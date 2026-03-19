@@ -38,9 +38,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
-                        "num_patches": self.processor.image_processor.num_patches,
                     },
-                    {"type": "text", "text": "Chart to table"},
                 ],
             },
         ]

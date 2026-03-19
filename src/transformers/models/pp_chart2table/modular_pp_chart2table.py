@@ -81,7 +81,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPChart2TableProcessor(ProcessorMixin):
     model_input_names = ["input_ids", "pixel_values"]
 
@@ -111,7 +110,7 @@ class PPChart2TableProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        input_ids = torch.tensor(self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids)
+        input_ids = self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids
 
         return BatchFeature(data={"input_ids": input_ids, **image_inputs})
 

@@ -18,18 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-from ...utils.import_utils import requires
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPChart2TableProcessor(ProcessorMixin):
     model_input_names = ["input_ids", "pixel_values"]
 
@@ -59,7 +56,7 @@ class PPChart2TableProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
-        input_ids = torch.tensor(self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids)
+        input_ids = self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids
 
         return BatchFeature(data={"input_ids": input_ids, **image_inputs})
 

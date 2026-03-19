@@ -52,10 +52,12 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": 16},
-            {"type": "text", "text": "Chart to table"}
+            {
+                "type": "image",
+                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+            },
         ],
-    }
+    },
 ]
 result = pipe(text=conversation)
 print(result[0]["generated_text"])
@@ -87,10 +89,12 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": processor.image_processor.num_patches},
-            {"type": "text", "text": "Chart to table"}
+            {
+                "type": "image",
+                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+            },
         ],
-    }
+    },
 ]
 
 inputs = processor.apply_chat_template(
@@ -133,10 +137,12 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": 16},
-            {"type": "text", "text": "Chart to table"}
+            {
+                "type": "image",
+                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+            },
         ],
-    }
+    },
 ]
 result = pipe(text=[conversation, conversation])
 print(result[0][0]["generated_text"])
@@ -168,10 +174,12 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": processor.image_processor.num_patches},
-            {"type": "text", "text": "Chart to table"}
+            {
+                "type": "image",
+                "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+            },
         ],
-    }
+    },
 ]
 
 batch_conversation = [conversation, conversation]

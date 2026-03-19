@@ -27,7 +27,8 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
+        # tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
+        tokenizer = tokenizer_class.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table")
         return tokenizer
 
     @unittest.skip("PPChart2TableProcessor pop the image processor output 'num_patches'")
@@ -38,14 +39,8 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()
         conversation = [
-            {
-                "role": "system",
-                "content": [],
-            },
-            {
-                "role": "user",
-                "content": [{"type": "image", "num_patches": 16}, {"type": "text", "text": "Chart to table"}],
-            },
+            {"role": "system", "content": []},
+            {"role": "user", "content": []}
         ]
         inputs = processor.apply_chat_template(
             conversation,
@@ -53,7 +48,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
         )
         inputs = processor(images=image_input, text=inputs, return_tensors="pt")
-        self.assertEqual(inputs["input_ids"].shape, (1, 285))
+        self.assertEqual(inputs["input_ids"].shape, (1, 287))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 1024))
 
     def test_unstructured_kwargs_batched(self):
@@ -79,19 +74,19 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     @unittest.skip(
-        reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None"
+        reason="PPChart2Table relies on a predetermined input format; chat template usage is not intended, and image input cannot be None."
     )
     def test_apply_chat_template_assistant_mask(self):
         pass
 
     @unittest.skip(
-        reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None"
+        reason="PPChart2Table relies on a predetermined input format; chat template usage is not intended, and image input cannot be None."
     )
     def test_apply_chat_template_image_0(self):
         pass
 
     @unittest.skip(
-        reason="PPChart2Table uses predetermined input - chat template usage not intended + image input cannot be None"
+        reason="PPChart2Table relies on a predetermined input format; chat template usage is not intended, and image input cannot be None."
     )
     def test_apply_chat_template_image_1(self):
         pass
