@@ -203,7 +203,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # this fails because of continue_final_message
         # chat template is correctly loading from model checkpoint: Qwen/Qwen3-ASR-0.6B
         # print(processor.chat_template)
-        rendered = processor.apply_chat_template(
+        processor.apply_chat_template(
             batch_messages,
             continue_final_message=True,
             tokenize=False,
