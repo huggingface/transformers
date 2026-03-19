@@ -197,6 +197,18 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # Conversion happens only for the `ConditionalGeneration` model, not the base model. Because
+        # we use the same conversion in ColPali recursively, we can't simplify regex and rely on `base_model_prefix`
+        # as we did in Llava
+        try:
+            self.all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+            super().test_reverse_loading_mapping(check_keys_were_modified)
+        finally:
+            self.all_model_classes = (
+                (PaliGemmaModel, PaliGemmaForConditionalGeneration) if is_torch_available() else ()
+            )
+
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):
         """

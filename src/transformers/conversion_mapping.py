@@ -62,7 +62,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
-    "paligemma": "llava",
     "aya_vision": "llava",
     "fuyu": "llava",
     "got_ocr2": "llava",
@@ -87,9 +86,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
-        "colpali": [
-            WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
+        "paligemma": [
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"vision_tower", target_patterns="model.vision_tower"),
+            WeightRenaming(source_patterns=r"multi_modal_projector", target_patterns="model.multi_modal_projector"),
+            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
