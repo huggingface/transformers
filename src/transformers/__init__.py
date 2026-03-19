@@ -459,12 +459,14 @@ else:
         "get_cosine_with_hard_restarts_schedule_with_warmup",
         "get_cosine_with_min_lr_schedule_with_warmup",
         "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
+        "get_greedy_schedule",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
+        "get_reduce_on_plateau_schedule",
         "get_scheduler",
         "get_wsd_schedule",
-        "get_reduce_on_plateau_schedule",
+        "GreedyLR",
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
@@ -633,6 +635,7 @@ if TYPE_CHECKING:
 
     # Optimization
     from .optimization import Adafactor as Adafactor
+    from .optimization import GreedyLR as GreedyLR
     from .optimization import get_constant_schedule as get_constant_schedule
     from .optimization import get_constant_schedule_with_warmup as get_constant_schedule_with_warmup
     from .optimization import get_cosine_schedule_with_warmup as get_cosine_schedule_with_warmup
@@ -645,6 +648,7 @@ if TYPE_CHECKING:
     from .optimization import (
         get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
+    from .optimization import get_greedy_schedule as get_greedy_schedule
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup
     from .optimization import get_polynomial_decay_schedule_with_warmup as get_polynomial_decay_schedule_with_warmup
