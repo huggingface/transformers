@@ -15,8 +15,11 @@
 import copy
 import json
 import os
+import tempfile
 from typing import Any, TypeVar
+from urllib.parse import urlparse
 
+import httpx
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
 
@@ -38,6 +41,22 @@ ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
 
 
 logger = logging.get_logger(__name__)
+
+
+def is_remote_url(url_or_filename: str) -> bool:
+    parsed = urlparse(url_or_filename)
+    return parsed.scheme in ("http", "https")
+
+
+def download_url(url: str) -> str:
+    with httpx.stream("GET", url, follow_redirects=True) as response:
+        response.raise_for_status()
+        suffix = os.path.splitext(urlparse(str(response.url)).path)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            for chunk in response.iter_bytes():
+                temp_file.write(chunk)
+
+    return temp_file.name
 
 
 # TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils_fast
@@ -272,10 +291,16 @@ class ImageProcessingMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
-        if os.path.isfile(pretrained_model_name_or_path):
+        elif os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
+
+        elif is_remote_url(pretrained_model_name_or_path):
+            image_processor_file = pretrained_model_name_or_path
+            resolved_image_processor_file = download_url(pretrained_model_name_or_path)
+            resolved_processor_file = None
+    
         else:
             image_processor_file = image_processor_filename
             try:
