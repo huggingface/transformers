@@ -348,38 +348,13 @@ class UVDocResNetStage(nn.Module):
 
 
 class UVDocResNet(nn.Module):
-    """ResNet backbone with multiple stages for feature extraction."""
+    """Initial resnet_head and resnet_down."""
 
     def __init__(self, config):
         super().__init__()
-
-        self.stages = nn.ModuleList([])
-
-        for stage_index in range(len(config.resnet_down)):
-            stage = UVDocResNetStage(
-                config=config,
-                in_channels=config.resnet_down[stage_index][0],
-                out_channels=config.resnet_down[stage_index][1],
-                stride=config.resnet_down[stage_index][2],
-                kernel_size=config.kernel_size,
-                stage_index=stage_index
-            )
-            self.stages.append(stage)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for stage in self.stages:
-            hidden_states = stage(hidden_states)
-        return hidden_states
-
-
-class UVDocResNetHead(nn.Module):
-    """Initial processing head with downsample and upsample convolutions."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.conv_head = nn.ModuleList([])
+        self.resnet_head = nn.ModuleList([])
         for i in range(len(config.resnet_head)):
-            self.conv_head.append(
+            self.resnet_head.append(
                 UVDocConvLayer(
                     in_channels=config.resnet_head[i][0],
                     out_channels=config.resnet_head[i][1],
@@ -389,9 +364,25 @@ class UVDocResNetHead(nn.Module):
                 )
             )
 
+        self.resnet_down = nn.ModuleList([])
+        for stage_index in range(len(config.resnet_down)):
+            self.resnet_down.append(
+                UVDocResNetStage(
+                    config=config,
+                    in_channels=config.resnet_down[stage_index][0],
+                    out_channels=config.resnet_down[stage_index][1],
+                    stride=config.resnet_down[stage_index][2],
+                    kernel_size=config.kernel_size,
+                    stage_index=stage_index
+                )
+            )
+        
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for conv in self.conv_head:
-            hidden_states = conv(hidden_states)
+        for head in self.resnet_head:
+            hidden_states = head(hidden_states)
+        for stage in self.resnet_down:
+            hidden_states = stage(hidden_states)
         return hidden_states
 
 
@@ -470,8 +461,7 @@ class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
-        self.resnet_head = UVDocResNetHead(config)
-        self.resnet_down = UVDocResNet(config)
+        self.uvdoc_resnet = UVDocResNet(config)
 
         self.bridge = nn.ModuleList([])
         for dilation_value in config.dilation_values:
@@ -498,12 +488,11 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        hidden_states = self.resnet_head(pixel_values)
-        resnet_down = self.resnet_down(hidden_states)
+        hidden_states = self.uvdoc_resnet(pixel_values)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:
-            bridge_output = bridge_layer(resnet_down)
+            bridge_output = bridge_layer(hidden_states)
             bridge_outputs.append(bridge_output)
 
         bridge_concat = torch.cat(bridge_outputs, dim=1)
