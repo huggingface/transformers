@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-03-18.*
+*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-03-19.*
 
 # X-Codec2
 
@@ -30,13 +30,13 @@ X-Codec2 is a neural audio codec designed to improve speech synthesis and genera
 
 About its architecture:
 - **Unified Semantic-Acoustic Tokenization**: X-Codec2 fuses outputs from a semantic encoder (e.g., Wav2Vec2-BERT) and an acoustic encoder into a single embedding, capturing both high-level meaning (e.g., text content, emotion) and low-level audio details (e.g., timbre).
-- **Single-Stage Vector Quantization (VQ)**: Unlike the multi-layer residual VQ in most approaches (e.g., [X-Codec](./xcodec), [DAC](./dac), [EnCodec](./encodec)), X-Codec2 uses a single-layer of Feature Scalar Quantization (FSQ) for stability and compatibility with causal, autoregressive LLMs.
+- **Single-Stage Feature Scalar Quantization (FSQ)**: Unlike the multi-layer residual VQ in most approaches (e.g., [DAC](./dac), [EnCodec](./encodec), [X-Codec](./xcodec), [Mimi](./mimi.md)), X-Codec2 uses a single-layer of Feature Scalar Quantization (FSQ) for stability and compatibility with causal, autoregressive LLMs.
 - **Transformer-Friendly Design**: The 1D token structure of X-Codec2 naturally aligns with the autoregressive modeling in LLMs like LLaMA, improving training efficiency and downstream compatibility.
 
 A model checkpoint is available at [bezzam/xcodec2](https://huggingface.co/bezzam/xcodec2).
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [Steven Zheng](https://huggingface.co/Steveeeeeeen).
-The original code can be found [here](https://github.com/zhenye234/X-Codec-2.0).
+The original modeling code can be found [here](https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py), while their training code is [here](https://github.com/zhenye234/X-Codec-2.0).
 
 ## Usage example 
 
