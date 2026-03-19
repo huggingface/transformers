@@ -211,9 +211,9 @@ print(answer)
 [[autodoc]] DonutImageProcessor
     - preprocess
 
-## DonutImageProcessorFast
+## DonutImageProcessorPil
 
-[[autodoc]] DonutImageProcessorFast
+[[autodoc]] DonutImageProcessorPil
     - preprocess
 
 ## DonutProcessor

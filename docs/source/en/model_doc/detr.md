@@ -167,9 +167,9 @@ As a summary, consider the following table:
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## DetrImageProcessorFast
+## DetrImageProcessorPil
 
-[[autodoc]] DetrImageProcessorFast
+[[autodoc]] DetrImageProcessorPil
     - preprocess
     - post_process_object_detection
     - post_process_semantic_segmentation

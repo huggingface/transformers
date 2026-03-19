@@ -23,7 +23,7 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5ServerDetConfig,
     PPOCRV5ServerDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessor,
     PPOCRV5ServerDetModel,
     is_torch_available,
     is_vision_available,
@@ -261,7 +261,7 @@ class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-OCRv5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         self.image = Image.open(
             requests.get(
