@@ -234,7 +234,6 @@ class Ernie4_5_VLMoeTextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -248,9 +247,7 @@ class Ernie4_5_VLMoeTextAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -514,7 +511,6 @@ class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.Tensor | None = None,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
@@ -528,7 +524,6 @@ class Ernie4_5_VLMoeDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = hidden_states + residual
@@ -662,6 +657,7 @@ class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
             hidden_act=config.hidden_act,
         )
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -670,6 +666,12 @@ class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.Tensor`):
+            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
+        rotary_pos_emb (`torch.Tensor`, *optional*):
+            Precomputed rotary positional embeddings applied to the vision attention query/key states.
+        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -746,7 +748,6 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> MoeModelOutputWithPast:
         r"""
@@ -762,15 +763,11 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         # the hard coded `3` is for temporal, height and width.
         if position_ids is None:
-            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
@@ -791,7 +788,6 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=text_position_ids,
         )
@@ -809,7 +805,6 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
                 position_ids=position_ids,
                 moe_mm_token_type_ids=moe_mm_token_type_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -835,7 +830,7 @@ class Ernie4_5VLVisionMLP(nn.Module):
 class Ernie4_5_VLMoePatchEmbed(nn.Module):
     def __init__(
         self,
-        patch_size: int = 14,
+        patch_size: int | list[int] | tuple[int, int] = 14,
         in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:
@@ -1083,7 +1078,6 @@ class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):
 @auto_docstring
 class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {"^norm": "language_model.norm"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Ernie4_5_VLMoeConfig
@@ -1365,11 +1359,14 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        can_compute_mrope = (
-            input_ids is not None
-            and mm_token_type_ids is not None
-            and (image_grid_thw is not None or video_grid_thw is not None)
-        )
+        has_multimodal = image_grid_thw is not None or video_grid_thw is not None
+        if has_multimodal and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
+        can_compute_mrope = input_ids is not None and mm_token_type_ids is not None and has_multimodal
 
         if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
             position_ids, rope_deltas = self.get_rope_index(
@@ -1393,7 +1390,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
             position_ids = position_ids + delta.to(device=inputs_embeds.device)
         else:
-            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
@@ -1414,7 +1411,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
         r"""
@@ -1468,7 +1464,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1564,7 +1559,6 @@ def load_balancing_loss_func(
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {"^model.norm": "model.language_model.norm"}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1637,7 +1631,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
@@ -1677,7 +1670,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             rope_deltas=rope_deltas,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1716,7 +1708,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         input_ids,
         inputs_embeds=None,
         attention_mask=None,
-        cache_position=None,
         past_key_values=None,
         image_grid_thw=None,
         video_grid_thw=None,
@@ -1729,7 +1720,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,

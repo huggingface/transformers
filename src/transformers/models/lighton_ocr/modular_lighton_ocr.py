@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
 
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -41,27 +41,10 @@ from ..mistral3.modeling_mistral3 import (
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
+@auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
+@strict(accept_kwargs=True)
 class LightOnOcrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LightOnOcrForConditionalGeneration`]. It is used to instantiate a
-    LightOnOcr model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the LightOnOcr [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
-
-    Args:
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size of spatial merging for image patches.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The id of the image token in the vocabulary.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        vision_config (`dict` or `LightOnOcrVisionConfig`, *optional*):
-            Custom vision configuration or dictionary with vision configuration values.
-        text_config (`dict` or `LightOnOcrTextConfig`, *optional*):
-            Custom text configuration or dictionary with text configuration values.
-
     Example:
 
     ```python
@@ -81,22 +64,16 @@ class LightOnOcrConfig(PretrainedConfig):
     model_type = "lighton_ocr"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        spatial_merge_size: int = 2,
-        image_token_id: int = 151655,
-        tie_word_embeddings: bool = True,
-        vision_config: dict[str, Any] | None = None,
-        text_config: dict[str, Any] | None = None,
-        **kwargs,
-    ):
-        self.spatial_merge_size = spatial_merge_size
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    spatial_merge_size: int = 2
+    image_token_id: int = 151655
+    tie_word_embeddings: bool = True
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
 
-        if vision_config is None:
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
             self.vision_config = CONFIG_MAPPING["pixtral"](
-                attention_dropout=0,
+                attention_dropout=0.0,
                 head_dim=64,
                 hidden_act="silu",
                 hidden_size=1024,
@@ -110,15 +87,13 @@ class LightOnOcrConfig(PretrainedConfig):
                 patch_size=14,
                 rope_theta=10000,
             )
-        elif isinstance(vision_config, PretrainedConfig):
-            self.vision_config = vision_config
-        else:
-            vision_config["model_type"] = vision_config.get("model_type", "pixtral")
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "pixtral")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
 
-        if text_config is None:
+        if self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"](
-                attention_dropout=0,
+                attention_dropout=0.0,
                 head_dim=128,
                 hidden_act="silu",
                 hidden_size=1024,
@@ -134,13 +109,11 @@ class LightOnOcrConfig(PretrainedConfig):
                 use_cache=True,
                 vocab_size=151936,
             )
-        elif isinstance(text_config, PretrainedConfig):
-            self.text_config = text_config
-        else:
-            text_config["model_type"] = text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
@@ -300,7 +273,6 @@ class LightOnOcrModelOutputWithPast(Mistral3ModelOutputWithPast):
 
 class LightOnOcrModel(Mistral3Model):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: LightOnOcrConfig):
         PreTrainedModel.__init__(self, config)
@@ -337,19 +309,9 @@ class LightOnOcrModel(Mistral3Model):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LightOnOcrModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -372,10 +334,6 @@ class LightOnOcrModel(Mistral3Model):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -389,8 +347,6 @@ class LightOnOcrModel(Mistral3Model):
 
 
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]

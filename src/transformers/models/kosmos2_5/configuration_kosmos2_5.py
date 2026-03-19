@@ -13,58 +13,21 @@
 # limitations under the License.
 """KOSMOS-2.5 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="microsoft/kosmos-2.5")
+@strict(accept_kwargs=True)
 class Kosmos2_5TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Kosmos2_5TextModel`]. It is used to instantiate a
-    KOSMOS-2.5 text decoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2.5
-    [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 108481):
-            Vocabulary size of the Kosmos2_5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Kosmos2_5Model`].
-        max_position_embeddings (`int`, *optional*, defaults to 4096):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        embed_dim (`int`, *optional*, defaults to 1536):
-            Dimensionality of the layers and the pooler layer.
-        layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        ffn_dim (`int`, *optional*, defaults to 6144):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://huggingface.co/papers/1909.11556) for more details.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_embedding (`bool`, *optional*, defaults to `True`):
-            Scale embeddings by diving by sqrt(embed_dim).
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+    activation_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for activations inside the fully connected layer.
     ```"""
 
     model_type = "kosmos_2_5_text_model"
@@ -76,84 +39,38 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
         "num_hidden_layers": "layers",
     }
 
-    def __init__(
-        self,
-        vocab_size=108481,
-        max_position_embeddings=4096,
-        embed_dim=1536,
-        layers=24,
-        ffn_dim=6144,
-        attention_heads=16,
-        activation_function="gelu",
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        layerdrop=0.0,
-        layer_norm_eps=1e-5,
-        init_std=0.02,
-        scale_embedding=True,
-        use_cache=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.embed_dim = embed_dim
-        self.layers = layers
-        self.ffn_dim = ffn_dim
-        self.attention_heads = attention_heads
-        self.activation_function = activation_function
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.layerdrop = layerdrop
-        self.layer_norm_eps = layer_norm_eps
-        self.init_std = init_std
-        self.scale_embedding = scale_embedding
-        self.use_cache = use_cache
+    vocab_size: int = 108481
+    max_position_embeddings: int = 4096
+    embed_dim: int = 1536
+    layers: int = 24
+    ffn_dim: int = 6144
+    attention_heads: int = 16
+    activation_function: str = "gelu"
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    layerdrop: float | int = 0.0
+    layer_norm_eps: float = 1e-5
+    init_std: float = 0.02
+    scale_embedding: bool = True
+    use_cache: bool = True
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | None = 2
 
 
+@auto_docstring(checkpoint="microsoft/kosmos-2.5")
+@strict(accept_kwargs=True)
 class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Kosmos2_5VisionModel`]. It is used to
-    instantiate a KOSMOS-2.5 vision encoder according to the specified arguments, defining the model architecture.
-    Instantiating a configuration defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2.5
-    [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
+    dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
+    max_num_patches (`int`, *optional*, defaults to 4096):
+        Maximum sequence length (here number of patches) supported by the model.
+    patch_embed_hidden_size (`int`, *optional*, defaults to 768):
+        Dimensionality of the input patch_embedding layer in the Transformer encoder.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        patch_embed_hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the input patch_embedding layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3968):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        head_dim (`int`, *optional*, defaults to 64):
-            Dimensionality of the key, query, value projections per attention head.
-        num_hidden_layers (`int`, *optional*, defaults to 18):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 24):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        max_num_patches (`int`, *optional*, defaults to 4096):
-            Maximum sequence length (here number of patches) supported by the model.
     Example:
 
     ```python
@@ -172,86 +89,51 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
     model_type = "kosmos_2_5_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1536,
-        patch_embed_hidden_size=768,
-        intermediate_size=3968,
-        head_dim=64,
-        num_hidden_layers=18,
-        num_attention_heads=24,
-        dense_act_fn="gelu_new",
-        layer_norm_eps=1e-6,
-        dropout_rate=0.0,
-        attention_dropout=0.0,
-        max_num_patches=4096,
-        initializer_factor=1.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.patch_embed_hidden_size = patch_embed_hidden_size
-        self.intermediate_size = intermediate_size
-        self.dropout_rate = dropout_rate
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.dense_act_fn = dense_act_fn
-        self.max_num_patches = max_num_patches
-        self.head_dim = head_dim
-        self.initializer_factor = initializer_factor
-        self.initializer_range = initializer_range
+    hidden_size: int = 1536
+    patch_embed_hidden_size: int = 768
+    intermediate_size: int = 3968
+    head_dim: int = 64
+    num_hidden_layers: int = 18
+    num_attention_heads: int = 24
+    dense_act_fn: str = "gelu_new"
+    layer_norm_eps: float = 1e-6
+    dropout_rate: float = 0.0
+    attention_dropout: float | int = 0.0
+    max_num_patches: int = 4096
+    initializer_factor: float = 1.0
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="microsoft/kosmos-2.5")
+@strict(accept_kwargs=True)
 class Kosmos2_5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Kosmos2_5Model`]. It is used to instantiate a
-    KOSMOS-2.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the KOSMOS-2.5
-    [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Kosmos2_5TextConfig`].
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`Kosmos2_5VisionConfig`].
-        latent_query_num (`int`, *optional*, defaults to 2048):
-            The number of latent query tokens that represent the image features used in the text decoder component.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
+    latent_query_num (`int`, *optional*, defaults to 2048):
+        The number of latent query tokens that represent the image features used in the text decoder component.
     """
 
     model_type = "kosmos-2.5"
     sub_configs = {"text_config": Kosmos2_5TextConfig, "vision_config": Kosmos2_5VisionConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        latent_query_num=2048,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = Kosmos2_5TextConfig()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    latent_query_num: int = 2048
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = Kosmos2_5TextConfig()
             logger.info("`text_config` is `None`. initializing the `Kosmos2_5TextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = Kosmos2_5TextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = Kosmos2_5TextConfig(**self.text_config)
 
-        if vision_config is None:
-            vision_config = Kosmos2_5VisionConfig()
+        if self.vision_config is None:
+            self.vision_config = Kosmos2_5VisionConfig()
             logger.info("`vision_config` is `None`. initializing the `Kosmos2_5VisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = Kosmos2_5VisionConfig(**vision_config)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = Kosmos2_5VisionConfig(**self.vision_config)
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.latent_query_num = latent_query_num
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Kosmos2_5Config"]

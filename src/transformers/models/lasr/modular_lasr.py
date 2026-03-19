@@ -16,7 +16,8 @@ import itertools
 from collections.abc import Callable
 
 import torch
-from tokenizers import Tokenizer
+from huggingface_hub.dataclasses import strict
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 from torch import nn
 
@@ -46,28 +47,76 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
         vocab=None,
         vocab_file=None,
         **kwargs,
     ):
-        super().__init__(
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            extra_ids=extra_ids,
-            additional_special_tokens=additional_special_tokens,
-            vocab=vocab,
-            vocab_file=vocab_file,
-            **kwargs,
-        )
+        self._extra_ids = extra_ids
+
+        # Handle extra_ids and additional_special_tokens
+        if additional_special_tokens is not None:
+            extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
+            if len(extra_tokens) < 1:
+                additional_special_tokens += [f"<extra_id_{i}>" for i in range(extra_ids)]
+            elif extra_ids > 0 and extra_ids != len(extra_tokens):
+                raise ValueError(
+                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
+                    " provided to LasrTokenizer. In this case the additional_special_tokens must include the extra_ids"
+                    " tokens"
+                )
+        else:
+            extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
+            additional_special_tokens = extra_tokens
+
+        # LASR vocab structure: <pad>=0, </s>=1, <unk>=2, then regular vocab, then extra_ids in reverse
+        if vocab is not None:
+            self._vocab_scores = vocab
+        else:
+            self._vocab_scores = [
+                (str(pad_token), 0.0),
+                (str(eos_token), 0.0),
+                (str(unk_token), 0.0),
+                ("▁", -2.0),  # Space token
+            ]
+            for i in range(extra_ids - 1, -1, -1):
+                self._vocab_scores.append((f"<extra_id_{i}>", 0.0))
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
                 unk_id=3,
                 byte_fallback=False,
             )
+        )
+
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
+
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
+            ]
+        )
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+
+        TokenizersBackend.__init__(
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            extra_ids=extra_ids,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.eos_token_id),
+            ],
         )
 
     def _decode(
@@ -99,65 +148,28 @@ class LasrProcessor(ParakeetProcessor):
     pass
 
 
+@auto_docstring(checkpoint="google/medasr")
+@strict(accept_kwargs=True)
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LasrEncoder`]. It is used to instantiate a
-    `LasrEncoder` model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-            hidden_size (`int`, *optional*, defaults to 512):
-                Dimension of the layers and the hidden states.
-            num_hidden_layers (`int`, *optional*, defaults to 17):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (`int`, *optional*, defaults to 8):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            intermediate_size (`int`, *optional*, defaults to 2048):
-                Dimension of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-                The non-linear activation function (function or string) in the encoder and pooler.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in the attention layers.
-            convolution_bias (`bool`, *optional*, defaults to `False`):
-                Whether to use bias in convolutions of the conformer's convolution module.
-            conv_kernel_size (`int`, *optional*, defaults to 32):
-                The kernel size of the convolution layers in the Conformer block.
-            subsampling_conv_channels (`int`, *optional*, defaults to 256):
-                The number of channels in the subsampling convolution layers.
-            subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
-                The kernel size of the subsampling convolution layers.
-            subsampling_conv_stride (`int`, *optional*, defaults to 2):
-                The stride of the subsampling convolution layers.
-            num_mel_bins (`int`, *optional*, defaults to 128):
-                Number of mel features.
-            dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for all fully connected layers in the embeddings, encoder, and pooler.
-            dropout_positions (`float`, *optional*, defaults to 0.0):
-                The dropout ratio for the positions in the input sequence.
-            layerdrop (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for the layers in the encoder.
-            activation_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for activations inside the fully connected layer.
-            attention_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout ratio for the attention layers.
-            max_position_embeddings (`int`, *optional*, defaults to 10000):
-                The maximum sequence length that this model might ever be used with.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-                The epsilon used by the layer normalization layers.
-            feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to `[1.5, 0.5]`):
-                The residual weights for the feed forward layers.
-            conv_residual_weights (`tuple[float, float]`, *optional*, defaults to `[2.0, 1.0]`):
-                The residual weights for the convolution layers.
-            batch_norm_momentum (`float`, *optional*, defaults to 0.01):
-                The momentum for the batch normalization layers.
-            rope_parameters (`RopeParameters`, *optional*):
-                Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-                a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-                with longer `max_position_embeddings`.
+    convolution_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in convolutions of the conformer's convolution module.
+    conv_kernel_size (`int`, *optional*, defaults to 32):
+        The kernel size of the convolution layers in the Conformer block.
+    subsampling_conv_channels (`int`, *optional*, defaults to 256):
+        The number of channels in the subsampling convolution layers.
+    subsampling_conv_kernel_size (`int`, *optional*, defaults to 5):
+        The kernel size of the subsampling convolution layers.
+    subsampling_conv_stride (`int`, *optional*, defaults to 2):
+        The stride of the subsampling convolution layers.
+    dropout_positions (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the positions in the input sequence.
+    feed_forward_residual_weights (`tuple[float, float]`, *optional*, defaults to `[1.5, 0.5]`):
+        The residual weights for the feed forward layers.
+    conv_residual_weights (`tuple[float, float]`, *optional*, defaults to `[2.0, 1.0]`):
+        The residual weights for the convolution layers.
+    batch_norm_momentum (`float`, *optional*, defaults to 0.01):
+        The momentum for the batch normalization layers
 
     Example:
         ```python
@@ -177,87 +189,37 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
     and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
-    def __init__(
-        self,
-        hidden_size=512,
-        num_hidden_layers=17,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        hidden_act="silu",
-        attention_bias=False,
-        convolution_bias=False,
-        conv_kernel_size=32,
-        subsampling_conv_channels=256,
-        subsampling_conv_kernel_size=5,
-        subsampling_conv_stride=2,
-        num_mel_bins=128,
-        dropout=0.1,
-        dropout_positions=0.0,
-        layerdrop=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=10000,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        feed_forward_residual_weights=[1.5, 0.5],
-        conv_residual_weights=[2.0, 1.0],
-        batch_norm_momentum=0.01,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        self.rope_parameters = rope_parameters
-        self.layer_norm_eps = layer_norm_eps
-        self.feed_forward_residual_weights = feed_forward_residual_weights
-        self.conv_residual_weights = conv_residual_weights
-        self.batch_norm_momentum = batch_norm_momentum
+    hidden_size: int = 512
+    num_hidden_layers: int = 17
+    intermediate_size: int = 2048
+    attention_bias: bool = False
+    convolution_bias: bool = False
+    conv_kernel_size: int = 32
+    subsampling_conv_kernel_size: int = 5
+    num_mel_bins: int = 128
+    max_position_embeddings: int = 10000
+    layer_norm_eps: float = 1e-6
+    feed_forward_residual_weights: list[float] | tuple[float, ...] = (1.5, 0.5)
+    conv_residual_weights: list[float] | tuple[float, ...] = (2.0, 1.0)
+    batch_norm_momentum: float = 0.01
+    rope_parameters: dict | None = None
 
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            attention_bias=attention_bias,
-            convolution_bias=convolution_bias,
-            conv_kernel_size=conv_kernel_size,
-            subsampling_conv_channels=subsampling_conv_channels,
-            num_mel_bins=num_mel_bins,
-            subsampling_conv_kernel_size=subsampling_conv_kernel_size,
-            subsampling_conv_stride=subsampling_conv_stride,
-            dropout=dropout,
-            dropout_positions=dropout_positions,
-            layerdrop=layerdrop,
-            activation_dropout=activation_dropout,
-            attention_dropout=attention_dropout,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            **kwargs,
-        )
-
-        del self.subsampling_factor
-        del self.scale_input
+    subsampling_factor = AttributeError()
+    scale_input = AttributeError()
 
 
+@auto_docstring(checkpoint="google/medasr")
+@strict(accept_kwargs=True)
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LasrForCTC`]. It is used to instantiate a
-    Lasr CTC model according to the specified arguments, defining the model architecture.
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-    Args:
-            vocab_size (`int`, *optional*, defaults to 512):
-                Vocabulary size of the model.
-            ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-                Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-                instance of [`LasrForCTC`].
-            ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-                Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-                occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-                of [`LasrForCTC`].
-            encoder_config (`Union[dict, LasrEncoderConfig]`, *optional*):
-                The config object or dictionary of the encoder.
-            pad_token_id (`int`, *optional*, defaults to 0):
-                Padding token id. Also used as blank token id.
+        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+            instance of [`LasrForCTC`].
+        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of [`LasrForCTC`].
+
     Example:
         ```python
         >>> from transformers import LasrForCTC, LasrCTCConfig
@@ -272,23 +234,8 @@ class LasrCTCConfig(ParakeetCTCConfig):
     and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
-    def __init__(
-        self,
-        vocab_size=512,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=True,
-        encoder_config: dict | LasrEncoderConfig = None,
-        pad_token_id=0,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            ctc_loss_reduction=ctc_loss_reduction,
-            ctc_zero_infinity=ctc_zero_infinity,
-            encoder_config=encoder_config,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+    vocab_size: int = 512
+    pad_token_id: int = 0
 
     @property
     def inputs_to_logits_ratio(self):

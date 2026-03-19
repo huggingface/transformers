@@ -13,90 +13,30 @@
 # limitations under the License.
 """Table Transformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="microsoft/table-transformer-detection")
+@strict(accept_kwargs=True)
 class TableTransformerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TableTransformerModel`]. It is used to
-    instantiate a Table Transformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Table Transformer
-    [microsoft/table-transformer-detection](https://huggingface.co/microsoft/table-transformer-detection) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
-            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
-            case it will default to `ResNetConfig()`.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_queries (`int`, *optional*, defaults to 100):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`TableTransformerModel`] can detect in a single image. For COCO, we recommend 100 queries.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
-        encoder_layers (`int`, *optional*, defaults to 6):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 2048):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float`, *optional*, defaults to 1):
-            The scaling factor used for the Xavier initialization gain in the HM Attention map module.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556)
-            for more details.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        position_embedding_type (`str`, *optional*, defaults to `"sine"`):
-            Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
-        dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
-            `use_timm_backbone` = `True`.
-        class_cost (`float`, *optional*, defaults to 1):
-            Relative weight of the classification error in the Hungarian matching cost.
-        bbox_cost (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
-        giou_cost (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
-        mask_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
-        dice_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
-        bbox_loss_coefficient (`float`, *optional*, defaults to 5):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        giou_loss_coefficient (`float`, *optional*, defaults to 2):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.1):
-            Relative classification weight of the 'no-object' class in the object detection loss.
+    num_queries (`int`, *optional*, defaults to 100):
+        Number of object queries, i.e. detection slots. This is the maximal number of objects
+        [`TableTransformerModel`] can detect in a single image. For COCO, we recommend 100 queries.
+    auxiliary_loss (`bool`, *optional*, defaults to `False`):
+        Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+    position_embedding_type (`str`, *optional*, defaults to `"sine"`):
+        Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
+    dilation (`bool`, *optional*, defaults to `False`):
+        Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+        `use_timm_backbone` = `True`.
+    eos_coefficient (`float`, *optional*, defaults to 0.1):
+        Relative classification weight of the 'no-object' class in the object detection loss.
 
     Examples:
 
@@ -119,55 +59,53 @@ class TableTransformerConfig(PreTrainedConfig):
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
+        "num_hidden_layers": "encoder_layers",
     }
 
-    # Copied from transformers.models.detr.configuration_detr.DetrConfig.__init__
-    def __init__(
-        self,
-        backbone_config=None,
-        num_channels=3,
-        num_queries=100,
-        encoder_layers=6,
-        encoder_ffn_dim=2048,
-        encoder_attention_heads=8,
-        decoder_layers=6,
-        decoder_ffn_dim=2048,
-        decoder_attention_heads=8,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        is_encoder_decoder=True,
-        activation_function="relu",
-        d_model=256,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        init_xavier_std=1.0,
-        auxiliary_loss=False,
-        position_embedding_type="sine",
-        dilation=False,
-        class_cost=1,
-        bbox_cost=5,
-        giou_cost=2,
-        mask_loss_coefficient=1,
-        dice_loss_coefficient=1,
-        bbox_loss_coefficient=5,
-        giou_loss_coefficient=2,
-        eos_coefficient=0.1,
-        **kwargs,
-    ):
+    backbone_config: dict | PreTrainedConfig | None = None
+    num_channels: int = 3
+    num_queries: int = 100
+    encoder_layers: int = 6
+    encoder_ffn_dim: int = 2048
+    encoder_attention_heads: int = 8
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 2048
+    decoder_attention_heads: int = 8
+    encoder_layerdrop: float | int = 0.0
+    decoder_layerdrop: float | int = 0.0
+    is_encoder_decoder: bool = True
+    activation_function: str = "relu"
+    d_model: int = 256
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    init_xavier_std: float = 1.0
+    auxiliary_loss: bool = False
+    position_embedding_type: str = "sine"
+    dilation: bool = False
+    class_cost: int = 1
+    bbox_cost: int = 5
+    giou_cost: int = 2
+    mask_loss_coefficient: int = 1
+    dice_loss_coefficient: int = 1
+    bbox_loss_coefficient: int = 5
+    giou_loss_coefficient: int = 2
+    eos_coefficient: float = 0.1
+
+    def __post_init__(self, **kwargs):
         backbone_kwargs = kwargs.get("backbone_kwargs", {})
         timm_default_kwargs = {
-            "num_channels": backbone_kwargs.get("num_channels", num_channels),
+            "num_channels": backbone_kwargs.get("num_channels", self.num_channels),
             "features_only": True,
             "use_pretrained_backbone": False,
             "out_indices": backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
         }
-        if dilation:
+        if self.dilation:
             timm_default_kwargs["output_stride"] = backbone_kwargs.get("output_stride", 16)
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_backbone="resnet50",
             default_config_type="resnet",
             default_config_kwargs={"out_features": ["stage4"]},
@@ -175,38 +113,7 @@ class TableTransformerConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.num_channels = num_channels
-        self.num_queries = num_queries
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.num_hidden_layers = encoder_layers
-        self.auxiliary_loss = auxiliary_loss
-        self.position_embedding_type = position_embedding_type
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.mask_loss_coefficient = mask_loss_coefficient
-        self.dice_loss_coefficient = dice_loss_coefficient
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.eos_coefficient = eos_coefficient
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["TableTransformerConfig"]
