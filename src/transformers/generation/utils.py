@@ -585,7 +585,7 @@ class GenerationMixin(ContinuousMixin):
 
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
         # between `forward`s
-        if self.is_remote_code():
+        if self.is_remote_code() and "cache_position" in set(inspect.signature(self.forward).parameters):
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
