@@ -13,74 +13,30 @@
 # limitations under the License.
 """CharacterBERT model configuration."""
 
+from huggingface_hub.dataclasses import strict
+
+from ...utils import auto_docstring
 from ..bert.configuration_bert import BertConfig
 
 
+@auto_docstring(checkpoint="helboukkouri/character-bert-base-uncased")
+@strict(accept_kwargs=True)
 class CharacterBertConfig(BertConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CharacterBertModel`]. It is used to instantiate
-    a CharacterBERT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    [helboukkouri/character-bert-general](https://huggingface.co/helboukkouri/character-bert-general).
+    character_embedding_dim (`int`, *optional*, defaults to 16):
+        Character embedding dimension used before the convolution stack.
+    character_vocab_size (`int`, *optional*, defaults to 262):
+        CharacterBERT byte-level tokenization expects exactly 262 character IDs before applying the +1 offset for
+        masking and padding (256 byte values + 6 special markers).
+    max_characters_per_token (`int`, *optional*, defaults to 50):
+        Maximum number of characters represented for each token. Must be at least the width of the widest
+        convolution in `character_cnn_filters`.
+    character_cnn_filters (`tuple[tuple[int, int], ...]`, *optional*, defaults to `((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024))`):
+        Convolution widths and output channels used in the character CNN.
+    num_highway_layers (`int`, *optional*, defaults to 2):
+        Number of highway layers applied after the convolution outputs.
 
-    Configuration objects inherit from [`~PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`~PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the model output projection used for masked language modeling.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the feed-forward layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            Activation function in the encoder and pooler.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            Dropout probability for all fully connected layers in embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            Dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            Maximum sequence length that this model might be used with.
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            Vocabulary size of the `token_type_ids` passed when calling the model.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation of the truncated normal initializer for all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            Epsilon used by layer normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            Token id used for padding.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether the model should return the last key/value attentions when relevant.
-        classifier_dropout (`float`, *optional*):
-            Dropout ratio for classification heads.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to use the model as a decoder.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added when using the model as a decoder.
-        bos_token_id (`int`, *optional*):
-            Beginning-of-sequence token id.
-        eos_token_id (`int`, *optional*):
-            End-of-sequence token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether input and output word embeddings are tied.
-        character_embedding_dim (`int`, *optional*, defaults to 16):
-            Character embedding dimension used before the convolution stack.
-        character_vocab_size (`int`, *optional*, defaults to 262):
-            CharacterBERT byte-level tokenization expects exactly 262 character IDs before applying the +1 offset
-            for masking and padding (256 byte values + 6 special markers).
-        max_characters_per_token (`int`, *optional*, defaults to 50):
-            Maximum number of characters represented for each token. Must be at least the width of the widest
-            convolution in `character_cnn_filters`.
-        character_cnn_filters (`tuple[tuple[int, int], ...]`, *optional*, defaults to `((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024))`):
-            Convolution widths and output channels used in the character CNN.
-        num_highway_layers (`int`, *optional*, defaults to 2):
-            Number of highway layers applied after the convolution outputs.
-
-    Example:
+    Examples:
 
     ```python
     >>> from transformers import CharacterBertConfig, CharacterBertModel
@@ -88,10 +44,42 @@ class CharacterBertConfig(BertConfig):
     >>> configuration = CharacterBertConfig()
     >>> model = CharacterBertModel(configuration)
     >>> configuration = model.config
-    ```
-    """
+    ```"""
 
     model_type = "character_bert"
+    vocab_size: int = 30522
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 512
+    type_vocab_size: int = 2
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    use_cache: bool = True
+    classifier_dropout: float | int | None = None
+    is_decoder: bool = False
+    add_cross_attention: bool = False
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    tie_word_embeddings: bool = False
+    character_embedding_dim: int = 16
+    character_vocab_size: int = 262
+    max_characters_per_token: int = 50
+    character_cnn_filters: tuple[tuple[int, int], ...] = (
+        (1, 32),
+        (2, 32),
+        (3, 64),
+        (4, 128),
+        (5, 256),
+        (6, 512),
+        (7, 1024),
+    )
+    num_highway_layers: int = 2
 
     def __init__(
         self,
