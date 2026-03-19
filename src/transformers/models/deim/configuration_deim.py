@@ -22,8 +22,22 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import (
     logging,
 )
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
+
+try:
+    # Newer versions of `transformers` expose this helper to validate backbone-related config fields.
+    from ...utils.backbone_utils import verify_backbone_config_arguments
+except ImportError:
+    # Older environments or partial installs might not have this helper yet.
+    # In that case, fall back to a no-op so DEIM remains importable.
+    def verify_backbone_config_arguments(
+        use_timm_backbone,
+        use_pretrained_backbone,
+        backbone,
+        backbone_config,
+        backbone_kwargs,
+    ):
+        return
 
 
 logger = logging.get_logger(__name__)
