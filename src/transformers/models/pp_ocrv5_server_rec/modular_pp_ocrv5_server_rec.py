@@ -25,6 +25,7 @@ from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbo
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     PILImageResampling,
     SizeDict,
@@ -48,7 +49,6 @@ from ..auto import AutoConfig
 from ..blip_2.modeling_blip_2 import Blip2Attention
 from ..clip.modeling_clip import CLIPEncoderLayer
 from ..focalnet.modeling_focalnet import FocalNetMlp
-from ..image_transforms import group_images_by_shape, reorder_images
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVLPreTrainedModel
 from ..resnet.modeling_resnet import ResNetConvLayer
 

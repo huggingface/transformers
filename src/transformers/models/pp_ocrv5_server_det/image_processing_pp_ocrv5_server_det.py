@@ -102,7 +102,7 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
                     stacked_images[0], limit_side_len, limit_type, max_side_limit
                 )
                 target_shape_per_shape[shape] = target_shape
-                stacked_images = self.resize(image=stacked_images, size=resize_size, resample=resample)
+                stacked_images = self.resize(image=stacked_images.float(), size=resize_size, resample=resample)
             resized_images_grouped[shape] = stacked_images
 
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
