@@ -380,10 +380,7 @@ class _tqdm_cls:
         factory = tqdm_lib.tqdm if _tqdm_active else EmptyTqdm
         if _tqdm_hook is not None:
             return _tqdm_hook(factory, args, kwargs)
-        if _tqdm_active:
-            return factory(*args, **kwargs)
-        else:
-            return EmptyTqdm(*args, **kwargs)
+        return factory(*args, **kwargs)
 
     def set_lock(self, *args, **kwargs):
         self._lock = None
