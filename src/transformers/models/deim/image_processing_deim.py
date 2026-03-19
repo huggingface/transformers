@@ -65,7 +65,11 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import requires
-from .image_processing_deim import compute_segments, convert_segmentation_to_rle, remove_low_and_no_objects
+from ..maskformer.image_processing_maskformer import (
+    compute_segments,
+    convert_segmentation_to_rle,
+    remove_low_and_no_objects,
+)
 
 
 if is_vision_available():
