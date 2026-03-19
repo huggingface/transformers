@@ -1,0 +1,72 @@
+name: Anti-Slop
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+jobs:
+  anti-slop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: peakoss/anti-slop@v0
+        with:
+          # -- Failure threshold --
+          # Require at least 2 failed checks before labeling to reduce false positives
+          max-failures: 2
+
+          # -- Do NOT close or lock, just label --
+          close-pr: false
+          lock-pr: false
+          failure-add-pr-labels: "Code agent slop"
+          failure-pr-message: |
+            This PR was flagged by our automated quality checks. If you're a genuine
+            contributor, please reply here and a maintainer will review your PR.
+
+            Common reasons for flagging:
+            - New GitHub account with incomplete profile
+            - PR description doesn't follow our PR template
+            - Overly verbose description or excessive code comments
+
+            We appreciate your contribution and apologize if this is a false positive!
+
+          # -- Account & profile checks --
+          # Catches brand-new spam accounts (Matt's top signal)
+          min-account-age: 30
+          detect-spam-usernames: true
+          min-profile-completeness: 3
+
+          # -- PR description checks --
+          # Agents tend to delete the PR template (Pete's signal)
+          require-pr-template: true
+          strict-pr-template-sections: "What does this PR do?,Before submitting,Who can review?"
+          # Overly verbose AI descriptions (Matt's signal)
+          max-description-length: 2500
+
+          # -- Code checks --
+          # AI agents over-comment simple fixes (Matt's signal)
+          max-added-comments: 10
+
+          # -- Disabled checks (keep minimal) --
+          require-description: false
+          require-linked-issue: false
+          require-conventional-title: false
+          require-conventional-commits: false
+          require-commit-author-match: false
+          require-maintainer-can-modify: false
+          require-final-newline: false
+          max-emoji-count: 0
+          max-code-references: 0
+          max-commit-message-length: 0
+          min-repo-merged-prs: 0
+          min-repo-merge-ratio: 0
+          min-global-merge-ratio: 0
+          max-daily-forks: 0
+
+          # -- Exemptions --
+          exempt-author-association: "OWNER,MEMBER,COLLABORATOR"
+          exempt-label: "exempt"
