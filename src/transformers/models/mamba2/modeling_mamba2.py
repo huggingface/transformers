@@ -502,14 +502,6 @@ class Mamba2Mixer(nn.Module):
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
 
-        use_precomputed_states = (
-            cache_params is not None
-            and cache_params.has_previous_state
-            and seq_len == 1
-            and cache_params.conv_states[self.layer_idx].shape[0]
-            == cache_params.ssm_states[self.layer_idx].shape[0]
-            == batch_size
-        )
 
         # 2. Convolution sequence transformation
         if cache_params is not None and cache_params.has_previous_state:
