@@ -211,7 +211,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
-            stdv = 1.0 / math.sqrt(module.hidden_size * 1.0)
+            stdv = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
             for generator in (module.structure_generator, module.loc_generator):
                 for layer in generator.children():
@@ -536,10 +536,10 @@ class SLANeXtStructureMLP(nn.Module):
         self.linear1 = nn.Linear(hidden_size, hidden_size)
         self.linear2 = nn.Linear(hidden_size, out_channels)
 
-    def forward(self, x):
-        x = self.linear1(x)
-        x = self.linear2(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        return hidden_states
 
 
 class SLANeXtLocationMLP(nn.Module):
@@ -549,11 +549,11 @@ class SLANeXtLocationMLP(nn.Module):
         self.linear2 = nn.Linear(hidden_size, loc_reg_num)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        x = self.linear1(x)
-        x = self.linear2(x)
-        x = self.sigmoid(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        hidden_states = self.sigmoid(hidden_states)
+        return hidden_states
 
 
 class SLANeXtSLAHead(nn.Module):
@@ -564,37 +564,34 @@ class SLANeXtSLAHead(nn.Module):
     ):
         super().__init__()
 
-        self.in_channels = config.post_conv_out_channels
-        self.hidden_size = config.hidden_size
-        self.max_text_length = config.max_text_length
-        self.out_channels = config.out_channels
-        self.loc_reg_num = config.loc_reg_num
-        self.emb = self._char_to_onehot
+        self.config = config
 
-        self.structure_attention_cell = SLANeXtAttentionGRUCell(self.in_channels, self.hidden_size, self.out_channels)
-        self.structure_generator = SLANeXtStructureMLP(self.hidden_size, self.out_channels)
-        self.loc_generator = SLANeXtLocationMLP(self.hidden_size, self.loc_reg_num)
+        self.structure_attention_cell = SLANeXtAttentionGRUCell(
+            config.post_conv_out_channels, config.hidden_size, config.out_channels
+        )
+        self.structure_generator = SLANeXtStructureMLP(config.hidden_size, config.out_channels)
+        self.loc_generator = SLANeXtLocationMLP(config.hidden_size, config.loc_reg_num)
 
     def forward(self, features, targets=None):
         batch_size = features.shape[0]
 
-        hidden = torch.zeros((batch_size, self.hidden_size), device=features.device)
+        hidden = torch.zeros((batch_size, self.config.hidden_size), device=features.device)
         structure_preds_list = []
         structure_ids_list = []
         pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
-        for _ in range(self.max_text_length + 1):
+        for _ in range(self.config.max_text_length + 1):
             hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
             pre_chars = structure_step.argmax(dim=1)
             structure_preds_list.append(structure_step)
             structure_ids_list.append(pre_chars)
-            if torch.stack(structure_ids_list, dim=1).eq(self.out_channels - 1).any(-1).all():
+            if torch.stack(structure_ids_list, dim=1).eq(self.config.out_channels - 1).any(-1).all():
                 break
         structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
 
         return structure_preds
 
     def _decode(self, pre_chars, features, hidden):
-        emb_feature = self.emb(pre_chars)
+        emb_feature = self._char_to_onehot(pre_chars)
         (output, hidden), alpha = self.structure_attention_cell(hidden, features, emb_feature)
 
         structure_step = self.structure_generator(output)
@@ -602,7 +599,7 @@ class SLANeXtSLAHead(nn.Module):
         return hidden, structure_step, loc_step
 
     def _char_to_onehot(self, input_char):
-        return F.one_hot(input_char, self.out_channels).float()
+        return F.one_hot(input_char, self.config.out_channels).float()
 
 
 @auto_docstring
@@ -631,34 +628,4 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    SLANeXt model for table structure recognition tasks. Wraps the core SLANeXtModel
-    and returns outputs compatible with the Transformers table recognition API.
-    """
-)
-class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
-    """
-    SLANeXt model for table recognition tasks.
-    """
-
-    def __init__(self, config: SLANeXtConfig):
-        super().__init__(config)
-        self.model = SLANeXtModel(config)
-        self.post_init()
-
-    @can_return_tuple
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        outputs = self.model(pixel_values)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-        )
-
-
-__all__ = ["SLANeXtForTableRecognition", "SLANeXtModel", "SLANeXtPreTrainedModel"]
+__all__ = ["SLANeXtModel", "SLANeXtPreTrainedModel"]

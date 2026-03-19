@@ -19,63 +19,151 @@
 # limitations under the License.
 
 
+from typing import Optional
+
 import numpy as np
 import torch
+import torchvision.transforms.v2.functional as tvF
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from ...image_processing_utils import BatchFeature
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
+from ...utils.generic import TensorType
 from ...utils.import_utils import requires
 
 
 @auto_docstring
 @requires(backends=("torch",))
 class SLANeXtImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast SLANeXt image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's long edge to the specified `size`. Can be overridden by the `do_resize`
-            parameter in the `preprocess` method.
-        size (`dict[str, int]`, *optional*, defaults to `{"height": 512, "width": 512}`):
-            Size of the image after resizing. The image is resized such that the long edge matches
-            `max(size["height"], size["width"])` while preserving the aspect ratio. Can be overridden by the `size`
-            parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
-            method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to a square of size `max(size["height"], size["width"])` after resizing. Padding
-            is applied to the bottom and right edges with zeros. Can be overridden by the `do_pad` parameter in the
-            `preprocess` method.
-    """
-
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 512, "width": 512}
     pad_size = {"height": 512, "width": 512}
+    rescale_factor = 1 / 255
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_pad = True
     valid_kwargs = ImagesKwargs
     model_input_names = ["pixel_values"]
+
+    def _resize(self, image: torch.Tensor, size: SizeDict) -> torch.Tensor:
+        device = image.device
+        channels, height, width = image.shape
+
+        # --- target size: long-edge scale (same as _resize_single_image) ---
+        scale = max(size.height, size.width) / max(height, width)
+        target_height = round(height * scale)
+        target_width = round(width * scale)
+
+        BITS = 11
+        SCALE = 1 << BITS  # 2048
+
+        # --- X coordinate tables ---
+        dx = torch.arange(target_width, dtype=torch.float32, device=device)
+        fx = (dx + 0.5) * (float(width) / float(target_width)) - 0.5
+        sx = fx.floor().to(torch.int32)
+        fx_frac = fx - sx.float()
+
+        # boundary handling (mirrors cv2)
+        fx_frac = torch.where(sx < 0, torch.zeros_like(fx_frac), fx_frac)
+        sx = torch.where(sx < 0, torch.zeros_like(sx), sx)
+        fx_frac = torch.where(sx >= width - 1, torch.ones_like(fx_frac), fx_frac)
+        sx = torch.where(sx >= width - 1, torch.full_like(sx, width - 2), sx)
+
+        # fixed-point weights
+        ax = (fx_frac * SCALE + 0.5).floor().to(torch.int32)  # round-to-nearest
+        ax_inv = SCALE - ax  # (target_w,)
+
+        # --- Y coordinate tables ---
+        dy = torch.arange(target_height, dtype=torch.float32, device=device)
+        fy = (dy + 0.5) * (float(height) / float(target_height)) - 0.5
+        sy = fy.floor().to(torch.int32)
+        fy_frac = fy - sy.float()
+
+        fy_frac = torch.where(sy < 0, torch.zeros_like(fy_frac), fy_frac)
+        sy = torch.where(sy < 0, torch.zeros_like(sy), sy)
+        fy_frac = torch.where(sy >= height - 1, torch.ones_like(fy_frac), fy_frac)
+        sy = torch.where(sy >= height - 1, torch.full_like(sy, height - 2), sy)
+
+        ay = (fy_frac * SCALE + 0.5).floor().to(torch.int32)
+        ay_inv = SCALE - ay  # (target_h,)
+
+        # --- gather pixel values as int32 in uint8 domain ---
+        # image: (C, H, W) float — convert to uint8 int32 for faithful cv2 arithmetic
+        img_u8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
+        img_i32 = img_u8.to(torch.int32)  # (C, H, W)
+
+        sx_l = sx.long()  # (target_w,)
+        sx_r = (sx + 1).long()  # (target_w,)  safe: sx <= width-2
+        sy_t = sy.long()  # (target_h,)
+        sy_b = (sy + 1).long()  # (target_h,)
+
+        # gather 4 neighbours: (C, target_h, target_w)
+        p00 = img_i32[:, sy_t[:, None], sx_l[None, :]]
+        p10 = img_i32[:, sy_t[:, None], sx_r[None, :]]
+        p01 = img_i32[:, sy_b[:, None], sx_l[None, :]]
+        p11 = img_i32[:, sy_b[:, None], sx_r[None, :]]
+
+        # fixed-point bilinear: weights broadcast over (C, target_h, target_w)
+        ay_ = ay.view(1, target_height, 1)
+        ay_inv_ = ay_inv.view(1, target_height, 1)
+        ax_ = ax.view(1, 1, target_width)
+        ax_inv_ = ax_inv.view(1, 1, target_width)
+
+        val = ay_inv_ * (ax_inv_ * p00 + ax_ * p10) + ay_ * (ax_inv_ * p01 + ax_ * p11)
+
+        # right-shift 22 bits with round-half-up (add 2^21 before shift)
+        shift = BITS * 2  # 22
+        val = (val + (1 << (shift - 1))) >> shift
+
+        # clamp and cast back to uint8, then to original dtype/device
+        result = val.clamp(0, 255).to(torch.uint8)  # (C, target_h, target_w)
+        return result.to(dtype=image.dtype)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        if do_resize:
+            resized_images = [self._resize(img, size) for img in images]
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        if do_pad:
+            processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
+
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)

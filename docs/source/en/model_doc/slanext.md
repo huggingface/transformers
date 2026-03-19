@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-17.*
+*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-19.*
 
 # SLANeXt
 
@@ -46,7 +46,7 @@ from transformers import AutoImageProcessor, AutoModel
 
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
 model = AutoModel.from_pretrained(model_path, dtype=torch.float32)
-image_processor = AutoImageProcessor.from_pretrained(model_path)
+image_processor = AutoImageProcessor.from_pretrained(model_path, use_fast=True)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw).convert("RGB")
 inputs = image_processor(images=image, return_tensors="pt")
