@@ -1004,3 +1004,54 @@ class ServeLoadModelIntegrationTest(unittest.TestCase):
         expected_present = [s for s in expected_order if s in unique_stages]
 
         self.assertEqual(unique_stages, expected_present, "Stages appeared out of order")
+
+    def test_concurrent_load_same_model(self):
+        """Two concurrent /load_model requests for the same model should both receive progress events
+        and a final ready event, but the model should only be loaded once."""
+        import concurrent.futures
+
+        model = "Qwen/Qwen2.5-0.5B-Instruct"
+        results = [None, None]
+
+        def load_in_thread(index):
+            with httpx.Client(timeout=120) as client:
+                with client.stream("POST", f"{self.base_url}/load_model", json={"model": model}) as response:
+                    events = parse_sse_events(response)
+                    results[index] = (response.status_code, events)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(load_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            # Re-raise any exceptions from threads
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            status_code, events = results[i]
+            self.assertEqual(status_code, 200, f"Caller {i} got non-200 status")
+            self.assertTrue(len(events) > 0, f"Caller {i} received no events")
+
+            ready_events = [e for e in events if e["status"] == "ready"]
+            self.assertEqual(len(ready_events), 1, f"Caller {i} should get exactly one ready event")
+            self.assertIn("model", ready_events[0])
+
+    def test_concurrent_load_second_caller_gets_cached_if_first_finishes(self):
+        """If the first /load_model finishes before the second arrives,
+        the second caller should get a cached response."""
+        model = "Qwen/Qwen2.5-0.5B-Instruct"
+
+        # First load — blocks until complete
+        _, events1 = self._load_model(model)
+        ready1 = [e for e in events1 if e["status"] == "ready"]
+        self.assertEqual(len(ready1), 1)
+        self.assertFalse(ready1[0]["cached"])
+
+        # Second load — model is now in memory
+        _, events2 = self._load_model(model)
+        ready2 = [e for e in events2 if e["status"] == "ready"]
+        self.assertEqual(len(ready2), 1)
+        self.assertTrue(ready2[0]["cached"])
+
+        # No loading events on the cached path
+        loading2 = [e for e in events2 if e["status"] == "loading"]
+        self.assertEqual(len(loading2), 0)

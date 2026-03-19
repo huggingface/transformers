@@ -653,6 +653,14 @@ class Serve:
         self.loaded_models: dict[str, TimedModel] = {}
         self.running_continuous_batching_manager: ContinuousBatchingManager | None = None
 
+        # Tracks in-flight model loads for fan-out to multiple SSE subscribers
+        self.loading_subscribers: dict[str, list[asyncio.Queue[str | None]]] = {}
+        self.loading_tasks: dict[str, asyncio.Task] = {}
+
+        # Thread-safety for load_model_and_processor / load_audio_model_and_processor
+        self.model_locks: dict[str, threading.Lock] = {}
+        self.model_locks_guard = threading.Lock()
+
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefill
         self.last_messages = None
@@ -751,12 +759,40 @@ class Serve:
 
             model_id_and_revision = self.process_model_name(model)
 
-            async def event_publisher(method: Callable):
+            async def event_publisher():
                 queue: asyncio.Queue[str | None] = asyncio.Queue()
+                model_loaded = model_id_and_revision in self.loaded_models
+                model_not_deleted = model_loaded and not self.loaded_models[model_id_and_revision].is_deleted()
+
+                # Case 1: Model already cached
+                if model_loaded and model_not_deleted:
+                    self.loaded_models[model_id_and_revision].reset_timer()
+                    yield f"data: {json.dumps({'status': 'ready', 'model': model_id_and_revision, 'cached': True})}\n\n"
+                    return
+
+                # Case 2: Load already happening, join existing subscribers
+                if model_id_and_revision in self.loading_tasks:
+                    self.loading_subscribers[model_id_and_revision].append(queue)
+
+                    while True:
+                        item = await queue.get()
+                        if item is None:
+                            break
+                        yield item
+                    return
+
+                # Case 3: First request — start the load task
+                self.loading_subscribers[model_id_and_revision] = [queue]
                 loop = asyncio.get_running_loop()
 
                 def enqueue(payload: dict):
-                    loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps(payload)}\n\n")
+                    msg = f"data: {json.dumps(payload)}\n\n"
+
+                    def broadcast():
+                        for q in self.loading_subscribers.get(model_id_and_revision, []):
+                            q.put_nowait(msg)
+
+                    loop.call_soon_threadsafe(broadcast)
 
                 download_aggregator = DownloadAggregator(enqueue, model_id_and_revision)
 
@@ -781,15 +817,21 @@ class Serve:
                 async def run_load():
                     previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
                     try:
-                        await asyncio.to_thread(method, model_id_and_revision, enqueue)
+                        await asyncio.to_thread(self.load_model_and_processor, model_id_and_revision, enqueue)
                     except Exception as e:
                         logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
                         enqueue({"status": "error", "model": model_id_and_revision, "message": str(e)})
                     finally:
                         logging.set_tqdm_hook(previous_hook)
-                        loop.call_soon_threadsafe(queue.put_nowait, None)
 
-                asyncio.create_task(run_load())
+                        def _send_sentinel():
+                            for q in self.loading_subscribers.pop(model_id_and_revision, []):
+                                q.put_nowait(None)
+                            self.loading_tasks.pop(model_id_and_revision, None)
+
+                        loop.call_soon_threadsafe(_send_sentinel)
+
+                self.loading_tasks[model_id_and_revision] = asyncio.create_task(run_load())
 
                 while True:
                     item = await queue.get()
@@ -797,7 +839,7 @@ class Serve:
                         break
                     yield item
 
-            return StreamingResponse(event_publisher(self.load_model_and_processor), media_type="text/event-stream")
+            return StreamingResponse(event_publisher(), media_type="text/event-stream")
 
         @app.middleware("http")
         async def get_or_set_request_id(request: Request, call_next):
@@ -2170,26 +2212,32 @@ class Serve:
         Returns:
             `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
         """
+        with self.model_locks_guard:
+            lock = self.model_locks.setdefault(model_id_and_revision, threading.Lock())
 
-        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            model, processor = self._load_model_and_data_processor(
-                model_id_and_revision, progress_callback=progress_callback
-            )
-            self.loaded_models[model_id_and_revision] = TimedModel(
-                model,
-                timeout_seconds=self.model_timeout,
-                processor=processor,
-            )
-            if progress_callback is not None:
-                progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
-        else:
-            self.loaded_models[model_id_and_revision].reset_timer()
-            model = self.loaded_models[model_id_and_revision].model
-            processor = self.loaded_models[model_id_and_revision].processor
-            if progress_callback is not None:
-                progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
+        with lock:
+            if (
+                model_id_and_revision not in self.loaded_models
+                or self.loaded_models[model_id_and_revision].is_deleted()
+            ):
+                model, processor = self._load_model_and_data_processor(
+                    model_id_and_revision, progress_callback=progress_callback
+                )
+                self.loaded_models[model_id_and_revision] = TimedModel(
+                    model,
+                    timeout_seconds=self.model_timeout,
+                    processor=processor,
+                )
+                if progress_callback is not None:
+                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
+            else:
+                self.loaded_models[model_id_and_revision].reset_timer()
+                model = self.loaded_models[model_id_and_revision].model
+                processor = self.loaded_models[model_id_and_revision].processor
+                if progress_callback is not None:
+                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
 
-        return model, processor
+            return model, processor
 
     def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
         """
@@ -2202,20 +2250,27 @@ class Serve:
         Returns:
             `tuple[PreTrainedModel, ProcessorMixin]`: The loaded audio model and processor.
         """
-        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            logger.warning(f"Loading model into cache: {model_id_and_revision}")
-            audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
-            self.loaded_models[model_id_and_revision] = TimedModel(
-                audio_model,
-                timeout_seconds=self.model_timeout,
-                processor=audio_processor,
-            )
-        else:
-            self.loaded_models[model_id_and_revision].reset_timer()
-            audio_model = self.loaded_models[model_id_and_revision].model
-            audio_processor = self.loaded_models[model_id_and_revision].processor
+        with self.model_locks_guard:
+            lock = self.model_locks.setdefault(model_id_and_revision, threading.Lock())
 
-        return audio_model, audio_processor
+        with lock:
+            if (
+                model_id_and_revision not in self.loaded_models
+                or self.loaded_models[model_id_and_revision].is_deleted()
+            ):
+                logger.warning(f"Loading model into cache: {model_id_and_revision}")
+                audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
+                self.loaded_models[model_id_and_revision] = TimedModel(
+                    audio_model,
+                    timeout_seconds=self.model_timeout,
+                    processor=audio_processor,
+                )
+            else:
+                self.loaded_models[model_id_and_revision].reset_timer()
+                audio_model = self.loaded_models[model_id_and_revision].model
+                audio_processor = self.loaded_models[model_id_and_revision].processor
+
+            return audio_model, audio_processor
 
 
 # set docstring separately to make it look nice (Typer doesn't play well with the class command)
