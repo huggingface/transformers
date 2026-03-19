@@ -13,7 +13,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# GPU setup for deep learning
+# Building a GPU workstation
 
 The GPU is one of the most important choices when building a deep learning machine. Tensor cores handle matrix multiplication efficiently, and high memory bandwidth keeps data flowing. Training large models requires a more powerful GPU, multiple GPUs, or offloading techniques that move work to the CPU or NVMe.
 
@@ -29,7 +29,7 @@ A PSU must maintain stable voltage because unstable voltage can starve the GPU o
 
 ## Cooling
 
-An overheated GPU throttles performance and shuts down to prevent damage. Keep temperatures between 158–167°F for full performance and a longer lifespan. Above 183–194°F, the GPU starts throttling.
+An overheated GPU throttles performance and shuts down to prevent damage. Keep temperatures between 158–167°F (70–75 Celsius) for full performance and a longer lifespan. Above 183–194°F (84–90 Celsius), the GPU usually starts throttling.
 
 ## Multi-GPU connectivity
 
@@ -44,7 +44,7 @@ nvidia-smi topo -m
 <hfoptions id="nvlink">
 <hfoption id="NVLink">
 
-[NVLink](https://www.nvidia.com/en-us/design-visualization/nvlink-bridges/) is NVIDIA's high-speed communication system for connecting multiple GPUs. Training [openai-community/gpt2](https://huggingface.co/openai-community/gpt2) on a small sample of [wikitext](https://huggingface.co/datasets/Salesforce/wikitext) is ~23% faster with NVLink.
+[NVLink](https://www.nvidia.com/en-us/design-visualization/nvlink-bridges/) is NVIDIA's high-speed communication system for connecting multiple GPUs.
 
 ```bash
         GPU0    GPU1    CPU Affinity    NUMA Affinity

@@ -185,7 +185,7 @@
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: GPU setup for deep learning
+      title: Building a GPU workstation
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
