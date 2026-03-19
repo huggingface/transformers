@@ -363,7 +363,7 @@ class TorchvisionBackend(BaseImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
