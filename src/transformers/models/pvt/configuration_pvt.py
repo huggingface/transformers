@@ -15,16 +15,14 @@
 # limitations under the License.
 """Pvt model configuration"""
 
-from collections.abc import Callable, Mapping
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Xrenya/pvt-tiny-224")
+@strict(accept_kwargs=True)
 class PvtConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):
@@ -62,48 +60,24 @@ class PvtConfig(PreTrainedConfig):
 
     model_type = "pvt"
 
-    def __init__(
-        self,
-        image_size: int = 224,
-        num_channels: int = 3,
-        num_encoder_blocks: int = 4,
-        depths: list[int] = [2, 2, 2, 2],
-        sequence_reduction_ratios: list[int] = [8, 4, 2, 1],
-        hidden_sizes: list[int] = [64, 128, 320, 512],
-        patch_sizes: list[int] = [4, 2, 2, 2],
-        strides: list[int] = [4, 2, 2, 2],
-        num_attention_heads: list[int] = [1, 2, 5, 8],
-        mlp_ratios: list[int] = [8, 8, 4, 4],
-        hidden_act: Mapping[str, Callable] = "gelu",
-        hidden_dropout_prob: float = 0.0,
-        attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 0.02,
-        drop_path_rate: float = 0.0,
-        layer_norm_eps: float = 1e-6,
-        qkv_bias: bool = True,
-        num_labels: int = 1000,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_encoder_blocks = num_encoder_blocks
-        self.depths = depths
-        self.sequence_reduction_ratios = sequence_reduction_ratios
-        self.hidden_sizes = hidden_sizes
-        self.patch_sizes = patch_sizes
-        self.strides = strides
-        self.mlp_ratios = mlp_ratios
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.drop_path_rate = drop_path_rate
-        self.layer_norm_eps = layer_norm_eps
-        self.num_labels = num_labels
-        self.qkv_bias = qkv_bias
+    image_size: int | list[int] | tuple[int, int] = 224
+    num_channels: int = 3
+    num_encoder_blocks: int = 4
+    depths: list[int] | tuple[int, ...] = (2, 2, 2, 2)
+    sequence_reduction_ratios: list[int] | tuple[int, ...] = (8, 4, 2, 1)
+    hidden_sizes: list[int] | tuple[int, ...] = (64, 128, 320, 512)
+    patch_sizes: list[int] | tuple[int, ...] = (4, 2, 2, 2)
+    strides: list[int] | tuple[int, ...] = (4, 2, 2, 2)
+    num_attention_heads: list[int] | tuple[int, ...] = (1, 2, 5, 8)
+    mlp_ratios: list[int] | tuple[int, ...] = (8, 8, 4, 4)
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    drop_path_rate: float = 0.0
+    layer_norm_eps: float = 1e-6
+    qkv_bias: bool = True
+    num_labels: int = 1000
 
 
 __all__ = ["PvtConfig"]

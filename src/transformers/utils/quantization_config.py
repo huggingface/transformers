@@ -15,13 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import dataclasses
 import importlib.metadata
 import json
 import os
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass
 from enum import Enum
-from inspect import Parameter, signature
 from typing import Any, Optional, Union
 
 from packaging import version
@@ -1454,53 +1452,44 @@ class FPQuantConfig(QuantizationConfigMixin):
 
 @dataclass
 class TorchAoConfig(QuantizationConfigMixin):
-    quant_method: QuantizationMethod
-    quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
-    modules_to_not_convert: list | None
-    quant_type_kwargs: dict[str, Any]
-    include_input_output_embeddings: bool
-    untie_embedding_weights: bool
-
-    """This is a config class for torchao quantization/sparsity techniques.
+    """Config class for torchao quantization/sparsity techniques.
 
     Args:
-        quant_type (`Union[str, AOBaseConfig]`):
-            The type of quantization we want to use. Can be either:
-            - A string: currently supporting: `int4_weight_only`, `int8_weight_only` and `int8_dynamic_activation_int8_weight`.
-            - An AOBaseConfig instance: for more advanced configuration options.
+        quant_type (`AOBaseConfig`):
+            A torchao `AOBaseConfig` instance specifying the quantization type, e.g.
+            `Int4WeightOnlyConfig(group_size=32)`, `Int8WeightOnlyConfig()`,
+            `Int8DynamicActivationInt8WeightConfig()`, `Float8WeightOnlyConfig()`, etc.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        include_input_output_embeddings (`bool`, default to `False`):
+        include_input_output_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to include embedding in quantization or not, input embedding will be removed from
             the module_not_to_convert list as well if this flag is set.
-        untie_embedding_weights (`bool`, default to `False`):
+        untie_embedding_weights (`bool`, *optional*, defaults to `False`):
             Whether to untie the weights when we are quantizing input embedding weights that is tied
             to other weights.
-        kwargs (`dict[str, Any]`, *optional*):
-            The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
-            `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
-            https://github.com/pytorch/ao/tree/main/torchao/quantization#other-available-quantization-techniques
 
     Example:
 
     ```python
-    # AOBaseConfig-based configuration
-    config = Int4WeightOnlyConfig(group_size=32)
-    quantization_config = TorchAoConfig(config)
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
+    from torchao.quantization import Int4WeightOnlyConfig
 
-    # String-based configuration
-    quantization_config = TorchAoConfig("int4_weight_only", group_size=32)
-    # int4_weight_only quant is only working with *torch.bfloat16* dtype right now
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda", dtype=torch.bfloat16, quantization_config=quantization_config)
-
+    quantization_config = TorchAoConfig(Int4WeightOnlyConfig(group_size=32))
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, device_map="cuda", torch_dtype=torch.bfloat16, quantization_config=quantization_config
+    )
     ```
     """
 
+    quant_method: QuantizationMethod
+    quant_type: "AOBaseConfig"  # noqa: F821
+    modules_to_not_convert: list | None
+    include_input_output_embeddings: bool
+    untie_embedding_weights: bool
+
     def __init__(
         self,
-        quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
+        quant_type: "AOBaseConfig",  # noqa: F821
         modules_to_not_convert: list | None = None,
         include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
@@ -1509,161 +1498,56 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
-        self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
         self.include_input_output_embeddings = include_input_output_embeddings
         self.untie_embedding_weights = untie_embedding_weights
         self.post_init()
 
-    @staticmethod
-    def _get_ao_version() -> version.Version:
-        """Centralized check for TorchAO availability and version requirements."""
+    def post_init(self):
+        """Validate configuration and set defaults."""
         if not is_torchao_available():
             raise ValueError("TorchAoConfig requires torchao to be installed. Install with `pip install torchao`")
 
-        return version.parse(importlib.metadata.version("torchao"))
-
-    def post_init(self):
-        """Validate configuration and set defaults."""
-        ao_version = self._get_ao_version()
-
-        # Handle quant_type based on type and version
         if isinstance(self.quant_type, str):
-            self._validate_string_quant_type()
-        elif ao_version > version.parse("0.9.0"):
-            from torchao.quantization.quant_api import AOBaseConfig
-
-            if not isinstance(self.quant_type, AOBaseConfig):
-                raise TypeError(
-                    f"quant_type must be either a string or an AOBaseConfig instance, got {type(self.quant_type)}"
-                )
-        else:
             raise ValueError(
-                f"In torchao <= 0.9.0, quant_type must be a string. Got {type(self.quant_type)}. "
-                f"Please upgrade to torchao > 0.9.0 to use AOBaseConfig instances."
+                f"String-based quantization type '{self.quant_type}' is no longer supported. "
+                f"Please use the corresponding Config object directly, e.g. "
+                f"TorchAoConfig(Int4WeightOnlyConfig(group_size=32)) instead of "
+                f"TorchAoConfig('int4_weight_only', group_size=32)."
             )
 
-    def _validate_string_quant_type(self):
-        """Validate string quant_type and its kwargs."""
-        methods = self._get_torchao_quant_type_to_method()
+        from torchao.quantization.quant_api import AOBaseConfig
 
-        if self.quant_type not in methods:
-            raise ValueError(
-                f"Unsupported string quantization type: {self.quant_type}. "
-                f"Supported types: {', '.join(methods.keys())}"
-            )
-
-        # Validate kwargs against method signature
-        method = methods[self.quant_type]
-        sig = signature(method)
-        valid_kwargs = {
-            param.name
-            for param in sig.parameters.values()
-            if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
-        }
-
-        invalid_kwargs = set(self.quant_type_kwargs) - valid_kwargs
-        if invalid_kwargs:
-            raise ValueError(
-                f"Unexpected keyword arg for {self.quant_type}: {', '.join(invalid_kwargs)}. "
-                f"Valid kwargs: {', '.join(valid_kwargs)}"
-            )
-
-    def _get_torchao_quant_type_to_method(self):
-        """Get mapping of quant_type strings to their corresponding methods."""
-        from torchao.quantization import (
-            int4_weight_only,
-            int8_dynamic_activation_int8_weight,
-            int8_weight_only,
-        )
-
-        return {
-            "int4_weight_only": int4_weight_only,
-            "int8_weight_only": int8_weight_only,
-            "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
-        }
+        if not isinstance(self.quant_type, AOBaseConfig):
+            raise TypeError(f"quant_type must be an AOBaseConfig instance, got {type(self.quant_type)}")
 
     def get_apply_tensor_subclass(self):
-        """Create the appropriate quantization method based on configuration."""
-        if isinstance(self.quant_type, str):
-            methods = self._get_torchao_quant_type_to_method()
-            quant_type_kwargs = self.quant_type_kwargs.copy()
-            if (
-                not torch.cuda.is_available()
-                and is_torchao_available()
-                and self.quant_type == "int4_weight_only"
-                and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
-                and quant_type_kwargs.get("layout", None) is None
-            ):
-                if torch.xpu.is_available():
-                    if version.parse(importlib.metadata.version("torchao")) >= version.parse(
-                        "0.11.0"
-                    ) and version.parse(importlib.metadata.version("torch")) > version.parse("2.7.9"):
-                        from torchao.dtypes import Int4XPULayout
-                        from torchao.quantization.quant_primitives import ZeroPointDomain
-
-                        quant_type_kwargs["layout"] = Int4XPULayout()
-                        quant_type_kwargs["zero_point_domain"] = ZeroPointDomain.INT
-                    else:
-                        raise ValueError(
-                            "TorchAoConfig requires torchao >= 0.11.0 and torch >= 2.8.0 for XPU support. Please upgrade the version or use run on CPU with the cpu version pytorch."
-                        )
-                else:
-                    from torchao.dtypes import Int4CPULayout
-
-                    quant_type_kwargs["layout"] = Int4CPULayout()
-
-            return methods[self.quant_type](**quant_type_kwargs)
-        else:
-            return self.quant_type
+        """Return the quantization config to apply."""
+        return self.quant_type
 
     def to_dict(self):
         """Convert configuration to a dictionary."""
         d = super().to_dict()
 
-        if isinstance(self.quant_type, str):
-            # Handle layout serialization if present
-            if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
-                if is_dataclass(d["quant_type_kwargs"]["layout"]):
-                    d["quant_type_kwargs"]["layout"] = [
-                        d["quant_type_kwargs"]["layout"].__class__.__name__,
-                        dataclasses.asdict(d["quant_type_kwargs"]["layout"]),
-                    ]
-                if isinstance(d["quant_type_kwargs"]["layout"], list):
-                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layout kwargs"
-                    assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
-                    assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
-                else:
-                    raise ValueError("layout must be a list")
-        else:
-            # Handle AOBaseConfig serialization
-            from torchao.core.config import config_to_dict
+        from torchao.core.config import config_to_dict
 
-            # For now we assume there is 1 config per Transformer, however in the future
-            # We may want to support a config per fqn.
-            d["quant_type"] = {"default": config_to_dict(self.quant_type)}
+        d["quant_type"] = {"default": config_to_dict(self.quant_type)}
 
         return d
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """Create configuration from a dictionary."""
-        ao_version = cls._get_ao_version()
-        assert ao_version > version.parse("0.9.0"), "TorchAoConfig requires torchao > 0.9.0 for construction from dict"
+        from torchao.core.config import config_from_dict
+
         config_dict = config_dict.copy()
         quant_type = config_dict.pop("quant_type")
 
-        if isinstance(quant_type, str):
-            return cls(quant_type=quant_type, **config_dict)
         # Check if we only have one key which is "default"
         # In the future we may update this
         assert len(quant_type) == 1 and "default" in quant_type, (
             "Expected only one key 'default' in quant_type dictionary"
         )
         quant_type = quant_type["default"]
-
-        # Deserialize quant_type if needed
-        from torchao.core.config import config_from_dict
-
         quant_type = config_from_dict(quant_type)
 
         return cls(quant_type=quant_type, **config_dict)

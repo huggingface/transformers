@@ -14,15 +14,15 @@
 
 """Phi-3 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/Phi-3-mini-4k-instruct")
+@strict(accept_kwargs=True)
 class Phi3Config(PreTrainedConfig):
     r"""
     original_max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -58,59 +58,33 @@ class Phi3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32064,
-        hidden_size: int | None = 3072,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        resid_pdrop: float | None = 0.0,
-        embd_pdrop: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 4096,
-        original_max_position_embeddings: int | None = 4096,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 32000,
-        pad_token_id: int | None = 32000,
-        sliding_window: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 32064
+    hidden_size: int = 3072
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    resid_pdrop: float = 0.0
+    embd_pdrop: float = 0.0
+    attention_dropout: float | int = 0.0
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096
+    original_max_position_embeddings: int = 4096
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 32000
+    pad_token_id: int | None = 32000
+    sliding_window: int | None = None
 
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attention_dropout = attention_dropout
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.original_max_position_embeddings = original_max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 1.0)  # assign default for BC
-        self.sliding_window = sliding_window
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(
         self, default_theta: int | float = 10_000.0, ignore_keys: set | None = None, **kwargs
@@ -121,21 +95,20 @@ class Phi3Config(PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
-        self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
+        self.rope_parameters.setdefault("partial_rotary_factor", kwargs.get("partial_rotary_factor", 1.0))
         self.standardize_rope_params()
 
         # For backward compatibility if previous version used "su" or "yarn"
         rope_parameters_type = self.rope_parameters.get("rope_type", None)
         if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
             self.rope_parameters["rope_type"] = "longrope"
-        self.validate_rope(ignore_keys=ignore_keys)
         return kwargs
 
-    def validate_rope(self, ignore_keys: set | None = None):
+    def validate_rope(self):
         """
         Validate the `rope_parameters` configuration.
         """
-        super().validate_rope(ignore_keys=ignore_keys)
+        super().validate_rope()
 
         # Run Phi3 specific validation
         if not isinstance(self.rope_parameters, dict):

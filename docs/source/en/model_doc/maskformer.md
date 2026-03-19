@@ -72,14 +72,13 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 
 [[autodoc]] MaskFormerImageProcessor
     - preprocess
-    - encode_inputs
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## MaskFormerImageProcessorFast
+## MaskFormerImageProcessorPil
 
-[[autodoc]] MaskFormerImageProcessorFast
+[[autodoc]] MaskFormerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

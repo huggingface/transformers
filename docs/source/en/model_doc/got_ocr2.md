@@ -273,10 +273,12 @@ alt="drawing" width="600"/>
 ## GotOcr2ImageProcessor
 
 [[autodoc]] GotOcr2ImageProcessor
+    - preprocess
 
-## GotOcr2ImageProcessorFast
+## GotOcr2ImageProcessorPil
 
-[[autodoc]] GotOcr2ImageProcessorFast
+[[autodoc]] GotOcr2ImageProcessorPil
+    - preprocess
 
 ## GotOcr2Processor
 

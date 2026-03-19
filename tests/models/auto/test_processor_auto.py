@@ -35,7 +35,7 @@ from transformers import (
     AutoTokenizer,
     BaseVideoProcessor,
     BertTokenizer,
-    CLIPImageProcessorFast,
+    CLIPImageProcessor,
     FeatureExtractionMixin,
     ImageProcessingMixin,
     LlamaTokenizer,
@@ -43,7 +43,6 @@ from transformers import (
     LlavaProcessor,
     ProcessorMixin,
     SiglipImageProcessor,
-    SiglipImageProcessorFast,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -423,7 +422,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
     def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
-        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessorFast")
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
     def test_auto_processor_save_load(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
@@ -493,8 +492,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         # Create processor with multiple image processors
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertForMaskedLM")
-        image_processor = SiglipImageProcessorFast(size={"height": 224, "width": 224})
-        encoder_image_processor = CLIPImageProcessorFast(size={"height": 384, "width": 384})
+        image_processor = SiglipImageProcessor(size={"height": 224, "width": 224})
+        encoder_image_processor = CLIPImageProcessor(size={"height": 384, "width": 384})
 
         processor = DualImageProcessorProcessor(
             tokenizer=tokenizer,
@@ -515,10 +514,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # Verify both image processors have the correct type key for instantiation
             self.assertIn("image_processor_type", processor_config["image_processor"])
             self.assertIn("image_processor_type", processor_config["encoder_image_processor"])
-            self.assertEqual(processor_config["image_processor"]["image_processor_type"], "SiglipImageProcessorFast")
-            self.assertEqual(
-                processor_config["encoder_image_processor"]["image_processor_type"], "CLIPImageProcessorFast"
-            )
+            self.assertEqual(processor_config["image_processor"]["image_processor_type"], "SiglipImageProcessor")
+            self.assertEqual(processor_config["encoder_image_processor"]["image_processor_type"], "CLIPImageProcessor")
 
             # Verify the sizes are different (to ensure they're separate configs)
             self.assertEqual(processor_config["image_processor"]["size"], {"height": 224, "width": 224})
@@ -540,8 +537,8 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertEqual(loaded_processor.encoder_image_processor.size, {"height": 384, "width": 384})
 
             # Verify they are different types
-            self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessorFast)
-            self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessorFast)
+            self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
+            self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessor)
 
 
 @is_staging_test

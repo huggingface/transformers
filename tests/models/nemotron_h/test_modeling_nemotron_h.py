@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 import pytest
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, NemotronHConfig, NemotronHForCausalLM, is_torch_available
@@ -264,9 +265,6 @@ class NemotronHModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -626,7 +624,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertEqual(config.num_hidden_layers, 4)
 
         # Invalid layer type - should raise error
-        with self.assertRaises(ValueError):
+        with self.assertRaises(StrictDataclassClassValidationError):
             NemotronHConfig(
                 vocab_size=100,
                 hidden_size=32,

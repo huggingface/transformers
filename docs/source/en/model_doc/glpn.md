@@ -61,9 +61,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] GLPNImageProcessor
     - preprocess
 
-## GLPNImageProcessorFast
+## GLPNImageProcessorPil
 
-[[autodoc]] GLPNImageProcessorFast
+[[autodoc]] GLPNImageProcessorPil
     - preprocess
 
 ## GLPNModel
