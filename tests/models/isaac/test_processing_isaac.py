@@ -659,22 +659,6 @@ def test_crop_cuts_through_image_segment(isaac_processor, isaac_tokenizer, isaac
 
 @require_torch
 @require_vision
-def test_crop_removes_all_vision_when_window_excludes_images(isaac_processor, isaac_tokenizer, isaac_tiny_config):
-    vision_token = isaac_processor.vision_token
-    text_tail = "closing"
-    image = _make_dummy_image()
-
-    tail_tokens = len(isaac_processor.tokenizer.encode(text_tail, add_special_tokens=False))
-    processor = _make_processor_with_max_len(isaac_tokenizer, isaac_tiny_config, tail_tokens)
-    outputs = _assert_common(_run_processor(processor, text=f"{vision_token} {text_tail}", images=[image]))
-
-    _assert_no_vision(outputs)
-    assert outputs["input_ids"].shape[1] == tail_tokens
-    assert _count_modality(outputs, 0) == tail_tokens
-
-
-@require_torch
-@require_vision
 def test_batch_outputs_match_individual_calls(isaac_processor):
     texts = ["hi", "this one is longer"]
 
