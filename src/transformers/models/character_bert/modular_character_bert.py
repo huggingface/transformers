@@ -13,19 +13,15 @@
 # limitations under the License.
 """PyTorch CharacterBERT model."""
 
-from __future__ import annotations
-
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
+from ...cache_utils import Cache
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
-    MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -37,7 +33,10 @@ from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import (
     BertCrossAttention,
     BertEncoder,
+    BertForQuestionAnswering,
+    BertForTokenClassification,
     BertLayer,
+    BertModel,
     BertOnlyMLMHead,
     BertPooler,
     BertPreTrainedModel,
@@ -73,13 +72,13 @@ class CharacterBertOnlyMLMHead(BertOnlyMLMHead):
 class CharacterBertHighway(nn.Module):
     def __init__(self, input_dim: int, num_layers: int = 1):
         super().__init__()
-        self._layers = nn.ModuleList([nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)])
-        for layer in self._layers:
+        self.layers = nn.ModuleList([nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)])
+        for layer in self.layers:
             layer.bias[input_dim:].data.fill_(1)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         current_input = inputs
-        for layer in self._layers:
+        for layer in self.layers:
             projected = layer(current_input)
             nonlinear_part, gate = projected.chunk(2, dim=-1)
             nonlinear_part = nn.functional.relu(nonlinear_part)
@@ -93,23 +92,23 @@ class CharacterBertCharacterCNN(nn.Module):
         super().__init__()
         self.max_characters_per_token = config.max_characters_per_token
         self.hidden_size = config.hidden_size
-        self._filters = list(config.character_cnn_filters)
+        self.filters = list(config.character_cnn_filters)
 
-        self._char_embedding_weights = nn.Parameter(
+        self.char_embedding_weights = nn.Parameter(
             torch.zeros(config.character_vocab_size + 1, config.character_embedding_dim),
             requires_grad=True,
         )
 
-        convolutions = []
-        for index, (width, num_filters) in enumerate(self._filters):
-            conv = nn.Conv1d(config.character_embedding_dim, num_filters, kernel_size=width, bias=True)
-            self.add_module(f"char_conv_{index}", conv)
-            convolutions.append(conv)
-        self._convolutions = convolutions
+        self.convolutions = nn.ModuleList(
+            [
+                nn.Conv1d(config.character_embedding_dim, num_filters, kernel_size=width, bias=True)
+                for width, num_filters in self.filters
+            ]
+        )
 
-        total_filters = sum(num_filters for _, num_filters in self._filters)
-        self._highways = CharacterBertHighway(total_filters, config.num_highway_layers)
-        self._projection = nn.Linear(total_filters, config.hidden_size, bias=True)
+        total_filters = sum(num_filters for _, num_filters in self.filters)
+        self.highways = CharacterBertHighway(total_filters, config.num_highway_layers)
+        self.projection = nn.Linear(total_filters, config.hidden_size, bias=True)
 
     def forward(self, input_ids: torch.LongTensor) -> torch.Tensor:
         if input_ids.ndim < 2:
@@ -130,21 +129,20 @@ class CharacterBertCharacterCNN(nn.Module):
 
         character_embeddings = nn.functional.embedding(
             input_ids.reshape(num_tokens, max_characters),
-            self._char_embedding_weights,
+            self.char_embedding_weights,
         )
         character_embeddings = torch.transpose(character_embeddings, 1, 2)
 
         conv_outputs = []
-        for index in range(len(self._convolutions)):
-            conv = getattr(self, f"char_conv_{index}")
+        for conv in self.convolutions:
             convolved = conv(character_embeddings)
             convolved, _ = torch.max(convolved, dim=-1)
             convolved = nn.functional.relu(convolved)
             conv_outputs.append(convolved)
 
         token_embeddings = torch.cat(conv_outputs, dim=-1)
-        token_embeddings = self._highways(token_embeddings)
-        token_embeddings = self._projection(token_embeddings)
+        token_embeddings = self.highways(token_embeddings)
+        token_embeddings = self.projection(token_embeddings)
 
         return token_embeddings.view(*token_dims, self.hidden_size)
 
@@ -214,6 +212,7 @@ class CharacterBertEmbeddings(nn.Module):
 class CharacterBertPreTrainedModel(BertPreTrainedModel):
     config_class = CharacterBertConfig
     base_model_prefix = "character_bert"
+    _no_split_modules = ["CharacterBertEmbeddings", "CharacterBertLayer"]
     _can_record_outputs = {
         "hidden_states": CharacterBertLayer,
         "attentions": CharacterBertSelfAttention,
@@ -224,7 +223,7 @@ class CharacterBertPreTrainedModel(BertPreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, CharacterBertCharacterCNN):
-            init.zeros_(module._char_embedding_weights)
+            init.zeros_(module.char_embedding_weights)
 
 
 @auto_docstring(
@@ -232,15 +231,13 @@ class CharacterBertPreTrainedModel(BertPreTrainedModel):
     CharacterBERT model with a CharacterCNN token embedder and BERT encoder stack.
     """
 )
-class CharacterBertModel(CharacterBertPreTrainedModel):
-    _no_split_modules = ["CharacterBertEmbeddings", "CharacterBertLayer"]
-
+class CharacterBertModel(BertModel):
     def __init__(self, config: CharacterBertConfig, add_pooling_layer: bool = True):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether to include the pooler over the first token hidden state.
         """
-        super().__init__(config)
+        super().__init__(self, config)
         self.config = config
         self.gradient_checkpointing = False
 
@@ -249,12 +246,6 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
         self.pooler = CharacterBertPooler(config) if add_pooling_layer else None
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
 
     @merge_with_config_defaults
     @capture_outputs
@@ -270,110 +261,26 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
-
-        if use_cache and past_key_values is None:
-            past_key_values = (
-                EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-                if encoder_hidden_states is not None or self.config.is_encoder_decoder
-                else DynamicCache(config=self.config)
+        if input_ids is not None and input_ids.ndim != 3:
+            raise ValueError(
+                "CharacterBERT expects `input_ids` to have shape "
+                "(batch_size, sequence_length, max_characters_per_token)."
             )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            if input_ids.ndim != 3:
-                raise ValueError(
-                    "CharacterBERT expects `input_ids` to have shape "
-                    "(batch_size, sequence_length, max_characters_per_token)."
-                )
-            device = input_ids.device
-            seq_length = input_ids.shape[1]
-        else:
-            device = inputs_embeds.device
-            seq_length = inputs_embeds.shape[1]
-
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
-
-        embedding_output = self.embeddings(
+        return super().forward(
             input_ids=input_ids,
-            position_ids=position_ids,
+            attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
-
-        attention_mask, encoder_attention_mask = self._create_attention_masks(
-            attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
-            embedding_output=embedding_output,
-            encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-        )
-
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
-            position_ids=position_ids,
             **kwargs,
         )
-        sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-
-        return BaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
-        )
-
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        cache_position,
-        past_key_values,
-    ):
-        if self.config.is_decoder:
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-            )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
-
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
-
-        return attention_mask, encoder_attention_mask
 
 
 @auto_docstring(
@@ -402,12 +309,6 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
-
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
-        self.cls.predictions.decoder.bias = self.cls.predictions.bias
-        if missing_keys is not None:
-            missing_keys.discard("cls.predictions.decoder.bias")
 
     @can_return_tuple
     @auto_docstring
@@ -535,85 +436,11 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
 
 
 @auto_docstring
-class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
+class CharacterBertForTokenClassification(BertForTokenClassification):
     def __init__(self, config: CharacterBertConfig):
         super().__init__(config)
-
-        self.character_bert = CharacterBertModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, 1)
-
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        input_ids = input_ids.reshape(-1, input_ids.size(-2), input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.reshape(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.reshape(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.reshape(-1, position_ids.size(-1)) if position_ids is not None else None
-        inputs_embeds = (
-            inputs_embeds.reshape(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        outputs = self.character_bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, num_choices)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels)
-
-        return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@auto_docstring
-class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
-    def __init__(self, config: CharacterBertConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels
 
         self.character_bert = CharacterBertModel(config, add_pooling_layer=False)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -627,6 +454,10 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        """
         outputs = self.character_bert(
             input_ids,
             attention_mask=attention_mask,
@@ -655,15 +486,11 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
 
 
 @auto_docstring
-class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
+class CharacterBertForQuestionAnswering(BertForQuestionAnswering):
     def __init__(self, config: CharacterBertConfig):
         super().__init__(config)
-        self.num_labels = config.num_labels
 
         self.character_bert = CharacterBertModel(config, add_pooling_layer=False)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -722,7 +549,6 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
 
 __all__ = [
     "CharacterBertForMaskedLM",
-    "CharacterBertForMultipleChoice",
     "CharacterBertForQuestionAnswering",
     "CharacterBertForSequenceClassification",
     "CharacterBertForTokenClassification",
