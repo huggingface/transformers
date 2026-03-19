@@ -1577,13 +1577,13 @@ class ContinuousBatchingConfig:
             set to 0.
         max_cached_graphs (`int`, *optional*, defaults to 0):
             Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
-        varlen_compile_config (`CompileConfig`, *optional*, defaults to None):
+        varlen_compile_config (`CompileConfig`, *optional*):
             CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
             The varlen path handles batches with varying query and KV lengths, often benefiting from dynamic=True.
-        decode_compile_config (`CompileConfig`, *optional*, defaults to None):
+        decode_compile_config (`CompileConfig`, *optional*):
             CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
-        use_default_compile_configs (`bool`, *optional*, defaults to False):
+        use_default_compile_configs (`bool`, *optional*, defaults to `False`):
             If True, a default compile config will be used for paths that are not explicitly set.
         scheduler (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
