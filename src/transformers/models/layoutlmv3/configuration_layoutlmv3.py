@@ -80,7 +80,7 @@ class LayoutLMv3Config(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_2d_position_embeddings: int = 1024
     coordinate_size: int = 128
     shape_size: int = 128

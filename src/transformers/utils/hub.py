@@ -82,6 +82,7 @@ class DownloadKwargs(TypedDict, total=False):
     revision: str | None
     subfolder: str
     commit_hash: str | None
+    tqdm_class: type | None
 
 
 # Determine default cache directory.
@@ -295,6 +296,7 @@ def cached_files(
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: str | None = None,
+    tqdm_class: type | None = None,
     **deprecated_kwargs,
 ) -> list[str] | None:
     """
@@ -429,6 +431,7 @@ def cached_files(
                 proxies=proxies,
                 token=token,
                 local_files_only=local_files_only,
+                tqdm_class=tqdm_class,
             )
         else:
             snapshot_download(
@@ -442,6 +445,7 @@ def cached_files(
                 proxies=proxies,
                 token=token,
                 local_files_only=local_files_only,
+                tqdm_class=tqdm_class,
             )
 
     except Exception as e:
@@ -841,6 +845,7 @@ def get_checkpoint_shard_files(
     revision=None,
     subfolder="",
     _commit_hash=None,
+    tqdm_class=None,
     **deprecated_kwargs,
 ):
     """
@@ -883,6 +888,7 @@ def get_checkpoint_shard_files(
         revision=revision,
         subfolder=subfolder,
         _commit_hash=_commit_hash,
+        tqdm_class=tqdm_class,
     )
 
     return cached_filenames, sharded_metadata
