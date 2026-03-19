@@ -300,6 +300,10 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
 
+    def test_auto_tokenizer_from_mistral_patching(self):
+        """See #43376, regression when kwarg is manually passed to patch the regex in mistral tokenizers"""
+        AutoTokenizer.from_pretrained("mistralai/Ministral-3-3B-Instruct-2512", fix_mistral_regex=True)  # should not error
+
     @require_tokenizers
     def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
         tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
