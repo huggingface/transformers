@@ -525,7 +525,9 @@ def sdpa_mask(
         attention_mask = attention_mask.expand(batch_size, -1, q_length, kv_length)
         # Apply padding mask separately using compile-friendly slice-based indexing
         if _apply_padding_separately:
-            attention_mask = attention_mask & padding_mask[:, kv_offset : kv_offset + kv_length].unsqueeze(1).unsqueeze(1)
+            attention_mask = attention_mask & padding_mask[:, kv_offset : kv_offset + kv_length].unsqueeze(
+                1
+            ).unsqueeze(1)
 
     # Option 2: Vmap mask creation (torch>=2.6 and custom patterns)
     elif _is_torch_greater_or_equal_than_2_6:

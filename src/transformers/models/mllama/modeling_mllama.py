@@ -1406,7 +1406,9 @@ class MllamaModel(MllamaPreTrainedModel):
             seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
             cross_attention_mask = cross_attention_mask[:, :, past_seen_tokens : past_seen_tokens + seq_len]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, past_seen_tokens : past_seen_tokens + seq_len]
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[
+                :, :, past_seen_tokens : past_seen_tokens + seq_len
+            ]
 
         outputs = self.language_model(
             input_ids=input_ids,
