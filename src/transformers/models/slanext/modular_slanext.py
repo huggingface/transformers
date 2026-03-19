@@ -41,6 +41,7 @@ from ..got_ocr2.modeling_got_ocr2 import (
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
+@strict(accept_kwargs=True)
 class SLANeXtVisionConfig(GotOcr2VisionConfig):
     image_size: int = 512
 

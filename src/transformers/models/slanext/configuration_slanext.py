@@ -26,6 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
+@strict(accept_kwargs=True)
 class SLANeXtVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
