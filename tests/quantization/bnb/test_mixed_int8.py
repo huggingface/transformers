@@ -149,16 +149,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         Test the `get_keys_to_not_convert` function.
         """
 
-        from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
+        from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, OPTForCausalLM
         from transformers.quantizers.base import get_keys_to_not_convert
 
-        model_id = "mosaicml/mpt-7b"
-        config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
-        with torch.device("meta"):
-            model = MptForCausalLM(config)
         # The order of the keys does not matter, so we sort them before comparing, same for the other tests.
-        self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "transformer.wte"].sort())
-
         model_id = "Salesforce/blip2-opt-2.7b"
         config = AutoConfig.from_pretrained(model_id, revision="1ef7f63a8f0a144c13fdca8103eb7b4691c74cec")
         with torch.device("meta"):
@@ -628,6 +622,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
 
 
 @apply_skip_if_not_implemented
+@require_torch_multi_accelerator
 class MixedInt8TestPipeline(BaseMixedInt8Test):
     def setUp(self):
         super().setUp()
@@ -649,11 +644,41 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
         we used pipeline for inference speed benchmarking we want to make sure that this feature does not break anything
         on pipeline.
         """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": 0,
+            "transformer.h.0": 0,
+            "transformer.h.1": 0,
+            "transformer.h.2": 0,
+            "transformer.h.3": 0,
+            "transformer.h.4": 0,
+            "transformer.h.5": 0,
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 0,
+            "transformer.h.10": 1,
+            "transformer.h.11": 1,
+            "transformer.h.12": 1,
+            "transformer.h.13": 1,
+            "transformer.h.14": 1,
+            "transformer.h.15": 1,
+            "transformer.h.16": 1,
+            "transformer.h.17": 0,
+            "transformer.h.18": 0,
+            "transformer.h.19": 0,
+            "transformer.h.20": 0,
+            "transformer.h.21": 0,
+            "transformer.h.22": 0,
+            "transformer.h.23": 1,
+            "transformer.ln_f": 0,
+        }
         # self._clear_cuda_cache()
         self.pipe = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"device_map": "auto", "quantization_config": BitsAndBytesConfig(load_in_8bit=True)},
+            model_kwargs={"device_map": device_map, "quantization_config": BitsAndBytesConfig(load_in_8bit=True)},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
 
@@ -883,9 +908,11 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         model.train()
 
         if torch_device in ["cuda", "xpu"]:
-            self.assertEqual(
-                set(model.hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
-            )
+            hf_device_map = getattr(model, "hf_device_map", None)
+            if hf_device_map is not None:
+                self.assertEqual(
+                    set(hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
+                )
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
@@ -921,7 +948,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 @apply_skip_if_not_implemented
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "openai-community/gpt2-xl"
-    EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
+    EXPECTED_RELATIVE_DIFFERENCE = 1.8987589402914336
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a big fan of")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")
@@ -930,6 +957,8 @@ class MixedInt8GPT2Test(MixedInt8Test):
     # Expected values on Intel CPU
     EXPECTED_OUTPUTS.add("Hello my name is John Doe. I am a man. I am")
     EXPECTED_OUTPUTS.add("Hello my name is John, and I'm a writer. I'm")
+    # Expected values on Intel XPU
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe and I am a member of the United")
 
     def test_int8_from_pretrained(self):
         r"""

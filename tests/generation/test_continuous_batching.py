@@ -25,25 +25,28 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     CompileConfig,
+    ContinuousBatchingConfig,
     GenerationConfig,
     LogitsProcessorList,
 )
 from transformers.generation.continuous_batching.cache import (
-    FullAttentionCacheAllocator,
     PagedAttentionCache,
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
-from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, build_attention_mask
+from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
+from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor
+from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_kernels,
     require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_flash_attn_2_available, is_kernels_available
+from transformers.utils import is_flash_attn_2_available, is_kernels_available, is_torch_xpu_available
 
 
 def flush_memory(flush_compile: bool = True) -> None:
@@ -74,7 +77,7 @@ def flush_memory(flush_compile: bool = True) -> None:
     gc.collect()
 
 
-class ContinuousBatchingNonGenerationTest(unittest.TestCase):
+class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -152,19 +155,17 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
         cumulative_seqlens_q: list[int],
         cumulative_seqlens_k: list[int],
         sliding_window: int,  # the sliding window size, 1 means no sliding window
-        str_expected_mask: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
+        str_expected_mask_lines: list[str],  # the attention mask, broken down by line as a string of 0s and 1s
     ) -> None:
         """Tests the correctness of the attention mask used in the continuous batching API."""
         # Build expected mask
         minus_inf = torch.finfo(torch.float32).min
         expected_mask = torch.empty((cumulative_seqlens_q[-1], cumulative_seqlens_k[-1]), dtype=torch.float32)
-        for i, line in enumerate(str_expected_mask):
+        for i, line in enumerate(str_expected_mask_lines):
             expected_mask[i, :] = torch.tensor([minus_inf if c == "0" else 0 for c in line])
         # Build actual mask
         actual_mask = torch.full_like(expected_mask, minus_inf)  # function modifies in place
-        build_attention_mask(
-            actual_mask, torch.tensor(cumulative_seqlens_q), torch.tensor(cumulative_seqlens_k), sliding_window
-        )
+        build_attention_mask(actual_mask, cumulative_seqlens_q, cumulative_seqlens_k, sliding_window)
         # Check that the actual mask matches the expected mask
         matches = (expected_mask == actual_mask).all()
         # If it doesn't match, print the masks in a readable form and fail the test
@@ -173,7 +174,7 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                 "".join("1" if x == 0 else "0" for x in token_attn_vector) for token_attn_vector in actual_mask
             ]
             str_mask = "\n".join(str_mask)
-            str_expected_mask = "\n".join(str_expected_mask)
+            str_expected_mask = "\n".join(str_expected_mask_lines)
             self.fail(
                 f"Test failed for: {cumulative_seqlens_q = }, {cumulative_seqlens_k = }, {sliding_window = }\n"
                 f"Expected mask:\n{str_expected_mask}\n"
@@ -214,7 +215,6 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             (2, 0, 1, 1, 3, 4, True),
         ]
     )
-    @require_torch_accelerator
     def test_continuous_batching_will_allocation_be_successful(
         self,
         num_requested_blocks: int,
@@ -227,10 +227,14 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
     ) -> None:
         """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the elevant attributes of
         a dummy cache."""
+
+        if torch_device is None:  # this check which should always pass and helps with type checking
+            raise ValueError(f"This requires a torch accelerator, yet {torch_device = } and the test was not skipped.")
+
         # Create the cache
         cache = PagedAttentionCache(
             config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
-            generation_config=GenerationConfig(num_blocks=8, block_size=16, max_batch_tokens=8),
+            continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=8),
             device=torch_device,
         )
 
@@ -253,8 +257,141 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             f"Expected {expected_result}, got {result}",
         )
 
+    @parameterized.expand(
+        [
+            # (block_size, block_table, past_length, query_length, expected_indices)
+            # Basic cases
+            (32, [0, 1, 2], 0, 16, list(range(16))),
+            (32, [0, 1, 2], 0, 32, list(range(32))),
+            (32, [0, 1, 2], 0, 64, list(range(64))),
+            # Non-contiguous blocks
+            (32, [0, 3, 6], 0, 64, list(range(32)) + list(range(96, 128))),
+            (32, [2, 5, 8], 0, 32, list(range(64, 96))),
+            # With past_length (read still starts from 0)
+            (32, [0, 1, 2], 16, 16, list(range(32))),
+            (32, [0, 1, 2], 31, 2, list(range(33))),
+            # Partial last block
+            (32, [0, 1, 2], 0, 50, list(range(32)) + list(range(32, 50))),
+            # Different block sizes
+            (16, [0, 1, 2, 3], 0, 48, list(range(48))),
+            (64, [0, 1], 0, 100, list(range(100))),
+        ]
+    )
+    def test_full_attention_get_read_indices(
+        self,
+        block_size: int,
+        block_table: list[int],
+        past_length: int,
+        query_length: int,
+        expected_indices: list[int],
+    ) -> None:
+        """Test FullAttentionCacheAllocator.get_read_indices returns correct physical indices."""
+        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
+        request_id = "test_request"
+        allocator.block_table[request_id] = block_table
 
-class ContinuousBatchingGenerationTest(unittest.TestCase):
+        result = allocator.get_read_indices(request_id, past_length, query_length)
+        self.assertEqual(
+            result,
+            expected_indices,
+            f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
+        )
+
+    @parameterized.expand(
+        [
+            # (block_size, block_table, past_length, query_length, expected_indices)
+            # Start of sequence
+            (32, [0, 1, 2], 0, 16, list(range(16))),
+            (32, [0, 1, 2], 0, 32, list(range(32))),
+            # Continue in same block
+            (32, [0, 1, 2], 16, 16, list(range(16, 32))),
+            # Cross block boundary
+            (32, [0, 1, 2], 30, 4, list(range(30, 34))),
+            (32, [0, 1, 2], 31, 2, [31, 32]),
+            # Non-contiguous blocks
+            (32, [0, 3, 6], 30, 4, [30, 31, 96, 97]),
+            (32, [2, 5, 8], 60, 10, list(range(188, 192)) + list(range(256, 262))),
+            # Decode step (single token)
+            (32, [0, 1, 2], 0, 1, [0]),
+            (32, [0, 1, 2], 31, 1, [31]),
+            (32, [0, 1, 2], 32, 1, [32]),
+            (32, [0, 1, 2], 63, 1, [63]),
+            # Different block sizes
+            (16, [0, 1, 2, 3], 14, 4, [14, 15, 16, 17]),
+            (64, [0, 1], 60, 10, list(range(60, 70))),
+        ]
+    )
+    def test_full_attention_get_write_indices(
+        self,
+        block_size: int,
+        block_table: list[int],
+        past_length: int,
+        query_length: int,
+        expected_indices: list[int],
+    ) -> None:
+        """Test FullAttentionCacheAllocator.get_write_indices returns correct physical indices."""
+        allocator = FullAttentionCacheAllocator(index=0, block_size=block_size, allow_block_sharing=False)
+        request_id = "test_request"
+        allocator.block_table[request_id] = block_table
+
+        result = allocator.get_write_indices(request_id, past_length, query_length)
+        self.assertEqual(
+            result,
+            expected_indices,
+            f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
+        )
+
+    @slow
+    def test_continuous_batching_no_accelerators(self) -> None:
+        """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
+        environment by mocking all acceleratoravailability checks to return False"""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        # Mock all accelerator availability checks to simulate CPU-only PyTorch
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("transformers.utils.is_torch_xpu_available", return_value=False),
+            patch("torch.backends.mps.is_available", return_value=False),
+        ):
+            # Verify patches work
+            self.assertFalse(torch.cuda.is_available())
+            self.assertFalse(is_torch_xpu_available())
+            self.assertFalse(torch.backends.mps.is_available())
+
+            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+            tokenizer.pad_token = tokenizer.eos_token
+
+            user_messages = [
+                "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
+            ]
+            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+            # Load model on CPU
+            model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
+            model = model.to("cpu").eval()
+            model.generation_config.max_new_tokens = 10
+            model.generation_config.do_sample = False
+
+            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+
+            # This should not crash even with all accelerators unavailable
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=model.generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+
+            # Verify we got outputs
+            self.assertEqual(len(outputs), len(input_ids))
+            for output in outputs.values():
+                self.assertIsNotNone(output.generated_tokens)
+                self.assertGreater(len(output.generated_tokens), 0)
+
+
+@require_torch_accelerator
+class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
@@ -262,12 +399,10 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     def _test_continuous_batching_parity(
         self,
         model_id: str,
-        allow_block_sharing: bool,
+        continuous_batching_config: ContinuousBatchingConfig,
         attn_implementation: str,
-        use_cuda_graph: bool,
         use_compile: bool,
         max_new_tokens: int = 20,
-        num_blocks: int | None = None,
         num_repeat_prompts: int = 1,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
@@ -276,12 +411,13 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         if attn_implementation == "flash_attention_2" and not (is_flash_attn_2_available() or is_kernels_available()):
             self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
-        if use_cuda_graph and torch_device != "cuda":
+        if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
             self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
 
         # Prepare continuous batching inputs
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        tokenizer.pad_token = tokenizer.eos_token
+        if hasattr(tokenizer, "eos_token"):
+            tokenizer.pad_token = tokenizer.eos_token
         user_messages = [
             "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
             "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
@@ -299,17 +435,24 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         # Generation with continuous batching
         model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
+        if (
+            attn_implementation == "flash_attention_2"
+            and torch_device == "cpu"
+            and getattr(model.config, "sliding_window", None) is not None
+            and model.config.sliding_window > 0
+        ):
+            self.skipTest("Flash Attention 2 with sliding window attention is not supported on CPU. Skipping test.")
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        model.generation_config.use_cuda_graph = use_cuda_graph
-        model.generation_config.num_blocks = num_blocks
         if use_compile:
             model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
-            inputs=input_ids, generation_config=model.generation_config, allow_block_sharing=allow_block_sharing
+            inputs=input_ids,
+            generation_config=model.generation_config,
+            continuous_batching_config=continuous_batching_config,
         )
 
         # Prepare non-continuous batching inputs
@@ -328,7 +471,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        model.generation_config.use_cuda_graph = use_cuda_graph
+        model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
         if use_compile:
             model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
@@ -353,7 +496,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             if continuous_batching_output != generate_output:
                 decoded_continuous_batching_output = tokenizer.decode(continuous_batching_output)
                 decoded_generate_output = tokenizer.decode(generate_output)
-                msg = f"Test failed for {model_id = } {allow_block_sharing = }, {attn_implementation = }, {use_cuda_graph = }, {use_compile = }\n"
+                msg = f"Test failed for {model_id = } {continuous_batching_config = }, {attn_implementation = }, {use_compile = }\n"
                 msg += f"User message              : {repr(user_message)}\n"
                 msg += f"Continuous batching output: {repr(decoded_continuous_batching_output)}\n"
                 msg += f"Generate output           : {repr(decoded_generate_output)}"
@@ -372,7 +515,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
-    @require_torch_accelerator
     @slow
     def test_continuous_batching_config_combinations(
         self,
@@ -382,13 +524,18 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         use_compile: bool,
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph
+        )
         self._test_continuous_batching_parity(
-            model_id, allow_block_sharing, attn_implementation, use_cuda_graph, use_compile
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation=attn_implementation,
+            use_compile=use_compile,
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
     # TODO: replace gemma2 with a tiny version of GPT-OSS? That way we can test sliding window AND attention sink
-
     @parameterized.expand(
         list(
             itertools.product(
@@ -398,30 +545,52 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
-    @require_torch_accelerator
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
-            self._test_continuous_batching_parity(model_id, True, "flash_attention_2", use_cuda_graph, use_compile)
+            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph)
+            self._test_continuous_batching_parity(
+                model_id=model_id,
+                continuous_batching_config=continuous_batching_config,
+                attn_implementation="flash_attention_2",
+                use_compile=use_compile,
+            )
         finally:
             flush_memory(flush_compile=use_compile)
 
-    @require_torch_accelerator
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        self._test_continuous_batching_parity(model_id, False, "sdpa", False, False)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="sdpa",
+            use_compile=False,
+        )
 
-    @require_torch_accelerator
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="flash_attention_2",
+            use_compile=True,
+            max_new_tokens=80,
+        )
 
-    @require_torch_accelerator
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
         sharing."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
+        )
 
         # Patch soft_reset_one_request to verify it's called at least once
         original_soft_reset = ContinuousBatchProcessor.soft_reset_one_request
@@ -429,7 +598,12 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset
         ) as mock_soft_reset:
             self._test_continuous_batching_parity(
-                model_id, True, "sdpa", True, False, num_blocks=4, num_repeat_prompts=4
+                model_id=model_id,
+                continuous_batching_config=continuous_batching_config,
+                attn_implementation="sdpa",
+                use_compile=False,
+                max_new_tokens=30,
+                num_repeat_prompts=4,
             )
             self.assertTrue(mock_soft_reset.called, "Soft reset method was not called.")
 
@@ -475,15 +649,12 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         manager.stop(block=True)
 
-    @require_torch_accelerator
     def test_streaming_request(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=False)
 
-    @require_torch_accelerator
     def test_non_streaming_request(self) -> None:
         self._test_streaming_or_not_request(with_streaming=False, with_non_streaming=True)
 
-    @require_torch_accelerator
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
@@ -496,8 +667,11 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id)
 
-        generation_config = GenerationConfig(do_sample=False, block_size=32)
-        with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
+        cb_context_manager = model.continuous_batching_context_manager(
+            generation_config=GenerationConfig(do_sample=False),
+            continuous_batching_config=ContinuousBatchingConfig(block_size=32),
+        )
+        with cb_context_manager as manager:
             manager.logit_processor = LogitsProcessorList()
 
             # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
@@ -515,6 +689,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
             num_fa = expected_layer_types["full_attention"]
             num_sw = expected_layer_types["sliding_window"]
+
+            if manager.batch_processor is None:
+                raise RuntimeError("Batch processor is None even after a request was added.")
 
             hash_table = manager.batch_processor.cache._block_manager._hash_to_id
             self.assertEqual(
@@ -580,7 +757,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         print(f"{chunk_no_reuse.generated_tokens = } {expected_output_tokens = }")
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens)
 
-    @require_torch_accelerator
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         num_layer_groups = {"full_attention": 1, "sliding_window": 0}
@@ -591,7 +767,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
-    @require_torch_accelerator
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
         num_layer_groups = {"full_attention": 2, "sliding_window": 11}
@@ -603,7 +778,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
     @parameterized.expand([True, False])
-    @require_torch_accelerator
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -622,12 +796,14 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model.generation_config.do_sample = False
 
         # Generation with continuous batching
-        manager_cm = model.continuous_batching_context_manager(
-            allow_block_sharing=allow_block_sharing, block=True, timeout=5
+        cb_context_manager = model.continuous_batching_context_manager(
+            continuous_batching_config=ContinuousBatchingConfig(allow_block_sharing=allow_block_sharing),
+            block=True,
+            timeout=5,
         )
         # Main loop
         results = []
-        with manager_cm as manager:
+        with cb_context_manager as manager:
             manager.num_return_sequences = 2
             manager.add_requests(inputs=input_ids, max_new_tokens=30)
             requests_left = 2
@@ -642,3 +818,89 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         self.assertEqual(len(results), 2, f"Expected 2 results, but got {len(results) = }")
         self.assertEqual(results[0].generated_tokens, results[1].generated_tokens)
+
+    # ----------------------------------Additional features tests---------------------------------- #
+    #               Tests to check addtional features of CB do not change its results               #
+    # --------------------------------------------------------------------------------------------- #
+    @parameterized.expand(
+        list(
+            itertools.product(
+                ["sdpa", "flash_attention_2"],
+                [False, True],
+                [False, True],
+            )
+        )
+    )
+    @slow
+    def test_continuous_batching_async(
+        self, attn_implementation: str, use_cuda_graph: bool, use_compile: bool
+    ) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=ContinuousBatchingConfig(
+                allow_block_sharing=True, use_cuda_graph=use_cuda_graph, use_async_batching=True
+            ),
+            attn_implementation=attn_implementation,
+            use_compile=use_compile,
+        )
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @slow
+    @require_kernels
+    def test_flash_attn_with_kvcache_parity(self, use_cuda_graph: bool, use_async: bool) -> None:
+        """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
+
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation="paged|kernels-community/flash-attn3",
+        ).eval()
+
+        # Prepare continuous batching inputs
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        if hasattr(tokenizer, "eos_token"):
+            tokenizer.pad_token = tokenizer.eos_token
+        user_messages = [
+            "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
+            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
+            "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
+        ]  # fmt: skip
+        chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+        gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
+        continuous_batching_config = ContinuousBatchingConfig(
+            block_size=256,
+            num_blocks=64,
+            max_batch_tokens=16,
+            use_cuda_graph=use_cuda_graph,
+            use_async_batching=use_async,
+        )
+
+        # Generate with varlen path only
+        continuous_batching_config.max_blocks_per_request = 0
+        outputs_varlen = model.generate_batch(
+            inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
+        )
+
+        # Generate with flash_attn_with_kvcache path for decode
+        continuous_batching_config.max_blocks_per_request = 16
+        # This context manager ensures that the varlen path is used
+        og_get_block_table_key = PagedAttentionCache.get_block_table_key
+        with patch.object(
+            PagedAttentionCache, "get_block_table_key", autospec=True, side_effect=og_get_block_table_key
+        ) as mock_get_block_table_key:
+            outputs_kvcache = model.generate_batch(
+                inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
+            )
+            self.assertTrue(mock_get_block_table_key.called, "get_block_table_key method was not called.")
+
+        self.assertEqual(len(outputs_varlen), len(outputs_kvcache))
+        for (_, out_fa2), (_, out_fa3) in zip(outputs_varlen.items(), outputs_kvcache.items()):
+            text_fa2 = tokenizer.decode(out_fa2.generated_tokens, skip_special_tokens=True)
+            text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
+            self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")

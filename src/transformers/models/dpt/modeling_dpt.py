@@ -28,13 +28,14 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import load_backbone
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dpt import DPTConfig
 
 
@@ -285,7 +286,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -319,7 +319,11 @@ class DPTSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -327,9 +331,9 @@ class DPTSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -340,6 +344,7 @@ class DPTSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -373,8 +378,12 @@ class DPTViTAttention(nn.Module):
         self.attention = DPTSelfAttention(config)
         self.output = DPTViTSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -423,9 +432,13 @@ class DPTViTLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, **kwargs)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -438,27 +451,6 @@ class DPTViTLayer(GradientCheckpointingLayer):
         layer_output = self.output(layer_output, hidden_states)
 
         return layer_output
-
-
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Encoder with Dinov2Config->DPTConfig, Dinov2->DPTViT
-class DPTViTEncoder(nn.Module):
-    def __init__(self, config: DPTConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
-            if all_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
 
 
 class DPTReassembleStage(nn.Module):
@@ -566,7 +558,7 @@ class DPTReassembleStage(nn.Module):
 
 
 def _get_backbone_hidden_size(config):
-    if config.backbone_config is not None and config.is_hybrid is False:
+    if config.backbone_config is not None and hasattr(config.backbone_config, "hidden_size"):
         return config.backbone_config.hidden_size
     else:
         return config.hidden_size
@@ -728,6 +720,7 @@ class DPTPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "hidden_states": DPTViTLayer,
         "attentions": DPTSelfAttention,
     }
 
@@ -738,6 +731,21 @@ class DPTPreTrainedModel(PreTrainedModel):
         if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
             init.zeros_(module.cls_token)
             init.zeros_(module.position_embeddings)
+
+
+class DPTViTEncoder(nn.Module):
+    def __init__(self, config: DPTConfig):
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(
+        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -769,23 +777,18 @@ class DPTModel(DPTPreTrainedModel):
         else:
             return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         embedding_output: BaseModelOutputWithIntermediateActivations = self.embeddings(pixel_values)
         embedding_last_hidden_states = embedding_output.last_hidden_states
 
-        encoder_outputs: BaseModelOutput = self.encoder(
-            embedding_last_hidden_states, output_hidden_states=output_hidden_states
-        )
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_last_hidden_states, **kwargs)
         sequence_output = encoder_outputs.last_hidden_state
 
         sequence_output = self.layernorm(sequence_output)
@@ -795,7 +798,6 @@ class DPTModel(DPTPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             intermediate_activations=embedding_output.intermediate_activations,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -923,7 +925,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         super().__init__(config)
 
         self.backbone = None
-        if config.is_hybrid is False and (config.backbone_config is not None or config.backbone is not None):
+        if config.is_hybrid is False and config.backbone_config is not None:
             self.backbone = load_backbone(config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
@@ -943,8 +945,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -956,10 +957,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
         >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
@@ -982,19 +985,22 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
-
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
+        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
+            self.config, "output_hidden_states", False
+        )
+        kwargs["output_hidden_states"] = True
+
         if self.backbone is not None:
-            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
         else:
-            outputs = self.dpt(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.dpt(pixel_values, **kwargs)
             hidden_states = outputs.hidden_states
             # only keep certain features based on config.backbone_out_indices
             # note that the hidden_states also include the initial embeddings
@@ -1024,7 +1030,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
             attentions=outputs.attentions,
         )
 
@@ -1092,8 +1098,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1104,10 +1109,12 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
@@ -1117,15 +1124,17 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(
-            pixel_values, output_hidden_states=True, **kwargs
+        # Internally the model always needs to output hidden states, we control the output
+        # per user request on the final output
+        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
+            self.config, "output_hidden_states", False
         )
+        kwargs["output_hidden_states"] = True
+
+        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
 
         # only keep certain features based on config.backbone_out_indices
@@ -1168,7 +1177,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
             attentions=outputs.attentions,
         )
 

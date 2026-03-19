@@ -36,7 +36,8 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
 from .vision import IdeficsVisionEmbeddings, IdeficsVisionTransformer
@@ -155,7 +156,7 @@ def expand_inputs_for_generation(
     return input_ids, model_kwargs
 
 
-def freeze_model(model, module_exceptions=[]):
+def freeze_model(model, module_exceptions=()):
     mapping = {
         "LayerNorm": nn.LayerNorm,
         "Linear": nn.Linear,
@@ -570,7 +571,6 @@ class IdeficsAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -591,7 +591,7 @@ class IdeficsAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_values is not None:
-            kv_seq_len += cache_position[0]
+            kv_seq_len += past_key_values.get_seq_length()
 
         if not is_cross_attention:
             cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
@@ -599,18 +599,15 @@ class IdeficsAttention(nn.Module):
         # [bsz, nh, t, hd]
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if self.qk_layer_norms:
             query_states = self.q_layer_norm(query_states)
             key_states = self.k_layer_norm(key_states)
 
-        attention_interface: Callable = eager_attention_forward
-
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -657,7 +654,6 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -670,7 +666,6 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -932,14 +927,15 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if config.freeze_vision_layers:
             freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
 
-    def freeze_text_layers(self, module_exceptions=[]):
+    def freeze_text_layers(self, module_exceptions=()):
         for module in [self.layers, self.norm]:
             freeze_model(module, module_exceptions=module_exceptions)
 
-    def freeze_vision_layers(self, module_exceptions=[]):
+    def freeze_vision_layers(self, module_exceptions=()):
         freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -954,7 +950,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         image_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsBaseModelOutputWithPast:
         r"""
@@ -976,14 +971,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        batch_size, seq_length, _ = inputs_embeds.shape
+        seq_length = inputs_embeds.shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         seq_length_with_past = seq_length + past_key_values_length
-
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -991,7 +981,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             position_ids = position_ids[:, -seq_length:]
         elif position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0)
 
         if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
             raise ValueError(
@@ -1060,9 +1051,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -1088,7 +1078,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1141,7 +1130,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsCausalLMOutputWithPast:
@@ -1195,7 +1183,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1224,7 +1211,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         position_ids=None,
         inputs_embeds=None,
         past_key_values=None,
-        cache_position=None,
         pixel_values=None,
         image_hidden_states=None,
         image_attention_mask=None,
@@ -1248,7 +1234,6 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             image_attention_mask=image_attention_mask,

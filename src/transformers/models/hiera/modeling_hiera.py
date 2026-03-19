@@ -21,6 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -31,7 +32,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_hiera import HieraConfig
 
 
@@ -856,7 +857,7 @@ class HieraModel(HieraPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1142,10 +1143,12 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> from transformers import AutoImageProcessor, HieraForPreTraining
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-mae-hf")
         >>> model = HieraForPreTraining.from_pretrained("facebook/hiera-tiny-224-mae-hf")
@@ -1158,7 +1161,7 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> print(list(logits.shape))
         [1, 196, 768]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1257,7 +1260,7 @@ class HieraForImageClassification(HieraPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1297,10 +1300,9 @@ class HieraForImageClassification(HieraPreTrainedModel):
     Hiera backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
+class HieraBackbone(BackboneMixin, HieraPreTrainedModel):
     def __init__(self, config: HieraConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.embed_dim] + [
             int(config.embed_dim * config.embed_dim_multiplier**i) for i in range(len(config.depths))
@@ -1310,7 +1312,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self._out_features, self.channels):
+        for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
@@ -1320,6 +1322,8 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1337,10 +1341,12 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-hf")
         >>> model = AutoBackbone.from_pretrained(
@@ -1353,7 +1359,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

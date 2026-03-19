@@ -228,7 +228,6 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     test_missing_keys = False
-    test_torch_exportable = True
 
     # as ImageGPTForImageClassification isn't included in any auto mapping, we add labels here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

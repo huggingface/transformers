@@ -322,3 +322,5 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 
 [[autodoc]] LlavaOnevisionForConditionalGeneration
     - forward
+    - get_image_features
+    - get_video_features

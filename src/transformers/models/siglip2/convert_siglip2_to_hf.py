@@ -26,7 +26,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw
 
-from transformers import GemmaTokenizerFast, Siglip2Config, Siglip2ImageProcessorFast, Siglip2Model, Siglip2Processor
+from transformers import Siglip2Config, Siglip2ImageProcessorFast, Siglip2Model, Siglip2Processor, Siglip2Tokenizer
 from transformers.utils import logging
 
 
@@ -173,18 +173,22 @@ def get_siglip2_config(model_name: str) -> Siglip2Config:
     return config
 
 
-def get_siglip2_tokenizer() -> GemmaTokenizerFast:
-    # Load pretrained tokenizer
+def get_siglip2_tokenizer() -> Siglip2Tokenizer:
+    # Load underlying Gemma tokenizer files, but instantiate Siglip2Tokenizer
     gemma_checkpoint = "google/gemma-7b"
-    tokenizer = GemmaTokenizerFast.from_pretrained(
-        gemma_checkpoint,
-        add_bos_token=False,
-        add_eos_token=True,
-        padding_side="right",
-        do_lower_case=True,
-        # important: make tokenizer NOT return attention_mask since original one doesn't require it
-        model_input_names=["input_ids"],
-    )
+
+    tokenizer = Siglip2Tokenizer.from_pretrained(gemma_checkpoint)
+    tokenizer.padding_side = "right"
+
+    # important: make tokenizer NOT return attention_mask since original one doesn't require it
+    tokenizer.model_input_names = ["input_ids"]
+
+    # preserve previous BOS/EOS behavior for text encoder
+    if hasattr(tokenizer, "add_bos_token"):
+        tokenizer.add_bos_token = False
+    if hasattr(tokenizer, "add_eos_token"):
+        tokenizer.add_eos_token = True
+
     return tokenizer
 
 

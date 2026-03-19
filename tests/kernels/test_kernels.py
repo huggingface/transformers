@@ -16,6 +16,8 @@
 
 
 import copy
+import os
+import tempfile
 import types
 from unittest.mock import MagicMock, patch
 
@@ -72,8 +74,8 @@ class TestHubKernels(TestCasePlus):
             if hasattr(cls, attr):
                 try:
                     delattr(cls, attr)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Could not delete attribute {attr}: {e}")
 
         # Clear any temporary kernel module cache entries populated by tests
         try:
@@ -82,8 +84,8 @@ class TestHubKernels(TestCasePlus):
             ]
             for k in keys_to_remove:
                 _KERNEL_MODULE_MAPPING.pop(k, None)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Could not clear kernel module cache: {e}")
 
     def tearDown(self):
         # Free accelerator memory/cache and trigger GC
@@ -221,6 +223,29 @@ class TestHubKernels(TestCasePlus):
 
 
 @require_kernels
+class TestKernelsEnv(TestCasePlus):
+    def test_disable_hub_kernels(self):
+        with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
+            import importlib
+
+            from transformers.integrations import hub_kernels
+
+            importlib.reload(hub_kernels)
+
+            self.assertFalse(hub_kernels._kernels_enabled)
+
+    def test_enable_hub_kernels(self):
+        with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
+            import importlib
+
+            from transformers.integrations import hub_kernels
+
+            importlib.reload(hub_kernels)
+
+            self.assertTrue(hub_kernels._kernels_enabled)
+
+
+@require_kernels
 class TestKernelUtilities(TestCasePlus):
     def test_is_kernel_regex(self):
         valid = [
@@ -319,6 +344,42 @@ class TestKernelUtilities(TestCasePlus):
 
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
+    def test_trust_remote_code_for_attention_kernels(self):
+        """
+        Test that using an untrusted kernel (any repo outside `kernels-community`) as attention requires
+        passing an expplicit `allow_all_kernels=True`
+        """
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
+        model = LlamaModel(copy.deepcopy(config))
+        untrusted_kernel = "untrusted/flash_attention_2"
+        trusted_kernel = "kernels-community/flash-attn2"
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # Test that an untrusted kernel will raise an error without the flag
+            with self.assertRaisesRegex(
+                ValueError,
+                "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository",
+            ):
+                _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
+
+            def dummy_lazy_import(*args, **kwargs):
+                pass
+
+            # Test that it works with the flag - though the repo does not exist, so patch the dispatch
+            with patch("transformers.modeling_utils.lazy_import_flash_attention", dummy_lazy_import):
+                model = LlamaModel.from_pretrained(
+                    tmpdirname, attn_implementation=untrusted_kernel, allow_all_kernels=True
+                )
+                self.assertEqual(model.config._attn_implementation, untrusted_kernel)
+
+            # Test that a trusted kernel does not need trust_remote_code
+            model = LlamaModel.from_pretrained(tmpdirname, attn_implementation=trusted_kernel)
+            self.assertEqual(model.config._attn_implementation, trusted_kernel)
+
     def test_load_and_register_flash_attn_like_kernel(self):
         kernel_obj = types.SimpleNamespace(flash_attn_varlen_func=lambda *a, **k: None)
 
@@ -332,12 +393,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Cleanup registration to avoid leaking functions across tests
             try:
                 ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
             try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
     def test_load_and_register_named_function_kernel(self):
         def my_attention(*args, **kwargs):
@@ -351,12 +412,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
             # Cleanup registration to avoid leaking functions across tests
             try:
                 ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
             try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
 
 @require_kernels
@@ -372,8 +433,8 @@ class TestUseKernelsLifecycle(TestCasePlus):
         if hasattr(cls, "model"):
             try:
                 del cls.model
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Could not delete model: {e}")
 
     def tearDown(self):
         # Free accelerator memory/cache and trigger GC

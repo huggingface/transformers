@@ -144,7 +144,7 @@ class GlmImageImageProcessor(BaseImageProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = ["pixel_values", "image_grid_thw"]
+    model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
     valid_kwargs = GlmImageImageProcessorKwargs
 
     def __init__(

@@ -21,6 +21,8 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
+from huggingface_hub import repo_exists
+
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -128,7 +130,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
+                Whether or not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -300,7 +302,14 @@ class _BaseAutoModelClass:
                     adapter_config = json.load(f)
 
                     adapter_kwargs["_adapter_model_path"] = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
+                    # Only override the model name/path if the current value doesn't point to a
+                    # complete model with an embedded adapter so that local models with embedded
+                    # adapters will load from the local base model rather than pull the base
+                    # model named in the adapter's config from the hub.
+                    if not os.path.exists(pretrained_model_name_or_path) or not os.path.exists(
+                        os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
+                    ):
+                        pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
 
         if not isinstance(config, PreTrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
@@ -416,21 +425,21 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
-        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
         out_indices = kwargs.pop("out_indices", config.out_indices)
         config = TimmBackboneConfig(
             backbone=pretrained_model_name_or_path,
             num_channels=num_channels,
             features_only=features_only,
-            use_pretrained_backbone=use_pretrained_backbone,
             out_indices=out_indices,
         )
-        return super().from_config(config, **kwargs)
+        # Always load a pretrained model when `from_pretrained` is called
+        kwargs.pop("use_pretrained_backbone", None)
+        return super().from_config(config, pretrained=True, **kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        use_timm_backbone = kwargs.pop("use_timm_backbone", False)
-        if use_timm_backbone:
+        kwargs.pop("use_timm_backbone", None)
+        if not repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

@@ -154,7 +154,7 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -308,7 +308,7 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -389,8 +389,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": BlipModel,
-            "image-to-text": BlipForConditionalGeneration,
-            "visual-question-answering": BlipForQuestionAnswering,
             "image-text-to-text": BlipForConditionalGeneration,
         }
         if is_torch_available()
@@ -463,7 +461,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
-            image_features.shape,
+            image_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,
@@ -482,7 +480,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
         self.assertEqual(
-            text_features.shape,
+            text_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,

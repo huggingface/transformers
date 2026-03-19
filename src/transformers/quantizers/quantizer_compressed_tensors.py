@@ -31,6 +31,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: CompressedTensorsConfig
 
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -79,18 +80,20 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
 
-        if (
-            self.quantization_config.is_quantization_compressed and not self.run_compressed
-        ) or self.quantization_config.is_sparsification_compressed:
+        if (self.quantization_config.is_quantization_compressed and not self.run_compressed) or (
+            self.quantization_config.is_sparsification_compressed
+        ):
             self.compressor.decompress_model(model=model)
 
+    # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
+    # TODO: Implement proper TP support for compressed tensors quantization
     def update_tp_plan(self, config):
         additional_plan = {
-            "layers.*.feed_forward.experts.*.gate_proj.weight": "local_colwise",
-            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "local_colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight": "local_colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "local_colwise",
-            "layers.*.feed_forward.experts.*.down_proj.weight": "local_rowwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight": "colwise",
+            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
+            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
+            "layers.*.feed_forward.experts.*.down_proj.weight": "rowwise",
         }
         if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
             config.get_text_config().base_model_tp_plan.update(additional_plan)

@@ -17,10 +17,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...backbone_utils import load_backbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ...utils.backbone_utils import load_backbone
 from .configuration_upernet import UperNetConfig
 
 
@@ -330,7 +330,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

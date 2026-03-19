@@ -22,11 +22,14 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_xglm import XGLMConfig
 
 
@@ -90,7 +93,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, position_ids: torch.Tensor | None = None, past_key_values_length: int = 0):
         bsz, seq_len = position_ids.size()
-        position_ids += self.offset
+        position_ids = position_ids + self.offset
 
         max_pos = 2 + seq_len + past_key_values_length
         if max_pos > self.weights.size(0):
@@ -137,8 +140,7 @@ class XGLMAttention(nn.Module):
         key_value_states: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -177,10 +179,7 @@ class XGLMAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -217,15 +216,12 @@ class XGLMAttention(nn.Module):
         else:
             attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
+        # this operation is a bit awkward, but it's required to
+        # make sure that attn_weights keeps its gradient.
+        # In order to do so, attn_weights have to be reshaped
+        # twice and have to be reused in the following
+        attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
@@ -288,9 +284,8 @@ class XGLMDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
@@ -302,37 +297,31 @@ class XGLMDecoderLayer(GradientCheckpointingLayer):
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
+        hidden_states, _ = self.self_attn(
+            hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
-                hidden_states=hidden_states,
+            hidden_states, _ = self.encoder_attn(
+                hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
+                **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
@@ -346,12 +335,7 @@ class XGLMDecoderLayer(GradientCheckpointingLayer):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -372,6 +356,12 @@ class XGLMPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class XGLMModel(XGLMPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": XGLMDecoderLayer,
+        "attentions": OutputRecorder(XGLMAttention, index=1, layer_name="self_attn"),
+        "cross_attentions": OutputRecorder(XGLMAttention, index=1, layer_name="encoder_attn"),
+    }
+
     def __init__(self, config: XGLMConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -396,6 +386,8 @@ class XGLMModel(XGLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -407,11 +399,7 @@ class XGLMModel(XGLMPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
@@ -426,34 +414,11 @@ class XGLMModel(XGLMPreTrainedModel):
 
             [What are attention masks?](../glossary#attention-mask)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`..."
-                )
-                use_cache = False
 
         # initialize `past_key_values`
         if use_cache and past_key_values is None:
@@ -464,14 +429,18 @@ class XGLMModel(XGLMPreTrainedModel):
             )
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
         )
 
         if position_ids is None:
             position_ids = torch.arange(
                 past_key_values_length,
-                input_shape[-1] + past_key_values_length,
+                inputs_embeds.shape[1] + past_key_values_length,
                 dtype=torch.long,
                 device=input_ids.device if input_ids is not None else inputs_embeds.device,
             )
@@ -479,9 +448,11 @@ class XGLMModel(XGLMPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         hidden_states = inputs_embeds + self.embed_positions(position_ids, past_key_values_length).to(
@@ -489,56 +460,28 @@ class XGLMModel(XGLMPreTrainedModel):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=float(self.dropout), training=self.training)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             if self.training:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
+                **kwargs,
             )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
 
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -560,6 +503,8 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -572,12 +517,8 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
@@ -597,14 +538,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        outputs: BaseModelOutputWithPastAndCrossAttentions = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -613,13 +547,10 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
@@ -631,12 +562,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
                 labels,
                 vocab_size=self.config.vocab_size,
                 pad_token_id=self.config.pad_token_id,
-                **kwargs,
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,

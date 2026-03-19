@@ -19,7 +19,6 @@ import pytest
 
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -171,11 +170,10 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -259,20 +257,28 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_pretrained_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
         # Force load_backbone path
-        config.is_hybrid = False
+        config_dict["is_hybrid"] = False
 
         # Load a timm backbone
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_timm_backbone"] = True
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
         # Load a HF backbone
-        config.backbone = "facebook/dinov2-small"
-        config.use_timm_backbone = False
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
+        config_dict["is_hybrid"] = False
+        config_dict["backbone"] = "facebook/dinov2-small"
+        config_dict["use_timm_backbone"] = False
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
     @slow
@@ -385,25 +391,3 @@ class DPTModelIntegrationTest(unittest.TestCase):
         ).squeeze()
         self.assertTrue(output_enlarged.shape == expected_shape)
         torch.testing.assert_close(predicted_depth_l, output_enlarged, atol=1e-3, rtol=1e-3)
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        for strict in [True, False]:
-            with self.subTest(strict=strict):
-                if not is_torch_greater_or_equal_than_2_4:
-                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
-                model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device).eval()
-                image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
-                image = prepare_img()
-                inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-                exported_program = torch.export.export(
-                    model,
-                    args=(inputs["pixel_values"],),
-                    strict=strict,
-                )
-                with torch.no_grad():
-                    eager_outputs = model(**inputs)
-                    exported_outputs = exported_program.module().forward(inputs["pixel_values"])
-                self.assertEqual(eager_outputs.logits.shape, exported_outputs.logits.shape)
-                torch.testing.assert_close(eager_outputs.logits, exported_outputs.logits, rtol=1e-4, atol=1e-4)

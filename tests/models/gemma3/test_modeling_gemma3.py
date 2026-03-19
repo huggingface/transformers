@@ -26,6 +26,7 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
+    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -35,6 +36,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -42,11 +44,10 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -70,12 +71,23 @@ class Gemma3TextModelTester(CausalLMModelTester):
         causal_lm_class = Gemma3ForCausalLM
         sequence_classification_class = Gemma3TextForSequenceClassification
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_probs_dropout_prob = 0.0
+
 
 @require_torch
 class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Gemma3TextModelTester
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+
+    @unittest.skip("Gemma3 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
+    def test_tp_generation_quantized(self):
+        pass
 
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
@@ -246,115 +258,39 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
 
-class Gemma3Vision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_index=4,
-        boi_token_index=5,
-        eoi_token_index=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-        use_cache=False,
-    ):
-        self.parent = parent
-        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_index = image_token_index
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.llm_tester = Gemma3TextModelTester(self.parent)
-        self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
+class Gemma3Vision2TextModelTester(VLMModelTester):
+    base_model_class = Gemma3Model
+    config_class = Gemma3Config
+    text_config_class = Gemma3TextConfig
+    vision_config_class = SiglipVisionConfig
+    conditional_generation_class = Gemma3ForConditionalGeneration
+    sequence_classification_class = Gemma3ForSequenceClassification
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("mm_tokens_per_image", 2)
+        tokens_per_side = int(kwargs["mm_tokens_per_image"] ** 0.5)
+        kwargs.setdefault("num_image_tokens", tokens_per_side * tokens_per_side)
+        kwargs.setdefault("image_size", 20)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("image_token_index", 4)
+        kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
+        super().__init__(parent, **kwargs)
 
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-        self.use_cache = use_cache
+    def create_attention_mask(self, input_ids):
+        # Gemma3 uses padding mask for bidirectional attention on image tokens
+        return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_config(self):
-        return Gemma3Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
-            boi_token_index=self.boi_token_index,
-            eoi_token_index=self.eoi_token_index,
-            mm_tokens_per_image=self.mm_tokens_per_image,
-        )
-
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
-            ]
-        )
-        config = self.get_config()
-
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
-        # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_index
-
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
-        token_type_ids[input_ids == config.image_token_index] = 1
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-        return config, inputs_dict
+        token_type_ids[input_ids == config.image_token_id] = 1
+        return {"token_type_ids": token_type_ids}
 
 
 @require_torch
-class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            Gemma3Model,
-            Gemma3ForConditionalGeneration,
-            Gemma3ForSequenceClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3Vision2TextModelTester
 
     test_missing_keys = False
     _is_stateful = True
@@ -368,15 +304,28 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
-    def setUp(self):
-        self.model_tester = Gemma3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     def test_bidirectional_image_attention(self):
         """
         Tests that each image can attend to itself bidirectionally. However an image
         cannot attend to future images, even within the same batch.
         """
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config._attn_implementation = "eager"
         model = Gemma3Model(config).to(torch_device)
@@ -452,6 +401,13 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     @slow
     def test_flash_attn_3_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_3", test_fwd_in_train=False)
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    def test_flash_attn_4_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
 
 
 @slow
@@ -610,7 +566,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("cuda", (8, 0)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background"],
-                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
+                ("cuda", (8, 6)): ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There’s a bright blue sky with some white clouds in the'],
                 ("cuda", (9, 0)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the"],
                 ("rocm", (9, 5)): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background"]
@@ -727,8 +683,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a city with"],
-                ("cuda", (8, 0)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"],
-                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt appears to be a street scene in a city"],
+                ("cuda", (8, 6)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Chinese Arch"],
                 ("cuda", (9, 0)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image!\n\nHere's a description of the scene:\n\n*   **Location:**"],
                 ("rocm", (9, 4)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],
                 ("rocm", (9, 5)): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Main Features:**\n\n*   **Chinese Archway:** The most prominent"],

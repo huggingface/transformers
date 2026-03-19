@@ -18,6 +18,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -25,9 +26,10 @@ from ...modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_convnext import ConvNextConfig
 
 
@@ -194,9 +196,29 @@ class ConvNextStage(nn.Module):
         return features
 
 
-class ConvNextEncoder(nn.Module):
+@auto_docstring
+class ConvNextPreTrainedModel(PreTrainedModel):
+    config: ConvNextConfig
+    base_model_prefix = "convnext"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _no_split_modules = ["ConvNextLayer", "ConvNextStage"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, ConvNextLayer):
+            if module.layer_scale_parameter is not None:
+                init.constant_(module.layer_scale_parameter, self.config.layer_scale_init_value)
+
+
+class ConvNextEncoder(ConvNextPreTrainedModel):
+    main_input_name = "hidden_states"
+    _can_record_outputs = {"hidden_states": ConvNextStage}
+
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.stages = nn.ModuleList()
         drop_path_rates = [
             x.tolist()
@@ -216,35 +238,19 @@ class ConvNextEncoder(nn.Module):
             self.stages.append(stage)
             prev_chs = out_chs
 
-    def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: bool | None = False
-    ) -> BaseModelOutputWithNoAttention:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
+        self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithNoAttention:
         for layer_module in self.stages:
             hidden_states = layer_module(hidden_states)
-            if all_hidden_states is not None:
-                all_hidden_states.append(hidden_states)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
-
-
-@auto_docstring
-class ConvNextPreTrainedModel(PreTrainedModel):
-    config: ConvNextConfig
-    base_model_prefix = "convnext"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["ConvNextLayer"]
-    _can_record_outputs = {}  # hidden states are collected explicitly
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, ConvNextLayer):
-            if module.layer_scale_parameter is not None:
-                init.constant_(module.layer_scale_parameter, self.config.layer_scale_init_value)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -265,18 +271,13 @@ class ConvNextModel(ConvNextPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, output_hidden_states: bool | None = None, **kwargs
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPoolingAndNoAttention:
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values)
-        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states
-        )
+        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(embedding_output, **kwargs)
         last_hidden_state = encoder_outputs.last_hidden_state
 
         # global average pooling, (N, C, H, W) -> (N, C)
@@ -344,12 +345,11 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     ConvNeXt backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
+class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.embeddings = ConvNextEmbeddings(config)
         self.encoder = ConvNextEncoder(config)
@@ -357,7 +357,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self._out_features, self.channels):
+        for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
@@ -365,9 +365,12 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, output_hidden_states: bool | None = None, **kwargs
+        self,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -376,10 +379,12 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = AutoBackbone.from_pretrained("facebook/convnext-tiny-224")
@@ -387,12 +392,11 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
-        outputs: BaseModelOutputWithPoolingAndNoAttention = self.encoder(embedding_output, output_hidden_states=True)
-        hidden_states = outputs.hidden_states
+        encoder_outputs: BaseModelOutputWithNoAttention = self.encoder(embedding_output, **kwargs)
+        hidden_states = encoder_outputs.hidden_states
 
         feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -400,10 +404,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
                 hidden_state = self.hidden_states_norms[stage](hidden_state)
                 feature_maps.append(hidden_state)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if output_hidden_states else None,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=hidden_states)
 
 
 __all__ = ["ConvNextForImageClassification", "ConvNextModel", "ConvNextPreTrainedModel", "ConvNextBackbone"]

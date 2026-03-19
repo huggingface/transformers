@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -108,8 +109,8 @@ class GPT2ModelTester(CausalLMModelTester):
     def prepare_config_and_inputs_for_common(self):
         # Overwritten: we want `token_type_ids` as part of the common inputs
         config_and_inputs = self.prepare_config_and_inputs(extra_inputs=True)
-        config, input_ids, _, token_type_ids, _, _, _, _ = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
+        config, input_ids, attention_mask, token_type_ids, _, _, _, _ = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "token_type_ids": token_type_ids}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -160,7 +161,6 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
-            "question-answering": GPT2ForQuestionAnswering,
             "text-classification": GPT2ForSequenceClassification,
             "text-generation": GPT2LMHeadModel,
             "token-classification": GPT2ForTokenClassification,
@@ -185,6 +185,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
                     device=torch_device,
                 )
                 inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["attention_mask"] = torch.tril(torch.ones_like(inputs_dict["input_ids"]).to(torch_device))
                 inputs_dict["token_type_ids"] = inputs_dict["labels"]
                 inputs_dict["mc_token_ids"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.num_choices),
@@ -245,6 +246,59 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
         )
         result.loss.backward()
+
+    def test_gpt2_sdpa_matches_eager_with_scaling_configs(self):
+        """Test that SDPA and eager produce equivalent outputs when scaling configs differ from defaults.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # SDPA attention (was buggy: ignored scaling configs)
+        model.set_attn_implementation("sdpa")
+        with torch.no_grad():
+            output_sdpa = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_sdpa, atol=1e-4, rtol=1e-4)
+
+    @require_torch_gpu
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    def test_gpt2_fa2_matches_eager_with_scaling_configs(self):
+        """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval().to(torch.float16)
+        input_ids = input_ids.to(torch_device)
+        token_type_ids = token_type_ids.to(torch_device)
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # Flash Attention 2 (was buggy: ignored scaling configs)
+        model.set_attn_implementation("flash_attention_2")
+        with torch.no_grad():
+            output_fa2 = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_fa2, atol=1e-2, rtol=1e-2)
 
     def test_gpt2_reorder_and_upcast_attn(self):
         # extra test: model-specific flag
@@ -366,48 +420,6 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertTrue(
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
-
-    # TODO joao, manuel: remove this in v4.62.0
-    @slow
-    def test_contrastive_search_gpt2(self):
-        article = (
-            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
-        )
-
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2-large").to(torch_device)
-        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = gpt2_model.generate(
-            input_ids,
-            penalty_alpha=0.6,
-            top_k=4,
-            max_length=256,
-            trust_remote_code=True,
-            custom_generate="transformers-community/contrastive-search",
-        )
-
-        generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
-                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
-                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
-                "Google Now, which helps users find the information they're looking for on the web. But the company "
-                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
-                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
-                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
-                "concerned about the company's ability to keep users' information private. In a blog post last "
-                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
-                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
-                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
-                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
-                "but said in a statement to The Associated Press that"
-            ],
-        )
 
     @require_flash_attn
     @require_torch_accelerator

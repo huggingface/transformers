@@ -22,11 +22,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_pvt_v2 import PvtV2Config
 
 
@@ -410,7 +411,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         encoder_outputs = self.encoder(
             pixel_values=pixel_values,
@@ -467,7 +468,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.pvt_v2(
             pixel_values=pixel_values,
@@ -510,12 +511,13 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     PVTv2 backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class PvtV2Backbone(PvtV2Model, BackboneMixin):
+class PvtV2Backbone(BackboneMixin, PvtV2Model):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
-        super()._init_backbone(config)
         self.num_features = config.hidden_sizes
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -532,10 +534,12 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
         >>> model = AutoBackbone.from_pretrained(
@@ -549,7 +553,7 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 256, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

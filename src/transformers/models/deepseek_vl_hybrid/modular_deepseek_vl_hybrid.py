@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     BatchFeature,
@@ -43,6 +46,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
@@ -80,25 +84,12 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 """
 
 
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
+@strict(accept_kwargs=True)
 class DeepseekVLHybridConfig(DeepseekVLConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekVLHybridModel`]. It is used to instantiate a
-    DeepseekVLHybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
-    [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
-            The config object or dictionary of the high resolution vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100015):
-            The index representing image tokens in the model's token vocabulary.
+    high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
+        The config object or dictionary of the high resolution vision backbone.
 
     Example:
 
@@ -118,30 +109,46 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     model_type = "deepseek_vl_hybrid"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "high_res_vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        text_config: AutoConfig | None = None,
-        vision_config: AutoConfig | None = None,
-        high_res_vision_config: AutoConfig | None = None,
-        image_token_id: int = 100015,
-        **kwargs,
-    ):
-        if high_res_vision_config is None:
-            high_res_vision_config = {}
+    high_res_vision_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.high_res_vision_config is None:
+            self.high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
 
-        if isinstance(high_res_vision_config, dict):
-            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
-            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
+        if isinstance(self.high_res_vision_config, dict):
+            self.high_res_vision_config["model_type"] = self.high_res_vision_config.get(
+                "model_type", "sam_vision_model"
+            )
+            self.high_res_vision_config = CONFIG_MAPPING[self.high_res_vision_config["model_type"]](
+                **self.high_res_vision_config
+            )
 
-        self.high_res_vision_config = high_res_vision_config
+        super().__post_init__(**kwargs)
 
-        super().__init__(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=image_token_id,
-            **kwargs,
-        )
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
+    r"""
+    high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the high resolution vision model.
+    high_res_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the high resolution vision model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+        Hidden-states of the high resolution vision model at the output of each layer plus the optional initial embedding outputs.
+    high_res_vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)` from the high resolution vision model.
+
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
+    """
+
+    high_res_vision_last_hidden_state: torch.FloatTensor | None = None
+    high_res_vision_hidden_states: tuple[torch.FloatTensor] | None = None
+    high_res_vision_attentions: tuple[torch.FloatTensor] | None = None
 
 
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -249,21 +256,25 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         super().__init__(config)
 
-    def get_low_res_image_features(self, pixel_values):
-        output = self.vision_model(pixel_values)
-        output = output[0]
-        return output
+    def get_low_res_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.vision_model(pixel_values, return_dict=True, **kwargs)
 
-    def get_high_res_image_features(self, pixel_values):
-        output = self.high_res_vision_model(
+    def get_high_res_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
-            output_hidden_states=True,
+            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
+            **kwargs,
         )
-        last_hidden_state = output.last_hidden_state
+        last_hidden_state = high_res_outputs.last_hidden_state
         last_hidden_state = self.high_res_vision_proj(last_hidden_state)
 
-        hidden_states = output.hidden_states
+        hidden_states = high_res_outputs.hidden_states
         global_hidden_state = hidden_states[self.global_attn_index + 1]  # +1 for embedding layer
         global_hidden_state = self.high_res_vision_neck(global_hidden_state)
         global_hidden_state = self.high_res_vision_proj(global_hidden_state)
@@ -273,14 +284,31 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         # batch_size, hidden_size, height, width -> batch_size, seq_len, hidden_size
         output = output.permute(0, 2, 3, 1)
         output = output.reshape(output.shape[0], -1, output.shape[-1])
+        high_res_outputs.last_hidden_state = output
 
-        return output
+        return high_res_outputs
 
-    def get_image_features(self, pixel_values, high_res_pixel_values):
-        vision_encodings = self.get_low_res_image_features(pixel_values)
-        high_res_vision_encodings = self.get_high_res_image_features(high_res_pixel_values)
-        images_embeds = self.aligner(vision_encodings, high_res_vision_encodings)
-        return images_embeds
+    @can_return_tuple
+    @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        high_res_pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithHighResVisionEncodings:
+        low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
+        high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
+        image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
+
+        return BaseModelOutputWithHighResVisionEncodings(
+            last_hidden_state=low_res_outputs.last_hidden_state,
+            pooler_output=image_features,
+            hidden_states=low_res_outputs.hidden_states,
+            attentions=low_res_outputs.attentions,
+            high_res_vision_last_hidden_state=high_res_outputs.last_hidden_state,
+            high_res_vision_hidden_states=high_res_outputs.hidden_states,
+            high_res_vision_attentions=high_res_outputs.attentions,
+        )
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
@@ -292,7 +320,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -319,7 +346,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
                 image_attention_mask = input_ids == self.config.image_token_id
 
             image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_embeds = self.get_image_features(pixel_values, high_res_pixel_values)
+            image_embeds = self.get_image_features(pixel_values, high_res_pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
@@ -330,7 +357,6 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -355,7 +381,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -377,7 +402,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -408,7 +432,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         pixel_values=None,
         high_res_pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -418,7 +441,6 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -426,7 +448,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
@@ -843,8 +865,8 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"],
-        high_res_interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
+        high_res_interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

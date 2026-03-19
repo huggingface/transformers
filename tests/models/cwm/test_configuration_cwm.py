@@ -14,6 +14,8 @@
 
 import unittest
 
+import huggingface_hub
+
 from transformers.models.cwm import CwmConfig
 from transformers.testing_utils import require_torch
 
@@ -47,14 +49,14 @@ class CwmConfigTest(unittest.TestCase):
         self.assertEqual(len(config.layer_types), config.num_hidden_layers)
 
     def test_invalid_layer_types_length(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             CwmConfig(
                 num_hidden_layers=4,
                 layer_types=["full_attention", "sliding_attention"],  # Only 2 types for 4 layers
             )
 
     def test_invalid_layer_type_value(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             CwmConfig(num_hidden_layers=2, layer_types=["full_attention", "invalid_attention"])
 
     def test_automatic_layer_types_generation(self):

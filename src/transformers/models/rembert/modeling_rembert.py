@@ -550,7 +550,7 @@ class RemBertModel(RemBertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -672,7 +672,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.rembert(
             input_ids,
@@ -705,28 +705,6 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, is_first_iteration=False, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-    @classmethod
-    def can_generate(cls) -> bool:
-        """
-        Legacy correction: RemBertForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
-        `prepare_inputs_for_generation` method.
-        """
-        return False
 
 
 @auto_docstring(
@@ -794,7 +772,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.rembert(
             input_ids,
@@ -871,7 +849,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.rembert(
             input_ids,
@@ -979,7 +957,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1057,7 +1035,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.rembert(
             input_ids,
@@ -1120,7 +1098,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.rembert(
             input_ids,

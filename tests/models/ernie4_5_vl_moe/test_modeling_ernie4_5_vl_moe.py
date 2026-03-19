@@ -18,14 +18,16 @@ import unittest
 from transformers import (
     AutoModelForImageTextToText,
     AutoProcessor,
-    Ernie4_5_VL_MoeConfig,
-    Ernie4_5_VL_MoeForConditionalGeneration,
-    Ernie4_5_VL_MoeModel,
+    Ernie4_5_VLMoeConfig,
+    Ernie4_5_VLMoeForConditionalGeneration,
+    Ernie4_5_VLMoeModel,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_large_accelerator,
     slow,
@@ -52,7 +54,7 @@ if is_vision_available():
     pass
 
 
-class Ernie4_5_VL_MoeVisionText2TextModelTester:
+class Ernie4_5_VLMoeVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -129,7 +131,7 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
-        return Ernie4_5_VL_MoeConfig(
+        return Ernie4_5_VLMoeConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
             image_token_id=self.image_token_id,
@@ -169,6 +171,8 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor(
@@ -176,16 +180,17 @@ class Ernie4_5_VL_MoeVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
 
 @require_torch
-class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            Ernie4_5_VL_MoeModel,
-            Ernie4_5_VL_MoeForConditionalGeneration,
+            Ernie4_5_VLMoeModel,
+            Ernie4_5_VLMoeForConditionalGeneration,
         )
         if is_torch_available()
         else ()
@@ -195,8 +200,8 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Ernie4_5_VL_MoeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VL_MoeConfig, has_text_modality=False)
+        self.model_tester = Ernie4_5_VLMoeVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Ernie4_5_VLMoeConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -266,11 +271,39 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The superclass method simply calls the model_tester.prepare_config_and_inputs_for_common(),
+        but that method only prepared image inputs, i.e. where the temporal dimension in grid_thw is 1.
+        This override prepares proper video inputs with 12 frames.
+        """
+        config = self.model_tester.get_config()
+        patch_size = config.vision_config.patch_size
+        batch_size = self.model_tester.batch_size
+        image_size = self.model_tester.image_size
+        num_channels = self.model_tester.num_channels
+        num_frames = 12
+        pixel_values_videos = floats_tensor(
+            [num_frames * batch_size * (image_size**2) // (patch_size**2), num_channels * (patch_size**2)]
+        )
+
+        patches_per_side = image_size // patch_size
+        video_grid_thw = torch.tensor(
+            [[num_frames, patches_per_side, patches_per_side]] * batch_size, device=torch_device
+        )
+        inputs_dict = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_grid_thw": video_grid_thw,
+        }
+        return config, inputs_dict
+
 
 @slow
-@require_torch_large_accelerator(memory=64)  # Tested on A100
+@require_torch_large_accelerator(memory=64)  # Tested on A100 / torch 2.9.0
 @require_torch
-class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
+class Ernie4_5_VLMoeIntegrationTest(unittest.TestCase):
     model = None
     model_id = "baidu/ERNIE-4.5-VL-28B-A3B-PT"
 
@@ -278,7 +311,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
-        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/10")
+        self.processor = AutoProcessor.from_pretrained(self.model_id, revision="refs/pr/11")
         self.message = [
             {
                 "role": "user",
@@ -314,7 +347,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
             dtype=dtype,
             attn_implementation=attn_implementation,
             experts_implementation="eager",
-            revision="refs/pr/10",
+            revision="refs/pr/11",
         )
 
     def test_small_model_integration_test(self):
@@ -380,7 +413,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_with_video(self):
         processor = AutoProcessor.from_pretrained(
-            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/10"
+            self.model_id, max_image_size={"longest_edge": 50176}, revision="refs/pr/11"
         )
         model = self.load_model(dtype=torch.float16)
         questions = ["Only use English during your responses. Describe the following video."]
@@ -427,8 +460,8 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
         EXPECTED_DECODED_TEXT = [
-            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, including a short tail',
-            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as its short'
+            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, such as tuft',
+            'The animal in the image is a lynx, not a dog. It has the distinctive features of a lynx, including a short tail'
         ]  # fmt: skip
 
         self.assertEqual(
@@ -461,7 +494,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            "The animal in the image is a lynx, not a dog. It's a wild cat species known for its distinctive ear tufts and",
+            "The animal in the image is a lynx. It's a medium-sized wild cat characterized by its distinctive facial ruff, short tail",
             "I am an AI assistant designed to help answer questions, provide information, and assist with tasks. I don't have personal experiences or a physical form"
         ]  # fmt: skip
 
@@ -508,7 +541,7 @@ class Ernie4_5_VL_MoeIntegrationTest(unittest.TestCase):
 # Garbage output expected as it is a dummy model to be run on the CI
 @slow
 @require_torch
-class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
+class Ernie4_5_VLMoeSmallIntegrationTest(unittest.TestCase):
     model = None
     model_id = "hf-internal-testing/Ernie-VL-Moe-Small"
 
@@ -601,10 +634,21 @@ class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
-            '不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊',
-        ]  # fmt: skip
+        # fmt: off
+        expectations = Expectations(
+            {
+                ("xpu", None): [
+                    '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
+                    '填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空填空',
+                ],
+                (None, None): [
+                    '知道了知道了attaatta不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如不如',
+                    '不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊不是啊',
+                ],
+            }
+        )
+        EXPECTED_DECODED_TEXT = expectations.get_expectation()
+        # fmt: on
 
         self.assertEqual(
             [
@@ -649,6 +693,7 @@ class Ernie4_5_VL_MoeSmallIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_expand(self):
         model = self.load_model("auto")
         inputs = self.processor.apply_chat_template(

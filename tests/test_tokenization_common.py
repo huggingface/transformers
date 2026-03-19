@@ -25,7 +25,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
 from parameterized import parameterized
 
@@ -134,9 +134,9 @@ def filter_roberta_detectors(_, pretrained_name: str):
 
 def merge_model_tokenizer_mappings(
     model_mapping: dict["PretrainedConfig", "PreTrainedModel"],
-    tokenizer_mapping: dict["PretrainedConfig", tuple["PreTrainedTokenizer", "TokenizersBackend"]],
+    tokenizer_mapping: dict["PretrainedConfig", "TokenizersBackend"],
 ) -> dict[
-    Union["PreTrainedTokenizer", "TokenizersBackend"],
+    "TokenizersBackend",
     tuple["PretrainedConfig", "PreTrainedModel"],
 ]:
     configurations = list(model_mapping.keys())
@@ -145,15 +145,12 @@ def merge_model_tokenizer_mappings(
     for configuration in configurations:
         if configuration in model_mapping and configuration in tokenizer_mapping:
             model = model_mapping[configuration]
-            tokenizer = tokenizer_mapping[configuration][0]
-            tokenizer_fast = tokenizer_mapping[configuration][1]
+            tokenizer = tokenizer_mapping[configuration]
 
             if tokenizer is not None:
-                if configuration.__name__.startswith(tokenizer.__name__.replace("Tokenizer", "")):
+                name = tokenizer.__name__.replace("TokenizerFast", "").replace("Tokenizer", "")
+                if configuration.__name__.startswith(name):
                     model_tokenizer_mapping.update({tokenizer: (configuration, model)})
-            if tokenizer_fast is not None:
-                if configuration.__name__.startswith(tokenizer_fast.__name__.replace("TokenizerFast", "")):
-                    model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 
@@ -367,14 +364,11 @@ Hey how are you doing"""  # noqa: W293
 
         # save the first pretrained tokenizer to tmpdirname for tests to use
         if cls.from_pretrained_id and cls.tokenizer_class is not None:
-            try:
-                tokenizer = AutoTokenizer.from_pretrained(
-                    cls.from_pretrained_id[0],
-                    **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
-                )
-                tokenizer.save_pretrained(cls.tmpdirname)
-            except Exception:
-                pass
+            tokenizer = AutoTokenizer.from_pretrained(
+                cls.from_pretrained_id[0],
+                **(cls.from_pretrained_kwargs if cls.from_pretrained_kwargs is not None else {}),
+            )
+            tokenizer.save_pretrained(cls.tmpdirname)
 
     @classmethod
     def tearDownClass(cls):
@@ -451,6 +445,21 @@ Hey how are you doing"""  # noqa: W293
             if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
                 vocab = vocab_ids
 
+        # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
+        extra_kwargs = {}
+        normalizer_config = extractor.tokenizer_data.get("normalizer")
+        if normalizer_config:
+            if normalizer_config.get("type", None) == "Sequence":
+                normalizer_list = normalizer_config["normalizers"]
+            elif not isinstance(normalizer_config, list):
+                normalizer_list = [normalizer_config]
+            for normalizer in normalizer_list:
+                if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
+                    import base64
+
+                    extra_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(normalizer["precompiled_charsmap"])
+                    break
+
         # Convert added_tokens list to added_tokens_decoder dict format
         # This matches the format used by from_pretrained() from tokenizer_config.jso
         tokenizer_from_extractor = self.tokenizer_class(
@@ -459,6 +468,7 @@ Hey how are you doing"""  # noqa: W293
             do_lower_case=False,
             keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
+            **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
 
@@ -643,6 +653,8 @@ Hey how are you doing"""  # noqa: W293
                 "vocab",
                 "merges",
                 "legacy",
+                "_spm_precompiled_charsmap",
+                "additional_special_tokens",  # V5: deprecated, converted to extra_special_tokens
             ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
@@ -871,6 +883,10 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
         if tokenizer_from_extractor is None:
             self.fail("No tokenizer from TokenizersExtractor provided")
+
+        # Debug: print tokenizer class used by tokenizer_from_extractor
+        print("tokenizer_from_extractor class:", type(tokenizer_from_extractor))
+
         self._run_integration_checks(tokenizer_from_extractor, "from_extractor")
 
     def test_internal_consistency(self):
@@ -2719,8 +2735,9 @@ Hey how are you doing"""  # noqa: W293
                         tokenizer_cached.all_special_tokens_extended,
                         tokenizer_local.all_special_tokens_extended,
                     )
-                except Exception as _:
-                    pass  # if the pretrained model is not loadable how could it pass locally :)
+                except Exception as e:
+                    # if the pretrained model is not loadable how could it pass locally :)
+                    print(f"Could not load pretrained tokenizer {pretrained_name}: {e}")
 
 
 @require_tokenizers
@@ -2825,5 +2842,6 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
                         tokenizer_cached.all_special_tokens_extended,
                         tokenizer_local.all_special_tokens_extended,
                     )
-                except Exception as _:
-                    pass  # if the pretrained model is not loadable how could it pass locally :)
+                except Exception as e:
+                    # if the pretrained model is not loadable how could it pass locally :)
+                    print(f"Could not load pretrained tokenizer: {e}")

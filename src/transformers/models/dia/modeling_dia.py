@@ -41,7 +41,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from .generation_dia import DiaGenerationMixin
 
@@ -116,7 +117,7 @@ class DiaMLP(nn.Module):
 
 @use_kernel_forward_from_hub("RMSNorm")
 class DiaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
         DiaRMSNorm is equivalent to T5LayerNorm
         """
@@ -124,7 +125,7 @@ class DiaRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -260,8 +261,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -299,7 +299,6 @@ class DiaSelfAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -313,13 +312,11 @@ class DiaSelfAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -392,9 +389,9 @@ class DiaCrossAttention(nn.Module):
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 past_key_values.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -428,7 +425,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_attn_output, self_attn_weights = self.self_attention(
+        self_attn_output, _ = self.self_attention(
             normed_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -441,10 +438,15 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
-        return hidden_states, self_attn_weights
+        return hidden_states
 
 
 class DiaEncoder(DiaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": DiaEncoderLayer,
+        "attentions": DiaSelfAttention,
+    }
+
     def __init__(self, config: DiaEncoderConfig):
         super().__init__(config)
         self.config = config
@@ -458,16 +460,15 @@ class DiaEncoder(DiaPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutput | tuple:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         hidden_states = self.embedding(input_ids)
 
         # RoPE
@@ -477,38 +478,23 @@ class DiaEncoder(DiaPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
 
-        if output_hidden_states:
-            encoder_states += (hidden_states,)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class DiaDecoderLayer(GradientCheckpointingLayer):
@@ -530,7 +516,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         self_attn_cache = past_key_values
@@ -539,21 +524,20 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_attn_output, self_attn_weights = self.self_attention(
+        self_attn_output, _ = self.self_attention(
             normed_states,
             position_embeddings,
             attention_mask,
             # Needs to be an arg in order to function properly
             # on inplace operations to be carried (e.g. compile)
             self_attn_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual + self_attn_output
 
         residual = hidden_states
         normed_states = self.pre_ca_norm(hidden_states)
-        cross_states, cross_attn_weights = self.cross_attention(
+        cross_states, _ = self.cross_attention(
             normed_states,
             encoder_hidden_states,
             attention_mask=encoder_attention_mask,
@@ -567,11 +551,16 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
 
-        return hidden_states, self_attn_weights, cross_attn_weights
+        return hidden_states
 
 
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
+
+    _can_record_outputs = {
+        "hidden_states": DiaDecoderLayer,
+        "attentions": [DiaSelfAttention, DiaCrossAttention],
+    }
 
     def __init__(self, config: DiaDecoderConfig):
         super().__init__(config)
@@ -586,8 +575,9 @@ class DiaDecoder(DiaPreTrainedModel):
 
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -596,10 +586,7 @@ class DiaDecoder(DiaPreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`):
@@ -610,12 +597,10 @@ class DiaDecoder(DiaPreTrainedModel):
 
         batch_size, seq_length = input_ids.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=input_ids.device
-            )
+
         if position_ids is None:
-            position_ids = cache_position[None, :]
+            position_ids = torch.arange(seq_length, device=input_ids.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0)
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
@@ -627,28 +612,20 @@ class DiaDecoder(DiaPreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
         )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
         for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = layer(
+            hidden_states = layer(
                 hidden_states,
                 # Needs to be an arg in order to function properly
                 # on inplace operations to be carried (e.g. compile)
@@ -657,29 +634,15 @@ class DiaDecoder(DiaPreTrainedModel):
                 encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns = all_self_attns + (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         hidden_states = self.norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -708,9 +671,6 @@ class DiaModel(DiaPreTrainedModel):
         encoder_outputs: BaseModelOutput | tuple | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqModelOutput:
         r"""
@@ -740,12 +700,6 @@ class DiaModel(DiaPreTrainedModel):
                 "You should either provide text ids or the cached text encodings. Neither has been found."
             )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if self.is_gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -760,8 +714,6 @@ class DiaModel(DiaPreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 **kwargs,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
@@ -789,10 +741,7 @@ class DiaModel(DiaPreTrainedModel):
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -844,10 +793,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         encoder_outputs: BaseModelOutput | tuple | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqLMOutput:
         r"""
@@ -885,9 +831,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
             **kwargs,
         )
 

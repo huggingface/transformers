@@ -585,7 +585,7 @@ class Serve:
         self,
         request: dict,
         schema: TypedDict,
-        validator: TypeAdapter,
+        validator: "TypeAdapter",
         unused_fields: set,
     ):
         """
@@ -661,10 +661,10 @@ class Serve:
         model: str | None = None,
         role: str | None = None,
         finish_reason: str | None = None,
-        tool_calls: list[ChoiceDeltaToolCall] | None = None,
+        tool_calls: list["ChoiceDeltaToolCall"] | None = None,
         decode_stream: DecodeStream | None = None,
         tokenizer: Optional["PreTrainedTokenizerFast"] = None,
-    ) -> ChatCompletionChunk:
+    ) -> "ChatCompletionChunk":
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
 
@@ -713,7 +713,7 @@ class Serve:
         return chunk
 
     @staticmethod
-    def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
+    def chunk_to_sse_element(chunk: "ChatCompletionChunk | BaseModel") -> str:
         """
         Builds an event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
@@ -727,6 +727,9 @@ class Serve:
         Returns:
             `str`: The built chunk, a string containing a JSON string with the payload.
         """
+        if isinstance(chunk, str):
+            # Error paths may yield pre-formatted strings — pass them through as-is.
+            return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     @staticmethod
@@ -778,7 +781,7 @@ class Serve:
 
         return generative_models
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -801,6 +804,14 @@ class Serve:
                 self.running_continuous_batching_manager = None
 
         model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        # Continuous batching only supports text-only models
+        if self.get_model_modality(model, processor=processor) != Modality.LLM:
+            logger.warning_once(
+                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+            )
+            return self.generate_chat_completion(req)
+
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
@@ -839,8 +850,22 @@ class Serve:
                 for result in self.running_continuous_batching_manager.request_id_iter(request_id):
                     n_tokens_generated += 1
 
+                    # Always yield the token content (even for the final FINISHED token)
+                    if result.generated_tokens:
+                        token_id = result.generated_tokens[-1]
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id,
+                            content=token_id,
+                            model=model_id_and_revision,
+                            decode_stream=decode_stream,
+                            tokenizer=tokenizer,
+                        )
+
                     if result.status == RequestStatus.FINISHED:
-                        generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                        generated_all_tokens = (
+                            generation_config.max_new_tokens is not None
+                            and n_tokens_generated >= generation_config.max_new_tokens
+                        )
 
                         # If the tokenizer has an eos_token, we can have a more robust check.
                         if hasattr(tokenizer, "eos_token"):
@@ -855,14 +880,6 @@ class Serve:
                             model=model_id_and_revision,
                         )
                         break
-                    else:
-                        yield self.build_chat_completion_chunk(
-                            request_id=request_id,
-                            content=result.generated_tokens[-1],
-                            model=model_id_and_revision,
-                            decode_stream=decode_stream,
-                            tokenizer=tokenizer,
-                        )
 
             except Exception as e:
                 logger.error(str(e))
@@ -992,7 +1009,7 @@ class Serve:
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
+    def generate_chat_completion(self, req: dict) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using `generate`.
 
@@ -1192,7 +1209,10 @@ class Serve:
                             _request_id, content=result, model=model_id_and_revision
                         )
 
-                generated_all_tokens = n_tokens_generated >= generation_config.max_new_tokens
+                generated_all_tokens = (
+                    generation_config.max_new_tokens is not None
+                    and n_tokens_generated >= generation_config.max_new_tokens
+                )
 
                 # If the tokenizer has an eos_token, we can have a more robust check.
                 if hasattr(streamer.tokenizer, "eos_token"):
@@ -1308,7 +1328,7 @@ class Serve:
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
             seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
+            if inputs.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {

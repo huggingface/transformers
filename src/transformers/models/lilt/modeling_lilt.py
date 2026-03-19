@@ -572,7 +572,7 @@ class LiltModel(LiltPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -701,7 +701,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> predicted_class_idx = outputs.logits.argmax(-1).item()
         >>> predicted_class = model.config.id2label[predicted_class_idx]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.lilt(
             input_ids,
@@ -814,7 +814,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> outputs = model(**encoding)
         >>> predicted_class_indices = outputs.logits.argmax(-1)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.lilt(
             input_ids,
@@ -935,7 +935,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> predict_answer_tokens = encoding.input_ids[0, answer_start_index : answer_end_index + 1]
         >>> predicted_answer = tokenizer.decode(predict_answer_tokens)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.lilt(
             input_ids,

@@ -20,7 +20,6 @@
 
 import copy
 import math
-from typing import Union
 
 import torch
 import torch.nn as nn
@@ -30,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -40,21 +39,10 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs, is_flash_attention_requested
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_switch_transformers import SwitchTransformersConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -316,14 +304,11 @@ class SwitchTransformersAttention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length, device=None, cache_position=None):
+    def compute_bias(self, query_length, key_length, device=None, past_seen_tokens=0):
         """Compute binned relative position bias"""
         if device is None:
             device = self.relative_attention_bias.weight.device
-        if cache_position is None:
-            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        else:
-            context_position = cache_position[:, None].to(device)
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None] + past_seen_tokens
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
@@ -343,10 +328,8 @@ class SwitchTransformersAttention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_values=None,
-        query_length=None,
-        use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -354,6 +337,9 @@ class SwitchTransformersAttention(nn.Module):
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
         batch_size, seq_length = hidden_states.shape[:2]
+        past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
+        # We clone here for StaticCache, as we get the value before updating it, but use it after and it's the same ref
+        past_seen_tokens = past_seen_tokens.clone() if isinstance(past_seen_tokens, torch.Tensor) else past_seen_tokens
 
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
@@ -385,11 +371,7 @@ class SwitchTransformersAttention(nn.Module):
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
             if past_key_values is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -399,8 +381,6 @@ class SwitchTransformersAttention(nn.Module):
 
         if position_bias is None:
             key_length = key_states.shape[-2]
-            # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
-            real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
                     (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
@@ -409,9 +389,8 @@ class SwitchTransformersAttention(nn.Module):
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    real_seq_length, key_length, device=scores.device, cache_position=cache_position
+                    seq_length, key_length, device=scores.device, past_seen_tokens=past_seen_tokens
                 )
-                position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
@@ -454,7 +433,7 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
         past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -464,7 +443,6 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -487,10 +465,8 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         attention_mask=None,
         position_bias=None,
         past_key_values=None,
-        use_cache=False,
-        query_length=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -499,10 +475,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
             key_value_states=key_value_states,
             position_bias=position_bias,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            query_length=query_length,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
@@ -535,7 +508,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_decoder_position_bias=None,
         past_key_values=None,
         use_cache=False,
-        cache_position=None,
         **kwargs,
     ):
         hidden_states, _ = self.layer[0](
@@ -544,7 +516,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
             position_bias=position_bias,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
         )
 
         # clamp inf values to enable fp16 training
@@ -560,9 +531,6 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 past_key_values=past_key_values,
-                query_length=cache_position[-1] + 1,
-                use_cache=use_cache,
-                cache_position=cache_position,
             )
 
             # clamp inf values to enable fp16 training
@@ -652,7 +620,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
         "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
-        "router_logits": SwitchTransformersTop1Router,
+        "router_logits": OutputRecorder(SwitchTransformersTop1Router, index=2),
     }
 
     def __init__(self, config):
@@ -679,7 +647,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_ids=None,
@@ -689,9 +658,8 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         inputs_embeds=None,
         past_key_values=None,
         use_cache=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | MoEModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -720,24 +688,17 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
-            causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache
-                if isinstance(past_key_values, EncoderDecoderCache)
-                else past_key_values,
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
         else:
             causal_mask = attention_mask[:, None, None, :]
@@ -770,7 +731,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 encoder_decoder_position_bias,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -781,129 +741,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if is_flash_attention_requested(self.config):
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        sequence_length = input_tensor.shape[1]
-        if using_compilable_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
 
 
 @auto_docstring
@@ -947,7 +784,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
@@ -963,7 +799,6 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1102,12 +937,15 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                output_router_logits=output_router_logits,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1124,7 +962,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1185,11 +1023,11 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            decoder_router_logits=decoder_outputs.router_probs,
+            decoder_router_logits=decoder_outputs.router_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            encoder_router_logits=encoder_outputs.router_probs,
+            encoder_router_logits=encoder_outputs.router_logits,
         )
 
     def _unpack_router_logits(self, router_outputs):
@@ -1210,11 +1048,6 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
     }
-    _can_record_outputs = {
-        "hidden_states": SwitchTransformersBlock,
-        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
-        "router_logits": SwitchTransformersTop1Router,
-    }
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1234,7 +1067,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

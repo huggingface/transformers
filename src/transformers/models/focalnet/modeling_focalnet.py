@@ -22,11 +22,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_focalnet import FocalNetConfig
 
 
@@ -635,7 +636,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -720,10 +721,12 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/focalnet-base-simmim-window6-192")
         >>> config = FocalNetConfig()
@@ -739,7 +742,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 192, 192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
             pixel_values,
@@ -820,7 +823,7 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
             pixel_values,
@@ -853,12 +856,11 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     FocalNet backbone, to be used with frameworks like X-Decoder.
     """
 )
-class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
+class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
     has_attentions = False
 
     def __init__(self, config: FocalNetConfig):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.embed_dim] + config.hidden_sizes
         self.focalnet = FocalNetModel(config)
@@ -866,6 +868,8 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -881,10 +885,12 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/focalnet-tiny-lrf")
         >>> model = AutoBackbone.from_pretrained("microsoft/focalnet-tiny-lrf")
@@ -892,7 +898,7 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

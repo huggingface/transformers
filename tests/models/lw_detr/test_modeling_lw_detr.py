@@ -683,6 +683,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [-7.7648, -4.1330, -2.9003, -4.0559, -2.9635],
+                ("xpu", (3, 0)): [-7.7693, -4.1270, -2.9018, -4.0605, -2.9575],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -694,6 +695,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.1694, 0.1979, 0.2121, 0.0912, 0.2537],
+                ("xpu", (3, 0)): [0.1694, 0.1979, 0.2121, 0.0912, 0.2537],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -707,6 +709,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.8684, 0.7492, 0.7146, 0.4362],
+                ("xpu", (3, 0)): [0.8676, 0.7527, 0.7177, 0.4391],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -720,6 +723,12 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
                     [40.5547, 73.0968, 176.2951, 116.8605],
                     [340.3403, 25.1044, 640.2798, 368.7382],
                     [334.2971, 77.0087, 371.2877, 189.8089],
+                ],
+                ("xpu", (3, 0)): [
+                    [4.8948, 56.5549, 319.8077, 474.7937],
+                    [40.5620, 73.1059, 176.2996, 116.8567],
+                    [340.3327, 25.1026, 640.3193, 368.6754],
+                    [334.2945, 76.9876, 371.2914, 189.8221],
                 ],
             }
         )
@@ -749,8 +758,10 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [-11.9394, -4.3419, -4.4172, -5.0299, -6.9282],
+                ("xpu", (3, 0)): [-11.9292, -4.3307, -4.4075, -5.0207, -6.9211],
             }
         )
+
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-4, atol=2e-4)
 
@@ -760,6 +771,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.7689, 0.4107, 0.4617, 0.7244, 0.2526],
+                ("xpu", (3, 0)): [0.7688, 0.4106, 0.4618, 0.7245, 0.2526],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -773,6 +785,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.9746, 0.9717, 0.9344, 0.8182],
+                ("xpu", (3, 0)): [0.9745, 0.9715, 0.9339, 0.8163],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -786,6 +799,12 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
                     [344.3325, 23.2591, 639.7999, 370.9900],
                     [40.4797, 73.3092, 175.6086, 116.9654],
                     [333.9930, 77.1547, 370.4000, 186.1230],
+                ],
+                ("xpu", (3, 0)): [
+                    [7.4487, 54.2931, 315.8945, 474.8726],
+                    [344.2597, 23.2305, 639.8082, 370.9894],
+                    [40.4780, 73.3095, 175.6083, 116.9673],
+                    [333.9890, 77.1453, 370.4069, 186.1300],
                 ],
             }
         )

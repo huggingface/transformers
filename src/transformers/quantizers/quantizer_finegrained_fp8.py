@@ -10,6 +10,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import FineGrainedFP8Config
 
 logger = logging.get_logger(__name__)
 
@@ -21,6 +22,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "FineGrainedFP8Config"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -75,10 +77,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        from ..integrations.finegrained_fp8 import FP8Expert, FP8Linear
+        from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, (FP8Linear, FP8Expert)):
+        if isinstance(module, (FP8Linear, FP8Experts)):
             if self.pre_quantized or tensor_name == "bias":
                 return False
             else:
@@ -110,29 +112,23 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    # NOTE: TP is applied before quantization so this is only to add hooks.
-    # Quantization is incompatible with DTensors, so we have to anyway have
-    # gathers! But it should be model independent -> figure out where to put
-    # the gather and that's it.
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:
             text_plan = {
-                "layers.*.self_attn.q_proj.weight": "local_colwise",
-                "layers.*.self_attn.q_proj.weight_scale_inv": "local_colwise",
-                "layers.*.self_attn.k_proj.weight": "local_colwise",
-                "layers.*.self_attn.k_proj.weight_scale_inv": "local_colwise",
-                "layers.*.self_attn.v_proj.weight": "local_colwise",
-                "layers.*.self_attn.v_proj.weight_scale_inv": "local_colwise",
-                "layers.*.self_attn.o_proj.weight": "local_rowwise",
-                "layers.*.self_attn.o_proj.weight_scale_inv": "local_rowwise",
-                "layers.*.self_attn": "gather",
-                "layers.*.mlp.gate_proj.weight": "local_colwise",
-                "layers.*.mlp.gate_proj.weight_scale_inv": "local_colwise",
-                "layers.*.mlp.up_proj.weight": "local_colwise",
-                "layers.*.mlp.up_proj.weight_scale_inv": "local_colwise",
-                "layers.*.mlp.down_proj.weight": "local_rowwise",
-                "layers.*.mlp.down_proj.weight_scale_inv": "local_rowwise",
-                "layers.*.mlp": "gather",
+                "layers.*.self_attn.q_proj.weight": "colwise",
+                "layers.*.self_attn.q_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.k_proj.weight": "colwise",
+                "layers.*.self_attn.k_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.v_proj.weight": "colwise",
+                "layers.*.self_attn.v_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.o_proj.weight": "rowwise",
+                "layers.*.self_attn.o_proj.weight_scale_inv": "rowwise",
+                "layers.*.mlp.gate_proj.weight": "colwise",
+                "layers.*.mlp.gate_proj.weight_scale_inv": "colwise",
+                "layers.*.mlp.up_proj.weight": "colwise",
+                "layers.*.mlp.up_proj.weight_scale_inv": "colwise",
+                "layers.*.mlp.down_proj.weight": "rowwise",
+                "layers.*.mlp.down_proj.weight_scale_inv": "rowwise",
             }
 
             config.base_model_tp_plan = text_plan
@@ -145,6 +141,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return False
+
+    @property
+    def is_compileable(self) -> bool:
+        return True
 
     def get_quantize_ops(self):
         from ..integrations.finegrained_fp8 import Fp8Quantize

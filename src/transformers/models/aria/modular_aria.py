@@ -15,6 +15,7 @@ from collections.abc import Iterable
 
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -36,6 +37,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
@@ -94,76 +96,16 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
     return output
 
 
+@auto_docstring(checkpoint="rhymes-ai/Aria")
+@strict(accept_kwargs=True)
 class AriaTextConfig(LlamaConfig):
     r"""
-    This class handles the configuration for the text component of the Aria model.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
-    [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
-    This class extends the LlamaConfig to include additional parameters specific to the Mixture of Experts (MoE) architecture.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LlamaModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            The size of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
-            `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Llama 1 supports up to 2048 tokens,
-            Llama 2 up to 4096, CodeLlama up to 16384.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*, defaults to 2):
-            Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of stream token id.
-        pretraining_tp (`int`, *optional*, defaults to 1):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
-            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
-            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
-        head_dim (`int`, *optional*):
-            The attention head dimension. If None, it will default to hidden_size // num_heads
-        moe_num_experts (`int`, *optional*, defaults to 8):
-            The number of experts in the MoE layer.
-        moe_topk (`int`, *optional*, defaults to 2):
-            The number of top experts to route to for each token.
-        moe_num_shared_experts (`int`, *optional*, defaults to 2):
-            The number of shared experts.
+    moe_num_experts (`int`, *optional*, defaults to 8):
+        The number of experts in the MoE layer.
+    moe_topk (`int`, *optional*, defaults to 2):
+        The number of top experts to route to for each token.
+    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+        The number of shared experts.
     """
 
     model_type = "aria_text"
@@ -178,47 +120,19 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        intermediate_size: int = 4096,
-        moe_num_experts: int = 8,
-        moe_topk: int = 2,
-        moe_num_shared_experts: int = 2,
-        pad_token_id=2,
-        **super_kwargs,
-    ):
-        self.intermediate_size = intermediate_size
-        self.moe_num_experts = moe_num_experts
-        self.moe_topk = moe_topk
-        self.moe_num_shared_experts = moe_num_shared_experts
-        super().__init__(pad_token_id=pad_token_id, **super_kwargs)
+    intermediate_size: int = 4096
+    moe_num_experts: int = 8
+    moe_topk: int = 2
+    moe_num_shared_experts: int = 2
+    pad_token_id: int | None = 2
 
 
+@auto_docstring(checkpoint="rhymes-ai/Aria")
+@strict(accept_kwargs=True)
 class AriaConfig(PreTrainedConfig):
     r"""
-    This class handles the configuration for both vision and text components of the Aria model,
-    as well as additional parameters for image token handling and projector mapping.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the model of the Aria
-    [rhymes-ai/Aria](https://huggingface.co/rhymes-ai/Aria) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (`AriaVisionConfig` or `dict`, *optional*):
-            Configuration for the vision component.
-        vision_feature_layer (`int`, *optional*, defaults to -1):
-            The index of the layer to select the vision feature.
-        text_config (`AriaTextConfig` or `dict`, *optional*):
-            Configuration for the text component.
-        projector_patch_to_query_dict (`dict`, *optional*):
-            Mapping of patch sizes to query dimensions.
-        image_token_index (`int`, *optional*, defaults to 9):
-            Index used to represent image tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+    projector_patch_to_query_dict (`dict`, *optional*):
+        Mapping of patch sizes to query dimensions.
     """
 
     model_type = "aria"
@@ -227,47 +141,37 @@ class AriaConfig(PreTrainedConfig):
     }
     sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        vision_feature_layer: int = -1,
-        text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: dict | None = None,
-        image_token_index: int | None = 9,
-        initializer_range: float | None = 0.02,
-        tie_word_embeddings: bool | None = False,
-        **kwargs,
-    ):
-        self.image_token_index = image_token_index
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | AriaTextConfig | None = None
+    vision_feature_layer: int | list[int] = -1
+    projector_patch_to_query_dict: dict | None = None
+    image_token_index: int = 9
+    initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
+    def __post_init__(self, **kwargs):
         # Convert the keys and values of projector_patch_to_query_dict to integers
         # This ensures consistency even if they were provided as strings
-        if projector_patch_to_query_dict is None:
-            projector_patch_to_query_dict = {
+        if self.projector_patch_to_query_dict is None:
+            self.projector_patch_to_query_dict = {
                 1225: 128,
                 4900: 256,
             }
-        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in projector_patch_to_query_dict.items()}
+        self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-        self.vision_feature_layer = vision_feature_layer
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = "idefics3_vision"
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["idefics3_vision"]()
 
-        self.vision_config = vision_config
-        self.initializer_range = initializer_range
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = "idefics3_vision"
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
 
-        if isinstance(text_config, dict) and "model_type" in text_config:
-            text_config = AriaTextConfig(**text_config)
-        elif text_config is None:
-            text_config = AriaTextConfig()
+        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
+            self.text_config = AriaTextConfig(**self.text_config)
+        elif self.text_config is None:
+            self.text_config = AriaTextConfig()
 
-        self.text_config = text_config
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class AriaTextRMSNorm(LlamaRMSNorm):
@@ -1262,29 +1166,17 @@ class AriaModel(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
-    ):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            pixel_mask (`torch.FloatTensor]`, *optional*):
-                The tensors corresponding to the input image mask.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
+        vision_feature_layer: int | list[int] = -1,
+        output_hidden_states: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         image_outputs = self.vision_tower(
-            pixel_values, patch_attention_mask=patch_attention_mask, output_hidden_states=True
+            pixel_values,
+            patch_attention_mask=patch_attention_mask,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
         )
         image_attn_mask = None
         if patch_attention_mask is not None:
@@ -1292,8 +1184,9 @@ class AriaModel(LlavaModel):
             image_attn_mask = torch.logical_not(flattened_mask)
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-        image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-        return image_features
+        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
+
+        return image_outputs
 
     def forward(
         self,
@@ -1305,7 +1198,6 @@ class AriaModel(LlavaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | AriaModelOutputWithPast:
         if inputs_embeds is None:
@@ -1317,7 +1209,8 @@ class AriaModel(LlavaModel):
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1330,7 +1223,6 @@ class AriaModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1354,16 +1246,19 @@ class AriaModel(LlavaModel):
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
-    ):
+        vision_feature_layer: int | list[int] = -1,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
             vision_feature_layer=vision_feature_layer,
+            **kwargs,
         )
 
     @can_return_tuple
@@ -1380,7 +1275,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AriaCausalLMOutputWithPast:
         r"""
@@ -1393,7 +1287,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO
@@ -1452,7 +1347,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1483,7 +1377,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         pixel_values=None,
         pixel_mask=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -1493,7 +1386,6 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -1501,7 +1393,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

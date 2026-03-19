@@ -21,7 +21,8 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...backbone_utils import load_backbone
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -30,7 +31,6 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.backbone_utils import load_backbone
 from .configuration_dab_detr import DabDetrConfig
 
 
@@ -231,7 +231,7 @@ class DabDetrConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
 class DabDetrConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -915,14 +915,15 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1044,11 +1045,10 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1061,9 +1061,11 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and memory_key_padding_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            memory_key_padding_mask = _prepare_4d_attention_mask(
-                memory_key_padding_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            memory_key_padding_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=memory_key_padding_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         for layer_id, decoder_layer in enumerate(self.layers):
@@ -1239,13 +1241,15 @@ class DabDetrModel(DabDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab_detr-base")
-        >>> model = AutoModel.from_pretrained("IDEA-Research/dab_detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+        >>> model = AutoModel.from_pretrained("IDEA-Research/dab-detr-resnet-50")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -1263,7 +1267,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, _, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1393,7 +1397,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->DabDetr
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->DabDetr
 class DabDetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 
@@ -1492,10 +1496,12 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")
@@ -1524,7 +1530,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # First, sent images through DAB_DETR base model to obtain encoder + decoder outputs
         model_outputs = self.model(

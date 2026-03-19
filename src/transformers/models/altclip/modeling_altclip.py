@@ -27,13 +27,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPoolingAndProjection,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs, logging, torch_int
-from ...utils.generic import is_flash_attention_requested
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
@@ -84,10 +85,7 @@ class AltCLIPOutput(ModelOutput):
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->AltRoberta
@@ -200,6 +198,7 @@ class AltRobertaEmbeddings(nn.Module):
 class AltRobertaSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
@@ -220,7 +219,7 @@ class AltRobertaSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
@@ -250,9 +249,7 @@ class AltRobertaSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
@@ -285,16 +282,15 @@ class AltRobertaAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        attention_output, _ = self.self(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->AltRoberta
@@ -342,24 +338,19 @@ class AltRobertaLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-        **kwargs,
-    ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        hidden_states = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        hidden_states = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return hidden_states
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -375,41 +366,21 @@ class AltRobertaEncoder(nn.Module):
         self.layer = nn.ModuleList([AltRobertaLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -480,8 +451,7 @@ class AltCLIPAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        causal_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -494,19 +464,10 @@ class AltCLIPAttention(nn.Module):
         queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        # CLIP text model uses both `causal_attention_mask` and `attention_mask`
-        # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
-        if not is_flash_attention_requested(self.config):
-            if attention_mask is not None and causal_attention_mask is not None:
-                attention_mask = attention_mask + causal_attention_mask
-            elif causal_attention_mask is not None:
-                attention_mask = causal_attention_mask
-        else:
-            self.is_causal = causal_attention_mask is not None
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -514,15 +475,13 @@ class AltCLIPAttention(nn.Module):
             keys,
             values,
             attention_mask,
-            is_causal=self.is_causal,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
-        if not output_attentions:
-            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -555,27 +514,15 @@ class AltCLIPEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
-        output_attentions: bool | None = False,
-    ) -> tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -584,12 +531,7 @@ class AltCLIPEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class AltCLIPEncoder(nn.Module):
@@ -607,15 +549,11 @@ class AltCLIPEncoder(nn.Module):
         self.layers = nn.ModuleList([AltCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
-        causal_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
         Args:
@@ -630,52 +568,18 @@ class AltCLIPEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
-                causal_attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
         )
 
 
@@ -832,22 +736,13 @@ class AltCLIPVisionTransformer(nn.Module):
         self.encoder = AltCLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -856,9 +751,7 @@ class AltCLIPVisionTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -868,8 +761,6 @@ class AltCLIPVisionTransformer(nn.Module):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -877,6 +768,10 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config: AltCLIPVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_record_outputs = {
+        "hidden_states": AltCLIPEncoderLayer,
+        "attentions": AltCLIPAttention,
+    }
 
     def __init__(self, config: AltCLIPVisionConfig):
         super().__init__(config)
@@ -887,29 +782,30 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AltCLIPVisionModel
 
         >>> model = AltCLIPVisionModel.from_pretrained("BAAI/AltCLIP")
         >>> processor = AutoProcessor.from_pretrained("BAAI/AltCLIP")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -917,14 +813,10 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         return self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 
@@ -939,6 +831,10 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
 )
 class AltRobertaModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
+    _can_record_outputs = {
+        "hidden_states": AltRobertaLayer,
+        "attentions": AltRobertaSelfAttention,
+    }
 
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->AltRoberta
     def __init__(self, config, add_pooling_layer=True):
@@ -963,6 +859,8 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
@@ -972,17 +870,8 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -999,14 +888,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
@@ -1020,9 +901,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -1030,8 +909,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -1064,10 +941,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPoolingAndProjection:
         r"""
         Examples:
@@ -1087,17 +961,13 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.roberta(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
         # last module outputs
@@ -1120,6 +990,10 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
 
 class AltCLIPModel(AltCLIPPreTrainedModel):
     config: AltCLIPConfig
+    _can_record_outputs = {
+        "hidden_states": AltCLIPEncoderLayer,
+        "attentions": AltCLIPAttention,
+    }
 
     def __init__(self, config: AltCLIPConfig):
         super().__init__(config)
@@ -1154,7 +1028,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
@@ -1162,12 +1036,9 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`AltCLIPTextModel`].
-
         Examples:
 
         ```python
@@ -1181,29 +1052,28 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> with torch.inference_mode():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndProjection = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
+            **kwargs,
         )
         pooled_output = text_outputs.pooler_output
-        text_features = self.text_projection(pooled_output)
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        return text_features
+        return text_outputs
 
-    @filter_out_non_signature_kwargs()
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`AltCLIPVisionModel`].
-
         Examples:
 
         ```python
@@ -1224,12 +1094,14 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
         pooled_output = vision_outputs.pooler_output
-        image_features = self.visual_projection(pooled_output)
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        return image_features
+        return vision_outputs
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1239,11 +1111,8 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         return_loss: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AltCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
@@ -1253,13 +1122,15 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AltCLIPModel
 
         >>> model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
         >>> processor = AutoProcessor.from_pretrained("BAAI/AltCLIP")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
         ... )
@@ -1267,29 +1138,18 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use AltCLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         image_embeds = vision_outputs[1]
@@ -1310,10 +1170,6 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         loss = None
         if return_loss:
             loss = clip_loss(logits_per_text)
-
-        if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return AltCLIPOutput(
             loss=loss,

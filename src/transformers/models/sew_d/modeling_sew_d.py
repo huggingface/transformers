@@ -26,8 +26,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data
+from ...modeling_utils import PreTrainedModel, get_torch_context_manager_or_global_device
 from ...utils import auto_docstring, logging
 from .configuration_sew_d import SEWDConfig
 
@@ -496,7 +495,7 @@ class XSoftmax(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         (output,) = ctx.saved_tensors
-        inputGrad = softmax_backward_data(ctx, grad_output, output)
+        inputGrad = torch._softmax_backward_data(grad_output, output, ctx.dim, output.dtype)
         return inputGrad, None, None
 
     @staticmethod
@@ -1327,7 +1326,7 @@ class SEWDModel(SEWDPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -1407,6 +1406,9 @@ class SEWDForCTC(SEWDPreTrainedModel):
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
 
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
+
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for SEWD so that we do not have to introduce a new API to
         # [`PreTrainedModel`]. While slightly hacky, SEWD never has to tie input and output embeddings, so that it is
@@ -1453,7 +1455,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -1572,7 +1574,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.sew_d(

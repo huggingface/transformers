@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
 from typing import Optional
@@ -39,7 +38,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_modernbert_decoder import ModernBertDecoderConfig
 
 
@@ -58,21 +58,13 @@ class ModernBertDecoderEmbeddings(nn.Module):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = nn.Dropout(config.embedding_dropout)
 
-    @torch.compile(dynamic=True)
-    def compiled_embeddings(self, input_ids: torch.LongTensor) -> torch.Tensor:
-        return self.drop(self.norm(self.tok_embeddings(input_ids)))
-
     def forward(
         self, input_ids: torch.LongTensor | None = None, inputs_embeds: torch.Tensor | None = None
     ) -> torch.Tensor:
         if inputs_embeds is not None:
             hidden_states = self.drop(self.norm(inputs_embeds))
         else:
-            hidden_states = (
-                self.compiled_embeddings(input_ids)
-                if self.config.reference_compile
-                else self.drop(self.norm(self.tok_embeddings(input_ids)))
-            )
+            hidden_states = self.drop(self.norm(self.tok_embeddings(input_ids)))
         return hidden_states
 
 
@@ -203,11 +195,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    original_dtype = q.dtype
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
+    return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
 def eager_attention_forward(
@@ -216,7 +209,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     sliding_window: int | None = None,
     **kwargs,
@@ -229,8 +222,7 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     # Use the pre-computed attention mask
-    causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-    attn_weights = attn_weights + causal_mask
+    attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -279,7 +271,6 @@ class ModernBertDecoderAttention(nn.Module):
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -293,13 +284,11 @@ class ModernBertDecoderAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -339,7 +328,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -351,7 +339,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -388,12 +375,12 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ModernBertDecoderLayer,
         "attentions": ModernBertDecoderAttention,
     }
+    _skip_keys_device_placement = ["past_key_values"]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -472,7 +459,8 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -482,44 +470,31 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPast:
-        if (input_ids is None) == (inputs_embeds is None):
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            batch_size, seq_length = input_ids.shape[:2]
-        else:
-            batch_size, seq_length = inputs_embeds.shape[:2]
+        # Calculate embeddings
+        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
         # Handle past_key_values and cache setup
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + seq_length,
-                device=input_ids.device if input_ids is not None else inputs_embeds.device,
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
-
-        # Calculate embeddings
-        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+            batch_size = hidden_states.shape[0]
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": hidden_states,
+                "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -539,7 +514,6 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_embeddings=position_embeddings[decoder_layer.attention_type],
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
             )

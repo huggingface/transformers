@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1286,12 +1286,13 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1529,9 +1530,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        input_shape = hidden_states.size()[:-1]
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1544,16 +1543,26 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        if cache_position is None:
+            cache_position = torch.arange(
+                past_key_values_length, past_key_values_length + hidden_states.shape[1], device=hidden_states.device
+            )
 
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, hidden_states, past_key_values_length
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, hidden_states.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
@@ -1958,7 +1967,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -2144,7 +2153,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         19.68
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_ids is None:
@@ -2439,7 +2448,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         torch.Size([15872])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_values is None:
@@ -2785,7 +2794,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         torch.Size([77824])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_values is None:

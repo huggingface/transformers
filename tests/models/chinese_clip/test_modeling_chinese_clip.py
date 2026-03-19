@@ -329,7 +329,7 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ChineseCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChineseCLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChineseCLIPTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -406,7 +406,7 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ChineseCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ChineseCLIPVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=ChineseCLIPVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -623,7 +623,11 @@ class ChineseCLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3990, 0.2983, -0.1239], [-0.1452, -0.2759, 0.0403], [-0.3149, -0.4763, 0.8555]]
+            [
+                [-0.3997, 0.2982, -0.1240],
+                [-0.1455, -0.2749, 0.0397],
+                [-0.3095, -0.4702, 0.8512],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(

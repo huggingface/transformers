@@ -137,7 +137,7 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AltCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -296,7 +296,7 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -521,7 +521,11 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3589, -0.5939, 0.3534], [0.4346, 0.1647, 0.7071], [1.1404, -0.4716, 0.1664]]
+            [
+                [-0.3577, -0.5977, 0.3555],
+                [0.4544, 0.1660, 0.6583],
+                [1.1715, -0.4870, 0.1645],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(

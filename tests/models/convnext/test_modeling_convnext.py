@@ -177,7 +177,6 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)
@@ -185,7 +184,7 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self,
             config_class=ConvNextConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "hidden_sizes"],
         )
 
@@ -284,7 +283,7 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0261, -0.4739, 0.1910]).to(torch_device)
+        expected_slice = torch.tensor([-0.0267, -0.4735, 0.1901]).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 

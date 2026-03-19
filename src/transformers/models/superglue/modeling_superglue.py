@@ -678,13 +678,18 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image_1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
-        >>> images = [image1, image2]
+        >>> with httpx.stream("GET", url) as response:
+        ...     image_2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image_1, image_2]
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
         >>> model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
@@ -701,7 +706,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
