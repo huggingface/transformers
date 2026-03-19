@@ -32,7 +32,6 @@ _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
-
 def w8a8_per_tensor_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -388,8 +387,6 @@ def _grouped_scaled_mm(
     return output
 
 
-
-
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -428,7 +425,8 @@ def fp8_batched_mm_experts_forward(
             self.gate_up_proj if self.has_gate else self.up_proj,
             self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
             self.gate_up_proj_activation_scale if self.activation_scheme == "static" else None,
-            expert_ids, self.num_experts,
+            expert_ids,
+            self.num_experts,
         )
 
     # Apply gating or activation
@@ -439,14 +437,20 @@ def fp8_batched_mm_experts_forward(
 
     if self.block_size is not None:
         proj_out = kernel.w8a8_fp8_matmul_batched(
-            proj_out, self.down_proj, self.down_proj_scale_inv,
-            block_size=self.block_size, expert_ids=expert_ids,
+            proj_out,
+            self.down_proj,
+            self.down_proj_scale_inv,
+            block_size=self.block_size,
+            expert_ids=expert_ids,
         )
     else:
         proj_out = _batched_scaled_mm(
-            proj_out, self.down_proj, self.down_proj_scale_inv,
+            proj_out,
+            self.down_proj,
+            self.down_proj_scale_inv,
             self.down_proj_activation_scale if self.activation_scheme == "static" else None,
-            expert_ids, self.num_experts,
+            expert_ids,
+            self.num_experts,
         )
 
     # Apply routing weights
@@ -499,12 +503,18 @@ def fp8_grouped_mm_experts_forward(
 
     if self.block_size is not None:
         proj_out = kernel.w8a8_fp8_matmul_grouped(
-            selected_hidden_states_g, gate_up_weight, gate_up_scale,
-            tokens_per_expert=tokens_per_expert, block_size=self.block_size, offsets=offsets,
+            selected_hidden_states_g,
+            gate_up_weight,
+            gate_up_scale,
+            tokens_per_expert=tokens_per_expert,
+            block_size=self.block_size,
+            offsets=offsets,
         )
     else:
         proj_out = _grouped_scaled_mm(
-            selected_hidden_states_g, gate_up_weight, gate_up_scale,
+            selected_hidden_states_g,
+            gate_up_weight,
+            gate_up_scale,
             self.gate_up_proj_activation_scale if self.activation_scheme == "static" else None,
             tokens_per_expert,
         )
@@ -517,12 +527,18 @@ def fp8_grouped_mm_experts_forward(
 
     if self.block_size is not None:
         proj_out = kernel.w8a8_fp8_matmul_grouped(
-            proj_out, self.down_proj, self.down_proj_scale_inv,
-            tokens_per_expert=tokens_per_expert, block_size=self.block_size, offsets=offsets,
+            proj_out,
+            self.down_proj,
+            self.down_proj_scale_inv,
+            tokens_per_expert=tokens_per_expert,
+            block_size=self.block_size,
+            offsets=offsets,
         )
     else:
         proj_out = _grouped_scaled_mm(
-            proj_out, self.down_proj, self.down_proj_scale_inv,
+            proj_out,
+            self.down_proj,
+            self.down_proj_scale_inv,
             self.down_proj_activation_scale if self.activation_scheme == "static" else None,
             tokens_per_expert,
         )
