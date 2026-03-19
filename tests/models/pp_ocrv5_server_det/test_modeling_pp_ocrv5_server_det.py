@@ -258,7 +258,7 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 @slow
 class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
+        model_path = "PaddlePaddle/PP-OCRv5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None

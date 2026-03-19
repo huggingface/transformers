@@ -198,7 +198,9 @@ else:
             ("pp_doclayout_v3", {"torchvision": "PPDocLayoutV3ImageProcessor"}),
             ("pp_lcnet", {"torchvision": "PPLCNetImageProcessor"}),
             ("pp_ocrv5_mobile_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             ("pp_ocrv5_server_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
+            ("pp_ocrv5_server_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             (
                 "prompt_depth_anything",
                 {"torchvision": "PromptDepthAnythingImageProcessor", "pil": "PromptDepthAnythingImageProcessorPil"},
