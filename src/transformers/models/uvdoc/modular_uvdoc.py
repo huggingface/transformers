@@ -28,14 +28,14 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import SizeDict, PILImageResampling
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, requires_backends
 from ...utils.generic import TensorType
-from ...utils.output_capturing import capture_outputs
 
 from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
 from ...modeling_layers import GradientCheckpointingLayer
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetPreTrainedModel
+from ...utils.generic import merge_with_config_defaults
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
 @strict(accept_kwargs=True)
