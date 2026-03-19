@@ -100,14 +100,13 @@ def wait_for_server(base_url: str, timeout: int = 120) -> bool:
 
 def streaming_chat_completion(
     base_url: str, messages: list, max_tokens: int, seed: int,
-    do_sample: bool = False, cache_implementation: str | None = None,
+    do_sample: bool = False,
 ) -> dict:
     """Send a streaming chat completion request. Returns {total, ttft, completion_tokens, text}."""
     gen_cfg = {"max_new_tokens": max_tokens, "min_new_tokens": max_tokens, "do_sample": do_sample}
     if do_sample:
         gen_cfg["temperature"] = 0.7
-    if cache_implementation:
-        gen_cfg["cache_implementation"] = cache_implementation
+
     payload = {
         "messages": messages,
         "stream": True,
@@ -162,14 +161,13 @@ def streaming_chat_completion(
 
 def streaming_response(
     base_url: str, messages: list, max_tokens: int, seed: int,
-    do_sample: bool = False, cache_implementation: str | None = None,
+    do_sample: bool = False,
 ) -> dict:
     """Send a streaming responses API request. Returns {total, ttft, completion_tokens, text}."""
     gen_cfg = {"max_new_tokens": max_tokens, "min_new_tokens": max_tokens, "do_sample": do_sample}
     if do_sample:
         gen_cfg["temperature"] = 0.7
-    if cache_implementation:
-        gen_cfg["cache_implementation"] = cache_implementation
+
     # Convert messages to Responses API input format
     input_messages = messages
     payload = {
@@ -217,12 +215,12 @@ def streaming_response(
 
 def streaming_request(
     base_url: str, messages: list, max_tokens: int, seed: int,
-    do_sample: bool = False, cache_implementation: str | None = None,
+    do_sample: bool = False,
     endpoint: str = "chat",
 ) -> dict:
     """Dispatch to chat completions or responses API based on endpoint."""
     kw = dict(base_url=base_url, messages=messages, max_tokens=max_tokens,
-              seed=seed, do_sample=do_sample, cache_implementation=cache_implementation)
+              seed=seed, do_sample=do_sample)
     if endpoint == "responses":
         return streaming_response(**kw)
     return streaming_chat_completion(**kw)
@@ -235,12 +233,12 @@ def streaming_request(
 
 def bench_pp(
     base_url: str, tokenizer, pp: int, warmup: int, iterations: int, seed: int,
-    do_sample: bool = False, cache_implementation: str | None = None, endpoint: str = "chat",
+    do_sample: bool = False, endpoint: str = "chat",
 ) -> dict:
     """Prefill benchmark: large prompt, max_tokens=1. Measures TTFT ≈ pure prefill time."""
     prompt = make_prompt(tokenizer, pp)
     messages = [{"role": "user", "content": prompt}]
-    kw = {"do_sample": do_sample, "cache_implementation": cache_implementation, "endpoint": endpoint}
+    kw = {"do_sample": do_sample, "endpoint": endpoint}
 
     for _ in range(warmup):
         streaming_request(base_url, messages, max_tokens=1, seed=seed, **kw)
@@ -259,12 +257,12 @@ def bench_pp(
 
 def bench_tg(
     base_url: str, tokenizer, tg: int, warmup: int, iterations: int, seed: int,
-    tg_prefill: int = 512, do_sample: bool = False, cache_implementation: str | None = None, endpoint: str = "chat",
+    tg_prefill: int = 512, do_sample: bool = False, endpoint: str = "chat",
 ) -> dict:
     """Decode benchmark: generate `tg` tokens after a `tg_prefill`-token prompt."""
     prompt = make_prompt(tokenizer, tg_prefill)
     messages = [{"role": "user", "content": prompt}]
-    kw = {"do_sample": do_sample, "cache_implementation": cache_implementation, "endpoint": endpoint}
+    kw = {"do_sample": do_sample, "endpoint": endpoint}
 
     for _ in range(warmup):
         streaming_request(base_url, messages, max_tokens=tg, seed=seed, **kw)
@@ -461,8 +459,8 @@ def main():
                         help="Prefill size for decode tests (default: 512)")
     parser.add_argument("--attn-impl", type=str, nargs="+", default=["sdpa", "eager", "flash_attention_2"],
                         help="Attention implementations to benchmark (default: sdpa eager flash_attention_2)")
-    parser.add_argument("--cache", type=str, default=None,
-                        help="Cache implementation (e.g. 'static' for StaticCache + torch.compile)")
+    parser.add_argument("--compile", action="store_true",
+                        help="Enable static cache + torch.compile on the server for faster decode")
     parser.add_argument("--mode", type=str, choices=["bench", "chat"], default="bench",
                         help="bench: greedy (temp=0). chat: sampling (do_sample=True, temp=0.7)")
     parser.add_argument("--endpoint", type=str, choices=["chat", "responses"], default="responses",
@@ -473,7 +471,6 @@ def main():
     args.warmup = max(args.warmup, 1)
     do_sample = args.mode == "chat"
     mode_str = "chat (do_sample=True, temp=0.7)" if do_sample else "bench (greedy, temp=0)"
-    cache_impl = args.cache
     endpoint = args.endpoint
     endpoint_path = "/v1/responses" if endpoint == "responses" else "/v1/chat/completions"
 
@@ -488,10 +485,10 @@ def main():
         rows = []
         for pp in args.pp:
             print(f"  pp{pp}")
-            rows.append(bench_pp(base_url, tokenizer, pp, args.warmup, args.iterations, args.seed, do_sample=do_sample, cache_implementation=cache_impl, endpoint=endpoint))
+            rows.append(bench_pp(base_url, tokenizer, pp, args.warmup, args.iterations, args.seed, do_sample=do_sample, endpoint=endpoint))
         for tg in args.tg:
             print(f"  tg{tg}")
-            rows.append(bench_tg(base_url, tokenizer, tg, args.warmup, args.iterations, args.seed, tg_prefill=args.tg_prefill, do_sample=do_sample, cache_implementation=cache_impl, endpoint=endpoint))
+            rows.append(bench_tg(base_url, tokenizer, tg, args.warmup, args.iterations, args.seed, tg_prefill=args.tg_prefill, do_sample=do_sample, endpoint=endpoint))
         print_table(rows)
 
     else:
@@ -508,7 +505,7 @@ def main():
                 print(f"\nStarting server for {spec['model']} (attn={attn_impl})...")
                 try:
                     server = start_server(spec["model"], args.port, spec["processor"], attn_implementation=attn_impl,
-                                          compile=cache_impl == "static")
+                                          compile=args.compile)
                 except Exception as e:
                     print(f"  ERROR: Failed to start server with attn={attn_impl}: {e}. Skipping.")
                     continue
@@ -527,10 +524,10 @@ def main():
                 rows = []
                 for pp in args.pp:
                     print(f"  pp{pp}")
-                    rows.append(bench_pp(base_url, tokenizer, pp, args.warmup, args.iterations, args.seed, do_sample=do_sample, cache_implementation=cache_impl, endpoint=endpoint))
+                    rows.append(bench_pp(base_url, tokenizer, pp, args.warmup, args.iterations, args.seed, do_sample=do_sample, endpoint=endpoint))
                 for tg in args.tg:
                     print(f"  tg{tg}")
-                    rows.append(bench_tg(base_url, tokenizer, tg, args.warmup, args.iterations, args.seed, tg_prefill=args.tg_prefill, do_sample=do_sample, cache_implementation=cache_impl, endpoint=endpoint))
+                    rows.append(bench_tg(base_url, tokenizer, tg, args.warmup, args.iterations, args.seed, tg_prefill=args.tg_prefill, do_sample=do_sample, endpoint=endpoint))
 
                 server.kill_server()
 
