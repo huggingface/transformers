@@ -593,10 +593,10 @@ class Lfm2MoeShortConv(nn.Module):
 
         if past_seen_tokens > 0:
             conv_state = past_key_values.conv_cache[self.layer_idx]
-            cache_position = torch.arange(seqlen, device=conv_state.device) + past_seen_tokens
-            cache_position = cache_position.clamp(0, self.L_cache - 1)
+            positions = torch.arange(seqlen, device=conv_state.device) + past_seen_tokens
+            positions = positions.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
-            conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
+            conv_state[:, :, positions] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
             past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:

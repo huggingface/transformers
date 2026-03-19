@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_chmv2 import *
-    from .image_processing_chmv2_fast import *
+    from .image_processing_chmv2 import *
     from .modeling_chmv2 import *
 else:
     import sys

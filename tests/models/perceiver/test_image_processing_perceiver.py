@@ -19,18 +19,13 @@ import numpy as np
 
 from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import PerceiverImageProcessor
-
-    if is_torchvision_available():
-        from transformers import PerceiverImageProcessorFast
 
 
 if is_torch_available():
@@ -108,9 +103,6 @@ class PerceiverImageProcessingTester:
 @require_torch
 @require_vision
 class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = PerceiverImageProcessor if is_vision_available() else None
-    fast_image_processing_class = PerceiverImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PerceiverImageProcessingTester(self)
@@ -120,7 +112,7 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_center_crop"))
             self.assertTrue(hasattr(image_processing, "crop_size"))
@@ -134,7 +126,7 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "image_std"))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -157,7 +149,7 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # Idefics3 always processes images as RGB, so it always returns images with 3 channels
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
@@ -181,7 +173,7 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -202,7 +194,7 @@ class PerceiverImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors

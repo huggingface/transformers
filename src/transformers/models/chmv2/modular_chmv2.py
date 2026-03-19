@@ -30,7 +30,7 @@ from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import (
     DepthAnythingPreActResidualLayer,
 )
-from ..dpt.image_processing_dpt_fast import DPTImageProcessorFast
+from ..dpt.image_processing_dpt import DPTImageProcessor
 from ..dpt.modeling_dpt import DPTReassembleLayer, _get_backbone_hidden_size
 
 
@@ -142,7 +142,7 @@ class CHMv2ImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-class CHMv2ImageProcessorFast(DPTImageProcessorFast):
+class CHMv2ImageProcessor(DPTImageProcessor):
     do_resize = False
     do_pad = True
     size_divisor = 16
@@ -533,7 +533,7 @@ class CHMv2ForDepthEstimation(CHMv2PreTrainedModel):
 
 __all__ = [
     "CHMv2Config",
-    "CHMv2ImageProcessorFast",
+    "CHMv2ImageProcessor",
     "CHMv2ForDepthEstimation",
     "CHMv2PreTrainedModel",
 ]
