@@ -817,6 +817,186 @@ def trf010_check_config_strict_decorator(
     return violations
 
 
+# Attributes that exist on torch.nn.Identity (i.e. standard nn.Module interface).
+# Accessing these on any submodule is safe even if the module is replaced with Identity.
+# This is a static list to avoid importing torch at lint time. If torch.nn.Module gains
+# new public attributes, update this set (generated via ``frozenset(dir(torch.nn.Identity()))``).
+_NN_MODULE_ATTRS: frozenset[str] = frozenset(
+    {
+        "T_destination",
+        "add_module",
+        "apply",
+        "bfloat16",
+        "buffers",
+        "call_super_init",
+        "children",
+        "compile",
+        "cpu",
+        "cuda",
+        "double",
+        "dump_patches",
+        "eval",
+        "extra_repr",
+        "float",
+        "forward",
+        "get_buffer",
+        "get_extra_state",
+        "get_parameter",
+        "get_submodule",
+        "half",
+        "ipu",
+        "load_state_dict",
+        "modules",
+        "mtia",
+        "named_buffers",
+        "named_children",
+        "named_modules",
+        "named_parameters",
+        "parameters",
+        "register_backward_hook",
+        "register_buffer",
+        "register_forward_hook",
+        "register_forward_pre_hook",
+        "register_full_backward_hook",
+        "register_full_backward_pre_hook",
+        "register_load_state_dict_post_hook",
+        "register_load_state_dict_pre_hook",
+        "register_module",
+        "register_parameter",
+        "register_state_dict_post_hook",
+        "register_state_dict_pre_hook",
+        "requires_grad_",
+        "set_extra_state",
+        "set_submodule",
+        "share_memory",
+        "state_dict",
+        "to",
+        "to_empty",
+        "train",
+        "training",
+        "type",
+        "xpu",
+        "zero_grad",
+    }
+)
+
+
+def _is_self_layers_node(node: ast.AST) -> bool:
+    """Return True when *node* represents ``self.layers``, possibly sliced or wrapped in ``enumerate``."""
+    if (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+        and node.attr == "layers"
+    ):
+        return True
+    if isinstance(node, ast.Subscript) and _is_self_layers_node(node.value):
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "enumerate"
+        and node.args
+        and _is_self_layers_node(node.args[0])
+    ):
+        return True
+    return False
+
+
+def _layer_loop_var(for_node: ast.For) -> str | None:
+    """Extract the layer variable name from ``for ... in self.layers`` (with or without ``enumerate``)."""
+    if not _is_self_layers_node(for_node.iter):
+        return None
+    target = for_node.target
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Tuple) and len(target.elts) == 2 and isinstance(target.elts[1], ast.Name):
+        return target.elts[1].id
+    return None
+
+
+def _is_non_module_attr_access(node: ast.Attribute) -> bool:
+    """Return True when *node* accesses an attribute that does NOT exist on ``nn.Module``."""
+    return node.attr not in _NN_MODULE_ATTRS
+
+
+def _model_dirs_with_pp_plan() -> set[str]:
+    """Return the set of model directory names whose config defines ``base_model_pp_plan``."""
+    pp_dirs: set[str] = set()
+    for config_path in MODELS_ROOT.rglob("configuration_*.py"):
+        try:
+            source = config_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "base_model_pp_plan" in source:
+            model_dir = _model_dir_name(config_path)
+            if model_dir is not None:
+                pp_dirs.add(model_dir)
+    return pp_dirs
+
+
+_PP_MODEL_DIRS: set[str] | None = None
+
+
+def _has_pp_plan(file_path: Path) -> bool:
+    """Return True when the model directory for *file_path* defines a ``base_model_pp_plan``."""
+    global _PP_MODEL_DIRS
+    if _PP_MODEL_DIRS is None:
+        _PP_MODEL_DIRS = _model_dirs_with_pp_plan()
+    model_dir = _model_dir_name(file_path)
+    return model_dir is not None and model_dir in _PP_MODEL_DIRS
+
+
+def trf011_check_pp_safe_forward(
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
+) -> list[Violation]:
+    if not _has_pp_plan(file_path):
+        return violations
+
+    class_to_bases = _collect_class_bases(tree)
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not _inherits_pretrained_model(node.name, class_to_bases):
+            continue
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
+            continue
+
+        forward_method = _class_methods(node).get("forward")
+        if forward_method is None:
+            continue
+
+        for stmt in ast.walk(forward_method):
+            if not isinstance(stmt, ast.For):
+                continue
+            layer_var = _layer_loop_var(stmt)
+            if layer_var is None:
+                continue
+            for sub in ast.walk(stmt):
+                if (
+                    isinstance(sub, ast.Attribute)
+                    and isinstance(sub.value, ast.Name)
+                    and sub.value.id == layer_var
+                    and _is_non_module_attr_access(sub)
+                ):
+                    if _has_rule_suppression(source_lines, rule_id, sub.lineno):
+                        continue
+                    violations.append(
+                        Violation(
+                            file_path=file_path,
+                            line_number=sub.lineno,
+                            rule_id=rule_id,
+                            message=(
+                                f"{rule_id}: {node.name}.forward accesses `{layer_var}.{sub.attr}` "
+                                f"in a loop over self.layers. This breaks pipeline parallelism when "
+                                f"layers are replaced with Identity. Use `self.config` instead."
+                            ),
+                        )
+                    )
+
+    return violations
+
+
 def _is_modeling_candidate(path: Path) -> bool:
     return (
         path.suffix == ".py"
