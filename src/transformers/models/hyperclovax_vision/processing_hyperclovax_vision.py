@@ -22,7 +22,7 @@ class HCXVisionV2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class HCXVisionV2Processor(ProcessorMixin):
-    image_processor_class = ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")
+    image_processor_class = "Qwen2VLImageProcessorFast"
     video_processor_class = "Qwen2VLVideoProcessor"
     tokenizer_class = (
         "GPT2Tokenizer",

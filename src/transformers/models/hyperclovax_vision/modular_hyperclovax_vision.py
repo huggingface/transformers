@@ -86,18 +86,17 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values_videos (`torch.FloatTensor`):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        video_output: BaseModelOutputWithPooling = self.vision_model(
-            pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs
-        )
-        projected = self.multi_modal_projector(video_output.pooler_output)
-        return projected
+        video_outputs = self.vision_model(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        projected = self.multi_modal_projector(video_outputs.pooler_output)
+        video_outputs.pooler_output = projected
+        return video_outputs
 
     @can_return_tuple
     @auto_docstring
@@ -106,18 +105,17 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor`):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        image_output: BaseModelOutputWithPooling = self.vision_model(
-            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
-        )
-        projected = self.multi_modal_projector(image_output.pooler_output)
-        return projected
+        image_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        projected = self.multi_modal_projector(image_outputs.pooler_output)
+        image_outputs.pooler_output = projected
+        return image_outputs
 
     def get_placeholder_mask(
         self,

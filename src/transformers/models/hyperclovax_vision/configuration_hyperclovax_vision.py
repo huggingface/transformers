@@ -149,6 +149,9 @@ class HCXVisionConfig(PreTrainedConfig):
 
         self.initializer_range = self.text_config.initializer_range
 
+        self.vision_hidden_size = self.vision_config.hidden_size
+        self.text_hidden_size = self.text_config.hidden_size
+
         # Accept old hub configs that used model_type="vlm"
         if kwargs.get("model_type") == "vlm":
             kwargs["model_type"] = "hyperclovax"
