@@ -13,14 +13,14 @@
 # limitations under the License.
 """MobileNetV2 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/mobilenet_v2_1.0_224")
+@strict(accept_kwargs=True)
 class MobileNetV2Config(PreTrainedConfig):
     r"""
     depth_divisible_by (`int`, *optional*, defaults to 8):
@@ -59,45 +59,26 @@ class MobileNetV2Config(PreTrainedConfig):
 
     model_type = "mobilenet_v2"
 
-    def __init__(
-        self,
-        num_channels=3,
-        image_size=224,
-        depth_multiplier=1.0,
-        depth_divisible_by=8,
-        min_depth=8,
-        expand_ratio=6.0,
-        output_stride=32,
-        first_layer_is_expansion=True,
-        finegrained_output=True,
-        hidden_act="relu6",
-        tf_padding=True,
-        classifier_dropout_prob=0.8,
-        initializer_range=0.02,
-        layer_norm_eps=0.001,
-        semantic_loss_ignore_index=255,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 224
+    depth_multiplier: float = 1.0
+    depth_divisible_by: int = 8
+    min_depth: int = 8
+    expand_ratio: float | int = 6.0
+    output_stride: int = 32
+    first_layer_is_expansion: bool = True
+    finegrained_output: bool = True
+    hidden_act: str = "relu6"
+    tf_padding: bool = True
+    classifier_dropout_prob: float = 0.8
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 0.001
+    semantic_loss_ignore_index: int = 255
 
-        if depth_multiplier <= 0:
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.depth_multiplier <= 0:
             raise ValueError("depth_multiplier must be greater than zero.")
-
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.depth_multiplier = depth_multiplier
-        self.depth_divisible_by = depth_divisible_by
-        self.min_depth = min_depth
-        self.expand_ratio = expand_ratio
-        self.output_stride = output_stride
-        self.first_layer_is_expansion = first_layer_is_expansion
-        self.finegrained_output = finegrained_output
-        self.hidden_act = hidden_act
-        self.tf_padding = tf_padding
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.semantic_loss_ignore_index = semantic_loss_ignore_index
 
 
 __all__ = ["MobileNetV2Config"]

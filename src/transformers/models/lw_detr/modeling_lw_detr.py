@@ -30,10 +30,10 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithCrossAttentions
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
@@ -224,25 +224,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LwDetrViTEncoder(nn.Module):
-    def __init__(self, config: LwDetrViTConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> list[torch.Tensor]:
-        list_hidden_states = [hidden_states]
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, **kwargs)
-            list_hidden_states.append(hidden_states)
-        return list_hidden_states
-
-
 class LwDetrViTEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -365,6 +346,25 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
+class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([LwDetrViTLayer(config, idx) for idx in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring()
 class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def __init__(self, config):
@@ -380,8 +380,8 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def get_input_embeddings(self) -> LwDetrViTEmbeddings:
         return self.embeddings.projection
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
@@ -425,9 +425,11 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
             .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
-        hidden_states = self.encoder(hidden_states, **kwargs)
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        output = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
+        hidden_states = output.hidden_states
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 hidden_state = (
@@ -444,7 +446,9 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
                 )
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        return BackboneOutput(
+            feature_maps=feature_maps, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 class LwDetrConvNormLayer(nn.Module):

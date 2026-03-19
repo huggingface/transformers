@@ -13,6 +13,8 @@
 # limitations under the License.
 """chameleon model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
@@ -21,7 +23,8 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="meta/chameleon-7B")
+@auto_docstring(checkpoint="facebook/chameleon-7b")
+@strict(accept_kwargs=True)
 class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
     base_channels (`int`, *optional*, defaults to 128):
@@ -43,40 +46,23 @@ class ChameleonVQVAEConfig(PreTrainedConfig):
     model_type = "chameleon_vqgan"
     base_config_key = "vq_config"
 
-    def __init__(
-        self,
-        embed_dim: int = 256,
-        num_embeddings: int = 8192,
-        double_latent: bool = False,
-        latent_channels: int = 256,
-        resolution: int = 512,
-        in_channels: int = 3,
-        base_channels: int = 128,
-        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
-        num_res_blocks: int = 2,
-        attn_resolutions: list[int] | None = None,
-        dropout: float = 0.0,
-        attn_type: str = "vanilla",
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-        self.num_embeddings = num_embeddings
-        self.double_latent = double_latent
-        self.latent_channels = latent_channels
-        self.resolution = resolution
-        self.in_channels = in_channels
-        self.base_channels = base_channels
-        self.channel_multiplier = channel_multiplier
-        self.num_res_blocks = num_res_blocks
-        self.attn_resolutions = attn_resolutions
-        self.dropout = dropout
-        self.attn_type = attn_type
-        self.initializer_range = initializer_range
+    embed_dim: int = 256
+    num_embeddings: int = 8192
+    double_latent: bool = False
+    latent_channels: int = 256
+    resolution: int = 512
+    in_channels: int = 3
+    base_channels: int = 128
+    channel_multiplier: list[int] | tuple[int, ...] = (1, 1, 2, 2, 4)
+    num_res_blocks: int = 2
+    attn_resolutions: list[int] | None = None
+    dropout: float | int = 0.0
+    attn_type: str = "vanilla"
+    initializer_range = 0.02
 
 
-@auto_docstring(checkpoint="meta/chameleon-7B")
+@auto_docstring(checkpoint="facebook/chameleon-7b")
+@strict(accept_kwargs=True)
 class ChameleonConfig(PreTrainedConfig):
     r"""
     model_parallel_size (`int`, *optional*, defaults to 1):
@@ -104,66 +90,40 @@ class ChameleonConfig(PreTrainedConfig):
     sub_configs = {"vq_config": ChameleonVQVAEConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int | None = 65536,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        hidden_act: int | None = "silu",
-        max_position_embeddings: int | None = 4096,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: int | None = False,
-        attention_dropout: float | None = 0.0,
-        model_parallel_size: int | None = 1,
-        swin_norm: bool | None = False,
-        vq_config: dict | None = None,
-        vocabulary_map: dict | None = None,
-        mlp_bias: bool | None = False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_bias = mlp_bias
+    vocab_size: int = 65536
+    hidden_size: int = 4096
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 32
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: int | None = False
+    attention_dropout: float | int | None = 0.0
+    model_parallel_size: int | None = 1
+    swin_norm: bool | None = False
+    vq_config: dict | PreTrainedConfig | None = None
+    vocabulary_map: dict | None = None
+    mlp_bias: bool = False
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.model_parallel_size = model_parallel_size
-        self.swin_norm = swin_norm
-        self.rope_parameters = rope_parameters
-
-        if vq_config is None:
-            vq_config = {}
+    def __post_init__(self, **kwargs):
+        if self.vq_config is None:
             logger.info("vq_config is None. initializing the ChameleonVQConfig with default values.")
+            self.vq_config = ChameleonVQVAEConfig()
+        elif isinstance(self.vq_config, dict):
+            self.vq_config = ChameleonVQVAEConfig(**self.vq_config)
 
-        self.vq_config = ChameleonVQVAEConfig(**vq_config)
+        self.image_token_id = self.vocabulary_map.get("<image>") if self.vocabulary_map is not None else None
 
-        self.vocabulary_map = vocabulary_map
-        self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ChameleonConfig", "ChameleonVQVAEConfig"]

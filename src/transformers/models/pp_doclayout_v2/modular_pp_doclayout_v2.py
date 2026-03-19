@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -43,7 +44,7 @@ from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3SelfOutput,
     LayoutLMv3TextEmbeddings,
 )
-from ..pp_doclayout_v3.image_processing_pp_doclayout_v3_fast import PPDocLayoutV3ImageProcessorFast
+from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
 from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import PPDocLayoutV3GlobalPointer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
@@ -58,6 +59,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
+@strict(accept_kwargs=True)
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     r"""
     has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
@@ -99,77 +101,41 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         The dropout probability in the global pointer head.
     """
 
-    def __init__(
-        self,
-        hidden_size=512,
-        num_attention_heads=8,
-        attention_probs_dropout_prob=0.1,
-        has_relative_attention_bias=False,
-        has_spatial_attention_bias=True,
-        layer_norm_eps=1e-5,
-        hidden_dropout_prob=0.1,
-        intermediate_size=2048,
-        hidden_act="gelu",
-        num_hidden_layers=6,
-        rel_pos_bins=32,
-        max_rel_pos=128,
-        rel_2d_pos_bins=64,
-        max_rel_2d_pos=256,
-        max_position_embeddings=514,
-        max_2d_position_embeddings=1024,
-        type_vocab_size=1,
-        vocab_size=4,
-        initializer_range=0.01,
-        start_token_id=0,
-        pad_token_id=1,
-        end_token_id=2,
-        pred_token_id=3,
-        coordinate_size=171,
-        shape_size=170,
-        num_classes=20,
-        relation_bias_embed_dim=16,
-        relation_bias_theta=10000,
-        relation_bias_scale=100,
-        global_pointer_head_size=64,
-        gp_dropout_value=0.0,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.has_relative_attention_bias = has_relative_attention_bias
-        self.has_spatial_attention_bias = has_spatial_attention_bias
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.num_hidden_layers = num_hidden_layers
-        self.rel_pos_bins = rel_pos_bins
-        self.max_rel_pos = max_rel_pos
-        self.rel_2d_pos_bins = rel_2d_pos_bins
-        self.max_rel_2d_pos = max_rel_2d_pos
-        self.max_position_embeddings = max_position_embeddings
-        self.max_2d_position_embeddings = max_2d_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.vocab_size = vocab_size
-        self.initializer_range = initializer_range
-        self.start_token_id = start_token_id
-        self.pad_token_id = pad_token_id
-        self.end_token_id = end_token_id
-        self.pred_token_id = pred_token_id
-        self.coordinate_size = coordinate_size
-        self.shape_size = shape_size
-        self.num_classes = num_classes
-        self.relation_bias_embed_dim = relation_bias_embed_dim
-        self.relation_bias_theta = relation_bias_theta
-        self.relation_bias_scale = relation_bias_scale
-        self.global_pointer_head_size = global_pointer_head_size
-        self.gp_dropout_value = gp_dropout_value
-
-        super().__init__(**kwargs)
+    hidden_size: int = 512
+    num_attention_heads: int = 8
+    attention_probs_dropout_prob: float = 0.1
+    has_relative_attention_bias: bool = False
+    has_spatial_attention_bias: bool = True
+    layer_norm_eps: float = 1e-5
+    hidden_dropout_prob: float = 0.1
+    intermediate_size: int = 2048
+    hidden_act: str = "gelu"
+    num_hidden_layers: int = 6
+    rel_pos_bins: int = 32
+    max_rel_pos: int = 128
+    rel_2d_pos_bins: int = 64
+    max_rel_2d_pos: int = 256
+    max_position_embeddings: int = 514
+    max_2d_position_embeddings: int = 1024
+    type_vocab_size: int = 1
+    vocab_size: int = 4
+    initializer_range: float = 0.01
+    start_token_id: int = 0
+    pad_token_id: int | None = 1
+    end_token_id: int = 2
+    pred_token_id: int = 3
+    coordinate_size: int = 171
+    shape_size: int = 170
+    num_classes: int = 20
+    relation_bias_embed_dim: int = 16
+    relation_bias_theta: int = 10000
+    relation_bias_scale: int = 100
+    global_pointer_head_size: int = 64
+    gp_dropout_value: float = 0.0
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
+@strict(accept_kwargs=True)
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
@@ -256,67 +222,56 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        initializer_range=0.01,
-        initializer_bias_prior_prob=None,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        # backbone
-        backbone_config=None,
-        freeze_backbone_batch_norms=True,
-        # encoder HybridEncoder
-        encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        hidden_expansion=1.0,
-        # decoder PPDocLayoutV2Transformer
-        d_model=256,
-        num_queries=300,
-        decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=100,
-        label_noise_ratio=0.5,
-        box_noise_scale=1.0,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        disable_custom_kernels=True,
-        is_encoder_decoder=True,
-        # label
-        class_thresholds=None,
-        class_order=None,
-        reading_order_config=None,
-        **kwargs,
-    ):
-        self.initializer_range = initializer_range
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
+    initializer_range: float = 0.01
+    initializer_bias_prior_prob: float | None = None
+    layer_norm_eps: float = 1e-5
+    batch_norm_eps: float = 1e-5
+    backbone_config: PreTrainedConfig | dict | None = None
+    freeze_backbone_batch_norms: bool = True
+    encoder_hidden_dim: int = 256
+    encoder_in_channels: list[int] | tuple[int, ...] | None = (512, 1024, 2048)
+    feat_strides: list[int] | tuple[int, ...] | None = (8, 16, 32)
+    encoder_layers: int = 1
+    encoder_ffn_dim: int = 1024
+    encoder_attention_heads: int = 8
+    dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    encode_proj_layers: list[int] | tuple[int, ...] | None = (2,)
+    positional_encoding_temperature: int = 10000
+    encoder_activation_function: str = "gelu"
+    activation_function: str = "silu"
+    eval_size: list[int] | None = None
+    normalize_before: bool = False
+    hidden_expansion: float = 1.0
+    d_model: int = 256
+    num_queries: int = 300
+    decoder_in_channels: list[int] | tuple[int, ...] | None = (256, 256, 256)
+    decoder_ffn_dim: int = 1024
+    num_feature_levels: int = 3
+    decoder_n_points: int = 4
+    decoder_layers: int = 6
+    decoder_attention_heads: int = 8
+    decoder_activation_function: str = "relu"
+    attention_dropout: float | int = 0.0
+    num_denoising: int = 100
+    label_noise_ratio: float = 0.5
+    box_noise_scale: float = 1.0
+    learn_initial_query: bool = False
+    anchor_image_size: list[int] | None = None
+    disable_custom_kernels: bool = True
+    is_encoder_decoder: bool = True
+    class_thresholds: list[float] | None = None
+    class_order: list[int] | None = None
+    reading_order_config: PreTrainedConfig | dict | None = None
 
-        if isinstance(reading_order_config, dict):
-            self.reading_order_config = self.sub_configs["reading_order_config"](**reading_order_config)
-        elif reading_order_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.reading_order_config, dict):
+            self.reading_order_config = self.sub_configs["reading_order_config"](**self.reading_order_config)
+        elif self.reading_order_config is None:
             self.reading_order_config = self.sub_configs["reading_order_config"]()
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",
             default_config_kwargs={
                 "arch": "L",
@@ -330,51 +285,17 @@ class PPDocLayoutV2Config(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
+        self.encoder_in_channels = list(self.encoder_in_channels)
+        self.feat_strides = list(self.feat_strides)
+        self.encode_proj_layers = list(self.encode_proj_layers)
+        self.eval_size = list(self.eval_size) if self.eval_size is not None else None
+        self.decoder_in_channels = list(self.decoder_in_channels)
+        self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
 
-        # ---- encoder ----
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = list(encoder_in_channels)
-        self.feat_strides = list(feat_strides)
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = list(encode_proj_layers)
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.eval_size = list(eval_size) if eval_size is not None else None
-        self.normalize_before = normalize_before
-        self.hidden_expansion = hidden_expansion
-
-        # ---- decoder ----
-        self.d_model = d_model
-        self.num_queries = num_queries
-        self.decoder_in_channels = list(decoder_in_channels)
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
-        self.disable_custom_kernels = disable_custom_kernels
-
-        self.class_thresholds = class_thresholds
-        self.class_order = class_order
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
-class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
+class PPDocLayoutV2ImageProcessor(PPDocLayoutV3ImageProcessor):
     def extract_custom_vertices(self):
         raise AttributeError("Not needed for PPDocLayoutV2")
 
@@ -537,12 +458,7 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
 
 class PPDocLayoutV2ReadingOrderSelfAttention(LayoutLMv3SelfAttention):
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
+        self, hidden_states, attention_mask=None, rel_pos=None, rel_2d_pos=None, **kwargs: Unpack[TransformersKwargs]
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -592,9 +508,7 @@ class PPDocLayoutV2ReadingOrderSelfAttention(LayoutLMv3SelfAttention):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
+        return context_layer, attention_probs
 
 
 class PPDocLayoutV2ReadingOrderSelfOutput(LayoutLMv3SelfOutput):
@@ -1079,7 +993,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
 
 __all__ = [
     "PPDocLayoutV2ForObjectDetection",
-    "PPDocLayoutV2ImageProcessorFast",
+    "PPDocLayoutV2ImageProcessor",
     "PPDocLayoutV2Config",
     "PPDocLayoutV2Model",
     "PPDocLayoutV2PreTrainedModel",

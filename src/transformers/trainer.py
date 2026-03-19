@@ -77,7 +77,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from .optimization import get_scheduler
+from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -1308,7 +1308,7 @@ class Trainer:
                 else:
                     raise
         else:
-            if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            if isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
                 last_lr = self.optimizer.param_groups[0]["lr"]
             else:
                 last_lr = self.lr_scheduler.get_last_lr()[0]
@@ -1765,7 +1765,7 @@ class Trainer:
 
                     if not self.accelerator.optimizer_step_was_skipped:
                         # Delay optimizer scheduling until metrics are generated
-                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                        if not isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
                             self.lr_scheduler.step()
 
                     model.zero_grad()
@@ -2483,7 +2483,7 @@ class Trainer:
         else:
             input_tokens = inputs[main_input_name].numel()
 
-        input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
+        input_tokens = torch.as_tensor(input_tokens, device=self.args.device, dtype=torch.int64)
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
     def _clip_grad_norm(self, model):
@@ -2984,12 +2984,15 @@ class Trainer:
         ignore_keys_for_eval: list[str] | None,
         skip_scheduler: bool = False,
     ) -> dict[str, float]:
-        """Run evaluation, report to HP search, and step ReduceLROnPlateau if needed."""
+        """Run evaluation, report to HP search, and step ReduceLROnPlateau/GreedyLR if needed."""
         metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         # Run delayed LR scheduler now that metrics are populated
-        if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau) and not skip_scheduler:
+        if (
+            isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR))
+            and not skip_scheduler
+        ):
             metric_to_check = self.args.metric_for_best_model
             if not metric_to_check.startswith("eval_"):
                 metric_to_check = f"eval_{metric_to_check}"

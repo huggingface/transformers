@@ -18,36 +18,27 @@
 # limitations under the License.
 
 import math
-from typing import Optional
 
 import numpy as np
 import torch
-import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
 )
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
+from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
@@ -59,6 +50,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torchvision_available,
     logging,
     torch_compilable_check,
     torch_int,
@@ -96,6 +88,10 @@ from ..video_llama_3.modeling_video_llama_3 import (
 )
 
 
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -122,8 +118,8 @@ def smart_resize(
     w_bar = round(width / factor) * factor
     if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
         h_bar = math.ceil(height * beta / factor) * factor
@@ -131,271 +127,150 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
+class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     r"""
-    Constructs a PaddleOCRVL image processor that dynamically resizes images based on the original images.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`dict[str, int]`, *optional*):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `list[float]`, *optional*):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `384 * 384`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `1536 * 1536`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = [
-        "pixel_values",
-        "image_grid_thw",
-    ]
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        min_pixels: int = 384 * 384,
-        max_pixels: int = 1536 * 1536,
-        patch_size: int = 14,
-        temporal_patch_size: int = 1,
-        merge_size: int = 2,
-        **kwargs,
-    ) -> None:
-        super().__init__()
+class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
+    size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
+    temporal_patch_size = 1
 
     def _preprocess(
         self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_size: int | None = None,
-        temporal_patch_size: int | None = None,
-        merge_size: int | None = None,
-        do_convert_rgb: bool | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        """
-        Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
-        Args:
-            images (`ImageInput`):
-                Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Scale factor to use if rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
-                The temporal patch size of the vision encoder.
-            merge_size (`int`, *optional*, defaults to `self.merge_size`):
-                The merge size of the vision encoder to llm encoder.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        images = make_list_of_images(images)
-        images = self.fetch_images(images)
-
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        height, width = get_image_size(images[0], channel_dim=input_data_format)
-        resized_height, resized_width = height, width
-        processed_images = []
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        all_patches = []
+        all_grids = []
 
         for image in images:
+            height, width = image.shape[-2:]
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
-                image = resize(
+                image = self.resize(
                     image,
-                    size=(resized_height, resized_width),
+                    size=SizeDict(height=resized_height, width=resized_width),
                     resample=resample,
-                    input_data_format=input_data_format,
                 )
+            else:
+                resized_height, resized_width = height, width
 
             if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
-
+                image = self.rescale(image, rescale_factor)
             if do_normalize:
-                image = self.normalize(
-                    image=image,
-                    mean=image_mean,
-                    std=image_std,
-                    input_data_format=input_data_format,
+                image = self.normalize(image, image_mean, image_std)
+
+            patches = np.expand_dims(image, axis=0)
+            if patches.ndim == 4:
+                patches = np.expand_dims(patches, axis=1)
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = np.repeat(
+                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
                 )
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            processed_images.append(image)
+                patches = np.concatenate([patches, repeats], axis=1)
 
-        patches = np.array(processed_images)
-        if data_format == ChannelDimension.LAST:
-            patches = patches.transpose(0, 3, 1, 2)
-        if patches.shape[0] == 1:
-            patches = np.tile(patches, (temporal_patch_size, 1, 1, 1))
+            batch_size = 1
+            grid_t = patches.shape[1] // temporal_patch_size
+            channel = patches.shape[2]
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-        channel = patches.shape[1]
-        grid_t = patches.shape[0] // temporal_patch_size
-        grid_h, grid_w = (
-            resized_height // patch_size,
-            resized_width // patch_size,
+            patches = patches.reshape(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h,
+                patch_size,
+                grid_w,
+                patch_size,
+            )
+            patches = patches.transpose(0, 1, 4, 6, 3, 2, 5, 7)
+            flatten_patches = patches.reshape(batch_size, grid_t * grid_h * grid_w, channel, patch_size, patch_size)
+
+            all_patches.append(flatten_patches.squeeze(0))
+            all_grids.append([grid_t, grid_h, grid_w])
+
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
-        patches = patches.reshape(
-            grid_t,
-            temporal_patch_size,
-            channel,
-            grid_h,
-            patch_size,
-            grid_w,
-            patch_size,
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
-        patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
-        if temporal_patch_size != 1:
-            raise ValueError(f"temporal_patch_size must be 1!, but got {temporal_patch_size}!")
-        flatten_patches = patches.reshape(grid_t * grid_h * grid_w, channel, patch_size, patch_size)
-        return flatten_patches, (grid_t, grid_h, grid_w)
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
-class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        min_pixels: int = 384 * 384,
-        max_pixels: int = 1536 * 1536,
-        patch_size: int = 14,
-        temporal_patch_size: int = 1,
-        merge_size: int = 2,
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        else:
-            size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
-        self.min_pixels = size["shortest_edge"]
-        self.max_pixels = size["longest_edge"]
-        self.size = size
-
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.do_convert_rgb = do_convert_rgb
+class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
+    size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
+    temporal_patch_size = 1
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
-        patch_size: int | None = None,
-        temporal_patch_size: int | None = None,
-        merge_size: int | None = None,
         **kwargs,
-    ):
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
-        merge_size = merge_size if merge_size is not None else self.merge_size
-
+    ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -405,31 +280,26 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
                 )
                 stacked_images = self.resize(
                     image=stacked_images,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        # Group images by size for further processing
-        # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         processed_grids = {}
         for shape, stacked_images in grouped_images.items():
             resized_height, resized_width = stacked_images.shape[-2:]
-            # Fused rescale and normalize
             patches = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-
             if patches.ndim == 4:
-                # add a temporal dimension if we have images
                 patches = patches.unsqueeze(1)
             if patches.shape[1] % temporal_patch_size != 0:
                 repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
@@ -437,10 +307,8 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
 
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // temporal_patch_size
-            grid_h, grid_w = (
-                resized_height // patch_size,
-                resized_width // patch_size,
-            )
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
             patches = patches.view(
                 batch_size,
                 grid_t,
@@ -465,6 +333,32 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs["min_pixels"] if "min_pixels" in images_kwargs else self.size["shortest_edge"]
+        max_pixels = images_kwargs["max_pixels"] if "max_pixels" in images_kwargs else self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        merge_size = images_kwargs.get("merge_size", self.merge_size)
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
 
 
 class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
@@ -578,7 +472,8 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
     Example:
@@ -600,31 +495,23 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     model_type = "paddleocr_vl_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=1152,
-        intermediate_size=4304,
-        num_hidden_layers=27,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=384,
-        patch_size=14,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        spatial_merge_size=2,
-        **kwargs,
-    ):
-        super().__init__()
-        self.spatial_merge_size = spatial_merge_size
+    hidden_size: int = 1152
+    intermediate_size: int = 4304
+    num_hidden_layers: int = 27
+    num_attention_heads: int = 16
+    image_size: int = 384
+    patch_size: int = 14
+    spatial_merge_size: int = 2
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PaddleOCRVL")
+@auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
+@strict(accept_kwargs=True)
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
     Example:
@@ -644,18 +531,11 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
 
     sub_configs = {"vision_config": PaddleOCRVisionConfig, "text_config": PaddleOCRTextConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=100295,
-        video_token_id=100296,
-        vision_start_token_id=101305,
-        vision_end_token_id=101306,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__()
+    image_token_id: int = 100295
+    video_token_id: int = 100296
+    vision_start_token_id: int = 101305
+    vision_end_token_id: int = 101306
+    tie_word_embeddings: int = True
 
 
 class PaddleOCRProjector(nn.Module):
@@ -1070,7 +950,6 @@ class PaddleOCRVLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 
 class PaddleOCRVLModel(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):
@@ -1214,11 +1093,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        "^mlp_AR": "model.projector",
-        r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
-    }
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def get_video_features(self):
@@ -1333,6 +1207,6 @@ __all__ = [
     "PaddleOCRVisionConfig",
     "PaddleOCRTextConfig",
     "PaddleOCRVLImageProcessor",
-    "PaddleOCRVLImageProcessorFast",
+    "PaddleOCRVLImageProcessorPil",
     "PaddleOCRVLProcessor",
 ]

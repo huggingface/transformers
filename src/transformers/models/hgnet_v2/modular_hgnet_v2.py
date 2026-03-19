@@ -13,12 +13,15 @@
 # limitations under the License.
 
 
+from collections.abc import Sequence
+
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...backbone_utils import BackboneConfigMixin, BackboneMixin
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import (
     BackboneOutput,
@@ -29,12 +32,14 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
 )
+from ...utils.generic import can_return_tuple
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 
 
 # TODO: Modular conversion for resnet must be fixed as
 # it provides incorrect import for configuration like resnet_resnet
 @auto_docstring(checkpoint="ustc-community/dfine_x_coco")
+@strict(accept_kwargs=True)
 class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     """
     stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
@@ -42,6 +47,10 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         - First number (3) is input image channels
         - Second number (32) is intermediate stem channels
         - Third number (48) is output stem channels
+    stem_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 1, 1, 2, 1)`):
+        Stride patterns for the stem layers.
+    stage_downsample_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 2, 2, 2)`):
+        Stride patterns for each stage layer.
     stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
         Input channel dimensions for each stage of the backbone.
         This defines how many channels the input to each stage will have.
@@ -71,57 +80,46 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "hgnet_v2"
 
-    def __init__(
-        self,
-        num_channels=3,
-        embedding_size=64,
-        depths=[3, 4, 6, 3],
-        hidden_sizes=[256, 512, 1024, 2048],
-        hidden_act="relu",
-        out_features=None,
-        out_indices=None,
-        stem_channels=[3, 32, 48],
-        stage_in_channels=[48, 128, 512, 1024],
-        stage_mid_channels=[48, 96, 192, 384],
-        stage_out_channels=[128, 512, 1024, 2048],
-        stage_num_blocks=[1, 1, 3, 1],
-        stage_downsample=[False, True, True, True],
-        stage_light_block=[False, False, True, True],
-        stage_kernel_size=[3, 3, 5, 5],
-        stage_numb_of_layers=[6, 6, 6, 6],
-        use_learnable_affine_block=False,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.num_channels = num_channels
-        self.embedding_size = embedding_size
-        self.depths = depths
-        self.hidden_sizes = hidden_sizes
-        self.hidden_act = hidden_act
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
-        self.stem_channels = stem_channels
-        self.stage_in_channels = stage_in_channels
-        self.stage_mid_channels = stage_mid_channels
-        self.stage_out_channels = stage_out_channels
-        self.stage_num_blocks = stage_num_blocks
-        self.stage_downsample = stage_downsample
-        self.stage_light_block = stage_light_block
-        self.stage_kernel_size = stage_kernel_size
-        self.stage_numb_of_layers = stage_numb_of_layers
-        self.use_learnable_affine_block = use_learnable_affine_block
-        self.initializer_range = initializer_range
+    num_channels: int = 3
+    embedding_size: int = 64
+    depths: list[int] | tuple[int, ...] = (3, 4, 6, 3)
+    hidden_sizes: list[int] | tuple[int, ...] = (256, 512, 1024, 2048)
+    hidden_act: str = "relu"
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    stem_channels: list[int] | tuple[int, ...] = (3, 32, 48)
+    stem_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 1, 1, 2, 1)
+    stage_in_channels: list[int] | tuple[int, ...] = (48, 128, 512, 1024)
+    stage_mid_channels: list[int] | tuple[int, ...] = (48, 96, 192, 384)
+    stage_out_channels: list[int] | tuple[int, ...] = (128, 512, 1024, 2048)
+    stage_num_blocks: list[int] | tuple[int, ...] = (1, 1, 3, 1)
+    stage_downsample: list[bool] | tuple[bool, ...] = (False, True, True, True)
+    stage_downsample_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 2, 2, 2)
+    stage_light_block: list[bool] | tuple[bool, ...] = (False, False, True, True)
+    stage_kernel_size: list[int] | tuple[int, ...] = (3, 3, 5, 5)
+    stage_numb_of_layers: list[int] | tuple[int, ...] = (6, 6, 6, 6)
+    use_learnable_affine_block: bool = False
+    initializer_range: float = 0.02
 
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        self.hidden_sizes = list(self.hidden_sizes)
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if not (
-            len(stage_in_channels)
-            == len(stage_mid_channels)
-            == len(stage_out_channels)
-            == len(stage_num_blocks)
-            == len(stage_downsample)
-            == len(stage_light_block)
-            == len(stage_kernel_size)
-            == len(stage_numb_of_layers)
+            len(self.stage_in_channels)
+            == len(self.stage_mid_channels)
+            == len(self.stage_out_channels)
+            == len(self.stage_num_blocks)
+            == len(self.stage_downsample)
+            == len(self.stage_light_block)
+            == len(self.stage_kernel_size)
+            == len(self.stage_numb_of_layers)
         ):
             raise ValueError("All stage configuration lists must have the same length.")
 
@@ -226,7 +224,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[0],
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[0],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -234,7 +232,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[1] // 2,
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[1],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -242,7 +240,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] // 2,
             config.stem_channels[1],
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[2],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -250,7 +248,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] * 2,
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[3],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -258,7 +256,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[2],
             kernel_size=1,
-            stride=1,
+            stride=config.stem_strides[4],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -367,10 +365,11 @@ class HGNetV2Stage(nn.Module):
         light_block = config.stage_light_block[stage_index]
         kernel_size = config.stage_kernel_size[stage_index]
         use_learnable_affine_block = config.use_learnable_affine_block
+        stride = config.stage_downsample_strides[stage_index]
 
         if downsample:
             self.downsample = HGNetV2ConvLayer(
-                in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
+                in_channels, in_channels, kernel_size=3, stride=stride, groups=in_channels, activation=None
             )
         else:
             self.downsample = nn.Identity()
@@ -443,6 +442,8 @@ class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -470,7 +471,7 @@ class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -557,7 +558,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

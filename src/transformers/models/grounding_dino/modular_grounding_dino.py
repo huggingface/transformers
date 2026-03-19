@@ -21,12 +21,14 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
+from transformers.models.detr.image_processing_detr import DetrImageProcessor
+from transformers.models.detr.image_processing_pil_detr import DetrImageProcessorPil
 
 from ...image_transforms import center_to_corners_format
 from ...utils import (
     TensorType,
     logging,
+    requires_backends,
 )
 
 
@@ -65,7 +67,7 @@ def _scale_boxes(boxes, target_sizes):
     return boxes
 
 
-class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
+class GroundingDinoImageProcessor(DetrImageProcessor):
     def post_process_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
@@ -129,4 +131,69 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
 
 
-__all__ = ["GroundingDinoImageProcessorFast"]
+class GroundingDinoImageProcessorPil(DetrImageProcessorPil):
+    def post_process_object_detection(
+        self,
+        outputs: "GroundingDinoObjectDetectionOutput",
+        threshold: float = 0.1,
+        target_sizes: TensorType | list[tuple] | None = None,
+    ):
+        """
+        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`GroundingDinoObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.1):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "labels": Indexes of the classes predicted by the model on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+        """
+        requires_backends(self, ["torch"])
+        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
+        batch_size = len(batch_logits)
+
+        if target_sizes is not None and len(target_sizes) != batch_size:
+            raise ValueError("Make sure that you pass in as many target sizes as images")
+
+        # batch_logits of shape (batch_size, num_queries, num_classes)
+        batch_class_logits = torch.max(batch_logits, dim=-1)
+        batch_scores = torch.sigmoid(batch_class_logits.values)
+        batch_labels = batch_class_logits.indices
+
+        # Convert to [x0, y0, x1, y1] format
+        batch_boxes = center_to_corners_format(batch_boxes)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
+
+        results = []
+        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
+            keep = scores > threshold
+            scores = scores[keep]
+            labels = labels[keep]
+            boxes = boxes[keep]
+            results.append({"scores": scores, "labels": labels, "boxes": boxes})
+
+        return results
+
+    def post_process_instance_segmentation(self):
+        raise NotImplementedError("Segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Grounding-Dino yet.")
+
+
+__all__ = ["GroundingDinoImageProcessor", "GroundingDinoImageProcessorPil"]

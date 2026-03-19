@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -47,8 +48,8 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionPatchEmbed,
 )
 from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attention_forward
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
@@ -60,6 +61,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageVQVAEConfig(PreTrainedConfig):
     r"""
     num_embeddings (`int`, *optional*, defaults to 16384):
@@ -69,53 +71,36 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
-    def __init__(
-        self,
-        embed_dim: int = 2048,
-        num_embeddings: int = 16384,
-        latent_channels: int = 1536,
-        in_channels: int = 3,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-        self.num_embeddings = num_embeddings
-        self.latent_channels = latent_channels
-        self.in_channels = in_channels
-        self.initializer_range = initializer_range
+    embed_dim: int = 2048
+    num_embeddings: int = 16384
+    latent_channels: int = 1536
+    in_channels: int = 3
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageVisionConfig(Glm4vVisionConfig):
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=40,
-        hidden_size=1536,
-        hidden_act="gelu",
-        attention_bias=True,
-        attention_dropout=0.0,
-        num_heads=16,
-        in_channels=3,
-        image_size=2048,
-        patch_size=16,
-        layer_norm_eps=1e-06,
-        spatial_merge_size=1,
-        intermediate_size=6144,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        del self.out_hidden_size
-        del self.rms_norm_eps
-        del self.temporal_patch_size
-        self.layer_norm_eps = layer_norm_eps
+    depth: int = 40
+    hidden_act: str = "gelu"
+    attention_bias: bool = True
+    num_heads: int = 16
+    image_size: int | list[int] | tuple[int, int] = 2048
+    patch_size: int | list[int] | tuple[int, int] = 16
+    layer_norm_eps: float = 1e-06
+    spatial_merge_size: int = 1
+    intermediate_size: int = 6144
+
+    out_hidden_size = AttributeError()
+    rms_norm_eps = AttributeError()
+    temporal_patch_size = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -137,28 +122,16 @@ class GlmImageTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size: int = 168064,
-        max_position_embeddings: int = 131072,
-        vision_vocab_size: int = 16512,
-        attention_bias: bool = True,
-        pad_token_id: int = 167841,
-        eos_token_id: int = 16385,
-        **super_kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            max_position_embeddings=max_position_embeddings,
-            pad_token_id=pad_token_id,
-            **super_kwargs,
-        )
-        self.vision_vocab_size = vision_vocab_size
-        self.attention_bias = attention_bias
-        self.eos_token_id = eos_token_id
+    vocab_size: int = 168064
+    max_position_embeddings: int = 131072
+    vision_vocab_size: int = 16512
+    attention_bias: bool = True
+    pad_token_id: int = 167841
+    eos_token_id: int | list[int] | None = 16385
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):
@@ -187,40 +160,31 @@ class GlmImageConfig(PreTrainedConfig):
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        vq_config=None,
-        image_token_id=167855,
-        image_start_token_id=16384,
-        image_end_token_id=16385,
-        tie_word_embeddings: bool | None = False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            vision_config = self.sub_configs["vision_config"](**kwargs)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    vq_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 167855
+    image_start_token_id: int = 16384
+    image_end_token_id: int = 16385
+    tie_word_embeddings: bool = False
 
-        if isinstance(vq_config, dict):
-            vq_config = self.sub_configs["vq_config"](**vq_config)
-        elif vq_config is None:
-            vq_config = self.sub_configs["vq_config"](**kwargs)
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
 
-        if isinstance(text_config, dict):
-            text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
-            text_config = self.sub_configs["text_config"](**kwargs)
+        if isinstance(self.vq_config, dict):
+            self.vq_config = self.sub_configs["vq_config"](**self.vq_config)
+        elif self.vq_config is None:
+            self.vq_config = self.sub_configs["vq_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.vq_config = vq_config
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        super().__post_init__(**kwargs)
 
 
 class GlmImageVisionMLP(SiglipMLP):
@@ -333,10 +297,10 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
-            The cumulative sequence lengths of each image or video feature.
         position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
             The cosine and sine position embeddings for vision attention.
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
         """
         residual = hidden_states
 
@@ -810,7 +774,6 @@ class GlmImageModel(Glm4vModel):
         inputs_embeds: torch.Tensor | None,
         attention_mask: torch.Tensor | None,
         past_key_values: torch.Tensor | None,
-        cache_position: torch.Tensor | None,
     ) -> torch.Tensor | None:
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
         can_compute_mrope = input_ids is not None and image_grid_thw is not None
@@ -827,12 +790,15 @@ class GlmImageModel(Glm4vModel):
         elif self.rope_deltas is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
-                step = cache_position[0].item() - self._prefill_len
+                step = past_key_values_length - self._prefill_len
                 position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
             else:
-                position_ids = cache_position.view(1, 1, -1).repeat(3, batch_size, 1)
+                position_ids = (
+                    torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_key_values_length
+                )
+                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
         else:
-            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
@@ -847,7 +813,6 @@ class GlmImageModel(Glm4vModel):
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageModelOutputWithPast:
         r"""
@@ -918,7 +883,6 @@ class GlmImageModel(Glm4vModel):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
             )
 
         outputs = self.language_model(
@@ -927,7 +891,6 @@ class GlmImageModel(Glm4vModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -945,7 +908,6 @@ class GlmImageCausalLMOutputWithPast(Glm4vCausalLMOutputWithPast):
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -989,7 +951,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GlmImageCausalLMOutputWithPast:
@@ -1045,7 +1006,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1074,7 +1034,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -1088,7 +1047,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -1208,8 +1166,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
@@ -1276,7 +1233,7 @@ class GlmImageImageProcessor(Qwen2VLImageProcessor):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
-class GlmImageImageProcessorFast(Qwen2VLImageProcessorFast):
+class GlmImageImageProcessorPil(Qwen2VLImageProcessorPil):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
@@ -1522,6 +1479,6 @@ __all__ = [
     "GlmImageModel",
     "GlmImageForConditionalGeneration",
     "GlmImageImageProcessor",
-    "GlmImageImageProcessorFast",
+    "GlmImageImageProcessorPil",
     "GlmImageProcessor",
 ]

@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,36 +14,23 @@
 """Image processor class for Pix2Struct."""
 
 import io
-import math
+import textwrap
+from typing import Union
 
-import numpy as np
+import torch
+import torchvision.transforms.v2.functional as tvF
 from huggingface_hub import hf_hub_download
+from PIL import Image, ImageDraw, ImageFont
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, to_pil_image
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    get_image_size,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-)
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ChannelDimension, ImageInput, SizeDict
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires_backends
 
 
-if is_vision_available():
-    import textwrap
-
-    from PIL import Image, ImageDraw, ImageFont
-
-if is_torch_available():
-    import torch
-
-logger = logging.get_logger(__name__)
 DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 
@@ -64,33 +51,6 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: dict[str, int]
     is_vqa: bool
     header_text: list[str] | str | None
-
-
-# adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
-def torch_extract_patches(image_tensor, patch_height, patch_width):
-    """
-    Utility function to extract patches from a given image tensor. Returns a tensor of shape
-    (1, `rows`, `columns`, `num_channels`x `patch_height` x `patch_width`).
-
-    Args:
-        image_tensor (torch.Tensor):
-            The image tensor to extract patches from.
-        patch_height (int):
-            The height of the patches to extract.
-        patch_width (int):
-            The width of the patches to extract.
-    """
-    requires_backends(torch_extract_patches, ["torch"])
-
-    image_tensor = image_tensor.unsqueeze(0)
-    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
-    patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
-    patches = patches.permute(0, 4, 2, 3, 1).reshape(
-        image_tensor.size(2) // patch_height,
-        image_tensor.size(3) // patch_width,
-        image_tensor.size(1) * patch_height * patch_width,
-    )
-    return patches.unsqueeze(0)
 
 
 # Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L106
@@ -149,322 +109,326 @@ def render_text(
 
     # Use a temporary canvas to determine the width and height in pixels when
     # rendering the text.
-    temp_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), background_color))
-    _, _, text_width, text_height = temp_draw.textbbox((0, 0), wrapped_text, font)
+    temp_img = Image.new("RGB", (1, 1))
+    temp_draw = ImageDraw.Draw(temp_img)
+    _, _, w, h = temp_draw.textbbox((0, 0), wrapped_text, font=font)
 
-    # Create the actual image with a bit of padding around the text.
-    image_width = text_width + left_padding + right_padding
-    image_height = text_height + top_padding + bottom_padding
-    image = Image.new("RGB", (image_width, image_height), background_color)
-    draw = ImageDraw.Draw(image)
-    draw.text(xy=(left_padding, top_padding), text=wrapped_text, fill=text_color, font=font)
-    return image
+    text_width = w + left_padding + right_padding
+    text_height = h + top_padding + bottom_padding
+
+    # Create the actual image with the text.
+    img = Image.new("RGB", (text_width, text_height), background_color)
+    draw = ImageDraw.Draw(img)
+    draw.text((left_padding, top_padding), wrapped_text, fill=text_color, font=font)
+
+    return img
 
 
-# Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L87
-def render_header(image: np.ndarray, header: str, input_data_format: str | ChildProcessError | None = None, **kwargs):
+# Disable as it causes issues with torch.compile
+@torch.compiler.disable
+def torch_extract_patches(image_tensor, patch_height, patch_width):
     """
-    Renders the input text as a header on the input image.
+    Extract patches from image tensor. Returns tensor of shape (batch, rows, columns, patch_height*patch_width*channels).
 
     Args:
-        image (`np.ndarray`):
-            The image to render the header on.
-        header (`str`):
-            The header text.
-        data_format (`Union[ChannelDimension, str]`, *optional*):
-            The data format of the image. Can be either "ChannelDimension.channels_first" or
-            "ChannelDimension.channels_last".
-
-    Returns:
-        `np.ndarray`: The image with the header rendered.
+        image_tensor (`torch.Tensor`):
+            Image tensor of shape (batch, channels, height, width).
+        patch_height (`int`):
+            Height of patches to extract.
+        patch_width (`int`):
+            Width of patches to extract.
     """
-    requires_backends(render_header, "vision")
-
-    # Convert to PIL image if necessary
-    image = to_pil_image(image, input_data_format=input_data_format)
-
-    header_image = render_text(header, **kwargs)
-    new_width = max(header_image.width, image.width)
-
-    new_height = int(image.height * (new_width / image.width))
-    new_header_height = int(header_image.height * (new_width / header_image.width))
-
-    new_image = Image.new("RGB", (new_width, new_height + new_header_height), "white")
-    new_image.paste(header_image.resize((new_width, new_header_height)), (0, 0))
-    new_image.paste(image.resize((new_width, new_height)), (0, new_header_height))
-
-    # Convert back to the original framework if necessary
-    new_image = to_numpy_array(new_image)
-
-    if infer_channel_dimension_format(new_image) == ChannelDimension.LAST:
-        new_image = to_channel_dimension_format(new_image, ChannelDimension.LAST)
-
-    return new_image
+    batch_size, channels, height, width = image_tensor.shape
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
+    patches = patches.permute(0, 4, 2, 3, 1).reshape(
+        batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
+    )
+    return patches
 
 
-class Pix2StructImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a Pix2Struct image processor.
-
-    Args:
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. According to Pix2Struct paper and code, the image is normalized with its own mean and standard
-            deviation.
-        patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
-            The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
-        max_patches (`int`, *optional*, defaults to 2048):
-            The maximum number of patches to extract from the image as per the [Pix2Struct
-            paper](https://huggingface.co/papers/2210.03347).
-        is_vqa (`bool`, *optional*, defaults to `False`):
-            Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
-            rendered onto the input images.
-    """
-
-    model_input_names = ["flattened_patches", "attention_mask"]
+@auto_docstring
+class Pix2StructImageProcessor(TorchvisionBackend):
+    rescale_factor = None
+    do_normalize = True
+    do_convert_rgb = True
+    patch_size = {"height": 16, "width": 16}
+    max_patches = 2048
+    is_vqa = False
     valid_kwargs = Pix2StructImageProcessorKwargs
+    model_input_names = ["flattened_patches", "attention_mask"]
 
-    def __init__(
+    def _standardize_kwargs(
         self,
-        do_convert_rgb: bool = True,
-        do_normalize: bool = True,
-        patch_size: dict[str, int] | None = None,
-        max_patches: int = 2048,
-        is_vqa: bool = False,
+        patch_size: dict[str, int] | SizeDict | None = None,
         **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.max_patches = max_patches
-        self.is_vqa = is_vqa
-
-    def extract_flattened_patches(
-        self,
-        image: np.ndarray,
-        max_patches: int,
-        patch_size: dict,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
+    ) -> dict:
         """
-        Extract flattened patches from an image.
+        Process custom Pix2Struct kwargs, specifically converting patch_size to SizeDict.
+        """
+        kwargs = super()._standardize_kwargs(**kwargs)
+        if patch_size is not None and not isinstance(patch_size, SizeDict):
+            kwargs["patch_size"] = SizeDict(**get_size_dict(size=patch_size, param_name="patch_size"))
+        else:
+            kwargs["patch_size"] = patch_size
+
+        return kwargs
+
+    def _validate_preprocess_kwargs(self, **kwargs):
+        """
+        Skip standard validation as Pix2Struct uses custom preprocessing.
+        """
+        # Pix2Struct doesn't use standard resize/rescale/normalize parameters
+        # so we skip the default validation
+        pass
+
+    def render_header(
+        self,
+        image: "torch.Tensor",
+        header: str,
+        font_bytes: bytes | None = None,
+        font_path: str | None = None,
+    ) -> "torch.Tensor":
+        """
+        Render header text on image using torch tensors.
 
         Args:
-            image (`np.ndarray`):
-                Image to extract flattened patches from.
-            max_patches (`int`):
-                Maximum number of patches to extract.
-            patch_size (`dict`):
-                Dictionary containing the patch height and width.
+            image (`torch.Tensor`):
+                Image tensor in channel-first format (C, H, W).
+            header (`str`):
+                Header text to render.
+            font_bytes (`bytes`, *optional*):
+                Font bytes to use for rendering.
+            font_path (`str`, *optional*):
+                Path to font file to use for rendering.
 
         Returns:
-            result (`np.ndarray`):
-                A sequence of `max_patches` flattened patches.
+            `torch.Tensor`: Image with header in channel-first format (C, H, W).
         """
-        requires_backends(self.extract_flattened_patches, "torch")
+        device = image.device
+        dtype = image.dtype
 
-        # convert to torch
-        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
-        image = torch.from_numpy(image)
+        # Convert tensor to PIL (channel-first to channel-last for PIL)
+        if image.dtype == torch.uint8:
+            image_pil = tvF.to_pil_image(image)
+        else:
+            # If float, convert to uint8 first
+            image_uint8 = (image * 255).clamp(0, 255).to(torch.uint8)
+            image_pil = tvF.to_pil_image(image_uint8)
 
-        patch_height, patch_width = patch_size["height"], patch_size["width"]
-        image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
+        # Render header text as PIL image
+        header_image = render_text(header, font_bytes=font_bytes, font_path=font_path)
 
-        # maximize scale s.t.
-        scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
-        num_feasible_rows = max(min(math.floor(scale * image_height / patch_height), max_patches), 1)
-        num_feasible_cols = max(min(math.floor(scale * image_width / patch_width), max_patches), 1)
-        resized_height = max(num_feasible_rows * patch_height, 1)
-        resized_width = max(num_feasible_cols * patch_width, 1)
+        # Calculate new dimensions
+        new_width = max(header_image.width, image_pil.width)
+        new_height = int(image_pil.height * (new_width / image_pil.width))
+        new_header_height = int(header_image.height * (new_width / header_image.width))
 
-        image = torch.nn.functional.interpolate(
-            image.unsqueeze(0),
-            size=(resized_height, resized_width),
-            mode="bilinear",
-            align_corners=False,
-            antialias=True,
-        ).squeeze(0)
+        # Create new image and paste header and original image
+        new_image = Image.new("RGB", (new_width, new_height + new_header_height), "white")
+        new_image.paste(header_image.resize((new_width, new_header_height)), (0, 0))
+        new_image.paste(image_pil.resize((new_width, new_height)), (0, new_header_height))
 
-        # [1, rows, columns, patch_height * patch_width * image_channels]
-        patches = torch_extract_patches(image, patch_height, patch_width)
+        # Convert back to tensor (channel-first)
+        result = tvF.pil_to_tensor(new_image).to(device)
 
-        patches_shape = patches.shape
-        rows = patches_shape[1]
-        columns = patches_shape[2]
-        depth = patches_shape[3]
-
-        # [rows * columns, patch_height * patch_width * image_channels]
-        patches = patches.reshape([rows * columns, depth])
-
-        # [rows * columns, 1]
-        row_ids = torch.arange(rows).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
-        col_ids = torch.arange(columns).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
-
-        # Offset by 1 so the ids do not contain zeros, which represent padding.
-        row_ids += 1
-        col_ids += 1
-
-        # Prepare additional patch features.
-        # [rows * columns, 1]
-        row_ids = row_ids.to(torch.float32)
-        col_ids = col_ids.to(torch.float32)
-
-        # [rows * columns, 2 + patch_height * patch_width * image_channels]
-        result = torch.cat([row_ids, col_ids, patches], -1)
-
-        # [max_patches, 2 + patch_height * patch_width * image_channels]
-        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)]).float()
-
-        result = to_numpy_array(result)
+        # Convert back to original dtype if needed
+        if dtype != torch.uint8:
+            result = result.float() / 255.0
 
         return result
 
-    def normalize(
-        self,
-        image: np.ndarray,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
+    def normalize(self, images: "torch.Tensor") -> "torch.Tensor":
         """
-        Normalize an image. image = (image - image_mean) / image_std.
+        Normalize batched images using per-image mean and standard deviation.
 
         Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
+            images (`torch.Tensor`):
+                Batched float image tensor of shape (B, C, H, W).
+
+        Returns:
+            `torch.Tensor`: Normalized images of shape (B, C, H, W).
         """
-        if image.dtype == np.uint8:
-            image = image.astype(np.float32)
+        # Compute mean and std per image along spatial and channel dimensions
+        mean = images.mean(dim=(1, 2, 3), keepdim=True)  # Shape: (B, 1, 1, 1)
+        std = images.std(dim=(1, 2, 3), keepdim=True)  # Shape: (B, 1, 1, 1)
 
-        # take mean across the whole `image`
-        mean = np.mean(image)
-        std = np.std(image)
-        adjusted_stddev = max(std, 1.0 / math.sqrt(np.prod(image.shape)))
+        num_elements_per_image = images.shape[1] * images.shape[2] * images.shape[3]
+        min_std = 1.0 / num_elements_per_image**0.5
+        adjusted_stddev = torch.maximum(std, torch.tensor(min_std, device=std.device))
 
-        return normalize(
-            image,
-            mean=mean,
-            std=adjusted_stddev,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
+        return (images - mean) / adjusted_stddev
+
+    def extract_flattened_patches(
+        self,
+        images: "torch.Tensor",
+        max_patches: int,
+        patch_size: SizeDict,
+    ) -> "torch.Tensor":
+        """
+        Extract flattened patches from a batch of images.
+
+        Args:
+            images (`torch.Tensor`):
+                Batched images tensor of shape (batch, channels, height, width).
+            max_patches (`int`):
+                Maximum number of patches to extract.
+            patch_size (`SizeDict`):
+                Dictionary containing patch height and width.
+
+        Returns:
+            `torch.Tensor`: Batched flattened patches with row/column IDs of shape (batch, max_patches, patch_dim).
+        """
+        patch_height, patch_width = patch_size.height, patch_size.width
+        batch_size, channels, image_height, image_width = images.shape
+
+        # Calculate scale to maximize patches while respecting max_patches
+        scale = (max_patches * (patch_height / image_height) * (patch_width / image_width)) ** 0.5
+        num_feasible_rows = max(min(int(scale * image_height / patch_height), max_patches), 1)
+        num_feasible_cols = max(min(int(scale * image_width / patch_width), max_patches), 1)
+        resized_height = max(num_feasible_rows * patch_height, 1)
+        resized_width = max(num_feasible_cols * patch_width, 1)
+
+        # Resize images (batched) using parent class method
+        resize_size = SizeDict(height=resized_height, width=resized_width)
+        images = self.resize(image=images, size=resize_size, resample=tvF.InterpolationMode.BILINEAR, antialias=True)
+
+        # Extract patches: [batch, rows, columns, patch_height * patch_width * channels]
+        patches = torch_extract_patches(images, patch_height, patch_width)
+
+        batch_size, rows, columns, depth = patches.shape
+
+        # Reshape to [batch, rows * columns, depth]
+        patches = patches.reshape(batch_size, rows * columns, depth)
+
+        # Create row and column IDs
+        row_ids = (
+            torch.arange(rows, device=images.device).reshape(rows, 1).repeat(1, columns).reshape(1, rows * columns, 1)
+        )
+        col_ids = (
+            torch.arange(columns, device=images.device)
+            .reshape(1, columns)
+            .repeat(rows, 1)
+            .reshape(1, rows * columns, 1)
         )
 
+        # Expand to batch size
+        row_ids = row_ids.expand(batch_size, -1, -1)
+        col_ids = col_ids.expand(batch_size, -1, -1)
+
+        # Offset by 1 so IDs don't contain zeros (which represent padding)
+        row_ids = (row_ids + 1).float()
+        col_ids = (col_ids + 1).float()
+
+        # Concatenate row_ids, col_ids, and patches: [batch, rows * columns, 2 + depth]
+        result = torch.cat([row_ids, col_ids, patches], dim=-1)
+
+        # Pad to max_patches: [batch, max_patches, 2 + depth]
+        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)]).float()
+
+        return result
+
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
-        header_text: str | None = None,
-        do_convert_rgb: bool | None = None,
-        do_normalize: bool | None = None,
-        max_patches: int | None = None,
-        patch_size: dict[str, int] | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> ImageInput:
+        header_text: str | list[str] | None = None,
+        **kwargs: Unpack[Pix2StructImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        header_text (`Union[str, list[str]]`, *optional*):
+            Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
         """
-        Preprocess an image or batch of images. The processor first computes the maximum possible number of
-        aspect-ratio preserving patches of size `patch_size` that can be extracted from the image. It then pads the
-        image with zeros to make the image respect the constraint of `max_patches`.
+        return super().preprocess(images, header_text=header_text, **kwargs)
 
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images.
-            header_text (`Union[list[str], str]`, *optional*):
-                Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            max_patches (`int`, *optional*, defaults to `self.max_patches`):
-                Maximum number of patches to extract.
-            patch_size (`dict`, *optional*, defaults to `self.patch_size`):
-                Dictionary containing the patch height and width.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        header_text: str | list[str] | None = None,
+        do_convert_rgb: bool = True,
+        input_data_format: ChannelDimension = ChannelDimension.FIRST,
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs: Unpack[Pix2StructImageProcessorKwargs],
+    ) -> BatchFeature:
         """
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        max_patches = max_patches if max_patches is not None else self.max_patches
-        is_vqa = self.is_vqa
+        Preprocess images for Pix2Struct.
+        """
+        # Prepare images (converts to torch tensors)
+        images = self._prepare_image_like_inputs(
+            images=images,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            device=device,
+        )
 
-        if kwargs.get("data_format") is not None:
-            raise ValueError("data_format is not an accepted input as the outputs are ")
-
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
+        # Handle VQA mode with header rendering
+        is_vqa = kwargs.get("is_vqa", self.is_vqa)
         if is_vqa:
             if header_text is None:
                 raise ValueError("A header text must be provided for VQA models.")
+
             font_bytes = kwargs.pop("font_bytes", None)
             font_path = kwargs.pop("font_path", None)
 
             if isinstance(header_text, str):
                 header_text = [header_text] * len(images)
 
+            # Render headers using torch-native method
             images = [
-                render_header(image, header_text[i], font_bytes=font_bytes, font_path=font_path)
+                self.render_header(image, header_text[i], font_bytes=font_bytes, font_path=font_path)
                 for i, image in enumerate(images)
             ]
 
-        if do_normalize:
-            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
+        return self._preprocess(images, **kwargs)
 
-        # convert to torch tensor and permute
-        images = [
-            self.extract_flattened_patches(
-                image=image, max_patches=max_patches, patch_size=patch_size, input_data_format=input_data_format
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_normalize: bool,
+        max_patches: int,
+        patch_size: SizeDict,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess images to extract flattened patches.
+        """
+        # Group images by shape first for efficient batch processing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+
+        flattened_patches_grouped = {}
+        attention_masks_grouped = {}
+
+        for shape, stacked_images in grouped_images.items():
+            # Convert to float if needed (for resize and other operations)
+            if stacked_images.dtype == torch.uint8:
+                stacked_images = stacked_images.float()
+
+            # Normalize batched images with per-image mean and std
+            if do_normalize:
+                stacked_images = self.normalize(stacked_images)
+
+            patches = self.extract_flattened_patches(
+                images=stacked_images, max_patches=max_patches, patch_size=patch_size
             )
-            for image in images
-        ]
+            masks = (patches.sum(dim=-1) != 0).float()
 
-        # create attention mask in numpy
-        attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
+            flattened_patches_grouped[shape] = patches
+            attention_masks_grouped[shape] = masks
 
-        encoded_outputs = BatchFeature(
-            data={"flattened_patches": images, "attention_mask": attention_masks}, tensor_type=return_tensors
+        flattened_patches = reorder_images(flattened_patches_grouped, grouped_images_index)
+        attention_masks = reorder_images(attention_masks_grouped, grouped_images_index)
+
+        # Stack if return_tensors is set
+        if return_tensors:
+            flattened_patches = torch.stack(flattened_patches, dim=0)
+            attention_masks = torch.stack(attention_masks, dim=0)
+
+        return BatchFeature(
+            data={"flattened_patches": flattened_patches, "attention_mask": attention_masks},
+            tensor_type=return_tensors,
         )
-
-        return encoded_outputs
 
 
 __all__ = ["Pix2StructImageProcessor"]

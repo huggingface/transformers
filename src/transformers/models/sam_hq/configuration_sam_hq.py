@@ -18,11 +18,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict(accept_kwargs=True)
 class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -33,29 +36,21 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
 
     base_config_key = "prompt_encoder_config"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        image_size=1024,
-        patch_size=16,
-        mask_input_channels=16,
-        num_point_embeddings=4,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.image_embedding_size = image_size // patch_size
-        self.mask_input_channels = mask_input_channels
-        self.num_point_embeddings = num_point_embeddings
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
+    hidden_size: int = 256
+    image_size: int | list[int] | tuple[int, int] = 1024
+    patch_size: int | list[int] | tuple[int, int] = 16
+    mask_input_channels: int = 16
+    num_point_embeddings: int = 4
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+
+    def __post_init__(self, **kwargs):
+        self.image_embedding_size = self.image_size // self.patch_size
+        super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict(accept_kwargs=True)
 class SamHQVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -93,54 +88,34 @@ class SamHQVisionConfig(PreTrainedConfig):
     base_config_key = "vision_config"
     model_type = "sam_hq_vision_model"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        output_channels=256,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=1024,
-        patch_size=16,
-        hidden_act="gelu",
-        layer_norm_eps=1e-06,
-        attention_dropout=0.0,
-        initializer_range=1e-10,
-        qkv_bias=True,
-        mlp_ratio=4.0,
-        use_abs_pos=True,
-        use_rel_pos=True,
-        window_size=14,
-        global_attn_indexes=[2, 5, 8, 11],
-        num_pos_feats=128,
-        mlp_dim=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    hidden_size: int = 768
+    output_channels: int = 256
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 1024
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-06
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 1e-10
+    qkv_bias: bool = True
+    mlp_ratio: float = 4.0
+    use_abs_pos: bool = True
+    use_rel_pos: bool = True
+    window_size: int = 14
+    global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
+    num_pos_feats: int = 128
+    mlp_dim: int | None = None
 
-        self.hidden_size = hidden_size
-        self.output_channels = output_channels
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.qkv_bias = qkv_bias
-        self.mlp_ratio = mlp_ratio
-        self.use_abs_pos = use_abs_pos
-        self.use_rel_pos = use_rel_pos
-        self.window_size = window_size
-        self.global_attn_indexes = global_attn_indexes
-        self.num_pos_feats = num_pos_feats
-        self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
+    def __post_init__(self, **kwargs):
+        self.mlp_dim = int(self.hidden_size * self.mlp_ratio) if self.mlp_dim is None else self.mlp_dim
         self.scale = self.hidden_size // 2
+        super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict(accept_kwargs=True)
 class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
     vit_dim (`int`, *optional*, defaults to 768):
@@ -159,36 +134,22 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
 
     base_config_key = "mask_decoder_config"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        hidden_act="relu",
-        mlp_dim=2048,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        attention_downsample_rate=2,
-        num_multimask_outputs=3,
-        iou_head_depth=3,
-        iou_head_hidden_dim=256,
-        layer_norm_eps=1e-6,
-        vit_dim=768,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.mlp_dim = mlp_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.attention_downsample_rate = attention_downsample_rate
-        self.num_multimask_outputs = num_multimask_outputs
-        self.iou_head_depth = iou_head_depth
-        self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.layer_norm_eps = layer_norm_eps
-        self.vit_dim = vit_dim
+    hidden_size: int = 256
+    hidden_act: str = "relu"
+    mlp_dim: int = 2048
+    num_hidden_layers: int = 2
+    num_attention_heads: int = 8
+    attention_downsample_rate: int = 2
+    num_multimask_outputs: int = 3
+    iou_head_depth: int = 3
+    iou_head_hidden_dim: int = 256
+    layer_norm_eps: float = 1e-6
+
+    vit_dim: int = 768
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict(accept_kwargs=True)
 class SamHQConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):
@@ -204,32 +165,29 @@ class SamHQConfig(PreTrainedConfig):
         "vision_config": SamHQVisionConfig,
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        prompt_encoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        vision_config = vision_config if vision_config is not None else {}
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
+    vision_config: dict | PreTrainedConfig | None = None
+    prompt_encoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+    tie_word_embeddings: bool = True
 
-        if isinstance(vision_config, SamHQVisionConfig):
-            vision_config = vision_config.to_dict()
-        if isinstance(prompt_encoder_config, SamHQPromptEncoderConfig):
-            prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, SamHQMaskDecoderConfig):
-            mask_decoder_config = mask_decoder_config.to_dict()
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = SamHQVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = SamHQVisionConfig()
 
-        self.vision_config = SamHQVisionConfig(**vision_config)
-        self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        if isinstance(self.prompt_encoder_config, dict):
+            self.prompt_encoder_config = SamHQPromptEncoderConfig(**self.prompt_encoder_config)
+        elif self.prompt_encoder_config is None:
+            self.prompt_encoder_config = SamHQPromptEncoderConfig()
+
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = SamHQMaskDecoderConfig(**self.mask_decoder_config)
+        elif self.mask_decoder_config is None:
+            self.mask_decoder_config = SamHQMaskDecoderConfig()
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["SamHQVisionConfig", "SamHQMaskDecoderConfig", "SamHQPromptEncoderConfig", "SamHQConfig"]

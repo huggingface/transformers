@@ -90,9 +90,9 @@ If you're interested in submitting a resource to be included here, please feel f
   [[autodoc]] LevitImageProcessor
     - preprocess
 
-## LevitImageProcessorFast
+## LevitImageProcessorPil
 
-  [[autodoc]] LevitImageProcessorFast
+[[autodoc]] LevitImageProcessorPil
     - preprocess
 
 ## LevitModel

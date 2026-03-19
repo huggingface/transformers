@@ -31,6 +31,12 @@ TMP_TOKEN_ID = -1
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
+# Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
+if logger.propagate:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
@@ -46,8 +52,8 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         torch.xpu.empty_cache()
         torch.xpu.synchronize()
         total_memory = torch.xpu.get_device_properties(device).total_memory
-        reserved_memory = getattr(torch.xpu, "memory_reserved")(device)
-        allocated_memory = getattr(torch.xpu, "memory_allocated")(device)
+        reserved_memory = torch.xpu.memory_reserved(device)
+        allocated_memory = torch.xpu.memory_allocated(device)
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
         # MPS memory reporting (PyTorch 2.0+)

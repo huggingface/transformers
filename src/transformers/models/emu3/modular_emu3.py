@@ -879,7 +879,9 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel):
 
 
 class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
-    def __init__(self, config: Emu3Config):
+    config: Emu3TextConfig
+
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
             [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -916,8 +918,6 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
 
 
 class Emu3Model(Emu3PreTrainedModel):
-    _checkpoint_conversion_mapping = {"text_model.model": "text_model"}
-
     def __init__(self, config):
         super().__init__(config)
         self.text_model = Emu3TextModel._from_config(config.text_config)
@@ -1075,11 +1075,6 @@ class Emu3Model(Emu3PreTrainedModel):
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
-    _checkpoint_conversion_mapping = {
-        "^text_model.model": "model.text_model",
-        "^vqmodel": "model.vqmodel",
-        "^text_model.lm_head": "lm_head",
-    }
 
     def __init__(self, config):
         super().__init__(config)

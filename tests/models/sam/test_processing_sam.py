@@ -29,7 +29,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from transformers.models.sam.image_processing_sam import _mask_to_rle_pytorch
+    from transformers.models.sam.image_processing_sam import _mask_to_rle
 
 
 @require_vision
@@ -135,7 +135,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         # Test that a mask of all zeros returns a single run [height * width].
         input_mask = torch.zeros((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
-        rle = _mask_to_rle_pytorch(input_mask)
+        rle = _mask_to_rle(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
@@ -144,7 +144,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that a mask of all ones returns [0, height * width].
         input_mask = torch.ones((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
-        rle = _mask_to_rle_pytorch(input_mask)
+        rle = _mask_to_rle(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
@@ -159,7 +159,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Flattened in Fortran order -> [0, 1, 1, 1].
         # The RLE for [0,1,1,1] is [1, 3].
         input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
-        rle = _mask_to_rle_pytorch(input_mask)
+        rle = _mask_to_rle(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])

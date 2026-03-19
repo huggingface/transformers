@@ -1510,7 +1510,9 @@ class TrainingArguments:
                 )
 
         if (
-            self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            self.load_best_model_at_end
+            or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            or self.lr_scheduler_type == SchedulerType.GREEDY
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
@@ -1524,6 +1526,12 @@ class TrainingArguments:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
+
+        # Auto-enable Kubeflow integration when running inside a Kubeflow TrainJob
+        from .integrations import is_kubeflow_available
+
+        if is_kubeflow_available() and "kubeflow" not in self.report_to:
+            self.report_to = list(self.report_to) + ["kubeflow"]
 
         # ── 4. Validation ──
         self._validate_args()
@@ -1701,6 +1709,10 @@ class TrainingArguments:
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires an eval strategy")
             if not is_torch_available():
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
+
+        if self.lr_scheduler_type == SchedulerType.GREEDY:
+            if self.eval_strategy == IntervalStrategy.NO:
+                raise ValueError("lr_scheduler_type greedy requires an eval strategy")
 
         if self.warmup_steps < 0:
             raise ValueError("warmup_steps must be an integer or a float")
@@ -2740,9 +2752,10 @@ class TrainingArguments:
             )
 
             fsdp_plugin_args = {}
+            fsdp_sharding = None
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
-                    fsdp_plugin_args["sharding_strategy"] = fsdp_option
+                    fsdp_sharding = fsdp_option
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     fsdp_plugin_args["cpu_offload"] = True
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
@@ -2758,16 +2771,20 @@ class TrainingArguments:
             fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             if fsdp_version == 2:
+                # full_shard → True (reshard after forward), shard_grad_op → False
+                default_reshard = fsdp_sharding != "shard_grad_op" if fsdp_sharding else True
                 fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
-                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                    str(self.fsdp_config.get("reshard_after_forward", default_reshard)).lower()
                 )
             else:
                 fsdp_plugin_args["forward_prefetch"] = str_to_bool(
                     str(self.fsdp_config.get("forward_prefetch", "false")).lower()
                 )
                 fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                # Pass sharding strategy as reshard_after_forward (accelerate converts it to ShardingStrategy)
+                default_reshard = fsdp_sharding.upper() if fsdp_sharding else "FULL_SHARD"
                 fsdp_plugin_args["reshard_after_forward"] = str(
-                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                    self.fsdp_config.get("reshard_after_forward", default_reshard)
                 ).lower()
                 fsdp_plugin_args["use_orig_params"] = str_to_bool(
                     str(self.fsdp_config.get("use_orig_params", "true")).lower()

@@ -13,6 +13,8 @@
 # limitations under the License.
 """CLAP model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -20,7 +22,8 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
+@strict(accept_kwargs=True)
 class ClapTextConfig(PreTrainedConfig):
     r"""
 
@@ -42,49 +45,27 @@ class ClapTextConfig(PreTrainedConfig):
     model_type = "clap_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size=50265,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=514,
-        type_vocab_size=1,
-        initializer_factor=1.0,
-        layer_norm_eps=1e-12,
-        projection_dim=512,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        projection_hidden_act="relu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_factor = initializer_factor
-        self.layer_norm_eps = layer_norm_eps
-        self.projection_hidden_act = projection_hidden_act
-        self.projection_dim = projection_dim
+    vocab_size: int = 50265
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 514
+    type_vocab_size: int = 1
+    initializer_factor: float = 1.0
+    layer_norm_eps: float = 1e-12
+    projection_dim: int = 512
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    projection_hidden_act: str = "relu"
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
+@strict(accept_kwargs=True)
 class ClapAudioConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 8):
@@ -131,69 +112,37 @@ class ClapAudioConfig(PreTrainedConfig):
     model_type = "clap_audio_model"
     base_config_key = "audio_config"
 
-    def __init__(
-        self,
-        window_size=8,
-        num_mel_bins=64,
-        spec_size=256,
-        hidden_act="gelu",
-        patch_size=4,
-        patch_stride=[4, 4],
-        num_classes=527,
-        hidden_size=768,
-        projection_dim=512,
-        depths=[2, 2, 6, 2],
-        num_attention_heads=[4, 8, 16, 32],
-        enable_fusion=False,
-        hidden_dropout_prob=0.1,
-        fusion_type=None,
-        patch_embed_input_channels=1,
-        flatten_patch_embeds=True,
-        patch_embeds_hidden_size=96,
-        enable_patch_layer_norm=True,
-        drop_path_rate=0.0,
-        attention_probs_dropout_prob=0.0,
-        qkv_bias=True,
-        mlp_ratio=4.0,
-        aff_block_r=4,
-        num_hidden_layers=4,
-        projection_hidden_act="relu",
-        layer_norm_eps=1e-5,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.window_size = window_size
-        self.num_mel_bins = num_mel_bins
-        self.spec_size = spec_size
-        self.patch_size = patch_size
-        self.patch_stride = patch_stride
-        self.num_classes = num_classes
-        self.hidden_size = hidden_size
-        self.depths = depths
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.window_size = window_size
-        self.enable_fusion = enable_fusion
-        self.fusion_type = fusion_type
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.projection_dim = projection_dim
-        self.flatten_patch_embeds = flatten_patch_embeds
-        self.patch_embeds_hidden_size = patch_embeds_hidden_size
-        self.enable_patch_layer_norm = enable_patch_layer_norm
-        self.drop_path_rate = drop_path_rate
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.qkv_bias = qkv_bias
-        self.mlp_ratio = mlp_ratio
-        self.patch_embed_input_channels = patch_embed_input_channels
-        self.aff_block_r = aff_block_r
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_factor = initializer_factor
-        self.projection_hidden_act = projection_hidden_act
+    window_size: int = 8
+    num_mel_bins: int = 64
+    spec_size: int = 256
+    hidden_act: str = "gelu"
+    patch_size: int | list[int] | tuple[int, int] = 4
+    patch_stride: int | list[int] | tuple[int, ...] = (4, 4)
+    num_classes: int = 527
+    hidden_size: int = 768
+    projection_dim: int = 512
+    depths: list[int] | tuple[int, ...] = (2, 2, 6, 2)
+    num_attention_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
+    enable_fusion: bool = False
+    hidden_dropout_prob: float = 0.1
+    fusion_type: str | None = None
+    patch_embed_input_channels: int = 1
+    flatten_patch_embeds: bool = True
+    patch_embeds_hidden_size: int = 96
+    enable_patch_layer_norm: bool = True
+    drop_path_rate: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    qkv_bias: bool = True
+    mlp_ratio: float = 4.0
+    aff_block_r: int = 4
+    num_hidden_layers: int = 4
+    projection_hidden_act: str = "relu"
+    layer_norm_eps: float = 1e-5
+    initializer_factor: float = 1.0
 
 
-@auto_docstring(checkpoint="calp-hsat-fused")
+@auto_docstring(checkpoint="laion/clap-htsat-fused")
+@strict(accept_kwargs=True)
 class ClapConfig(PreTrainedConfig):
     r"""
     Example:
@@ -223,45 +172,34 @@ class ClapConfig(PreTrainedConfig):
     model_type = "clap"
     sub_configs = {"text_config": ClapTextConfig, "audio_config": ClapAudioConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        audio_config=None,
-        logit_scale_init_value=(1 / 0.07),
-        projection_dim=512,
-        projection_hidden_act="relu",
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = ClapTextConfig()
+    text_config: dict | PreTrainedConfig | None = None
+    audio_config: dict | PreTrainedConfig | None = None
+    logit_scale_init_value: float = 1 / 0.07
+    projection_dim: int = 512
+    projection_hidden_act: str = "relu"
+    initializer_factor: float = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = ClapTextConfig()
             logger.info("`text_config` is `None`. initializing the `ClapTextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = ClapTextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = ClapTextConfig(**self.text_config)
 
-        if audio_config is None:
-            audio_config = ClapAudioConfig()
+        if self.audio_config is None:
+            self.audio_config = ClapAudioConfig()
             logger.info("`audio_config` is `None`. initializing the `ClapAudioConfig` with default values.")
-        elif isinstance(audio_config, dict):
-            audio_config = ClapAudioConfig(**audio_config)
+        elif isinstance(self.audio_config, dict):
+            self.audio_config = ClapAudioConfig(**self.audio_config)
 
-        self.text_config = text_config
-        self.audio_config = audio_config
+        self.text_config.projection_dim = self.projection_dim
+        self.audio_config.projection_dim = self.projection_dim
 
-        self.text_config.projection_dim = projection_dim
-        self.audio_config.projection_dim = projection_dim
-
-        self.text_config.projection_hidden_act = projection_hidden_act
-        self.audio_config.projection_hidden_act = projection_hidden_act
-
-        self.projection_dim = projection_dim
-        self.projection_hidden_act = projection_hidden_act
+        self.text_config.projection_hidden_act = self.projection_hidden_act
+        self.audio_config.projection_hidden_act = self.projection_hidden_act
         self.hidden_size = self.text_config.hidden_size
-
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = initializer_factor
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

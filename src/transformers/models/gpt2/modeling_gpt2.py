@@ -145,7 +145,6 @@ class GPT2Attention(nn.Module):
         self,
         hidden_states: tuple[torch.FloatTensor] | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
@@ -194,11 +193,7 @@ class GPT2Attention(nn.Module):
         if (past_key_values is not None and not is_cross_attention) or (
             past_key_values is not None and is_cross_attention and not is_updated
         ):
-            # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            cache_position = cache_position if not is_cross_attention else None
-            key_states, value_states = curr_past_key_values.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-            )
+            key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
             # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
             if is_cross_attention:
                 past_key_values.is_updated[self.layer_idx] = True
@@ -268,7 +263,6 @@ class GPT2Block(GradientCheckpointingLayer):
         self,
         hidden_states: tuple[torch.FloatTensor] | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
@@ -280,7 +274,6 @@ class GPT2Block(GradientCheckpointingLayer):
         attn_output, _ = self.attn(
             hidden_states,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             attention_mask=attention_mask,
             use_cache=use_cache,
             **kwargs,
@@ -530,7 +523,6 @@ class GPT2Model(GPT2PreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -584,13 +576,10 @@ class GPT2Model(GPT2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds.to(inputs_embeds.device)
@@ -603,7 +592,6 @@ class GPT2Model(GPT2PreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -629,7 +617,6 @@ class GPT2Model(GPT2PreTrainedModel):
             hidden_states = block(
                 hidden_states,
                 past_key_values if not (self.gradient_checkpointing and self.training) else None,
-                cache_position,
                 causal_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
@@ -672,7 +659,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -706,7 +692,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -767,7 +752,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.FloatTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -830,7 +814,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,

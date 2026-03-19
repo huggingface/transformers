@@ -13,16 +13,14 @@
 # limitations under the License.
 """ProphetNet model configuration"""
 
-from collections.abc import Callable
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/prophetnet-large-uncased")
+@strict(accept_kwargs=True)
 class ProphetNetConfig(PreTrainedConfig):
     r"""
     ngram (`int`, *optional*, defaults to 2):
@@ -47,72 +45,34 @@ class ProphetNetConfig(PreTrainedConfig):
         "num_attention_heads": "num_encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        activation_dropout: float | None = 0.1,
-        activation_function: str | Callable | None = "gelu",
-        vocab_size: int | None = 30522,
-        hidden_size: int | None = 1024,
-        encoder_ffn_dim: int | None = 4096,
-        num_encoder_layers: int | None = 12,
-        num_encoder_attention_heads: int | None = 16,
-        decoder_ffn_dim: int | None = 4096,
-        num_decoder_layers: int | None = 12,
-        num_decoder_attention_heads: int | None = 16,
-        attention_dropout: float | None = 0.1,
-        dropout: float | None = 0.1,
-        max_position_embeddings: int | None = 512,
-        init_std: float | None = 0.02,
-        is_encoder_decoder: bool | None = True,
-        add_cross_attention: bool | None = True,
-        decoder_start_token_id: int | None = 0,
-        ngram: int | None = 2,
-        num_buckets: int | None = 32,
-        relative_max_distance: int | None = 128,
-        disable_ngram_loss: bool | None = False,
-        eps: float | None = 0.0,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        is_decoder: bool | None = False,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.num_encoder_layers = num_encoder_layers
-        self.num_encoder_attention_heads = num_encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_decoder_layers = num_decoder_layers
-        self.num_decoder_attention_heads = num_decoder_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.init_std = init_std  # Normal(0, this parameter)
-        self.activation_function = activation_function
-
-        # parameters for prophetnet
-        self.ngram = ngram
-        self.num_buckets = num_buckets
-        self.relative_max_distance = relative_max_distance
-        self.disable_ngram_loss = disable_ngram_loss
-        self.eps = eps
-
-        # 3 Types of Dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.dropout = dropout
-
-        self.use_cache = use_cache
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.add_cross_attention = add_cross_attention
-        self.decoder_start_token_id = decoder_start_token_id
-        self.is_decoder = is_decoder
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    activation_dropout: float | int = 0.1
+    activation_function: str = "gelu"
+    vocab_size: int = 30522
+    hidden_size: int = 1024
+    encoder_ffn_dim: int = 4096
+    num_encoder_layers: int = 12
+    num_encoder_attention_heads: int = 16
+    decoder_ffn_dim: int = 4096
+    num_decoder_layers: int = 12
+    num_decoder_attention_heads: int = 16
+    attention_dropout: float | int = 0.1
+    dropout: float | int = 0.1
+    max_position_embeddings: int = 512
+    init_std: float = 0.02
+    is_encoder_decoder: bool = True
+    add_cross_attention: bool = True
+    decoder_start_token_id: int | None = 0
+    ngram: int = 2
+    num_buckets: int = 32
+    relative_max_distance: int = 128
+    disable_ngram_loss: bool = False
+    eps: float = 0.0
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    is_decoder: bool = False
+    tie_word_embeddings: bool = True
 
     @property
     def num_hidden_layers(self) -> int:

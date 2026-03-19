@@ -18,11 +18,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
+@strict(accept_kwargs=True)
 class LasrEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -65,68 +68,38 @@ class LasrEncoderConfig(PreTrainedConfig):
     model_type = "lasr_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        hidden_size=512,
-        num_hidden_layers=17,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        hidden_act="silu",
-        attention_bias=False,
-        convolution_bias=False,
-        conv_kernel_size=32,
-        subsampling_conv_channels=256,
-        subsampling_conv_kernel_size=5,
-        subsampling_conv_stride=2,
-        num_mel_bins=128,
-        dropout=0.1,
-        dropout_positions=0.0,
-        layerdrop=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=10000,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        feed_forward_residual_weights=[1.5, 0.5],
-        conv_residual_weights=[2.0, 1.0],
-        batch_norm_momentum=0.01,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        self.rope_parameters = rope_parameters
-        self.layer_norm_eps = layer_norm_eps
-        self.feed_forward_residual_weights = feed_forward_residual_weights
-        self.conv_residual_weights = conv_residual_weights
-        self.batch_norm_momentum = batch_norm_momentum
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_attention_heads  # LlamaAttention compatibility
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_bias = attention_bias
-        self.convolution_bias = convolution_bias
+    hidden_size: int = 512
+    num_hidden_layers: int = 17
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    hidden_act: str = "silu"
+    attention_bias: bool = False
+    convolution_bias: bool = False
+    conv_kernel_size: int = 32
+    subsampling_conv_channels: int = 256
+    num_mel_bins: int = 128
+    subsampling_conv_kernel_size: int = 5
+    subsampling_conv_stride: int = 2
+    dropout: float | int = 0.1
+    dropout_positions: float = 0.0
+    layerdrop: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    max_position_embeddings: int = 10000
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    feed_forward_residual_weights: list[float] | tuple[float, ...] = (1.5, 0.5)
+    conv_residual_weights: list[float] | tuple[float, ...] = (2.0, 1.0)
+    batch_norm_momentum: float = 0.01
+    rope_parameters: dict | None = None
 
-        self.conv_kernel_size = conv_kernel_size
-        self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
-        self.subsampling_conv_stride = subsampling_conv_stride
-        self.subsampling_conv_channels = subsampling_conv_channels
-        self.num_mel_bins = num_mel_bins
-
-        self.dropout = dropout
-        self.dropout_positions = dropout_positions
-        self.layerdrop = layerdrop
-        self.activation_dropout = activation_dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-
-        super().__init__(
-            **kwargs,
-        )
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
+@strict(accept_kwargs=True)
 class LasrCTCConfig(PreTrainedConfig):
     r"""
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
@@ -154,40 +127,19 @@ class LasrCTCConfig(PreTrainedConfig):
     model_type = "lasr_ctc"
     sub_configs = {"encoder_config": LasrEncoderConfig}
 
-    def __init__(
-        self,
-        vocab_size=512,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=True,
-        encoder_config: dict | LasrEncoderConfig = None,
-        pad_token_id=0,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.ctc_loss_reduction = ctc_loss_reduction
-        self.ctc_zero_infinity = ctc_zero_infinity
+    vocab_size: int = 512
+    ctc_loss_reduction: str = "mean"
+    ctc_zero_infinity: bool = True
+    encoder_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int = 0
 
-        if isinstance(encoder_config, dict):
-            self.encoder_config = LasrEncoderConfig(**encoder_config)
-        elif encoder_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = LasrEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
             self.encoder_config = LasrEncoderConfig()
-
-        self.encoder_config = self.encoder_config
         self.initializer_range = self.encoder_config.initializer_range
-        self.pad_token_id = pad_token_id
-
-        super().__init__(**kwargs)
-
-    @classmethod
-    def from_encoder_config(cls, encoder_config: LasrEncoderConfig, **kwargs):
-        r"""
-        Instantiate a [`LasrCTCConfig`] (or a derived class) from lasr encoder model configuration.
-
-        Returns:
-            [`LasrCTCConfig`]: An instance of a configuration object
-        """
-
-        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+        super().__post_init__(**kwargs)
 
     @property
     def inputs_to_logits_ratio(self):
