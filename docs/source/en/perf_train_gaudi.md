@@ -35,7 +35,7 @@ export PT_ENABLE_INT64_SUPPORT=1
 
 ## Mixed precision
 
-All Gaudi generations support bf16 natively. Only Gaudi 2 and Gaudi 3 support fp16.
+All Gaudi generations support bf16 natively.
 
 ```python
 from transformers import TrainingArguments
