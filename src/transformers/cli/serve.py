@@ -320,7 +320,7 @@ class DownloadAggregator:
         agg_current = sum(c for c, _ in self.bars.values())
         if agg_current == self.last_emitted_current:
             return
-        self._last_emitted_current = agg_current
+        self.last_emitted_current = agg_current
         totals = [t for _, t in self.bars.values() if t is not None]
         agg_total = sum(totals) if totals else None
         self.enqueue(
@@ -347,7 +347,7 @@ class DownloadProxy:
         self.total = wrapped_bar.total
 
     def __getattr__(self, name):
-        return getattr(self.wrapped, name)
+        return getattr(self.wrapped_bar, name)
 
     def update(self, n=1):
         if n is None:
@@ -359,7 +359,7 @@ class DownloadProxy:
         return self.wrapped_bar.update(n)
 
     def close(self):
-        self._dl_agg.close(self.bar_id)
+        self.download_aggregator.close(self.bar_id)
         return self.wrapped_bar.close()
 
     def __enter__(self):
@@ -373,7 +373,7 @@ class DownloadProxy:
         count = 0
         for item in self.wrapped_bar:
             count += 1
-            self._dl_agg.update(self.bar_id, count, getattr(self.wrapped_bar, "total", self.total))
+            self.download_aggregator.update(self.bar_id, count, getattr(self.wrapped_bar, "total", self.total))
 
             yield item
 
