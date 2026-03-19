@@ -39,7 +39,12 @@ from ...utils import (
     is_torchdynamo_compiling,
     torch_int,
 )
-from ...utils.backbone_utils import load_backbone
+
+try:
+    # Newer versions expose `load_backbone` at the top level.
+    from ...backbone_utils import load_backbone
+except ImportError:  # pragma: no cover - fallback for older layouts
+    from ...utils.backbone_utils import load_backbone
 from .configuration_deim import DEIMConfig
 
 
