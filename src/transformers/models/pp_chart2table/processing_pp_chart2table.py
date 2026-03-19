@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -35,17 +36,6 @@ class PPChart2TableProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-        # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
-        self.messages = [
-            {
-                "role": "system",
-            },
-            {
-                "role": "user",
-                "image": {"num_patches": self.image_processor.num_patches},
-            },
-        ]
-
     def __call__(
         self,
         images: ImageInput = None,
@@ -61,19 +51,15 @@ class PPChart2TableProcessor(ProcessorMixin):
         if images is None:
             raise ValueError("At least one of `images` must be provided")
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        batch_size = image_inputs["pixel_values"].shape[0]
-
-        # Use tokenizer's apply_chat_template instead of manually loading template
-        inputs = self.tokenizer.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            truncation=True,
-            **output_kwargs["text_kwargs"],
-        )
 
         # Prepare input ids for batch
-        input_ids = inputs["input_ids"].repeat(batch_size, 1)
+        if text is None:
+            raise ValueError("At least one of `text` must be provided")
+
+        if not isinstance(text, list):
+            text = [text]
+
+        input_ids = torch.tensor(self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids)
 
         return BatchFeature(data={"input_ids": input_ids, **image_inputs})
 

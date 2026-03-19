@@ -37,8 +37,23 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_ocr_queries(self):
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()
-        inputs = processor(image_input, return_tensors="pt")
-        self.assertEqual(inputs["input_ids"].shape, (1, 286))
+        conversation = [
+            {
+                "role": "system",
+                "content": [],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "image", "num_patches": 16}, {"type": "text", "text": "Chart to table"}],
+            },
+        ]
+        inputs = processor.apply_chat_template(
+            conversation,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        inputs = processor(images=image_input, text=inputs, return_tensors="pt")
+        self.assertEqual(inputs["input_ids"].shape, (1, 285))
         self.assertEqual(inputs["pixel_values"].shape, (1, 3, 1024, 1024))
 
     def test_unstructured_kwargs_batched(self):

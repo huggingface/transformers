@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 from huggingface_hub.dataclasses import strict
 
 from ...feature_extraction_utils import BatchFeature
@@ -52,9 +53,13 @@ class PPChart2TableConfig(GotOcr2Config):
 class PPChart2TableImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to `16`):
-        The expected patch size out of the image processor.
+        The size (in pixels) of each square patch that the image is divided into before being fed into the
+        vision encoder.
+
     num_patches (`int`, *optional*, defaults to `16`):
-        Alias for `patch_size`.
+        Number of patches used to represent the image in the input sequence. This parameter is included in
+        the chat template's user message to inform the language model about the image structure. The model
+        uses this information to understand how the image tokens correspond to the visual input.
     """
 
     patch_size: int
@@ -83,17 +88,6 @@ class PPChart2TableProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-        # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
-        self.messages = [
-            {
-                "role": "system",
-            },
-            {
-                "role": "user",
-                "image": {"num_patches": self.image_processor.num_patches},
-            },
-        ]
-
     def __call__(
         self,
         images: ImageInput = None,
@@ -109,19 +103,15 @@ class PPChart2TableProcessor(ProcessorMixin):
         if images is None:
             raise ValueError("At least one of `images` must be provided")
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        batch_size = image_inputs["pixel_values"].shape[0]
-
-        # Use tokenizer's apply_chat_template instead of manually loading template
-        inputs = self.tokenizer.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            truncation=True,
-            **output_kwargs["text_kwargs"],
-        )
 
         # Prepare input ids for batch
-        input_ids = inputs["input_ids"].repeat(batch_size, 1)
+        if text is None:
+            raise ValueError("At least one of `text` must be provided")
+
+        if not isinstance(text, list):
+            text = [text]
+
+        input_ids = torch.tensor(self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids)
 
         return BatchFeature(data={"input_ids": input_ids, **image_inputs})
 

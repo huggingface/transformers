@@ -24,9 +24,13 @@ from ...processing_utils import ImagesKwargs
 class PPChart2TableImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to `16`):
-        The expected patch size out of the image processor.
+        The size (in pixels) of each square patch that the image is divided into before being fed into the
+        vision encoder.
+
     num_patches (`int`, *optional*, defaults to `16`):
-        Alias for `patch_size`.
+        Number of patches used to represent the image in the input sequence. This parameter is included in
+        the chat template's user message to inform the language model about the image structure. The model
+        uses this information to understand how the image tokens correspond to the visual input.
     """
 
     patch_size: int

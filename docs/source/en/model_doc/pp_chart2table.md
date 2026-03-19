@@ -39,24 +39,26 @@ The example below demonstrates how to classify image with PP-Chart2Table using [
 <hfoption id="Pipeline">
 
 ```py
-import requests
-from PIL import Image
 from transformers import pipeline
-model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-pipe = pipeline(
-    task="image-text-to-text", 
-    model=model_path,
-    device_map="auto",
-)
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-# text is empty - processor uses hardcoded "Chart to table" instruction internally via chat template
-result = pipe(
-    images=image, 
-    text="",
-    do_sample=False, 
-    max_new_tokens=256
-)
-print(result)
+
+pipe = pipeline("image-text-to-text", model="PaddlePaddle/PP-Chart2Table_safetensors")
+
+# PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
+conversation = [
+    {
+        "role": "system",
+        "content": [],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": 16},
+            {"type": "text", "text": "Chart to table"}
+        ],
+    }
+]
+result = pipe(text=conversation)
+print(result[0]["generated_text"])
 
 ```
 
@@ -76,8 +78,29 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-inputs = processor(images=image).to(model.device)
+# PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
+conversation = [
+    {
+        "role": "system",
+        "content": [],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": processor.image_processor.num_patches},
+            {"type": "text", "text": "Chart to table"}
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True, 
+    add_generation_prompt=True, 
+    truncation=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
@@ -97,24 +120,27 @@ Here is how you can do it with PP-Chart2Table using [`Pipeline`] or the [`AutoMo
 <hfoption id="Pipeline">
 
 ```py
-import requests
 from transformers import pipeline
-from PIL import Image
-model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
-pipe = pipeline(
-    task="image-text-to-text", 
-    model=model_path,
-    device_map="auto",
-)
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-# text is empty - processor uses hardcoded "Chart to table" instruction internally via chat template
-result = pipe(
-    images=[image, image],
-    text="",
-    do_sample=False,
-    max_new_tokens=256
-)
-print(result)
+
+pipe = pipeline("image-text-to-text", model="PaddlePaddle/PP-Chart2Table_safetensors")
+
+# PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
+conversation = [
+    {
+        "role": "system",
+        "content": [],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": 16},
+            {"type": "text", "text": "Chart to table"}
+        ],
+    }
+]
+result = pipe(text=[conversation, conversation])
+print(result[0][0]["generated_text"])
+
 ```
 
 </hfoption>
@@ -133,13 +159,36 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", stream=True).raw)
-inputs = processor(images=[image, image]).to(model.device)
+# PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
+conversation = [
+    {
+        "role": "system",
+        "content": [],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png", "num_patches": processor.image_processor.num_patches},
+            {"type": "text", "text": "Chart to table"}
+        ],
+    }
+]
+
+batch_conversation = [conversation, conversation]
+inputs = processor.apply_chat_template(
+    batch_conversation,
+    tokenize=True, 
+    add_generation_prompt=True, 
+    truncation=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
 generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
 result = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 print(result)
+
 ```
 
 </hfoption>
