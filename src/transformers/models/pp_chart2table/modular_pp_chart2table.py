@@ -15,7 +15,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -65,7 +65,21 @@ class PPChart2TableImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
+class PPChart2TableImageProcessor(TorchvisionBackend):
+    resample = 3
+    image_mean = [0.48145466, 0.4578275, 0.40821073]
+    image_std = [0.26862954, 0.26130258, 0.27577711]
+    size = {"height": 1024, "width": 1024}
+    patch_size = 16
+    num_patches = 16
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    valid_kwargs = PPChart2TableImageProcessorKwargs
+
+
+@auto_docstring
+class PPChart2TableImageProcessorPil(PilBackend):
     resample = 3
     image_mean = [0.48145466, 0.4578275, 0.40821073]
     image_std = [0.26862954, 0.26130258, 0.27577711]
@@ -96,6 +110,7 @@ class PPChart2TableProcessor(ProcessorMixin):
 
 __all__ = [
     "PPChart2TableConfig",
-    "PPChart2TableImageProcessorFast",
+    "PPChart2TableImageProcessor",
+    "PPChart2TableImageProcessorPil",
     "PPChart2TableProcessor",
 ]

@@ -18,13 +18,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_backends import PilBackend
 from ...utils import auto_docstring
 from .image_processing_pp_chart2table import PPChart2TableImageProcessorKwargs
 
 
 @auto_docstring
-class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
+class PPChart2TableImageProcessorPil(PilBackend):
     resample = 3
     image_mean = [0.48145466, 0.4578275, 0.40821073]
     image_std = [0.26862954, 0.26130258, 0.27577711]
@@ -37,4 +37,4 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = PPChart2TableImageProcessorKwargs
 
 
-__all__ = ["PPChart2TableImageProcessorFast"]
+__all__ = ["PPChart2TableImageProcessorPil"]
