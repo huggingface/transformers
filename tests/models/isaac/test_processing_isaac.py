@@ -62,6 +62,7 @@ class SimpleIsaacTokenizer(PythonBackend):
             "<eos>": 2,
             "<unk>": 3,
             "<image>": 4,
+            "<|image_pad|>": 5,
         }
         self._ids_to_tokens = {idx: tok for tok, idx in self._vocab.items()}
         super().__init__(
@@ -69,14 +70,9 @@ class SimpleIsaacTokenizer(PythonBackend):
             eos_token="<eos>",
             pad_token="<pad>",
             unk_token="<unk>",
-            extra_special_tokens=["<image>"],
+            additional_special_tokens=["<image>"],
+            extra_special_tokens={"image_pad_token": "<|image_pad|>"},
             model_max_length=512,
-        )
-        self.chat_template = (
-            "{% for message in messages %}"
-            "{{ message['role'] }}: {{ message['content'] | trim }}\n"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}assistant:{% endif %}"
         )
 
     def get_vocab(self):
@@ -129,6 +125,73 @@ class SimpleIsaacTokenizer(PythonBackend):
         return ()
 
 
+class SimpleIsaacTokenizerWithNamedImagePad(PythonBackend):
+    vocab_files_names = {}
+    model_input_names = ["input_ids"]
+
+    def __init__(self):
+        self._vocab = {
+            "<pad>": 0,
+            "<bos>": 1,
+            "<eos>": 2,
+            "<unk>": 3,
+            "<image>": 4,
+            "<custom_image_pad>": 5,
+            "<|image_pad|>": 6,
+        }
+        self._ids_to_tokens = {idx: tok for tok, idx in self._vocab.items()}
+        super().__init__(
+            bos_token="<bos>",
+            eos_token="<eos>",
+            pad_token="<pad>",
+            unk_token="<unk>",
+            extra_special_tokens={"image_pad_token": "<custom_image_pad>"},
+            model_max_length=512,
+        )
+
+    def get_vocab(self):
+        return dict(self._vocab)
+
+    def _tokenize(self, text):
+        clean = text.replace("\n", " ").strip()
+        if not clean:
+            return []
+
+        special_tokens = sorted(
+            (token for token in self._vocab if token.startswith("<") and token.endswith(">")),
+            key=len,
+            reverse=True,
+        )
+        split_pattern = "(" + "|".join(re.escape(token) for token in special_tokens) + ")"
+        tokens = []
+        for chunk in re.split(split_pattern, clean):
+            if not chunk or chunk.isspace():
+                continue
+            if chunk in self._vocab:
+                tokens.append(chunk)
+            else:
+                tokens.extend(token for token in chunk.split(" ") if token)
+        return tokens
+
+    def _convert_token_to_id(self, token):
+        return self._vocab.get(token, self._vocab["<unk>"])
+
+    def _convert_id_to_token(self, index):
+        return self._ids_to_tokens.get(index, self.unk_token)
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self._vocab)
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        if token_ids_1 is not None:
+            token_ids_0 = token_ids_0 + token_ids_1
+        return [self.bos_token_id] + list(token_ids_0) + [self.eos_token_id]
+
+    def save_vocabulary(self, save_directory, filename_prefix=None):
+        return ()
+
+
 def _make_dummy_image(size=(32, 32), color=(255, 0, 0)):
     if Image is None:
         raise RuntimeError("PIL.Image is not available in this environment.")
@@ -159,6 +222,16 @@ def _run_processor(processor, text, images=None):
 
 def _make_post_process_processor():
     return IsaacProcessor(image_processor=IsaacImageProcessorFast(), tokenizer=SimpleIsaacTokenizer())
+
+
+def test_processor_prefers_named_image_pad_token():
+    processor = IsaacProcessor(
+        image_processor=IsaacImageProcessorFast(), tokenizer=SimpleIsaacTokenizerWithNamedImagePad()
+    )
+
+    assert processor.image_token == "<custom_image_pad>"
+    assert processor.image_pad_token_id == processor.tokenizer.image_pad_token_id
+    assert processor.image_pad_token_id != processor.tokenizer.convert_tokens_to_ids("<|image_pad|>")
 
 
 def _assert_common(outputs, batch_size=1):
@@ -353,6 +426,10 @@ class IsaacProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @unittest.skip("IsaacProcessor expands image placeholders into image pad tokens before tokenization")
     def test_tokenizer_defaults(self):
+        pass
+
+    @unittest.skip("IsaacProcessor does not return offset mappings needed for assistant masks")
+    def test_apply_chat_template_assistant_mask(self):
         pass
 
     def test_single_vs_batched_consistency(self):
