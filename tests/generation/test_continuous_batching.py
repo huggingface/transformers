@@ -16,6 +16,7 @@ import functools
 import gc
 import itertools
 import unittest
+from typing import Any
 from unittest.mock import patch
 
 import torch
@@ -27,6 +28,7 @@ from transformers import (
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
+    ContinuousMixin,
     GenerationConfig,
     LogitsProcessorList,
     StaticCache,
@@ -56,7 +58,18 @@ from transformers.utils import (
 from transformers.utils.generic import is_flash_attention_requested
 
 
+# Constant for tests
+_DEFAULT_USER_MESSAGES = [
+    "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
+    "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
+    "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
+]  # fmt: skip
+
+
+# Helper functions
 def flush_memory(flush_compile: bool = True) -> None:
+    """Flushes the memory of the current device and, if the flush_compile flag is True, all data related to
+    torch.compile."""
     gc.collect()
     # If needed, flush everything related to torch.compile
     if flush_compile:
@@ -83,6 +96,19 @@ def flush_memory(flush_compile: bool = True) -> None:
         torch.xpu.synchronize()
     gc.collect()
 
+def get_tokenizer_and_model(
+    model_id: str, attn_implementation: str, device: str, dtype: str | torch.dtype = "auto"
+) -> tuple[AutoTokenizer, ContinuousMixin]:
+    """Returns a tokenizer and a model for the given model ID. Attributes to setup the models (attn_implementation,
+    dtype and device) are needed as arguments."""
+    # Get tokenizer, with a padding token if not present
+    tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+    if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
+        tokenizer.pad_token = tokenizer.eos_token
+    # Load model on CPU
+    model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
+    model = model.to(device).eval()
+    return tokenizer, model
 
 def with_flush_memory(func):
     """Decorator that ensures flush_memory is called after the test, even if it fails."""
@@ -111,6 +137,29 @@ def with_flush_memory(func):
     return wrapper
 
 
+
+def get_generation_inputs(
+    user_messages: list[str], tokenizer: AutoTokenizer, for_continuous_batching: bool = False
+) -> Any:
+    """Returns the tokenized inputs for batched or non-batched generation."""
+    chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+    if for_continuous_batching:
+        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+        return input_ids
+    else:
+        inputs = tokenizer.apply_chat_template(
+            chats,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            padding=True,
+            return_dict=True,
+            return_attention_mask=True,
+        )
+        return inputs
+
+
+# Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         [
@@ -392,19 +441,10 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             self.assertFalse(is_torch_xpu_available())
             self.assertFalse(torch.backends.mps.is_available())
 
-            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
+            user_messages = _DEFAULT_USER_MESSAGES[:1]
+            input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
-            user_messages = [
-                "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
-            ]
-            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
-            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
-            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
-
-            # Load model on CPU
-            model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
-            model = model.to("cpu").eval()
             model.generation_config.max_new_tokens = 10
             model.generation_config.do_sample = False
 
@@ -426,6 +466,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
+
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
@@ -455,27 +496,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
             continuous_batching_config.varlen_compile_config = compile_config
 
-        # Prepare continuous batching inputs
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        if hasattr(tokenizer, "eos_token"):
-            tokenizer.pad_token = tokenizer.eos_token
-        user_messages = [
-            "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
-            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
-            "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
-        ]  # fmt: skip
-        if num_repeat_prompts > 1:
-            user_messages = user_messages * num_repeat_prompts
-        chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
-        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
-        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
-
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
         dtype = "auto" if attn_implementation == "flash_attention_2" else torch.float32
 
-        # Generation with continuous batching
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
+        # Prepare inputs
+        tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
         if (
             attn_implementation == "flash_attention_2"
             and torch_device == "cpu"
@@ -483,7 +509,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             and model.config.sliding_window > 0
         ):
             self.skipTest("Flash Attention 2 with sliding window attention is not supported on CPU. Skipping test.")
-        model = model.to(torch_device).eval()
+
+        user_messages = _DEFAULT_USER_MESSAGES * num_repeat_prompts
+        input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
 
@@ -494,20 +523,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             continuous_batching_config=continuous_batching_config,
         )
 
-        # Prepare non-continuous batching inputs
-        inputs = tokenizer.apply_chat_template(
-            chats,
-            add_generation_prompt=True,
-            return_tensors="pt",
-            padding=True,
-            return_dict=True,
-            return_attention_mask=True,
-        )
+        # Prepare non-continuous batching inputs and model
+        inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
         num_input_tokens = inputs.input_ids.shape[1]
 
-        # Generation without continuous batching
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
-        model = model.to(torch_device).eval()
+        # Generation without continuous batching (reload model to avoid any state contamination)
+        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
@@ -733,16 +754,13 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        model = AutoModelForCausalLM.from_pretrained(model_id)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
         manager = model.init_continuous_batching()
         manager.logit_processor = LogitsProcessorList()
         manager.start()
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        messages = [{"content": "What is the Transformers library known for?", "role": "user"}]
-        inputs = tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
-        ).to(model.device)[0]
+        user_messages = ["What is the Transformers library known for?"]
+        inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)[0]
 
         # Test with non-streaming
         if with_non_streaming:
@@ -783,8 +801,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def _test_block_sharing(
         self, model_id: str, expected_layer_types: dict[str, int], input_msg: str, expected_output_tokens: list[int]
     ) -> None:
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
 
         cb_context_manager = model.continuous_batching_context_manager(
             generation_config=GenerationConfig(do_sample=False),
@@ -794,11 +811,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             manager.logit_processor = LogitsProcessorList()
 
             # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
-            messages = [{"content": input_msg, "role": "user"}]
-            inputs = tokenizer.apply_chat_template(
-                messages, return_tensors="pt", add_generation_prompt=True, return_dict=False
-            )
-            inputs = inputs.to(model.device)[0].tolist()
+            inputs = get_generation_inputs([input_msg], tokenizer, for_continuous_batching=True)[0]
             self.assertGreaterEqual(len(inputs), 32, f"Input length is {len(inputs)} instead of at least 32")
             self.assertLess(len(inputs), 64, f"Input length is {len(inputs)} instead of less than 64")
 
@@ -900,17 +913,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        user_messages = [
-            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
-        ]
-        chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
-        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
-        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+        tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device)
+        user_messages = _DEFAULT_USER_MESSAGES[:1]
+        input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
-        # Generation with continuous batching
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="flash_attention_2")
-        model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = 30
         model.generation_config.do_sample = False
 
@@ -973,25 +979,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Test that paged flash_attn3 (flash_attn_with_kvcache path) produces same outputs as varlen."""
 
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            attn_implementation="paged|kernels-community/flash-attn3",
-        ).eval()
-
-        # Prepare continuous batching inputs
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        if hasattr(tokenizer, "eos_token"):
-            tokenizer.pad_token = tokenizer.eos_token
-        user_messages = [
-            "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
-            "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
-            "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
-        ]  # fmt: skip
-        chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
-        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
-        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+        tokenizer, model = get_tokenizer_and_model(
+            model_id, "paged|kernels-community/flash-attn3", torch_device, torch.bfloat16
+        )
+        user_messages = _DEFAULT_USER_MESSAGES[:]
+        input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
         gen_config = GenerationConfig(do_sample=False, max_new_tokens=20)
         continuous_batching_config = ContinuousBatchingConfig(
