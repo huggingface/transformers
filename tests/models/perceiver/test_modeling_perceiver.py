@@ -66,7 +66,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import PerceiverImageProcessor
+    from transformers import PerceiverImageProcessorPil
 
 
 class PerceiverModelTester:
@@ -902,7 +902,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification(self):
-        image_processor = PerceiverImageProcessor()
+        image_processor = PerceiverImageProcessorPil()
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
 
@@ -927,7 +927,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_fourier(self):
-        image_processor = PerceiverImageProcessor()
+        image_processor = PerceiverImageProcessorPil()
         model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
         model.to(torch_device)
 
@@ -951,7 +951,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_conv(self):
-        image_processor = PerceiverImageProcessor()
+        image_processor = PerceiverImageProcessorPil()
         model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
         model.to(torch_device)
 
@@ -1019,7 +1019,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
-        image_processor = PerceiverImageProcessor(size={"height": 384, "width": 384})
+        image_processor = PerceiverImageProcessorPil(size={"height": 384, "width": 384})
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
 

@@ -111,9 +111,9 @@ print(f"The predicted class label is: {predicted_class_label}")
 [[autodoc]] MobileNetV1ImageProcessor
     - preprocess
 
-## MobileNetV1ImageProcessorFast
+## MobileNetV1ImageProcessorPil
 
-[[autodoc]] MobileNetV1ImageProcessorFast
+[[autodoc]] MobileNetV1ImageProcessorPil
     - preprocess
 
 ## MobileNetV1Model

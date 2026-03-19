@@ -98,9 +98,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - preprocess
     - post_process_object_detection
 
-## RTDetrImageProcessorFast
+## RTDetrImageProcessorPil
 
-[[autodoc]] RTDetrImageProcessorFast
+[[autodoc]] RTDetrImageProcessorPil
     - preprocess
     - post_process_object_detection
 

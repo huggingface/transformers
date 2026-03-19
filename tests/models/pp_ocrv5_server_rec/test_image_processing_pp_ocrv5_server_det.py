@@ -19,16 +19,12 @@ import numpy as np
 
 from transformers import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from PIL import Image
-
-if is_torchvision_available():
-    from transformers import PPOCRV5ServerRecImageProcessorFast
 
 
 class PPOCRV5ServerRecImageProcessingTester:
@@ -131,9 +127,6 @@ class PPOCRV5ServerRecImageProcessingTester:
 @require_torch
 @require_vision
 class PPOCRV5ServerRecImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    test_slow_image_processor = False
-    fast_image_processing_class = PPOCRV5ServerRecImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PPOCRV5ServerRecImageProcessingTester(self)
@@ -142,6 +135,6 @@ class PPOCRV5ServerRecImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    @unittest.skip(reason="PPOCRV5ServerRecImageProcessorFast does not support 4 channel images yet")
+    @unittest.skip(reason="PPOCRV5ServerRecImageProcessor does not support 4 channel images yet")
     def test_call_numpy_4_channels():
         pass

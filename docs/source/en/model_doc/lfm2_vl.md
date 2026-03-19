@@ -75,9 +75,10 @@ processor.batch_decode(outputs, skip_special_tokens=True)[0]
 
 ```
 
-## Lfm2VlImageProcessorFast
+## Lfm2VlImageProcessor
 
-[[autodoc]] Lfm2VlImageProcessorFast
+[[autodoc]] Lfm2VlImageProcessor
+    - preprocess
 
 ## Lfm2VlProcessor
 

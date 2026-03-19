@@ -2,7 +2,7 @@
 from ..utils import DummyObject, requires_backends
 
 
-class BaseImageProcessorFast(metaclass=DummyObject):
+class TorchvisionBackend(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
