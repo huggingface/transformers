@@ -52,10 +52,15 @@ if __name__ == "__main__":
     results.append(run_and_parse_cb_example("--samples 100 --attn flash_attention_2"))
     results.append(run_and_parse_cb_example("--samples 100 --attn sdpa"))
 
-    # Benchmark with high number of samples
-    results.append(run_and_parse_cb_example("--samples 500"))
-    # Benchmark with async API
+    # Benchmark with high number of samples and synchronous batching
+    results.append(run_and_parse_cb_example("--samples 500 --no-use-async"))
+    # Benchmark with high number of samples and asynchronous batching
     results.append(run_and_parse_cb_example("--samples 500 --use-async"))
+
+    # Benchmark with low number of samples, asynchronous batching and decdode fast path
+    results.append(run_and_parse_cb_example("--samples 32 --max-new-tokens 2048 --use-async"))
+    # Benchmark with low number of samples, asynchronous batching and decdode fast path
+    results.append(run_and_parse_cb_example("--samples 32 --max-new-tokens 2048 --use-async --block-table 32"))
 
     # Benchmark with prefix sharing and compile (best performance, but not reproducible due to compilation)
     results.append(run_and_parse_cb_example("--samples 500 --add-prefix --compile"))

@@ -89,6 +89,7 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_kernels,
     require_non_hpu,
     require_torch,
@@ -629,7 +630,13 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__:
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+        if (
+            "init_range" in key
+            or "initializer_range" in key
+            or "_std" in key
+            or "initializer_factor" in key
+            or ("layer_scale" in key and key != "use_layer_scale")
+        ):
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -3393,6 +3400,22 @@ class ModelTesterMixin:
     def test_flash_attn_3_inference_equivalence_right_padding(self):
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_3", padding_side="right")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_4_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="left")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="right")
+
     def test_attn_implementation_composite_models(self):
         """
         Tests if composite models can receive a dict object as attn_implementation, where each key should be
@@ -3797,6 +3820,12 @@ class ModelTesterMixin:
     def test_flash_attn_3_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    def test_flash_attn_4_can_dispatch_composite_models(self):
+        self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_4")
+
     @require_flash_attn
     @require_torch_accelerator
     @require_bitsandbytes
@@ -3963,6 +3992,13 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_3_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_3")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    def test_flash_attn_4_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_4")
 
     def test_sliding_window_mask(self):
         """Tests that we can control the sliding window attention behavior of a model."""
@@ -4218,9 +4254,9 @@ class ModelTesterMixin:
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
             if hasattr(config, "attention_dropout"):
-                config.attention_dropout = 0
+                config.attention_dropout = 0.0
             if hasattr(config, "attention_probs_dropout_prob"):
-                config.attention_probs_dropout_prob = 0
+                config.attention_probs_dropout_prob = 0.0
 
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
@@ -4462,6 +4498,7 @@ class ModelTesterMixin:
                 self.skipTest(reason="No subconfigs so the test does not make sense")
             # Need to deepcopy here to avoid changing the _attn_implementation in-place
             model = model_class(copy.deepcopy(config))
+            subconfig_keys_seen = set()
 
             for submodule in model.modules():
                 # This is a submodel
@@ -4474,11 +4511,13 @@ class ModelTesterMixin:
                         if (
                             subconfig_from_model_config is not None
                             and subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__
+                            and subconfig_key not in subconfig_keys_seen
                         ):
                             # Since some composite models have different submodels parameterized by 2 of the same config
                             # class instances, we need to check against a list of matching classes, and check that at least
                             # 1 is the exact object (instead of checking immediately for similar object)
                             matching_sub_configs.append(subconfig_from_model_config)
+                            subconfig_keys_seen.add(subconfig_key)
 
                     # Both should be exactly the same object, that is when instantiating the submodel when should
                     # absolutely not copy the subconfig
@@ -4695,6 +4734,13 @@ class ModelTesterMixin:
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
                     for source_pattern in conversion.source_patterns:
+                        # Some patterns are written for gen-model only and won't be applied on base model
+                        if "lm_head" in source_pattern and model_class not in [
+                            *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+                        ]:
+                            continue
+
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
@@ -5221,30 +5267,36 @@ class ModelTesterMixin:
                 outputs = model.get_audio_features(**inputs_dict)
 
             if return_dict in (True, None):
-                self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutputWithPooling"
+                )
                 self.assertTrue(
                     hasattr(outputs, "last_hidden_state"),
-                    "get_audio_features() must return a BaseModelOutput with last_hidden_state",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with last_hidden_state",
                 )
                 self.assertTrue(
                     hasattr(outputs, "pooler_output"),
-                    "get_audio_features() must return a BaseModelOutput with pooler_output",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
                 self.assertTrue(
                     hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutput with hidden_states",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
                 )
                 if self.has_attentions:
                     self.assertTrue(
                         hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutput with attentions",
+                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
                     )
 
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = inputs_dict["input_features"].shape[0]
+
+                if "input_features" in inputs_dict:
+                    batch_size = inputs_dict["input_features"].shape[0]
+                else:
+                    batch_size = inputs_dict["input_values"].shape[0]
                 self.assertEqual(
                     last_hidden_state_shape[0],
                     batch_size,

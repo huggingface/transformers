@@ -13,67 +13,32 @@
 # limitations under the License.
 """VideoMAE model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="MCG-NJU/videomae-base")
+@strict(accept_kwargs=True)
 class VideoMAEConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VideoMAEModel`]. It is used to instantiate a
-    VideoMAE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VideoMAE
-    [MCG-NJU/videomae-base](https://huggingface.co/MCG-NJU/videomae-base) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        num_frames (`int`, *optional*, defaults to 16):
-            The number of frames in each video.
-        tubelet_size (`int`, *optional*, defaults to 2):
-            The number of tubelets.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        use_mean_pooling (`bool`, *optional*, defaults to `True`):
-            Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the decoder.
-        decoder_hidden_size (`int`, *optional*, defaults to 384):
-            Dimensionality of the decoder.
-        decoder_num_hidden_layers (`int`, *optional*, defaults to 4):
-            Number of hidden layers in the decoder.
-        decoder_intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
-        norm_pix_loss (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the target patch pixels.
+    num_frames (`int`, *optional*, defaults to 16):
+        The number of frames in each video.
+    tubelet_size (`int`, *optional*, defaults to 2):
+        The number of tubelets.
+    use_mean_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
+    decoder_num_attention_heads (`int`, *optional*, defaults to 6):
+        Number of attention heads for each attention layer in the decoder.
+    decoder_hidden_size (`int`, *optional*, defaults to 384):
+        Dimensionality of the decoder.
+    decoder_num_hidden_layers (`int`, *optional*, defaults to 4):
+        Number of hidden layers in the decoder.
+    decoder_intermediate_size (`int`, *optional*, defaults to 1536):
+        Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
+    norm_pix_loss (`bool`, *optional*, defaults to `True`):
+        Whether to normalize the target patch pixels.
 
     Example:
 
@@ -92,56 +57,27 @@ class VideoMAEConfig(PreTrainedConfig):
 
     model_type = "videomae"
 
-    def __init__(
-        self,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        num_frames=16,
-        tubelet_size=2,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        qkv_bias=True,
-        use_mean_pooling=True,
-        decoder_num_attention_heads=6,
-        decoder_hidden_size=384,
-        decoder_num_hidden_layers=4,
-        decoder_intermediate_size=1536,
-        norm_pix_loss=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.tubelet_size = tubelet_size
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.use_mean_pooling = use_mean_pooling
-
-        self.decoder_num_attention_heads = decoder_num_attention_heads
-        self.decoder_hidden_size = decoder_hidden_size
-        self.decoder_num_hidden_layers = decoder_num_hidden_layers
-        self.decoder_intermediate_size = decoder_intermediate_size
-        self.norm_pix_loss = norm_pix_loss
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    num_frames: int = 16
+    tubelet_size: int = 2
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    qkv_bias: bool = True
+    use_mean_pooling: bool = True
+    decoder_num_attention_heads: int = 6
+    decoder_hidden_size: int = 384
+    decoder_num_hidden_layers: int = 4
+    decoder_intermediate_size: int = 1536
+    norm_pix_loss: bool = True
 
 
 __all__ = ["VideoMAEConfig"]

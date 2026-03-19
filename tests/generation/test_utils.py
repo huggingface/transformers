@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -61,6 +62,7 @@ from transformers.utils.generic import is_flash_attention_requested
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         AutoModelForCausalLM,
@@ -1796,6 +1798,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1894,6 +1897,14 @@ class GenerationTesterMixin:
     def test_eager_matches_fa3_generate(self):
         """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_3")
+
+    @pytest.mark.flash_attn_4_test
+    @require_flash_attn_4
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa4_generate(self):
+        """Tests that generate has equivalent outputs with FA4 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_4")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -2005,6 +2016,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2150,6 +2162,22 @@ class GenerationTesterMixin:
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(
             attn_implementation="flash_attention_3", fa_kwargs=True
+        )
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_4")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_4", fa_kwargs=True
         )
 
     def _get_custom_4d_mask_test_data(self):
@@ -3392,29 +3420,30 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenized_inputs = tokenizer([text], return_tensors="pt")
         input_ids = tokenized_inputs.input_ids.to(torch_device)
 
-        # Traditional way of generating text
-        outputs_normal = model.generate(input_ids)
-        self.assertEqual(outputs_normal.shape, (1, 20 + input_ids.shape[1]))
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            # Traditional way of generating text
+            outputs_normal = model.generate(input_ids)
+            self.assertEqual(outputs_normal.shape, (1, 20 + input_ids.shape[1]))
 
-        # Should be different with token_type_ids
-        outputs_tti = model.generate(
-            input_ids,
-            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
-        )
-        with self.assertRaises(AssertionError):
-            self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
+            # Should be different with token_type_ids
+            outputs_tti = model.generate(
+                input_ids,
+                token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+            )
+            with self.assertRaises(AssertionError):
+                self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
 
-        # Assistant model
-        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+            # Assistant model
+            assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+            assistant.config.pad_token_id = tokenizer.eos_token_id
 
-        # If assisted generation passes model_kwargs correctly, should be same as previous
-        outputs_assisted = model.generate(
-            input_ids,
-            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
-            assistant_model=assistant,
-        )
-        self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
+            # If assisted generation passes model_kwargs correctly, should be same as previous
+            outputs_assisted = model.generate(
+                input_ids,
+                token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+                assistant_model=assistant,
+            )
+            self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
@@ -3668,6 +3697,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
 
+        # TODO Matt: Slightly flaky (~1%) without set_seed - if anyone wants to do
+        #            a deep dive on why, feel free!
+        set_seed(42)
         draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
         target_model = AutoModelForCausalLM.from_pretrained(target_name)
 
@@ -3933,13 +3965,14 @@ class GenerationIntegrationTests(unittest.TestCase):
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(checkpoint).to(torch_device)
-        original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
-        original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
-        self.assertEqual(original_decoded, [expected_output])
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
+            self.assertEqual(original_decoded, [expected_output])
 
-        outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
-        decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
-        self.assertEqual(decoded_assisted, [expected_output])
+            outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+            decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
+            self.assertEqual(decoded_assisted, [expected_output])
 
     @slow
     def test_beam_search_advanced_stopping_criteria(self):

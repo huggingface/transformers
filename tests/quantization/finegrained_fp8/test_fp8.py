@@ -386,15 +386,18 @@ class FP8QuantizerTest(unittest.TestCase):
         # we should at least have 1.5 times memory reduction in total
         assert model_size[""] > quantized_model_size[""] * 1.5
 
-    def test_quantized_moe_forward(self):
+    @parameterized.expand(["eager", "batched_mm", "grouped_mm"])
+    def test_quantized_moe_forward(self, experts_implementation):
         """
         Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
         where the indices go over `top_k` as shown within the Minimax M2 model
         """
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
+            experts_implementation=experts_implementation,
             device_map=self.device_map,
         )
+        assert model.config._experts_implementation == experts_implementation
 
         tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
         messages = [

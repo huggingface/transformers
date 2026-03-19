@@ -17,49 +17,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...utils import logging
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
+@strict(accept_kwargs=True)
 class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of the [`Ernie4_5_VLMoeVisionTransformerPretrainedModel`].
-    It is used to instantiate the vision models portion of the complete Ernie4.5-VL Moe model according to the specified
-    arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        depth (`int`, *optional*, defaults to 32):
-            Number of layers (depth) in the model.
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        in_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        temporal_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merge along the temporal dimension.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    temporal_merge_size (`int`, *optional*, defaults to 2):
+        The size used for merge along the temporal dimension.
     """
 
     model_type = "ernie4_5_vl_moe_vision"
     base_config_key = "vision_config"
+
+    depth: int = 32
+
+    hidden_size: int = 1280
+    hidden_act: str = "quick_gelu"
+    num_heads: int = 16
+    in_channels: int = 3
+    patch_size: int | list[int] | tuple[int, int] = 14
+    spatial_merge_size: int = 2
+    initializer_range: float = 0.02
 
     base_model_tp_plan = {
         "blocks.*.attn.qkv": "colwise",
@@ -67,105 +54,27 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
         "blocks.*.mlp.fc1": "colwise",
         "blocks.*.mlp.fc2": "rowwise",
     }
-
-    def __init__(
-        self,
-        depth=32,
-        hidden_size=1280,
-        hidden_act="quick_gelu",
-        intermediate_size=4 * 1280,
-        num_heads=16,
-        in_channels=3,
-        patch_size=14,
-        spatial_merge_size=2,
-        temporal_merge_size=2,
-        rms_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.initializer_range = initializer_range
-
-        self.intermediate_size = intermediate_size
-        self.temporal_merge_size = temporal_merge_size
-        self.rms_norm_eps = rms_norm_eps
+    intermediate_size: int = 4 * 1280
+    temporal_merge_size: int = 2
+    rms_norm_eps: float = 1e-6
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
+@strict(accept_kwargs=True)
 class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_VLMoeTextModel`]. It is used to instantiate a
-    the text model portion of the complete Ernie4.5-VL Moe model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 103424):
-            Vocabulary size of the Ernie 4.5 VL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Ernie4_5_VLMoeTextModel`]
-        hidden_size (`int`, *optional*, defaults to 2560):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 12288):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `4`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        use_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in any of the projections including mlp and attention for example.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        mlp_layer_types (`list`, *optional*):
-            MLP (Moe vs Dense) pattern for each layer.
-        moe_intermediate_size (`list[int]`, *optional*, defaults to `[1536, 512]`):
-            Intermediate size of the routed experts; differs between text (first) and image (second) experts.
-        moe_k (`int`, *optional*, defaults to 6):
-            Number of selected experts.
-        moe_num_experts (`int`, *optional*, defaults to 64):
-            Number of routed experts.
-        moe_num_shared_experts (`int`, *optional*, defaults to 2):
-            The number of experts that are shared for all MoE forwards.
-        moe_norm_min (`float`, *optional*, defaults to 1e-12):
-            Minimum division value during routing normalization.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabling this will also
-            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        pad_token_id (`int`, *optional*):
-            Padding token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
-        bos_token_id (`int`, *optional*):
-            Beginning of stream token id.
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use a bias in any of the projections including mlp and attention for example
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
+    moe_k (`int`, *optional*, defaults to 6):
+        Number of selected experts.
+    moe_num_experts (`int`, *optional*, defaults to 64):
+        Number of routed experts.
+    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+        The number of experts that are shared for all MoE forwards.
+    moe_norm_min (`float`, *optional*, defaults to 1e-12):
+        Minimum division value during routing normalization.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -190,101 +99,64 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
+    vocab_size: int = 103424
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    hidden_size: int = 2560
+    intermediate_size: int = 12288
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 20
+    num_key_value_heads: int | None = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    use_bias: int | None = False
+    moe_intermediate_size: list[int] | None = None
+    moe_k: int | None = 6
+    moe_num_experts: int | None = 64
+    moe_num_shared_experts: int | None = 2
+    moe_norm_min: float | None = 1e-12
+    output_router_logits: bool | None = False
+    router_aux_loss_coef: float | None = 0.001
     base_config_key = "text_config"
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size=103424,
-        hidden_size=2560,
-        intermediate_size=12288,
-        num_hidden_layers=28,
-        num_attention_heads=20,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        use_bias=False,
-        rope_parameters=None,
-        mlp_layer_types=None,
-        moe_intermediate_size=None,
-        moe_k=6,
-        moe_num_experts=64,
-        moe_num_shared_experts=2,
-        moe_norm_min=1e-12,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        pad_token_id=None,
-        eos_token_id=None,
-        bos_token_id=None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.use_bias = use_bias
-        self.rope_parameters = rope_parameters
+    mlp_layer_types: list[str] | None = None
 
-        # Default to MoE from the second layer and on
-        self.mlp_layer_types = mlp_layer_types
+    def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
-        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
-        self.moe_intermediate_size = moe_intermediate_size
         if self.moe_intermediate_size is None:
             self.moe_intermediate_size = [1536, 512]
-        self.moe_k = moe_k
-        self.moe_num_experts = moe_num_experts
-        self.moe_num_shared_experts = moe_num_shared_experts
-        self.moe_norm_min = moe_norm_min
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
 
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
+@strict(accept_kwargs=True)
 class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Ernie4_5_VLMoeModel`]. It is used to instantiate a
-    Ernie4.5-VL MoE model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Ernie 4.5 VL 28B A3B [baidu/ERNIE-4.5-VL-28B-A3B-PT](https://huggingface.co/baidu/ERNIE-4.5-VL-28B-A3B-PT).
+    image_start_token_id (`int`, *optional*, defaults to 101304):
+        The image token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 101305):
+        The image token index to encode the end of image.
+    image_token_id (`int`, *optional*, defaults to 100295):
+        The image token index to encode the image prompt.
+    video_start_token_id (`int`, *optional*, defaults to 101306):
+        The video token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 101307):
+        The video token index to encode the end of video.
+    video_token_id (`int`, *optional*, defaults to 103367):
+        The video token index to encode the video prompt.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Ernie4_5_VLMoeTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Ernie4_5_VLMoeVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_start_token_id (`int`, *optional*, defaults to 101304):
-            The image token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 101305):
-            The image token index to encode the end of image.
-        image_token_id (`int`, *optional*, defaults to 100295):
-            The image token index to encode the image prompt.
-        video_start_token_id (`int`, *optional*, defaults to 101306):
-            The video token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 101307):
-            The video token index to encode the end of video.
-        video_token_id (`int`, *optional*, defaults to 103367):
-            The video token index to encode the video prompt.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
+    Example:
 
     ```python
     >>> from transformers import Ernie4_5_VLMoeForConditionalGeneration, Ernie4_5_VLMoeConfig
@@ -303,42 +175,28 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     sub_configs = {"vision_config": Ernie4_5_VLMoeVisionConfig, "text_config": Ernie4_5_VLMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_start_token_id=101304,
-        image_end_token_id=101305,
-        image_token_id=100295,
-        video_start_token_id=101306,
-        video_end_token_id=101307,
-        video_token_id=103367,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, Ernie4_5_VLMoeVisionConfig):
-            self.vision_config = vision_config
-        elif vision_config is None:
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_start_token_id: int = 101304
+    image_end_token_id: int = 101305
+    image_token_id: int = 100295
+    video_start_token_id: int = 101306
+    video_end_token_id: int = 101307
+    video_token_id: int = 103367
+    tie_word_embeddings: bool = True
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(text_config, Ernie4_5_VLMoeTextConfig):
-            self.text_config = text_config
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.image_token_id = image_token_id
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.video_token_id = video_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):

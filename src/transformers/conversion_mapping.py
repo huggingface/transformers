@@ -63,11 +63,92 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
+    "paligemma": "llava",
+    "aya_vision": "llava",
+    "fuyu": "llava",
+    "got_ocr2": "llava",
+    "shieldgemma2": "llava",
+    "gemma3": "llava",
+    "internvl": "llava",
+    "llava_next": "llava",
+    "llava_next_video": "llava",
+    "llava_onevision": "llava",
+    "vipllava": "llava",
+    "video_llava": "llava",
+    "mistral3": "llava",
+    "mllama": "llava",
+    "qwen2_5_vl": "qwen2_vl",
+    "sam3_tracker_video": "sam3_tracker",
 }
 
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "llava": [
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
+            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+        ],
+        "colpali": [
+            WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
+            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
+        ],
+        "emu3": [
+            WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
+            WeightRenaming(source_patterns=r"text_model.lm_head", target_patterns="lm_head"),
+        ],
+        "paddleocr_vl": [
+            WeightRenaming(source_patterns=r"mlp_AR", target_patterns="model.projector"),
+            WeightRenaming(
+                source_patterns=r"^model(?!(\.visual|\.projector|\.language_model))",
+                target_patterns="model.language_model",
+            ),
+        ],
+        "qwen2_vl": [
+            WeightRenaming(
+                source_patterns=r"(?<!_)model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
+        "colqwen2": [
+            WeightRenaming(
+                source_patterns=r"vlm.model(?!\.(language_model|visual))",
+                target_patterns="vlm.model.language_model",
+            ),
+        ],
+        "gemma3n_text": [
+            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
+        ],
+        "timm_wrapper": [
+            # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
+            # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            WeightRenaming(
+                source_patterns=r"(.+)",
+                target_patterns=r"timm_model.\1",
+            )
+        ],
+        "pi0": [
+            WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
+            WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_in", target_patterns="embed_action_time.action_time_mlp_in"
+            ),
+            WeightRenaming(
+                source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
+            ),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
+            WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
+            # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.gemma_expert.lm_head",
+                target_patterns="model.dit.embed_tokens",
+            ),
+            WeightRenaming(
+                source_patterns=r"^paligemma_with_expert.paligemma.lm_head",
+                target_patterns="model.vlm.language_model.embed_tokens",
+            ),
+        ],
+        "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
+        "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
+        "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
@@ -83,6 +164,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
             WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
             WeightRenaming(r"(?<!vision_model\.)encoder.layers.", "encoder.text_model.layers."),
+        ],
+        "sam3_tracker": [
+            WeightRenaming(
+                source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
+            ),
+            WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
             WeightRenaming("^embed_tokens.", "text_model.embed_tokens."),
@@ -205,6 +292,7 @@ def _build_checkpoint_conversion_mapping():
             # language model
             WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
             WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
+            WeightRenaming(r"(?<!_)(?<!\w)norm\.", "language_model.norm."),
             WeightConverter(
                 source_patterns="mlp.gate.weight_1",
                 target_patterns="mlp.vision_moe.gate.weight",
@@ -289,6 +377,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "nemotron_h": [
+            WeightRenaming("backbone.", "model."),
+            WeightRenaming("embedding.weight", "embeddings.weight"),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.up_proj.weight",
+                ],
+                target_patterns="mixer.experts.up_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "mixer.experts.*.down_proj.weight",
+                ],
+                target_patterns="mixer.experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
@@ -304,14 +410,6 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "timm_wrapper": [
-            # Simply add the prefix `timm_model`
-            # TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
-            WeightRenaming(
-                source_patterns=r"(.+)",
-                target_patterns=r"timm_model.\1",
-            )
-        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",
@@ -321,6 +419,22 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="LayerNorm.beta",
                 target_patterns="LayerNorm.bias",
             ),
+        ],
+        "jina_embeddings_v3": [
+            WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
+            WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
+            WeightConverter(
+                source_patterns="mixer.Wqkv",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
+            WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
     }
     mapping["legacy"] += [
@@ -334,9 +448,21 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
-    mapping["ernie4_5_moe"] += [
-        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    mapping["ernie4_5_moe"] = [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias"),
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+        ),
+        WeightConverter(
+            source_patterns="mlp.experts.*.down_proj.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+        ),
     ]
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
@@ -344,6 +470,22 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    mapping["solar_open"] = [
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+        ),
+        WeightConverter(
+            source_patterns="mlp.experts.*.down_proj.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+        ),
+    ]
 
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
@@ -378,34 +520,7 @@ def register_checkpoint_conversion_mapping(
 
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "colpali",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "shieldgemma2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-    "sam3_video",
-    "sam3",
-    "sam3_tracker",
-    "sam3_tracker_video",
-    "paddleocrvl",
-    # NOTE: Slightly different from `model_type` (to follow naming conventions in vllm/sglang)
-    "ernie4_5_vlmoe",
-    "ernie4_5_vl_moe",  # BC alias
-    "detr",
-]
+VLMS = ["detr"]
 
 
 def get_model_conversion_mapping(
@@ -418,6 +533,7 @@ def get_model_conversion_mapping(
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
     """
+    # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
     # Load models with explicit, user-provided key mapping

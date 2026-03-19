@@ -113,8 +113,8 @@ jobs:
             python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
             echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
           elif [ "$job" = "run_trainer_and_fsdp_gpu" ]; then
-            echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
-            echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
+            echo "folder_slices=[['trainer'], ['fsdp'], ['ddp']]" >> $GITHUB_OUTPUT
+            echo "slice_ids=[0, 1, 2]" >> $GITHUB_OUTPUT
           fi
 
       - id: set-matrix-quantization
@@ -159,7 +159,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
-        slice_id: [0, 1]
+        slice_id: [0, 1, 2]
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
@@ -403,7 +403,7 @@ jobs:
       - name: Run all tests on GPU
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          python3 -m pytest -v --make-reports="${machine_type}_run_torch_cuda_extensions_gpu_test_reports" tests/deepspeed tests/extended
+          script -q -c "python3 -m pytest -v -rsfE --make-reports=${machine_type}_run_torch_cuda_extensions_gpu_test_reports tests/trainer/distributed/test_trainer_distributed_deepspeed.py" test_outputs.txt
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -449,7 +449,7 @@ jobs:
         working-directory: /transformers
         env:
           commit_sha: ${{ inputs.commit_sha || github.sha }}
-        run: git fetch && git checkout "$commit_sha"
+        run: git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers

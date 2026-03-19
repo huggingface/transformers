@@ -43,12 +43,7 @@ class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWith
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
-    _checkpoint_conversion_mapping = {
-        "model.language_model.model": "model.model.language_model",
-        "model.vision_tower": "model.model.vision_tower",
-        "model.multi_modal_projector": "model.model.multi_modal_projector",
-        "model.language_model.lm_head": "model.lm_head",
-    }
+    base_model_prefix = "model"
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
@@ -78,7 +73,6 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -115,7 +109,6 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             token_type_ids=token_type_ids,
-            cache_position=cache_position,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,

@@ -628,8 +628,9 @@ class RotaryEmbeddingConfigMixin:
     """
 
     default_theta = 10_000.0
+    ignore_keys_at_rope_validation = set()
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -645,13 +646,9 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-            ignore_keys_at_rope_validation = (
-                set() if ignore_keys_at_rope_validation is None else set(ignore_keys_at_rope_validation)
-            )
-            ignore_keys_at_rope_validation = ignore_keys_at_rope_validation | {"partial_rotary_factor"}
+            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | {"partial_rotary_factor"}
 
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
     def standardize_rope_params(self):
@@ -702,11 +699,11 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
+    def validate_rope(self: "PreTrainedConfig"):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
-        rope_parameters_dict = self.rope_parameters
+        rope_parameters_dict = getattr(self, "rope_parameters", None)
         if rope_parameters_dict is None:
             return
 
@@ -723,7 +720,7 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=ignore_keys)
+                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
@@ -942,4 +939,4 @@ def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: set 
         FutureWarning,
     )
     config.standardize_rope_params()
-    config.validate_rope(ignore_keys=ignore_keys)
+    config.validate_rope()
