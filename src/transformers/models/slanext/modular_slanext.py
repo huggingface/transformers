@@ -40,9 +40,7 @@ from ..got_ocr2.modeling_got_ocr2 import (
 )
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/SLANeXt_wired_safetensors"
-)
+@auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
 class SLANeXtVisionConfig(GotOcr2VisionConfig):
     image_size: int = 512
 
@@ -351,9 +349,9 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
 
         img_u8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
         img_i32 = img_u8.to(torch.int32)  # (C, H, W)
-        x_left = src_x_floor.long()   # (target_w,)
+        x_left = src_x_floor.long()  # (target_w,)
         x_right = (src_x_floor + 1).long()  # (target_w,)  safe: src_x_floor <= width-2
-        y_top = src_y_floor.long()    # (target_h,)
+        y_top = src_y_floor.long()  # (target_h,)
         y_bottom = (src_y_floor + 1).long()  # (target_h,)
         # gather 4 neighbours: (C, target_h, target_w)
         p00 = img_i32[:, y_top[:, None], x_left[None, :]]
@@ -365,7 +363,9 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
         weight_y_t_ = weight_y_t.view(1, target_height, 1)
         weight_x_r_ = weight_x_r.view(1, 1, target_width)
         weight_x_l_ = weight_x_l.view(1, 1, target_width)
-        val = weight_y_t_ * (weight_x_l_ * p00 + weight_x_r_ * p10) + weight_y_b_ * (weight_x_l_ * p01 + weight_x_r_ * p11)
+        val = weight_y_t_ * (weight_x_l_ * p00 + weight_x_r_ * p10) + weight_y_b_ * (
+            weight_x_l_ * p01 + weight_x_r_ * p11
+        )
         val = (val + (1 << 21)) >> 22
         result = val.clamp(0, 255).to(torch.uint8)  # (B*C, target_h, target_w)
 
