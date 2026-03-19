@@ -402,7 +402,7 @@ Every event contains at minimum a `status` and `model` field. Additional fields 
 |-------|-------------|-------------|
 | `status` | Always | `loading`, `ready`, or `error` |
 | `model` | Always | Canonical `model_id@revision` |
-| `stage` | `status == "loading"` | Current loading stage |
+| `stage` | `status == "loading"` | One of `processor`, `config`, `download`, `weights` (see stages below) |
 | `progress` | `download` and `weights` stages | Object with `current` and `total` (integer or null) |
 | `cached` | `status == "ready"` | `true` if the model was already in memory |
 | `message` | `status == "error"` | Error description |
