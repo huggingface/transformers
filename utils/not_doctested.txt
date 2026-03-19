@@ -62,7 +62,6 @@ docs/source/en/model_doc/bloom.md
 docs/source/en/model_doc/bridgetower.md
 docs/source/en/model_doc/camembert.md
 docs/source/en/model_doc/canine.md
-docs/source/en/model_doc/character_bert.md
 docs/source/en/model_doc/chinese_clip.md
 docs/source/en/model_doc/clap.md
 docs/source/en/model_doc/clip.md

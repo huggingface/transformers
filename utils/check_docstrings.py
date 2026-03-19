@@ -166,7 +166,6 @@ OBJECTS_TO_IGNORE = {
     "CamembertModel",
     "CamembertTokenizerFast",
     "CanineModel",
-    "CharacterBertModel",
     "CanineTokenizer",
     "ChineseCLIPTextModel",
     "ConditionalDetrImageProcessor",
