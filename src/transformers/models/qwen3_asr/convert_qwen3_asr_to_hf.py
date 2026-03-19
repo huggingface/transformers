@@ -20,7 +20,6 @@ python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py \
 ```
 """
 import argparse
-import json
 import logging
 import re
 import shutil

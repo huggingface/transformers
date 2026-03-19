@@ -33,6 +33,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeThinkerTextModel,
     Qwen3OmniMoeThinkerTextRMSNorm,
     Qwen3OmniMoeThinkerTextRotaryEmbedding,
+    SinusoidsPositionEmbedding,
     _get_feat_extract_output_lengths,
 )
 
@@ -332,6 +333,22 @@ class Qwen3ASRConfig(PreTrainedConfig):
         super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
 
 
+    @property
+    def num_attention_heads(self):
+        return self.thinker_config.text_config.num_attention_heads
+
+    @property
+    def hidden_size(self):
+        return self.thinker_config.text_config.hidden_size
+
+    @property
+    def vocab_size(self):
+        return self.thinker_config.text_config.vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self.thinker_config.text_config.vocab_size = value
+
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -485,6 +502,21 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
         "attentions": Qwen3ASRTextAttention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        if isinstance(module, SinusoidsPositionEmbedding):
+            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
+            inv_timescales = torch.exp(
+                -log_timescale_increment * torch.arange(module.channels // 2).float()
+            )
+            scaled_time = torch.arange(module.length)[:, None] * inv_timescales[None, :]
+
+            init.copy_(
+                module.positional_embedding,
+                torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            )
 
 class Qwen3ASRAudioEncoder(Qwen3OmniMoeAudioEncoder):
     pass
@@ -495,7 +527,6 @@ class Qwen3ASRThinkerTextRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding)
         super().__init__()
         self.rope_type = config.rope_parameters["rope_type"]
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
-
 
 class Qwen3ASRThinkerTextMLP(Qwen3OmniMoeThinkerTextMLP):
     pass
@@ -513,7 +544,7 @@ class Qwen3ASRThinkerTextAttention(Qwen3OmniMoeThinkerTextAttention):
 class Qwen3ASRThinkerTextModel(Qwen3OmniMoeThinkerTextModel):
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRTextAttention,
+        "attentions": Qwen3ASRThinkerTextAttention,
     }
 
     def __init__(self, config: Qwen3ASRTextConfig):
@@ -608,7 +639,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     _no_split_modules = ["Qwen3ASRAudioEncoder", "Qwen3ASRThinkerTextDecoderLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRTextAttention,
+        "attentions": Qwen3ASRThinkerTextAttention,
     }
 
     def __init__(self, config: Qwen3ASRConfig):

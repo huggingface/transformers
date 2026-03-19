@@ -320,5 +320,21 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
         super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, **kwargs)
 
+    @property
+    def num_attention_heads(self):
+        return self.thinker_config.text_config.num_attention_heads
+
+    @property
+    def hidden_size(self):
+        return self.thinker_config.text_config.hidden_size
+
+    @property
+    def vocab_size(self):
+        return self.thinker_config.text_config.vocab_size
+
+    @vocab_size.setter
+    def vocab_size(self, value):
+        self.thinker_config.text_config.vocab_size = value
+
 
 __all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRTextConfig", "Qwen3ASRConfig"]
