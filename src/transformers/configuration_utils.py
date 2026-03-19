@@ -26,12 +26,12 @@ from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 
-from .tokenization_utils_base import PreTrainedTokenizer
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
@@ -190,7 +190,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
 
     # Tokenizer kwargs
-    tokenizer_class: str | PreTrainedTokenizer | None = None
+    tokenizer_class: str | PreTrainedTokenizerBase | None = None
 
     def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
