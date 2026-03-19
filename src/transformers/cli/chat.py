@@ -47,7 +47,6 @@ if is_rich_available():
     from rich.live import Live
     from rich.markdown import Markdown
     from rich.progress import BarColumn, Progress, ProgressColumn, TextColumn, TimeElapsedColumn
-    from rich.table import Column
     from rich.text import Text
 
 DEFAULT_HTTP_ENDPOINT = {"hostname": "localhost", "port": 8000}
@@ -225,14 +224,24 @@ class RichInterface:
             "weights": "Loading into memory",
         }
 
+        # Include the model name prefix in descriptions only when the terminal is wide enough.
+        # The bar, stats, and elapsed columns need ~70 chars; the model prefix needs len(model)+5.
+        show_model_prefix = self._console.width >= len(model) + 5 + 70
+
+        def _label(stage_key):
+            stage_text = stage_labels.get(stage_key, stage_key)
+            if show_model_prefix:
+                return f"{model}  →  {stage_text}"
+            return stage_text
+
         progress = Progress(
-            TextColumn("[bold]{task.description}", table_column=Column(width=50, no_wrap=True)),
+            TextColumn("[bold]{task.description}"),
             BarColumn(bar_width=40),
             StatsColumn(),
             TimeElapsedColumn(),
             console=self._console,
         )
-        task_id = progress.add_task(f"{model}  →  Starting", total=None)
+        task_id = progress.add_task(_label("processor"), total=None)
         cached = False
 
         with Live(progress, console=self._console, transient=True):
@@ -252,7 +261,7 @@ class RichInterface:
                 if status == "loading":
                     stage = event.get("stage")
                     prog = event.get("progress")
-                    label = f"{model}  →  {stage_labels.get(stage, stage)}"
+                    label = _label(stage)
 
                     if prog:
                         unit = "bytes" if stage == "download" else "items"
