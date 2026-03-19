@@ -183,6 +183,18 @@ class IsaacConfig(PretrainedConfig):
 
     This configuration corresponds to checkpoints such as
     [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+
+    Args:
+        vision_config (`IsaacVisionConfig`, *optional*):
+            Configuration for the Isaac vision tower. If unset, the default [`IsaacVisionConfig`] is used.
+        text_config (`IsaacTextConfig` or `dict`, *optional*):
+            Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
+        vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
+            Rescale factor applied by the image processor before normalization.
+        max_sequence_length (`int`, *optional*, defaults to 16384):
+            Maximum multimodal sequence length produced by the processor and expected by the model.
+        vision_token (`str`, *optional*, defaults to `"<image>"`):
+            Placeholder string inserted into text prompts to mark image positions.
     """
 
     model_type = "isaac"

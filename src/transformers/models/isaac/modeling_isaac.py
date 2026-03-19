@@ -391,10 +391,8 @@ def pixel_shuffle_padded(
             Spatial down-sampling factor.
 
     Returns:
-        Tuple of:
-            - pixel-shuffled embeddings `(num_images, max_tokens, hidden_size * scale_factor**2)`
-            - attention mask `(num_images, max_tokens)`
-            - per-image valid token lengths `(num_images,)`
+        `torch.Tensor`: Pixel-shuffled embeddings of shape
+        `(num_images, max_tokens, hidden_size * scale_factor**2)`.
     """
     num_images, max_patches, embed_dim = x.shape
     output_dim = embed_dim * scale_factor * scale_factor
@@ -1390,15 +1388,8 @@ class IsaacModel(PreTrainedModel):
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
-        can_compute_mrope = (
-            mm_token_type_ids is not None
-            and mm_token_type_ids.eq(1).any()
-            and image_token_grids is not None
-            and image_token_offsets is not None
-            and image_token_lengths is not None
-        )
 
-        if can_compute_mrope and past_seen_tokens == 0:
+        if image_token_lengths is not None and image_token_lengths.gt(0).any() and past_seen_tokens == 0:
             position_ids, rope_deltas = self.get_rope_index(
                 mm_token_type_ids=mm_token_type_ids,
                 image_token_grids=image_token_grids,
@@ -1443,7 +1434,14 @@ class IsaacModel(PreTrainedModel):
         position_ids = rope_position.view(1, inputs_embeds.shape[0], -1).expand(3, -1, -1)
         return position_ids + rope_deltas.to(device=inputs_embeds.device).unsqueeze(0)
 
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="""
+        Forward pass with multimodal MRoPE position ids.
+
+        When image placeholders are present, Isaac computes vision features, scatters them into the token
+        embeddings, and runs the shared text backbone on the mixed sequence.
+        """,
+    )
     @can_return_tuple
     @merge_with_config_defaults
     def forward(
@@ -1466,10 +1464,6 @@ class IsaacModel(PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         """
-        Forward pass with MRoPE position embeddings.
-
-        Computes position embeddings once and passes them through all layers.
-
         Args:
             mm_token_type_ids (`torch.LongTensor`, *optional*):
                 Multimodal token type ids aligned with the embedded sequence, shaped `(batch_size, seq_len)`. Isaac
@@ -1723,12 +1717,9 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             inputs_tensor = model_kwargs["input_ids"]
 
         if (
-            len(inputs_tensor.shape) == 2
+            model_kwargs.get("image_token_lengths") is not None
+            and len(inputs_tensor.shape) == 2
             and inputs_tensor.dtype in [torch.int, torch.long]
-            and model_kwargs.get("mm_token_type_ids") is not None
-            and model_kwargs.get("vision_token_grids") is not None
-            and model_kwargs.get("vision_token_offsets") is not None
-            and model_kwargs.get("vision_token_lengths") is not None
         ):
             vision_positions, rope_deltas = self.model.get_rope_index(
                 mm_token_type_ids=model_kwargs["mm_token_type_ids"],
