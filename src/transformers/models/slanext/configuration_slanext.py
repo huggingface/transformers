@@ -25,8 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
 class SLANeXtVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):

@@ -204,7 +204,7 @@ else:
             ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("siglip2", ("Siglip2ImageProcessor", "Siglip2ImageProcessorFast")),
-            ("slanext", ("SLANeXtImageProcessor", "SLANeXtImageProcessorFast")),
+            ("smolvlm", ("SmolVLMImageProcessor", "SmolVLMImageProcessorFast")),
             ("slanext", (None, "SLANeXtImageProcessorFast")),
             ("superglue", ("SuperGlueImageProcessor", "SuperGlueImageProcessorFast")),
             ("superpoint", ("SuperPointImageProcessor", "SuperPointImageProcessorFast")),
