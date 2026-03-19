@@ -107,7 +107,7 @@ _COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
 class IsaacProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
+            "padding": True,
             "return_attention_mask": True,
         },
     }
@@ -838,8 +838,8 @@ class IsaacProcessor(ProcessorMixin):
         text_kwargs = copy.deepcopy(text_kwargs) if text_kwargs is not None else {}
         truncation = text_kwargs.pop("truncation", None)
         max_length = text_kwargs.pop("max_length", None)
-        padding = text_kwargs.pop("padding", False)
-        padding_side = text_kwargs.pop("padding_side", self.tokenizer.padding_side)
+        padding = text_kwargs.pop("padding", True)
+        padding_side = text_kwargs.pop("padding_side", "left")
         return_attention_mask = text_kwargs.pop("return_attention_mask", True)
         pad_to_multiple_of = text_kwargs.pop("pad_to_multiple_of", None)
         text_kwargs.pop("return_tensors", None)
