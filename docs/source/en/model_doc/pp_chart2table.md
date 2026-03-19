@@ -191,9 +191,13 @@ print(result)
 
 [[autodoc]] PPChart2TableConfig
 
-## PPChart2TableImageProcessorFast
+## PPChart2TableImageProcessor
 
-[[autodoc]] PPChart2TableImageProcessorFast
+[[autodoc]] PPChart2TableImageProcessor
+
+## PPChart2TableImageProcessorPil
+
+[[autodoc]] PPChart2TableImageProcessorPil
 
 ## PPChart2TableProcessor
 
