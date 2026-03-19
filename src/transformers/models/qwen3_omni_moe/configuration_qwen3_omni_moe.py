@@ -604,6 +604,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     system_token_id: int = 8948
     user_token_id: int = 872
     assistant_token_id: int = 77091
+    initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.thinker_config is None:
@@ -623,6 +624,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
             logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
         elif isinstance(self.code2wav_config, dict):
             self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
+
+        if self.initializer_range is None:
+            self.initializer_range = self.thinker_config.initializer_range
 
         super().__post_init__(**kwargs)
 
