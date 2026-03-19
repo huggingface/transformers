@@ -55,8 +55,11 @@ def mean_pooling(model_output, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+model_id = "nomic-ai/nomic-embed-text-v1.5"
+revision = "refs/pr/56"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision)
 
 sentences = ['search_document: TSNE is a dimensionality reduction algorithm created by Laurens van Der Maaten']
 encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
@@ -82,8 +85,11 @@ def mean_pooling(model_output, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+model_id = "nomic-ai/nomic-embed-text-v1.5"
+revision = "refs/pr/56"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision)
 
 sentences = ['search_query: Who is Laurens van Der Maaten?']
 encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
@@ -109,8 +115,11 @@ def mean_pooling(model_output, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+model_id = "nomic-ai/nomic-embed-text-v1.5"
+revision = "refs/pr/56"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision)
 
 sentences = ['clustering: the quick brown fox']
 encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
@@ -136,8 +145,11 @@ def mean_pooling(model_output, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+model_id = "nomic-ai/nomic-embed-text-v1.5"
+revision = "refs/pr/56"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision)
 
 sentences = ['classification: the quick brown fox']
 encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
