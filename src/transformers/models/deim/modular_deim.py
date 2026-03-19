@@ -452,9 +452,9 @@ class DeimConfig(PretrainedConfig):
         )
 
 
-
 class DEIMMultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
     pass
+
 
 class DEIMGate(DFineGate):
     pass
@@ -484,7 +484,6 @@ class DEIMEncoderLayer(DFineEncoderLayer):
     pass
 
 
-
 class DEIMPreTrainedModel(DFinePreTrainedModel):
     pass
 
@@ -497,12 +496,9 @@ class DEIMDecoderOutput(DFineDecoderOutput):
     pass
 
 
-
-
-
-
 class DEIMDecoder(DFineDecoder):
     pass
+
 
 class DEIMModel(DFineModel):
     pass
@@ -527,8 +523,10 @@ class DEIMLQE(DFineLQE):
 class DEIMConvNormLayer(DFineConvNormLayer):
     pass
 
+
 class DEIMRepVggBlock(DFineRepVggBlock):
     pass
+
 
 class DEIMCSPRepLayer(DFineCSPRepLayer):
     pass
@@ -537,13 +535,14 @@ class DEIMCSPRepLayer(DFineCSPRepLayer):
 class DEIMRepNCSPELAN4(DFineRepNCSPELAN4):
     pass
 
+
 class DEIMSCDown(DFineSCDown):
     pass
 
 
-
 class DEIMEncoder(DFineEncoder):
     pass
+
 
 class DEIMHybridEncoder(DFineHybridEncoder):
     pass
@@ -567,12 +566,3 @@ __all__ = [
     "DEIMImageProcessor",
     "DEIMImageProcessorFast",
 ]
-
-
-
-
-
-
-
-
-
