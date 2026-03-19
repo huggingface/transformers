@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 from huggingface_hub.dataclasses import strict
 
 from ...feature_extraction_utils import BatchFeature
@@ -21,7 +20,6 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import requires
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2Config
 
 

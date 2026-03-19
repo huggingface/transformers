@@ -38,10 +38,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_ocr_queries(self):
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()
-        conversation = [
-            {"role": "system", "content": []},
-            {"role": "user", "content": []}
-        ]
+        conversation = [{"role": "system", "content": []}, {"role": "user", "content": []}]
         inputs = processor.apply_chat_template(
             conversation,
             tokenize=False,
