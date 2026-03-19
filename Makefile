@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style check-repo check-model-rules check-model-rules-pr check-model-rules-all fix-repo test test-examples benchmark codex claude clean-ai
+.PHONY: style typing check-repo fix-repo test test-examples benchmark codex claude clean-ai
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
@@ -16,14 +16,18 @@ style:
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
+
+# Run ty type checker and model structure rules
+typing:
 	python utils/check_types.py $(ty_check_dirs)
+	python utils/check_modeling_structure.py
 
 # Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	python utils/check_types.py $(ty_check_dirs)
+	$(MAKE) typing
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
@@ -33,7 +37,6 @@ check-repo:
 	-python utils/check_docstrings.py
 	-python utils/check_dummies.py
 	-python utils/check_repo.py
-	-python utils/check_modeling_structure.py
 	-python utils/check_inits.py
 	-python utils/check_pipeline_typing.py
 	-python utils/check_config_docstrings.py
@@ -49,16 +52,7 @@ check-repo:
 	}
 
 
-check-model-rules:
-	python utils/check_modeling_structure.py --changed-only --base-ref origin/main
 
-
-check-model-rules-pr:
-	python utils/check_modeling_structure.py --changed-only --base-ref origin/main --github-annotations
-
-
-check-model-rules-all:
-	python utils/check_modeling_structure.py
 
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions

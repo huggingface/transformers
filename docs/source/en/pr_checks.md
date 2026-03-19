@@ -92,6 +92,12 @@ Code formatting is applied to all the source files, the examples and the tests u
 make style
 ```
 
+Type checking (via `ty`) and model structure rules are run separately with:
+
+```bash
+make typing
+```
+
 The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
 
 ```bash
