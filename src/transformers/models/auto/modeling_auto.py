@@ -1533,7 +1533,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForMultipleChoice"),
         ("camembert", "CamembertForMultipleChoice"),
         ("canine", "CanineForMultipleChoice"),
-        ("character_bert", "CharacterBertForMultipleChoice"),
         ("convbert", "ConvBertForMultipleChoice"),
         ("data2vec-text", "Data2VecTextForMultipleChoice"),
         ("deberta-v2", "DebertaV2ForMultipleChoice"),
