@@ -194,6 +194,7 @@ else:
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pixtral", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("poolformer", {"torchvision": "PoolFormerImageProcessor", "pil": "PoolFormerImageProcessorPil"}),
+            ("pp_chart2table", (None, "PPChart2TableImageProcessorFast")),
             ("pp_doclayout_v2", {"torchvision": "PPDocLayoutV2ImageProcessor"}),
             ("pp_doclayout_v3", {"torchvision": "PPDocLayoutV3ImageProcessor"}),
             ("pp_lcnet", {"torchvision": "PPLCNetImageProcessor"}),
