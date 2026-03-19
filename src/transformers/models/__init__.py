@@ -366,6 +366,7 @@ if TYPE_CHECKING:
     from .sam3_tracker_video import *
     from .sam3_video import *
     from .sam_hq import *
+    from .sarvam_mla import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *
