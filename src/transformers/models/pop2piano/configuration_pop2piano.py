@@ -56,7 +56,7 @@ class Pop2PianoConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     dense_act_fn: str = "relu"
     is_decoder: bool = False
     tie_word_embeddings: bool = True

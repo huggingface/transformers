@@ -120,7 +120,7 @@ class ReformerConfig(PreTrainedConfig):
     axial_pos_shape: list[int] | tuple[int, ...] = (64, 64)
     axial_pos_embds_dim: list[int] | tuple[int, ...] = (64, 192)
     chunk_size_lm_head: int = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     feed_forward_size: int = 512
     hash_seed: int | None = None
     hidden_act: str = "relu"

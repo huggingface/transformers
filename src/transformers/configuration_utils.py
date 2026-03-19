@@ -26,6 +26,7 @@ from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
 
+from .tokenization_utils_base import PreTrainedTokenizer
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
@@ -189,7 +190,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
 
     # Tokenizer kwargs
-    tokenizer_class: str | None = None
+    tokenizer_class: str | PreTrainedTokenizer | None = None
 
     def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
@@ -1265,3 +1266,18 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 
 # The alias is only here for BC - we did not have the correct CamelCasing before
 PretrainedConfig = PreTrainedConfig
+
+
+def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
+    logger.warning(
+        "`layer_type_validation` is deprecated and will be removed in v5.20. "
+        "Use `PreTrainedConfig.validate_layer_type` instead"
+    )
+
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        raise ValueError(
+            f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
+            f"({len(layer_types)})"
+        )
