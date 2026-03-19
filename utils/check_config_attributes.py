@@ -32,6 +32,8 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "PI0Config": ["vlm_projection_dim"],
+    "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
@@ -47,7 +49,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
-    "RecurrentGemmaConfig": ["block_types"],
+    "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
@@ -73,6 +75,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Sam3VisionConfig": ["backbone_feature_sizes"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
+    "ClvpDecoderConfig": ["add_cross_attention"],
     "SpeechT5HifiGanConfig": ["sampling_rate"],
     "UdopConfig": ["feed_forward_proj"],
     "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
@@ -89,6 +92,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
     "CsmConfig": ["tie_codebooks_embeddings"],
     "DeepseekV2Config": ["norm_topk_prob"],
+    "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
+    "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "SeamlessM4TConfig": True,
     "SeamlessM4Tv2Config": True,
     "ConditionalDetrConfig": True,
@@ -132,10 +137,24 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
     "LwDetrConfig": True,
+    "NemotronHConfig": True,
+    # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
+    "PPChart2TableConfig": True,
+    "PPChart2TableVisionConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
+    # Attr in base `PreTrainedConfig`
+    "chunk_size_feed_forward",
+    "dtype",
+    "id2label",
+    "label2id",
+    "problem_type",
+    "tokenizer_class",
+    "is_encoder_decoder",
+    "output_hidden_states",
+    "return_dict",
     # Inits related
     "initializer_range",
     "init_std",

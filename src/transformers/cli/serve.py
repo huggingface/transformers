@@ -23,7 +23,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
@@ -34,9 +34,15 @@ import typer
 from huggingface_hub import scan_cache_dir
 from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
+from tqdm.auto import tqdm as base_tqdm
 
 import transformers
 from transformers import AutoTokenizer, BitsAndBytesConfig, GenerationConfig, PreTrainedTokenizerBase
+from transformers.generation import (
+    LogitsProcessorList,
+    TextIteratorStreamer,
+)
+from transformers.utils import logging
 from transformers.utils.import_utils import (
     is_fastapi_available,
     is_librosa_available,
@@ -45,12 +51,6 @@ from transformers.utils.import_utils import (
     is_uvicorn_available,
     is_vision_available,
 )
-
-from .. import (
-    LogitsProcessorList,
-    TextIteratorStreamer,
-)
-from ..utils import logging
 
 
 if TYPE_CHECKING:
@@ -291,6 +291,203 @@ def create_generation_config_from_req(
     return generation_config
 
 
+class DownloadAggregator:
+    """Aggregates byte-progress across multiple concurrent download tqdm bars into a single SSE stream.
+
+    huggingface_hub opens one tqdm bar per file shard. This class tracks them all and emits
+    a single aggregate ``{"stage": "download", "progress": {"current": ..., "total": ...}}``
+    event whenever any bar updates.
+    """
+
+    def __init__(self, enqueue: Callable[[dict], None], model_id_and_revision: str):
+        self.enqueue = enqueue
+        self.model = model_id_and_revision
+        self.bars: dict[int, tuple[int, int | None]] = {}  # id -> (current, total)
+        self.last_emitted_current: int | None = None
+
+    def register(self, bar_id: int, total: int | None):
+        self.bars[bar_id] = (0, total)
+        self._emit()
+
+    def update(self, bar_id: int, current: int, total: int | None):
+        self.bars[bar_id] = (current, total)
+        self._emit()
+
+    def close(self, bar_id: int):
+        pass  # keep the bar in _bars so totals remain correct
+
+    def _emit(self):
+        agg_current = sum(c for c, _ in self.bars.values())
+        if agg_current == self.last_emitted_current:
+            return
+        self.last_emitted_current = agg_current
+        totals = [t for _, t in self.bars.values() if t is not None]
+        agg_total = sum(totals) if totals else None
+        self.enqueue(
+            {
+                "status": "loading",
+                "model": self.model,
+                "stage": "download",
+                "progress": {"current": agg_current, "total": agg_total},
+            }
+        )
+
+
+class DownloadProxy:
+    """
+    Leverages the DownloadAggregator in order to have a coherent tqdm wrapper.
+    """
+
+    def __init__(self, wrapped_bar, download_aggregator):
+        self.wrapped_bar = wrapped_bar
+        self.bar_id = id(wrapped_bar)
+        self.download_aggregator = download_aggregator
+
+        self.n = 0
+        self.total = wrapped_bar.total
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped_bar, name)
+
+    def update(self, n=1):
+        if n is None:
+            n = 1
+
+        self.n += n
+        self.download_aggregator.update(self.bar_id, self.n, getattr(self.wrapped_bar, "total", self.total))
+
+        return self.wrapped_bar.update(n)
+
+    def close(self):
+        self.download_aggregator.close(self.bar_id)
+        return self.wrapped_bar.close()
+
+    def __enter__(self):
+        self.wrapped_bar.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        return self.wrapped_bar.__exit__(*a)
+
+    def __iter__(self):
+        count = 0
+        for item in self.wrapped_bar:
+            count += 1
+            self.download_aggregator.update(self.bar_id, count, getattr(self.wrapped_bar, "total", self.total))
+
+            yield item
+
+
+class WeightsProxy:
+    """
+    Wraps the weight-loading tqdm bar to have finer control over how we emit them to the clinet.
+    """
+
+    def __init__(self, wrapped_bar, _callable, model_id_and_revision):
+        self.wrapped_bar = wrapped_bar
+        self.last_emitted = -1
+        self.callable = _callable
+        self.model_id_and_revision = model_id_and_revision
+
+        self.n = 0
+        self.total = wrapped_bar.total
+
+    def __getattr__(self, name):
+        return getattr(self.wrapped_bar, name)
+
+    def _emit(self):
+        if self.n == self.last_emitted:
+            return
+        self.last_emitted = self.n
+
+        self.callable(
+            {
+                "status": "loading",
+                "model": self.model_id_and_revision,
+                "stage": "weights",
+                "progress": {
+                    "current": self.n,
+                    "total": getattr(self.wrapped_bar, "total", self.total),
+                },
+            }
+        )
+
+    def update(self, n=1):
+        if n is None:
+            n = 1
+
+        self.n += n
+        self._emit()
+
+        return self.wrapped_bar.update(n)
+
+    def close(self):
+        return self.wrapped_bar.close()
+
+    def __enter__(self):
+        self.wrapped_bar.__enter__()
+        return self
+
+    def __exit__(self, *a):
+        return self.wrapped_bar.__exit__(*a)
+
+    def __iter__(self):
+        for item in self.wrapped_bar:
+            self.n += 1
+            self._emit()
+
+            yield item
+
+
+def set_tqdm_class(callback, mid):
+    download_aggregator = DownloadAggregator(callback, mid)
+
+    class ProgressTqdm(base_tqdm):
+        """tqdm subclass that routes progress to the correct SSE stage.
+
+        Bars with ``unit="B"`` are download bars (one per file shard) — they are
+        aggregated into a single ``download`` stage stream via ``_DownloadAggregator``.
+        All other bars are weight-loading bars emitted as ``weights`` stage events.
+        """
+
+        def __init__(self, *args, **kwargs):
+            self.sse_unit = kwargs.get("unit") or "it"
+            kwargs["disable"] = True  # suppress server-side display
+            super().__init__(*args, **kwargs)
+            self.n = 0
+            self.last_emitted = -1
+            if self.sse_unit == "B":
+                self._bar_id = id(self)
+                download_aggregator.register(self._bar_id, self.total)
+
+        def update(self, n=1):
+            if n is None:
+                n = 1
+
+            self.n += n
+
+            if self.sse_unit == "B":
+                download_aggregator.update(self._bar_id, self.n, self.total)
+            elif self.n != self.last_emitted:
+                self.last_emitted = self.n
+
+                callback(
+                    {
+                        "status": "loading",
+                        "model": mid,
+                        "stage": "weights",
+                        "progress": {"current": self.n, "total": self.total},
+                    }
+                )
+
+        def close(self):
+            if self.sse_unit == "B":
+                download_aggregator.close(self._bar_id)
+            super().close()
+
+    return ProgressTqdm
+
+
 class ToolState:
     """Lightweight class to keep track of the tool call state."""
 
@@ -348,7 +545,7 @@ class TimedModel:
     def timeout_reached(self):
         if self.timeout_seconds > 0:
             self.delete_model()
-            logger.info(
+            logger.warning(
                 f"{self._name_or_path} was removed from memory after {self.timeout_seconds} seconds of inactivity"
             )
 
@@ -363,8 +560,9 @@ class Serve:
     def __init__(
         self,
         continuous_batching: Annotated[
-            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
-        ] = False,
+            bool | None,
+            typer.Option(help="Whether to use continuous batching for chat completions."),
+        ] = None,
         device: Annotated[
             str,
             typer.Option(
@@ -382,9 +580,7 @@ class Serve:
         ] = False,
         attn_implementation: Annotated[
             str | None,
-            typer.Option(
-                help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
-            ),
+            typer.Option(help="Which attention implementation to use."),
         ] = None,
         quantization: Annotated[
             str | None,
@@ -397,7 +593,7 @@ class Serve:
         ] = 300,
         log_level: Annotated[
             str, typer.Option(help="Logging level as a string. Example: 'info' or 'warning'.")
-        ] = "info",
+        ] = "warning",
         default_seed: Annotated[
             int | None, typer.Option(help="The default seed for torch, should be an integer.")
         ] = None,
@@ -424,12 +620,13 @@ class Serve:
             )
 
         # Save input arguments
+        self.attn_implementation = attn_implementation
         self.continuous_batching = continuous_batching
         self.device = device
+        self.quantization = quantization
+
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
-        self.quantization = quantization
         self.host = host
         self.port = port
         self.model_timeout = model_timeout
@@ -456,6 +653,14 @@ class Serve:
         self.loaded_models: dict[str, TimedModel] = {}
         self.running_continuous_batching_manager: ContinuousBatchingManager | None = None
 
+        # Tracks in-flight model loads for fan-out to multiple SSE subscribers
+        self.loading_subscribers: dict[str, list[asyncio.Queue[str | None]]] = {}
+        self.loading_tasks: dict[str, asyncio.Task] = {}
+
+        # Thread-safety for load_model_and_processor / load_audio_model_and_processor
+        self.model_locks: dict[str, threading.Lock] = {}
+        self.model_locks_guard = threading.Lock()
+
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefill
         self.last_messages = None
@@ -473,10 +678,7 @@ class Serve:
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
-            for model in self.loaded_models.values():
-                model.delete_model()
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=5)
+            self.reset_loaded_models()
 
         app = FastAPI(lifespan=lifespan)
 
@@ -500,6 +702,8 @@ class Serve:
         def chat_completion(request: Request, body: dict):
             self.validate_chat_completion_request(request=body)
 
+            logger.warning(f"[Request received] Model: {body['model']}, CB: {self.continuous_batching}")
+
             if self.continuous_batching:
                 return self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
@@ -508,6 +712,9 @@ class Serve:
         @app.post("/v1/responses")
         def responses(request: dict):
             self.validate_response_request(request=request)
+
+            logger.warning(f"[Request received] Model: {request['model']}, CB: {self.continuous_batching}")
+
             # Support non-streaming mode when `stream=false` is provided
             stream = request.get("stream", True)
             if not stream:
@@ -544,6 +751,96 @@ class Serve:
         def healthcheck():
             return JSONResponse({"status": "ok"})
 
+        @app.post("/load_model")
+        async def load_model(body: dict):
+            model = body.get("model")
+            if model is None:
+                raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
+
+            model_id_and_revision = self.process_model_name(model)
+
+            async def event_publisher():
+                queue: asyncio.Queue[str | None] = asyncio.Queue()
+                model_loaded = model_id_and_revision in self.loaded_models
+                model_not_deleted = model_loaded and not self.loaded_models[model_id_and_revision].is_deleted()
+
+                # Case 1: Model already cached
+                if model_loaded and model_not_deleted:
+                    self.loaded_models[model_id_and_revision].reset_timer()
+                    yield f"data: {json.dumps({'status': 'ready', 'model': model_id_and_revision, 'cached': True})}\n\n"
+                    return
+
+                # Case 2: Load already happening, join existing subscribers
+                if model_id_and_revision in self.loading_tasks:
+                    self.loading_subscribers[model_id_and_revision].append(queue)
+
+                    while True:
+                        item = await queue.get()
+                        if item is None:
+                            break
+                        yield item
+                    return
+
+                # Case 3: First request — start the load task
+                self.loading_subscribers[model_id_and_revision] = [queue]
+                loop = asyncio.get_running_loop()
+
+                def enqueue(payload: dict):
+                    msg = f"data: {json.dumps(payload)}\n\n"
+
+                    def broadcast():
+                        for q in self.loading_subscribers.get(model_id_and_revision, []):
+                            q.put_nowait(msg)
+
+                    loop.call_soon_threadsafe(broadcast)
+
+                download_aggregator = DownloadAggregator(enqueue, model_id_and_revision)
+
+                def streaming_tqdm_hook(factory, args, kwargs):
+                    bar = factory(*args, **kwargs)
+                    desc = kwargs.get("desc") or getattr(bar, "desc", None) or ""
+                    unit = kwargs.get("unit") or getattr(bar, "unit", "it")
+                    total = getattr(bar, "total", kwargs.get("total"))
+
+                    # Only forward byte-progress bars (file downloads) — skip noise like "Fetching N files"
+                    if unit == "B":
+                        download_aggregator.register(id(bar), total)
+                        return DownloadProxy(bar, download_aggregator=download_aggregator)
+
+                    # "Loading weights" bar — emit as stage: "weights" with item-count progress
+                    if desc == "Loading weights":
+                        return WeightsProxy(bar, enqueue, model_id_and_revision)
+
+                    # Other non-byte, non-weights bars (noise) — return unmodified
+                    return bar
+
+                async def run_load():
+                    previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
+                    try:
+                        await asyncio.to_thread(self.load_model_and_processor, model_id_and_revision, enqueue)
+                    except Exception as e:
+                        logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
+                        enqueue({"status": "error", "model": model_id_and_revision, "message": str(e)})
+                    finally:
+                        logging.set_tqdm_hook(previous_hook)
+
+                        def _send_sentinel():
+                            for q in self.loading_subscribers.pop(model_id_and_revision, []):
+                                q.put_nowait(None)
+                            self.loading_tasks.pop(model_id_and_revision, None)
+
+                        loop.call_soon_threadsafe(_send_sentinel)
+
+                self.loading_tasks[model_id_and_revision] = asyncio.create_task(run_load())
+
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    yield item
+
+            return StreamingResponse(event_publisher(), media_type="text/event-stream")
+
         @app.middleware("http")
         async def get_or_set_request_id(request: Request, call_next):
             request_id = request.headers.get(X_REQUEST_ID) or str(uuid.uuid4())
@@ -552,7 +849,7 @@ class Serve:
             response.headers[X_REQUEST_ID] = request_id
             return response
 
-        config = uvicorn.Config(app, host=self.host, port=self.port, log_level=self.log_level)
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info")
         self.server = uvicorn.Server(config)
 
         if self.non_blocking:
@@ -581,11 +878,23 @@ class Serve:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
 
+    def reset_loaded_models(self):
+        """
+        Resets all loaded models.
+        """
+        if self.running_continuous_batching_manager is not None:
+            logger.warning("Resetting the continuous batching manager.")
+            self.running_continuous_batching_manager.stop(block=True, timeout=2)
+            self.running_continuous_batching_manager = None
+        for model in list(self.loaded_models.values()):
+            model.delete_model()
+        self.last_model = None
+
     def _validate_request(
         self,
         request: dict,
         schema: TypedDict,
-        validator: TypeAdapter,
+        validator: "TypeAdapter",
         unused_fields: set,
     ):
         """
@@ -661,10 +970,10 @@ class Serve:
         model: str | None = None,
         role: str | None = None,
         finish_reason: str | None = None,
-        tool_calls: list[ChoiceDeltaToolCall] | None = None,
+        tool_calls: list["ChoiceDeltaToolCall"] | None = None,
         decode_stream: DecodeStream | None = None,
         tokenizer: Optional["PreTrainedTokenizerFast"] = None,
-    ) -> ChatCompletionChunk:
+    ) -> "ChatCompletionChunk":
         """
         Builds a chunk of a streaming OpenAI Chat Completion response.
 
@@ -713,7 +1022,7 @@ class Serve:
         return chunk
 
     @staticmethod
-    def chunk_to_sse_element(chunk: ChatCompletionChunk | BaseModel) -> str:
+    def chunk_to_sse_element(chunk: "ChatCompletionChunk | BaseModel") -> str:
         """
         Builds an event of a streaming OpenAI Response model or a ChatCompletion chunk.
 
@@ -781,7 +1090,7 @@ class Serve:
 
         return generative_models
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using continuous batching.
 
@@ -804,6 +1113,14 @@ class Serve:
                 self.running_continuous_batching_manager = None
 
         model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        # Continuous batching only supports text-only models
+        if self.get_model_modality(model, processor=processor) != Modality.LLM:
+            logger.warning_once(
+                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+            )
+            return self.generate_chat_completion(req)
+
         tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
         generation_config = create_generation_config_from_req(
@@ -826,9 +1143,18 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
+        modality = self.get_model_modality(model, processor=processor)
+        processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
+
         inputs = processor.apply_chat_template(
-            req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
-        ).to(model.device)["input_ids"][0]
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=req.get("tools"),
+            return_tensors="pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        inputs = inputs["input_ids"][0].to(model.device)
 
         def stream_chat_completion(request_id, decode_stream):
             from ..generation.continuous_batching import RequestStatus
@@ -1001,7 +1327,7 @@ class Serve:
             processor_inputs.append(parsed_message)
         return processor_inputs
 
-    def generate_chat_completion(self, req: dict) -> StreamingResponse | JSONResponse:
+    def generate_chat_completion(self, req: dict) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using `generate`.
 
@@ -1064,13 +1390,21 @@ class Serve:
             skip_special_tokens=skip_special_tokens,
             skip_prompt=True,
         )
-        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
-        last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
             seq_len = self.last_kv_cache.get_seq_length()
             if inputs["input_ids"].shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
+            else:
+                last_kv_cache = None
+        else:
+            seq_len = inputs["input_ids"].shape[-1]
+            last_kv_cache = None
+
+        generation_config = create_generation_config_from_req(
+            req,
+            model_generation_config=model.generation_config,
+        )
 
         generation_kwargs = {
             **inputs,
@@ -1320,7 +1654,7 @@ class Serve:
         last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
             seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
+            if inputs.shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
 
         generation_kwargs = {
@@ -1759,7 +2093,7 @@ class Serve:
             quantization_config = None
 
         if quantization_config is not None:
-            logger.info(f"Quantization applied with the following config: {quantization_config}")
+            logger.warning(f"Quantization applied with the following config: {quantization_config}")
 
         return quantization_config
 
@@ -1780,7 +2114,9 @@ class Serve:
             return model_id
         return f"{model_id}@main"
 
-    def _load_model_and_data_processor(self, model_id_and_revision: str):
+    def _load_model_and_data_processor(
+        self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
+    ):
         """
         Generic method to load a model and a data processor from a model ID and revision, making use of the serve CLI
         arguments.
@@ -1799,7 +2135,18 @@ class Serve:
 
         from transformers import AutoConfig, AutoProcessor
 
-        logger.info(f"Loading {model_id_and_revision}")
+        callback = progress_callback
+        mid = model_id_and_revision
+
+        tqdm_class = set_tqdm_class(callback, mid) if callback is not None else None
+
+        def emit_progress(stage: str):
+            if progress_callback is None:
+                return
+            progress_callback({"status": "loading", "model": model_id_and_revision, "stage": stage})
+
+        logger.warning(f"Loading {model_id_and_revision}")
+        emit_progress("processor")
 
         if "@" in model_id_and_revision:
             model_id, revision = model_id_and_revision.split("@", 1)
@@ -1822,6 +2169,7 @@ class Serve:
             except OSError:
                 raise OSError("Failed to load processor with `AutoProcessor` and `AutoTokenizer`.")
 
+        # processor done — move on to config
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         quantization_config = self.get_quantization_config()
 
@@ -1834,9 +2182,11 @@ class Serve:
             "quantization_config": quantization_config,
         }
 
+        emit_progress("config")
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
-        model = architecture.from_pretrained(model_id, **model_kwargs)
+        # weights stage events are emitted by _WeightsTqdm (and download by _DownloadAggregator)
+        model = architecture.from_pretrained(model_id, tqdm_class=tqdm_class, **model_kwargs)
 
         has_default_max_length = (
             model.generation_config.max_new_tokens is None and model.generation_config.max_length == 20
@@ -1847,11 +2197,10 @@ class Serve:
         if has_default_max_length or has_short_max_new_tokens:
             model.generation_config.max_new_tokens = 1024
 
-        logger.info(f"Loaded model {model_id_and_revision}")
         return model, data_processor
 
     def load_model_and_processor(
-        self, model_id_and_revision: str
+        self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
     ) -> tuple["PreTrainedModel", "PreTrainedTokenizerFast"]:
         """
         Loads the text model and processor from the given model ID and revision into the ServeCommand instance.
@@ -1863,19 +2212,32 @@ class Serve:
         Returns:
             `tuple[PreTrainedModel, PreTrainedTokenizerFast]`: The loaded text model and processor.
         """
-        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            model, processor = self._load_model_and_data_processor(model_id_and_revision)
-            self.loaded_models[model_id_and_revision] = TimedModel(
-                model,
-                timeout_seconds=self.model_timeout,
-                processor=processor,
-            )
-        else:
-            self.loaded_models[model_id_and_revision].reset_timer()
-            model = self.loaded_models[model_id_and_revision].model
-            processor = self.loaded_models[model_id_and_revision].processor
+        with self.model_locks_guard:
+            lock = self.model_locks.setdefault(model_id_and_revision, threading.Lock())
 
-        return model, processor
+        with lock:
+            if (
+                model_id_and_revision not in self.loaded_models
+                or self.loaded_models[model_id_and_revision].is_deleted()
+            ):
+                model, processor = self._load_model_and_data_processor(
+                    model_id_and_revision, progress_callback=progress_callback
+                )
+                self.loaded_models[model_id_and_revision] = TimedModel(
+                    model,
+                    timeout_seconds=self.model_timeout,
+                    processor=processor,
+                )
+                if progress_callback is not None:
+                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
+            else:
+                self.loaded_models[model_id_and_revision].reset_timer()
+                model = self.loaded_models[model_id_and_revision].model
+                processor = self.loaded_models[model_id_and_revision].processor
+                if progress_callback is not None:
+                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
+
+            return model, processor
 
     def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
         """
@@ -1888,19 +2250,27 @@ class Serve:
         Returns:
             `tuple[PreTrainedModel, ProcessorMixin]`: The loaded audio model and processor.
         """
-        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
-            self.loaded_models[model_id_and_revision] = TimedModel(
-                audio_model,
-                timeout_seconds=self.model_timeout,
-                processor=audio_processor,
-            )
-        else:
-            self.loaded_models[model_id_and_revision].reset_timer()
-            audio_model = self.loaded_models[model_id_and_revision].model
-            audio_processor = self.loaded_models[model_id_and_revision].processor
+        with self.model_locks_guard:
+            lock = self.model_locks.setdefault(model_id_and_revision, threading.Lock())
 
-        return audio_model, audio_processor
+        with lock:
+            if (
+                model_id_and_revision not in self.loaded_models
+                or self.loaded_models[model_id_and_revision].is_deleted()
+            ):
+                logger.warning(f"Loading model into cache: {model_id_and_revision}")
+                audio_model, audio_processor = self._load_model_and_data_processor(model_id_and_revision)
+                self.loaded_models[model_id_and_revision] = TimedModel(
+                    audio_model,
+                    timeout_seconds=self.model_timeout,
+                    processor=audio_processor,
+                )
+            else:
+                self.loaded_models[model_id_and_revision].reset_timer()
+                audio_model = self.loaded_models[model_id_and_revision].model
+                audio_processor = self.loaded_models[model_id_and_revision].processor
+
+            return audio_model, audio_processor
 
 
 # set docstring separately to make it look nice (Typer doesn't play well with the class command)

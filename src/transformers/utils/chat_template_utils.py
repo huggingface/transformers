@@ -114,7 +114,7 @@ def _parse_type_hint(hint: str) -> dict:
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
-        elif all(isinstance(subtype["type"], str) for subtype in subtypes):
+        elif all("type" in subtype and isinstance(subtype["type"], str) for subtype in subtypes):
             # A union of basic types can be expressed as a list in the schema
             return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
         else:
@@ -439,7 +439,7 @@ def _cached_compile_jinja_template(chat_template):
             return rv
 
         def is_active(self) -> bool:
-            return self._rendered_blocks or self._generation_indices
+            return self._rendered_blocks is not None or self._generation_indices is not None
 
         @contextmanager
         def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):

@@ -327,7 +327,7 @@ class Lfm2MoeHybridConvCache:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         """
         Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
         the given layer at `layer_idx`.
@@ -335,7 +335,6 @@ class Lfm2MoeHybridConvCache:
         for each layer.
         """
         full_mask_kv_offset = 0
-        query_length = cache_position.shape[0]
         past_seen_tokens = self.get_seq_length()
         kv_length = query_length + past_seen_tokens
         return kv_length, full_mask_kv_offset
@@ -457,7 +456,6 @@ class Lfm2MoeAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Lfm2MoeHybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -471,8 +469,7 @@ class Lfm2MoeAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -536,17 +533,24 @@ class Lfm2MoeShortConv(nn.Module):
         self,
         x: torch.Tensor,
         past_key_values: Lfm2MoeHybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
+        seqlen = x.shape[1]
         x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
 
         Bx = B * x
 
+        # Note: we may or may not have to substract the current seq_len here as the cache may or may not be already updated
+        # by the current layer
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        # In this case, the cache was already updated and we need to subtract seq_len to get the correct past length
+        if "full_attention" in self.config.layer_types[: self.layer_idx]:
+            past_seen_tokens = past_seen_tokens - seqlen
+
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and cache_position[0] > 0:
+        if past_seen_tokens > 0:
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
                 past_key_values.conv_cache[self.layer_idx],
@@ -570,7 +574,6 @@ class Lfm2MoeShortConv(nn.Module):
         self,
         x: torch.Tensor,
         past_key_values: Lfm2MoeHybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         seqlen = x.shape[1]
@@ -581,11 +584,19 @@ class Lfm2MoeShortConv(nn.Module):
 
         Bx = B * x
 
-        if past_key_values is not None and cache_position[0] > 0:
+        # Note: we may or may not have to substract the current seq_len here as the cache may or may not be already updated
+        # by the current layer
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        # In this case, the cache was already updated and we need to subtract seq_len to get the correct past length
+        if "full_attention" in self.config.layer_types[: self.layer_idx]:
+            past_seen_tokens = past_seen_tokens - seqlen
+
+        if past_seen_tokens > 0:
             conv_state = past_key_values.conv_cache[self.layer_idx]
-            cache_position = cache_position.clamp(0, self.L_cache - 1)
+            positions = torch.arange(seqlen, device=conv_state.device) + past_seen_tokens
+            positions = positions.clamp(0, self.L_cache - 1)
             conv_state = conv_state.roll(shifts=-1, dims=-1)
-            conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
+            conv_state[:, :, positions] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
             past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
@@ -608,12 +619,11 @@ class Lfm2MoeShortConv(nn.Module):
         self,
         hidden_states: torch.Tensor,
         past_key_values: Lfm2MoeHybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
-        return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask)
+        return self.slow_forward(hidden_states, past_key_values, attention_mask)
 
 
 class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
@@ -640,7 +650,6 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Lfm2MoeHybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -651,14 +660,12 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
         else:
             hidden_states = self.conv(
                 hidden_states=self.operator_norm(hidden_states),
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 attention_mask=attention_mask,
             )
         hidden_states = hidden_states + residual
@@ -724,7 +731,6 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
         past_key_values: Lfm2MoeHybridConvCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -739,20 +745,15 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
                 config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
             )
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -770,7 +771,6 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
                 attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -809,7 +809,6 @@ class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -837,7 +836,6 @@ class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

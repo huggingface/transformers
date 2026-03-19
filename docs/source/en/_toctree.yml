@@ -87,6 +87,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: paged_attention
+      title: Paged attention
     - sections:
       - local: kernel_doc/overview
         title: Kernels
@@ -278,12 +280,16 @@
       title: MLX
     title: Local deployment
   - sections:
+    - local: community_integrations/nemo_automodel_pretraining
+      title: NeMo Automodel
     - local: community_integrations/nanotron
       title: Nanotron
     - local: community_integrations/torchtitan
       title: torchtitan
     title: Pretraining
   - sections:
+    - local: community_integrations/nemo_automodel_finetuning
+      title: NeMo Automodel
     - local: community_integrations/axolotl
       title: Axolotl
     - local: community_integrations/trl
@@ -542,6 +548,8 @@
         title: Ernie4_5_MoE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/eurobert
+        title: EuroBERT
       - local: model_doc/exaone4
         title: EXAONE-4.0
       - local: model_doc/exaone_moe
@@ -628,6 +636,8 @@
         title: Jamba
       - local: model_doc/jetmoe
         title: JetMoe
+      - local: model_doc/jina_embeddings_v3
+        title: jina_embeddings_v3
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -704,6 +714,8 @@
         title: NanoChat
       - local: model_doc/nemotron
         title: Nemotron
+      - local: model_doc/nemotron_h
+        title: NemotronH
       - local: model_doc/nllb
         title: NLLB
       - local: model_doc/nllb-moe
@@ -832,6 +844,8 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/chmv2
+        title: CHMv2
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext
@@ -1224,6 +1238,8 @@
         title: MGP-STR
       - local: model_doc/mistral3
         title: Mistral3
+      - local: model_doc/mistral4
+        title: Mistral4
       - local: model_doc/mllama
         title: mllama
       - local: model_doc/mm-grounding-dino
@@ -1252,6 +1268,8 @@
         title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
+      - local: model_doc/pi0
+        title: PI0
       - local: model_doc/pix2struct
         title: Pix2Struct
       - local: model_doc/pixtral
@@ -1260,6 +1278,20 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_ocrv5_mobile_det
+        title: PP-OCRv5_mobile_det
+      - local: model_doc/pp_ocrv5_mobile_rec
+        title: PP-OCRv5_mobile_rec
+      - local: model_doc/pp_ocrv5_server_det
+        title: PP-OCRv5_server_det
+      - local: model_doc/pp_ocrv5_server_rec
+        title: PP-OCRv5_server_rec
+      - local: model_doc/pp_chart2table
+        title: PPChart2Table
+      - local: model_doc/pp_lcnet
+        title: PPLCNet
+      - local: model_doc/pp_lcnet_v3
+        title: PPLCNetV3
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl

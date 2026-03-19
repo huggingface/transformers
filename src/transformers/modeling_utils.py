@@ -15,7 +15,6 @@
 import collections
 import copy
 import functools
-import importlib.metadata
 import inspect
 import json
 import os
@@ -27,7 +26,6 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
@@ -55,7 +53,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
-from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled, is_fsdp_enabled
+from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled, is_fsdp_enabled
 from .integrations.accelerate import (
     _get_device_map,
     accelerate_disk_offload,
@@ -70,7 +68,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import is_kernel
+from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -84,7 +82,12 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
-from .modeling_flash_attention_utils import lazy_import_flash_attention, lazy_import_paged_flash_attention
+from .modeling_flash_attention_utils import (
+    FLASH_ATTENTION_COMPATIBILITY_MATRIX,
+    FLASH_ATTN_KERNEL_FALLBACK,
+    lazy_import_flash_attention,
+    lazy_import_paged_flash_attention,
+)
 from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from .monkey_patching import apply_patches, patch_output_recorders
 from .pytorch_utils import id_tensor_storage
@@ -109,11 +112,8 @@ from .utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_env_variable_true,
-    is_flash_attn_2_available,
-    is_flash_attn_3_available,
     is_kernels_available,
     is_torch_flex_attn_available,
-    is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
@@ -121,8 +121,10 @@ from .utils import (
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
+    is_flash_attn_greater_or_equal,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
+    is_torch_cuda_available,
     is_tracing,
 )
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
@@ -153,12 +155,6 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
 _is_quantized = False
 _is_ds_init_called = False
-
-# Mapping from flash attention implementations to their kernel fallback repositories
-FLASH_ATTN_KERNEL_FALLBACK = {
-    "flash_attention_2": "kernels-community/flash-attn2",
-    "flash_attention_3": "kernels-community/vllm-flash-attn3",
-}
 
 
 @dataclass(frozen=True)
@@ -397,7 +393,7 @@ def remove_tied_weights_from_state_dict(
 ) -> dict[str, torch.Tensor]:
     """
     Remove all tied weights from the given `state_dict`, making sure to keep only the main weight that `model`
-    will expect when reloading (even if we know tie weights symmetrically, it's better to keep the intended one).
+    will expect when reloading (even if we now tie weights symmetrically, it's better to keep the intended one).
     This is because `safetensors` does not allow tensor aliasing - so we're going to remove aliases before saving.
     """
     # To avoid any potential mistakes and mismatches between config and actual tied weights, here we check the pointers
@@ -498,6 +494,7 @@ def _get_resolved_checkpoint_files(
     is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: str | None = None,
     download_kwargs: DownloadKwargs | None = None,
+    tqdm_class: type | None = None,
 ) -> tuple[list[str] | None, dict | None]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
@@ -602,6 +599,7 @@ def _get_resolved_checkpoint_files(
                 "_raise_exceptions_for_gated_repo": False,
                 "_raise_exceptions_for_missing_entries": False,
                 "_commit_hash": commit_hash,
+                "tqdm_class": tqdm_class,
                 **has_file_kwargs,
             }
             can_auto_convert = (
@@ -747,6 +745,7 @@ def _get_resolved_checkpoint_files(
             revision=revision,
             subfolder=subfolder,
             _commit_hash=commit_hash,
+            tqdm_class=tqdm_class,
         )
     else:
         checkpoint_files = [resolved_archive_file] if pretrained_model_name_or_path is not None else None
@@ -810,7 +809,7 @@ def _get_dtype(
         dtype = torch.get_default_dtype()
 
     if hf_quantizer is not None:
-        hf_quantizer.update_dtype(dtype)
+        dtype = hf_quantizer.update_dtype(dtype)
 
     # Get the main dtype
     if isinstance(dtype, dict):
@@ -833,11 +832,6 @@ def _get_dtype(
             sub_config.dtype = main_dtype
 
     return config, main_dtype
-
-
-class PipelineParallel(Enum):
-    inputs = 0
-    outputs = 1
 
 
 class ModuleUtilsMixin:
@@ -1158,7 +1152,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # A pipeline parallel plan specifying the layers which may not be present on all ranks when PP is enabled. For top-level
     # models, this attribute is currently defined in respective model code. For base models, it comes from
     # `config.base_model_pp_plan` during `post_init`.
-    _pp_plan: dict[str, PipelineParallel] | None = None
+    _pp_plan: dict[str, tuple[str, str]] = None
 
     # Advanced functionalities support
     supports_gradient_checkpointing: bool = False
@@ -1227,7 +1221,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # otherwise we derive it from the annotated `config` attribute.
 
         # defined in this particular subclass
-        child_annotation = cls.__dict__.get("__annotations__", {}).get("config", None)
+        child_annotation = inspect.get_annotations(cls).get("config", None)
         child_attribute = cls.__dict__.get("config_class", None)
 
         # defined in the class (this subclass or any parent class)
@@ -1258,7 +1252,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Check the attention implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
         self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
-            self.config._attn_implementation, is_init_check=True
+            self.config._attn_implementation,
+            is_init_check=True,
+            # We need to use this constant that is set through context manager as it cannot be forwarded in the model's __init__
+            allow_all_kernels=hub_kernels.ALLOW_ALL_KERNELS,
         )
         # Check the experts implementation is supported, or set it if not yet set (on the internal attr, to avoid
         # setting it recursively)
@@ -1380,7 +1377,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._tp_plan = plan
 
     @pp_plan.setter
-    def pp_plan(self, plan: dict[str, tuple[str, str]]):
+    def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
+        if plan is None:
+            self._pp_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `pp_plan`")
+
         self._pp_plan = plan
 
     def dequantize(self, dtype=None):
@@ -1451,6 +1454,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if isinstance(dtype, str):
             dtype = getattr(torch, dtype)
 
+        # Set the same `dtype` on all subconfigs to avoid dtype mismatch. When "auto" dtype
+        # with nested models, we can't dispatch different dtype per backbone module
+        for sub_config_key in config.sub_configs:
+            if (sub_config := getattr(config, sub_config_key)) is not None:
+                sub_config.dtype = dtype
+
         # If passing `attn_implementation` as kwargs, respect it (it will be applied recursively on subconfigs)
         if "attn_implementation" in kwargs:
             config._attn_implementation = kwargs.pop("attn_implementation")
@@ -1459,9 +1468,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
+        # Needed if the attn_implementation is an outside `kernels-community` kernel
+        allow_all_kernels = kwargs.get("allow_all_kernels", False)
+
         init_contexts = [apply_patches()]
         if dtype is not None:
             init_contexts.append(local_torch_dtype(dtype, cls.__name__))
+        if allow_all_kernels:
+            init_contexts.append(allow_all_hub_kernels())
 
         needs_zero3_init = is_deepspeed_zero3_enabled() and not _is_quantized and not _is_ds_init_called
         if needs_zero3_init:
@@ -1539,176 +1553,145 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Otherwise, can't generate
         return False
 
-    def _flash_attn_2_can_dispatch(self, is_init_check: bool = False) -> bool:
+    def _flash_attn_import_error(
+        self,
+        flash_attn_version: int,
+        general_availability_check: Callable,
+        pkg_availability_check: Callable,
+        supported_devices: tuple[tuple[Callable, str]],
+        custom_supported_devices: tuple[tuple[Callable, str]] = (),
+        cuda_min_major_version: int | None = None,
+    ):
         """
-        Check the availability of Flash Attention 2 for a given model.
+        Checks whether the specified Flash Attention version is supported and if not, searches for the specific reason
+        on why it failed - package import and/or device incompatibility issues.
 
         Args:
+            flash_attn_version (`int`):
+                The requested version of Flash Attention.
+            general_availability_check (`Callable`):
+                Checks whether our `is_available` function detects the specific FA version. Failing reasons
+                are then checked for one-by-one.
+            pkg_availability_check (`Callable`):
+                Checks whether the package could theoretically be detected in the environment by the init structures.
+                This is not a sure-fire check as device compatibility with FA is just as important.
+            supported_devices (`tuple[tuple[Callable, str]]`):
+                Essentially a list (for mutable kwargs reasons a tuple) of the supported devices in the format of
+                `(device_availability_check, device_name)`, i.e. a pair of the associated device's name and whether
+                it is available in the environment.
+            custom_supported_devices (`tuple[tuple[Callable, str]]`, *optional*, defaults to `()`):
+                Essentially a list (for mutable kwargs reasons a tuple) of the custom supported devices in the format of
+                `(device_availability_check, info_message)`. These custom devices have custom logic outside the torch
+                ecosystem either via kernels or other packages and hence have early checks for availability.
+            cuda_min_major_version (`int`, *optional*):
+                The minimum major cuda version supported for this version of Flash Attention. This is mostly
+                affecting more recent versions which are more specialized to the features of new hardware.
+        """
+        # Certain devices have custom workarounds e.g. with their own package distribution (NPU) or via kernels (XPU)
+        for device_availability_check, info_message in custom_supported_devices:
+            if device_availability_check():
+                logger.info(info_message)
+                return
+
+        if not general_availability_check():
+            preface = f"FlashAttention{flash_attn_version} has been toggled on, but it cannot be used due to the following error:"
+
+            # Can the package be seen in the import structure
+            if not pkg_availability_check():
+                raise ImportError(
+                    f"{preface} the package for FlashAttention{flash_attn_version} doesn't seem to be installed."
+                )
+            # Minimum version (FA2 only)
+            elif flash_attn_version == 2 and not is_flash_attn_greater_or_equal("2.3.3"):
+                raise ImportError(f"{preface} FlashAttention{flash_attn_version} requires at least version `2.3.3`.")
+            else:
+                # Supported devices availability
+                device_availability_checks, device_names = zip(*supported_devices)
+                if not any(device_availability_check() for device_availability_check in device_availability_checks):
+                    raise ImportError(
+                        f"{preface} FlashAttention{flash_attn_version} is not available on CPU. Please make sure you are on any of the supported devices: {device_names}."
+                    )
+                # Cuda major versions (more recent FA versions are specialized to newer cuda devices)
+                elif cuda_min_major_version is not None and is_torch_cuda_available():
+                    major, _ = torch.cuda.get_device_capability()
+                    if major < cuda_min_major_version:
+                        raise ImportError(
+                            f"{preface} FlashAttention{flash_attn_version} requires compute capability >= {cuda_min_major_version}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
+                        )
+
+    def _flash_attn_can_dispatch(self, flash_attn_version: int, is_init_check: bool = False) -> bool:
+        """
+        Check the availability of Flash Attention for a given model.
+
+        Args:
+            flash_attn_version (`int`):
+                The requested version of Flash Attention.
             is_init_check (`bool`, *optional*):
                 Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
                 fully instantiated. This is needed as we also check the devices of the weights, which are only available
                 later after __init__. This allows to raise proper exceptions early before instantiating the full models
                 if we know that the model does not support the requested attention.
         """
-        dtype = self.config.dtype
-
-        # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
-        if not (self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False)):
+        if not self._supports_flash_attn:
             raise ValueError(
-                f"{self.__class__.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
+                f"{self.__class__.__name__} does not support Flash Attention {flash_attn_version} yet. Please request to add support where"
                 f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
                 " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
 
-        if not is_flash_attn_2_available():
-            preface = "FlashAttention2 has been toggled on, but it cannot be used due to the following error:"
-            install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
+        if flash_attn_version not in [2, 3, 4]:
+            raise ValueError(f"Requested Flash Attention {flash_attn_version} which is not supported.")
 
-            # package `flash-attn` can not be installed on Ascend NPU, following validation logics can be ignored.
-            if is_torch_npu_available():
-                logger.info("Detect using FlashAttention2 on Ascend NPU.")
-                return True
+        # Check if we can even use the FA version based on the env of the user
+        self._flash_attn_import_error(**FLASH_ATTENTION_COMPATIBILITY_MATRIX[flash_attn_version])
 
-            if is_torch_xpu_available():
-                logger.info(
-                    f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU."
+        # Check for attention dropout, which is incompatible with newer FA versions
+        # (many should not really care about dropout as it is not super effective, hence warning for now)
+        if flash_attn_version > 2:
+            if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
+                logger.warning_once(
+                    f"You are attempting to use Flash Attention {flash_attn_version} with dropout. "
+                    "This might lead to unexpected behaviour as this is not supported on recent versions of Flash Attention."
                 )
-                return True
 
-            if importlib.util.find_spec("flash_attn") is None:
-                raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
-            else:
-                # Check FA2 installed version compatibility
-                flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
-                if torch.version.cuda:
-                    if flash_attention_version < version.parse("2.1.0"):
-                        raise ImportError(
-                            f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Detected version {flash_attention_version}. {install_message}"
-                        )
-                    elif not torch.cuda.is_available():
-                        raise ValueError(
-                            f"{preface} Flash Attention 2 is not available on CPU. Please make sure torch can access a CUDA device."
-                        )
-                    else:
-                        raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
-                elif torch.version.hip:
-                    if flash_attention_version < version.parse("2.0.4"):
-                        raise ImportError(
-                            f"{preface} you need flash_attn package version to be greater or equal than 2.0.4. Detected version {flash_attention_version}. {install_message}"
-                        )
-                    else:
-                        raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
-
+        # People often move dtypes after init so we only warn in those cases
+        dtype = self.config.dtype
         if dtype is None:
             logger.warning_once(
-                "You are attempting to use Flash Attention 2 without specifying a torch dtype. This might lead to unexpected behaviour"
+                f"You are attempting to use Flash Attention {flash_attn_version} without specifying a dtype. This might lead to unexpected behaviour"
             )
         elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
             logger.warning_once(
-                "Flash Attention 2 only supports torch.float16 and torch.bfloat16 dtypes, but"
+                f"Flash Attention {flash_attn_version} only supports torch.float16 and torch.bfloat16 dtypes, but"
                 f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", dtype=torch.float16)`'
+                f' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_{flash_attn_version}", dtype=torch.float16)`'
             )
 
         # With the early check, the parameters are not yet initialized correctly
         if not is_init_check:
             param_devices = list({param.device for param in self.parameters()})
             if len(param_devices) == 1 and param_devices[0].type == "cpu":
-                if torch.cuda.is_available():
-                    logger.warning_once(
-                        "You are attempting to use Flash Attention 2 with a model not initialized on GPU. Make sure to move the model to GPU"
-                        " after initializing it on CPU with `model.to('cuda')`."
-                    )
-                elif is_torch_mlu_available():
-                    logger.warning_once(
-                        "You are attempting to use Flash Attention 2 with a model not initialized on MLU. Make sure to move the model to MLU"
-                        " after initializing it on CPU with `model.to('mlu')`."
-                    )
-                else:
+                found_device = False
+                for device_availability_check, device_name in FLASH_ATTENTION_COMPATIBILITY_MATRIX[flash_attn_version][
+                    "supported_devices"
+                ]:
+                    if device_availability_check():
+                        found_device = True
+                        logger.warning_once(
+                            f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU. Please make sure to have "
+                            "access to a GPU and either initialise the model on a GPU by passing a device_map or initialising the model on CPU and then "
+                            f"moving it to GPU, e.g. with `model.to('{device_name}')`."
+                        )
+                        break
+
+                if not found_device:
                     raise ValueError(
-                        "You are attempting to use Flash Attention 2 with a model not initialized on GPU and with no GPU available. "
+                        f"You are attempting to use Flash Attention {flash_attn_version} with a model not initialized on GPU and with no GPU available. "
                         "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                         "or initialising the model on CPU and then moving it to GPU."
                     )
 
         # If no error raise by this point, we can return `True`
-        return True
-
-    def _flash_attn_3_can_dispatch(self, is_init_check: bool = False) -> bool:
-        """
-        Check the availability of Flash Attention 3 for a given model.
-
-        Args:
-            is_init_check (`bool`, *optional*):
-                Whether this check is performed early, i.e. at __init__ time, or later when the model and its weights are
-                fully instantiated. This is needed as we also check the devices of the weights, which are only available
-                later after __init__. This allows to raise proper exceptions early before instantiating the full models
-                if we know that the model does not support the requested attention.
-        """
-        dtype = self.config.dtype
-
-        if not self._supports_flash_attn:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support Flash Attention 3 yet. Please request to add support where"
-                f" the model is hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
-                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
-            )
-
-        if not is_flash_attn_3_available():
-            preface = "FlashAttention3 has been toggled on, but it cannot be used due to the following error:"
-
-            if importlib.util.find_spec("flash_attn_3") is None:
-                raise ImportError(f"{preface} the package flash_attn_3 seems to be not installed.")
-
-            if torch.cuda.is_available():
-                major, _ = torch.cuda.get_device_capability()
-                if major < 9:
-                    raise ValueError(
-                        f"{preface} Flash Attention 3 requires compute capability >= 9.0, but found {torch.cuda.get_device_capability()} with compute capability {major}.0."
-                    )
-                else:
-                    raise ImportError(f"{preface} Flash Attention 3 is not available.")
-            else:
-                raise ValueError(
-                    f"{preface} Flash Attention 3 is not available on CPU. Please make sure torch can access a CUDA device."
-                )
-
-        if dtype is None:
-            logger.warning_once(
-                "You are attempting to use Flash Attention 3 without specifying a torch dtype. This might lead to unexpected behaviour"
-            )
-        elif dtype is not None and dtype not in [torch.float16, torch.bfloat16]:
-            logger.warning_once(
-                "Flash Attention 3 only supports torch.float16 and torch.bfloat16 dtypes, but"
-                f" the current dype in {self.__class__.__name__} is {dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
-                ' or load the model with the `dtype` argument. Example: `model = AutoModel.from_pretrained("meta-llama/Llama-3.2-1B", attn_implementation="flash_attention_3", dtype=torch.float16)`'
-            )
-
-        if getattr(self.config, "alibi", False) or getattr(self.config, "use_alibi", False):
-            raise ValueError("Model is configured to use ALiBi, which is not supported by Flash Attention 3.")
-
-        # Check for attention dropout, which is incompatible with FA3
-        if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
-            raise ValueError(
-                f"Model has attention_dropout={self.config.attention_dropout}, which is not supported by Flash Attention 3."
-            )
-
-        # With the early check, the parameters are not yet initialized correctly
-        if not is_init_check:
-            param_devices = list({param.device for param in self.parameters()})
-            if len(param_devices) == 1 and param_devices[0].type == "cpu":
-                if torch.cuda.is_available():
-                    logger.warning_once(
-                        "You are attempting to use Flash Attention 3 with a model not initialized on GPU. Make sure to move the model to GPU"
-                        " after initializing it on CPU with `model.to('cuda')`."
-                    )
-                else:
-                    raise ValueError(
-                        "You are attempting to use Flash Attention 3 with a model not initialized on GPU and with no GPU available. "
-                        "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
-                        "or initialising the model on CPU and then moving it to GPU."
-                    )
-
         return True
 
     def _sdpa_can_dispatch(self, is_init_check: bool = False) -> bool:
@@ -1780,7 +1763,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         return True
 
     def _check_and_adjust_attn_implementation(
-        self, attn_implementation: str | None, is_init_check: bool = False
+        self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
     ) -> str:
         """
         Check that the `attn_implementation` exists and is supported by the models, and try to get the kernel from hub if
@@ -1794,6 +1777,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 fully instantiated. This is needed as we also check the devices of the weights, which are only available
                 later after __init__. This allows to raise proper exceptions early before instantiating the full models
                 if we know that the model does not support the requested attention.
+            allow_all_kernels (`bool`, optional):
+                Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+                of the `kernels-community` hub repository.
 
         Returns:
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
@@ -1806,8 +1792,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
             if (
-                compatible_flash_implementations
-                and is_flash_attention_requested(requested_attention_implementation=base_implementation)
+                is_flash_attention_requested(requested_attention_implementation=base_implementation)
+                and compatible_flash_implementations is not None
                 and base_implementation not in compatible_flash_implementations
             ):
                 default_flash_implementation = (
@@ -1821,18 +1807,26 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 attn_implementation = default_flash_implementation
 
         applicable_attn_implementation = attn_implementation
-
         is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
 
-        # If FA not installed, do not fail but use kernels instead
-        requested_original_flash_attn = attn_implementation is not None and (
-            attn_implementation.removeprefix("paged|") == "flash_attention_2"
-            or attn_implementation.removeprefix("paged|") == "flash_attention_3"
-        )
+        requested_original_flash_attn = False
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+            # If FA not installed, do not fail but use kernels instead if possible
+            for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
+                # No kernels support for FA4 for now
+                if fa_version == 4:
+                    continue
+
+                # Check whether we have an original FA requested but not available in the env
+                if requested_original_flash_attn := (
+                    attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
+                    and not FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]()
+                ):
+                    break
+
         if (
-            requested_original_flash_attn
-            and self._supports_flash_attn
-            and not (is_flash_attn_2_available() or is_flash_attn_3_available())
+            self._supports_flash_attn
+            and requested_original_flash_attn
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
@@ -1850,9 +1844,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             try:
                 # preload flash attention here to allow compile with fullgraph
                 if is_paged:
-                    lazy_import_paged_flash_attention(applicable_attn_implementation)
+                    lazy_import_paged_flash_attention(
+                        applicable_attn_implementation, allow_all_kernels=allow_all_kernels
+                    )
                 else:
-                    lazy_import_flash_attention(applicable_attn_implementation)
+                    lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
 
                 # log that we used kernel fallback if successful
                 if requested_original_flash_attn:
@@ -1863,10 +1859,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    if attn_implementation.endswith("2"):
-                        self._flash_attn_2_can_dispatch()
-                    else:
-                        self._flash_attn_3_can_dispatch()
+                    fa_version = int(attn_implementation[-1])  # "flash_attention_(2|3|...)"
+                    self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
                 # error properly out if a kernel was specifically requested
                 raise e
@@ -1903,7 +1897,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
             # check `supports_flash_attn_2` for BC with custom code. TODO: remove after a few releases
             if self._supports_flash_attn or getattr(self, "_supports_flash_attn_2", False):
-                message += ', `"attn_implementation=flash_attention_3"`, `"attn_implementation=flash_attention_2"`, `"attn_implementation=paged|flash_attention_2"`'
+                message += ", "
+                for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
+                    message += f'`"attn_implementation=flash_attention_{fa_version}"`, `"attn_implementation=paged|flash_attention_{fa_version}"`, '
+                message = message[:-2]  # remove trailing comma
             if self._supports_sdpa:
                 message += ', `"attn_implementation=sdpa"`, `"attn_implementation=paged|sdpa"`'
             if self._supports_flex_attn:
@@ -1911,10 +1908,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(message + ".")
 
         # Perform relevant checks
-        if "flash_attention_2" in applicable_attention:
-            self._flash_attn_2_can_dispatch(is_init_check)
-        elif "flash_attention_3" in applicable_attention:
-            self._flash_attn_3_can_dispatch(is_init_check)
+        if is_flash_attention_requested(requested_attention_implementation=applicable_attention) and (
+            fa_matched := re.search(r"^flash_attention_(\d)$", applicable_attention)
+        ):
+            fa_version = int(fa_matched.group(1))  # last digit
+            self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
         elif "sdpa" in applicable_attention:
@@ -1982,7 +1980,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
         return "@use_experts_implementation" in code
 
-    def set_attn_implementation(self, attn_implementation: str | dict):
+    def set_attn_implementation(self, attn_implementation: str | dict, allow_all_kernels: bool = False):
         """
         Set the requested `attn_implementation` for this model.
 
@@ -1991,6 +1989,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 The attention implementation to set for this model. It can be either a `str`, in which case it will be
                 dispatched to all submodels if relevant, or a `dict` where keys are the sub_configs name, in which case each
                 submodel will dispatch the corresponding value.
+            allow_all_kernels (`bool`, optional):
+                Whether to load kernels from unverified hub repos, if `attn_implementation` is a custom kernel outside
+                of the `kernels-community` hub repository.
         """
         requested_implementation = (
             attn_implementation
@@ -2008,7 +2009,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             else:
                 requested_implementation = self._check_and_adjust_attn_implementation(
-                    requested_implementation, is_init_check=False
+                    requested_implementation, is_init_check=False, allow_all_kernels=allow_all_kernels
                 )
                 # Apply the change (on the internal attr, to avoid setting it recursively)
                 self.config._attn_implementation_internal = requested_implementation
@@ -2224,7 +2225,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # NOTE: new models need to use existing names for layers if possible, so this list doesn't grow infinitely
         if modality in ["image", "video"]:
             possible_module_names = ["vision_tower", "visual", "vision_model", "vision_encoder", "image_tower"]
-        if modality == "audio":
+        elif modality == "audio":
             possible_module_names = ["audio_tower", "audio_encoder"]
         elif modality is None:
             possible_module_names = ["text_encoder", "encoder"]
@@ -2535,15 +2536,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # Both are already present -> it means the config is wrong and do not reflect the actual
                 # checkpoint -> let's raise a warning and NOT tie them
                 if source_is_there and target_is_there:
-                    logger.warning(
-                        f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
-                        f"{target_param_name}, but both are present in the checkpoints, so we will NOT tie them. "
-                        "You should update the config with `tie_word_embeddings=False` to silence this warning"
-                    )
-                    # Remove from internal attribute to correctly reflect actual tied weights
-                    self.all_tied_weights_keys.pop(target_param_name)
-                    # Skip to next iteration
-                    continue
+                    # If both are present, check if the weights are exactly similar, and only tie in this case
+                    # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
+                    if not torch.equal(self.get_parameter(source_param_name), self.get_parameter(target_param_name)):
+                        logger.warning(
+                            f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
+                            f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
+                            "tie them. You should update the config with `tie_word_embeddings=False` to silence this warning."
+                        )
+                        # Remove from internal attribute to correctly reflect actual tied weights
+                        self.all_tied_weights_keys.pop(target_param_name)
+                        # Skip to next iteration
+                        continue
                 # We're missing the source but we have the target -> we swap them, tying the parameter that exists
                 elif not source_is_there and target_is_there:
                     target_param_name, source_param_name = source_param_name, target_param_name
@@ -3591,9 +3595,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return super().float(*args)
 
     @classmethod
-    def get_init_context(cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool):
+    def get_init_context(
+        cls, dtype: torch.dtype, is_quantized: bool, _is_ds_init_called: bool, allow_all_kernels: bool | None
+    ):
         # Need to instantiate with correct dtype
         init_contexts = [local_torch_dtype(dtype, cls.__name__), init.no_tie_weights(), apply_patches()]
+        # Needed as we cannot forward the `allow_all_kernels` arg in the model's __init__
+        if allow_all_kernels:
+            init_contexts.append(allow_all_hub_kernels())
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
@@ -3761,7 +3770,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
                 </Tip>
             attn_implementation (`str`, *optional*):
-                The attention implementation to use in the model (if relevant). Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)), or `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
+                The attention implementation to use in the model (if relevant). Can be any of
+                    - `"eager"` (manual implementation of the attention)
+                    - `"sdpa"` (using [`F.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html))
+                    - `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention))
+                    - `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper))
+                    - `"flash_attention_4"` (using [Dao-AILab/flash-attention/flash_attn/cute](https://github.com/Dao-AILab/flash-attention/tree/main/flash_attn/cute)).
+                By default, if available, SDPA will be used. The default is otherwise the manual `"eager"` implementation.
 
                 Accept HF kernel references in the form:
                   <namespace>/<repo_name>[@<revision>][:<kernel_name>]
@@ -3895,6 +3910,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         state_dict = kwargs.pop("state_dict", None)
         proxies = kwargs.pop("proxies", None)
+        tqdm_class = kwargs.pop("tqdm_class", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -3917,6 +3933,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        allow_all_kernels = kwargs.pop("allow_all_kernels", False)
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
@@ -4044,6 +4061,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             user_agent=user_agent,
             is_remote_code=cls.is_remote_code(),
             transformers_explicit_filename=getattr(config, "transformers_weights", None),
+            tqdm_class=tqdm_class,
         )
 
         is_quantized = hf_quantizer is not None
@@ -4065,7 +4083,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
-        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called)
+        model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         with ContextManagers(model_init_context):
@@ -4160,6 +4178,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict: dict | None,
         checkpoint_files: list[str] | None,
         load_config: LoadStateDictConfig,
+        expected_keys: list[str] | None = None,
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         is_quantized = load_config.is_quantized
@@ -4169,7 +4188,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         }
 
         # Model's definition arriving here is final (TP hooks added, quantized layers replaces)
-        expected_keys = list(model.state_dict().keys())
+        expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
         if logger.level >= logging.WARNING:
             verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
@@ -4371,12 +4390,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Returns whether the model has a tensor parallelism plan.
         """
-        if self._tp_plan is not None:
+        # Check if model has a TP plan
+        if self._tp_plan:
             return True
         # Check if base model has a TP plan
-        if getattr(self.base_model, "_tp_plan", None) is not None:
+        if self.base_model._tp_plan:
             return True
-        if self.config.base_model_tp_plan is not None:
+        # Check if config has TP plan
+        if self.config.base_model_tp_plan:
             return True
         return False
 
@@ -4390,10 +4411,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @property
     def supports_pp_plan(self):
-        if self._pp_plan is not None:
+        # Check if model has a PP plan
+        if self._pp_plan:
             return True
         # Check if base model has PP plan
-        if getattr(self.base_model, "_pp_plan", None) is not None:
+        if self.base_model._pp_plan:
+            return True
+        # Check if config has PP plan
+        if self.config.base_model_pp_plan:
             return True
         return False
 
@@ -4523,8 +4548,23 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
         be initialized correctly (i.e. weight initialization distribution).
 
-        Params that are not missing have the `is_hf_initialized` flag.
+        Also marks non-missing params/buffers with `_is_hf_initialized` and propagates this flag to modules,
+        so that `_initialize_weights` can skip fully-initialized modules entirely.
         """
+        if is_fsdp_enabled() and not is_local_dist_rank_0():
+            # Handle FSDP edge case when using cpu ram efficient loading to ensure it is marked as initialized
+            # since it will get its weights broadcasted from rank0
+            # We actually need to do that only because we want to re-initialize non-persistent buffers with correct values.
+            # Everything else in the state_dict will be gathered from rank0, so we don't need re-initialization.
+            # We could simply early return after buffer inits if we had a way to init only the non-persistent buffers
+            for key in self.state_dict():
+                try:
+                    param_or_buffer = self.get_parameter_or_buffer(key)
+                    param_or_buffer._is_hf_initialized = True
+                except AttributeError:
+                    pass  # may happen when handling pre-quantized weights
+            self._is_hf_initialized = True
+
         # This will only initialize submodules that are not marked as initialized by the line above.
         if is_deepspeed_zero3_enabled() and not is_quantized:
             import deepspeed
@@ -4587,11 +4627,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
         # which params are supposed to be tied to which other params
         if self.is_remote_code():
-            # Remove those that are already initialized, but appear as missing due to module tying
+            # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
+            # tied weights, i.e. we did not explicitly mark them as initialized just above)
             loading_info.missing_keys = {
                 key
                 for key in loading_info.missing_keys
-                if not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
+                if key in self.all_tied_weights_keys
+                or not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
             }
 
     def get_parameter_or_buffer(self, target: str):
@@ -4798,10 +4840,12 @@ class AttentionInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
+        "flash_attention_4": flash_attention_forward,
         "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_4": paged_attention_forward,
         "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
         "paged|sdpa": sdpa_attention_paged_forward,

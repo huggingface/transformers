@@ -132,7 +132,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
-TORCHAO_MIN_VERSION = "0.4.0"
+TORCHAO_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.10.2"
@@ -212,7 +212,7 @@ def is_cuda_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.cuda is not None
+        return getattr(torch, "version").cuda is not None
     return False
 
 
@@ -221,7 +221,7 @@ def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
 
-        return torch.version.hip is not None
+        return getattr(torch, "version").hip is not None
     return False
 
 
@@ -465,6 +465,28 @@ def is_torch_hpu_available() -> bool:
 
 
 @lru_cache
+def is_torch_neuron_available(check_device: bool = False) -> bool:
+    import torch
+
+    if importlib.util.find_spec("torch_neuronx") is None:
+        return False
+
+    if check_device:
+        try:
+            import torch_neuronx  # noqa: F401
+
+            # Will raise a RuntimeError if no Neuron is found
+            if hasattr(torch, "neuron"):
+                _ = torch.neuron.device_count()
+                return torch.neuron.is_available()
+            return False
+        except RuntimeError:
+            return False
+
+    return hasattr(torch, "neuron") and torch.neuron.is_available()
+
+
+@lru_cache
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
@@ -477,13 +499,17 @@ def is_torch_bf16_gpu_available() -> bool:
         return torch.xpu.is_bf16_supported()
     if is_torch_hpu_available():
         return True
-    if is_torch_npu_available():
-        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
+    if is_torch_npu_available() and hasattr(torch, "npu"):
+        return torch.npu.is_bf16_supported()
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
-    if is_torch_musa_available():
-        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        return torch.musa.is_bf16_supported()
+    if is_torch_mlu_available() and hasattr(torch, "mlu"):
+        return torch.mlu.is_bf16_supported()
+    if is_torch_neuron_available() and hasattr(torch, "neuron"):
+        return torch.neuron.is_bf16_supported()
     return False
 
 
@@ -542,13 +568,13 @@ def is_torch_tf32_available() -> bool:
 
     import torch
 
-    if is_torch_musa_available():
-        if hasattr(torch, "musa"):
-            device_info = torch.musa.get_device_properties(torch.musa.current_device())
-            if f"{device_info.major}{device_info.minor}" >= "22":
-                return True
+    if is_torch_musa_available() and hasattr(torch, "musa"):
+        device_info = torch.musa.get_device_properties(torch.musa.current_device())
+        if f"{device_info.major}{device_info.minor}" >= "22":
+            return True
         return False
-    if not torch.cuda.is_available() or torch.version.cuda is None:
+    torch_version = getattr(torch, "version")
+    if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
     if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
         return False
@@ -890,39 +916,53 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
-    import torch
-
+    # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
     try:
-        if torch.version.cuda:
-            return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch.version.hip:
-            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-            return version.parse(flash_attn_version) >= version.parse("2.0.4")
-        elif is_torch_mlu_available():
-            return version.parse(flash_attn_version) >= version.parse("2.3.3")
-        else:
-            return False
+        return version.parse(flash_attn_version) >= version.parse("2.3.3")
     except packaging.version.InvalidVersion:
         return False
 
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("flash_attn_3")[0]
+    # Universally available under `flash_attn_interface`
+    is_available = _is_package_available("flash_attn_interface")[0]
+    # Resolving and ensuring the proper name of FA3 being associated
+    is_available = is_available and "flash-attn-3" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+    ]
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
-def is_flash_attn_greater_or_equal_2_10() -> bool:
-    _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
+def is_flash_attn_4_available() -> bool:
+    is_available = _is_package_available("flash_attn")[0]
+    # FA2 is also distributed under "flash_attn", hence we need to check the naming here
+    # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
+    #       -> check for the proper (normalized) distribution name
+    is_available = is_available and "flash-attn-4" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available:
         return False
     try:
@@ -1315,7 +1355,9 @@ def is_torchdynamo_compiling() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_compiling()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_compiling()
+        return False
     except Exception:
         return False
 
@@ -1324,7 +1366,9 @@ def is_torchdynamo_exporting() -> bool:
     try:
         import torch
 
-        return torch.compiler.is_exporting()
+        if hasattr(torch, "compiler"):
+            return torch.compiler.is_exporting()
+        return False
     except Exception:
         return False
 
@@ -1342,7 +1386,7 @@ def is_fake_tensor(x) -> bool:
     try:
         import torch
 
-        return isinstance(x, torch._subclasses.FakeTensor)
+        return isinstance(x, getattr(torch, "_subclasses").FakeTensor)
     except Exception:
         return False
 
@@ -1370,7 +1414,7 @@ def is_jax_jitting(x):
     try:
         import jax
 
-        return isinstance(x.jax(), jax.core.Tracer)
+        return isinstance(x.jax(), getattr(jax, "core").Tracer)
     except Exception:
         return False
 
@@ -1911,7 +1955,7 @@ def requires_backends(obj, backends):
         obj: object to be checked
         backends: list or tuple of backends to check.
     """
-    if not isinstance(backends, (list, tuple)):
+    if not isinstance(backends, list | tuple):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
@@ -2070,6 +2114,26 @@ class _LazyModule(ModuleType):
         if name in self._object_missing_backend:
             missing_backends = self._object_missing_backend[name]
 
+            # Backward-compat fallback: before the image processor refactoring, the base
+            # `<Model>ImageProcessor` name referred to the PIL/slow backend. After the refactoring
+            # it refers to the TorchvisionBackend (which requires torchvision). So if torchvision
+            # is not installed, transparently fall back to `<Model>ImageProcessorPil` and warn once.
+            if "torchvision" in missing_backends and name.endswith("ImageProcessor"):
+                pil_name = f"{name}Pil"
+                if pil_name in self._class_to_module and pil_name not in self._object_missing_backend:
+                    try:
+                        pil_module = self._get_module(self._class_to_module[pil_name])
+                        pil_value = getattr(pil_module, pil_name)
+                        logger.warning_once(
+                            f"`{name}` requires torchvision (not installed); falling back to `{pil_name}` "
+                            f"for backward compatibility. Install torchvision to use the default backend, "
+                            f"or import `{pil_name}` directly to silence this warning."
+                        )
+                        setattr(self, name, pil_value)
+                        return pil_value
+                    except Exception as e:
+                        logger.debug(f"Could not load PIL fallback {pil_name}: {e}")
+
             class Placeholder(metaclass=DummyObject):
                 _backends = missing_backends
 
@@ -2198,6 +2262,46 @@ class _LazyModule(ModuleType):
             if name.endswith("TokenizerFast"):
                 fallback_name = name[:-4]
                 if fallback_name in self._class_to_module:
+                    try:
+                        fb_module = self._get_module(self._class_to_module[fallback_name])
+                        value = getattr(fb_module, fallback_name)
+                        setattr(self, fallback_name, value)
+                        setattr(self, name, value)
+                        return value
+                    except Exception as e:
+                        logger.debug(f"Could not load fallback {fallback_name}: {e}")
+            # V5: Handle *ImageProcessorFast backward compatibility
+            # Similar to TokenizerFast, but for image processors
+            if name.endswith("ImageProcessorFast"):
+                fallback_name = name[:-4]  # Remove "Fast"
+                if fallback_name in self._class_to_module:
+                    logger.warning_once(
+                        f"`{name}` is deprecated. The `Fast` suffix for image processors has been removed; "
+                        f"use `{fallback_name}` instead."
+                    )
+                    if fallback_name in self._object_missing_backend:
+                        # The Fast alias has no entry in the import structure, so `requires_backends` on
+                        # the real class never runs. Handle the missing backend explicitly here, otherwise
+                        # `_get_module` swallows the ImportError and the caller gets an AttributeError.
+                        # Do not fall through to the PIL fallback since a legacy "Fast" image processor was explicitly requested.
+                        missing_backends = self._object_missing_backend[fallback_name]
+
+                        class Placeholder(metaclass=DummyObject):
+                            _backends = missing_backends
+
+                            def __init__(self, *args, **kwargs):
+                                requires_backends(self, missing_backends)
+
+                            def call(self, *args, **kwargs):
+                                pass
+
+                        Placeholder.__name__ = fallback_name
+                        module_name = self._class_to_module[fallback_name]
+                        Placeholder.__module__ = (
+                            module_name if module_name.startswith("transformers.") else f"transformers.{module_name}"
+                        )
+                        setattr(self, name, Placeholder)
+                        return Placeholder
                     try:
                         fb_module = self._get_module(self._class_to_module[fallback_name])
                         value = getattr(fb_module, fallback_name)
@@ -2412,11 +2516,20 @@ def requires(*, backends=()):
 
 
 BASE_FILE_REQUIREMENTS = {
-    lambda e: "modeling_" in e: ("torch",),
-    lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
-    lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
-    lambda e: e.startswith("image_processing_"): ("vision",),
-    lambda e: e.startswith("video_processing_"): ("vision", "torch", "torchvision"),
+    lambda name, content: "modeling_" in name: ("torch",),
+    lambda name, content: name.startswith("tokenization_") and name.endswith("_fast"): ("tokenizers",),
+    lambda name, content: name.startswith("image_processing_") and name.endswith("_fast"): (
+        "vision",
+        "torch",
+        "torchvision",
+    ),
+    lambda name, content: name.startswith("image_processing_") and "TorchvisionBackend" in content: (
+        "vision",
+        "torch",
+        "torchvision",
+    ),
+    lambda name, content: name.startswith("image_processing_"): ("vision",),
+    lambda name, content: name.startswith("video_processing_"): ("vision", "torch", "torchvision"),
 }
 
 
@@ -2520,15 +2633,16 @@ def create_import_structure_from_path(module_path):
     if os.path.isfile(module_path):
         module_path = os.path.dirname(module_path)
 
-    directory = module_path
     adjacent_modules = []
 
-    for f in os.listdir(module_path):
-        if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
-            import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
-
-        elif not os.path.isdir(os.path.join(directory, f)):
-            adjacent_modules.append(f)
+    with os.scandir(module_path) as entries:
+        for entry in entries:
+            if entry.name == "__pycache__":
+                continue
+            if entry.is_dir():
+                import_structure[entry.name] = create_import_structure_from_path(entry.path)
+            elif not entry.name.startswith(("convert_", "modular_")):
+                adjacent_modules.append(entry.name)
 
     # We're only taking a look at files different from __init__.py
     # We could theoretically require things directly from the __init__.py
@@ -2536,20 +2650,13 @@ def create_import_structure_from_path(module_path):
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
 
-    # Modular files should not be imported
-    def find_substring(substring, list_):
-        return any(substring in x for x in list_)
-
-    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
-        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
-
     module_requirements = {}
     for module_name in adjacent_modules:
         # Only modules ending in `.py` are accepted here.
         if not module_name.endswith(".py"):
             continue
 
-        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
+        with open(os.path.join(module_path, module_name), encoding="utf-8") as f:
             file_content = f.read()
 
         # Remove the .py suffix
@@ -2562,8 +2669,8 @@ def create_import_structure_from_path(module_path):
         # For example, any file named `modeling_xxx.py`
         # should have torch as a required backend.
         base_requirements = ()
-        for string_check, requirements in BASE_FILE_REQUIREMENTS.items():
-            if string_check(module_name):
+        for check, requirements in BASE_FILE_REQUIREMENTS.items():
+            if check(module_name, file_content):
                 base_requirements = requirements
                 break
 

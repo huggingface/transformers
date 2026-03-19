@@ -17,39 +17,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
+@strict(accept_kwargs=True)
 class VibeVoiceAsrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VibeVoiceAsrForConditionalGeneration`]. It is used
-    to instantiate a VibeVoice ASR model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of Microsoft's VibeVoice
-    ASR architecture.
-
-    e.g. [microsoft/VibeVoice-ASR](https://huggingface.co/microsoft/VibeVoice-ASR)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
-            The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
-        semantic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
-            The config object or dictionary of the semantic tokenizer. This tokenizer extracts semantic features from audio.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone (language model).
-        audio_token_id (`int`, *optional*, defaults to 151648):
-            The audio token index to encode the audio prompt.
-        audio_bos_token_id (`int`, *optional*, defaults to 151646):
-            The audio begin-of-sequence token index.
-        audio_eos_token_id (`int`, *optional*, defaults to 151647):
-            The audio end-of-sequence token index.
-        acoustic_tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
-            The chunk size (in number of samples) to use when tokenizer audio inputs. Default corresponds to 60 seconds at 24kHz.
+    acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
+        The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
+    semantic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
+        The config object or dictionary of the semantic tokenizer. This tokenizer extracts semantic features from audio.
+    audio_bos_token_id (`int`, *optional*, defaults to 151646):
+        The audio begin-of-sequence token index.
+    audio_eos_token_id (`int`, *optional*, defaults to 151647):
+        The audio end-of-sequence token index.
+    acoustic_tokenizer_chunk_size (`int`, *optional*, defaults to 1440000):
+        The chunk size (in number of samples) to use when tokenizer audio inputs. Default corresponds to 60 seconds at 24kHz.
 
     Example:
 
@@ -80,52 +68,44 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         "text_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        acoustic_tokenizer_encoder_config=None,
-        semantic_tokenizer_encoder_config=None,
-        text_config=None,
-        audio_token_id=151648,
-        audio_bos_token_id=151646,
-        audio_eos_token_id=151647,
-        acoustic_tokenizer_chunk_size=1440000,
-        **kwargs,
-    ):
-        if isinstance(acoustic_tokenizer_encoder_config, dict):
-            acoustic_tokenizer_encoder_config["model_type"] = acoustic_tokenizer_encoder_config.get(
+    acoustic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
+    semantic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
+    text_config: dict | PretrainedConfig | None = None
+    audio_token_id: int = 151648
+    audio_bos_token_id: int = 151646
+    audio_eos_token_id: int = 151647
+    acoustic_tokenizer_chunk_size: int = 1440000
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.acoustic_tokenizer_encoder_config, dict):
+            self.acoustic_tokenizer_encoder_config["model_type"] = self.acoustic_tokenizer_encoder_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            acoustic_tokenizer_encoder_config = CONFIG_MAPPING[acoustic_tokenizer_encoder_config["model_type"]](
-                **acoustic_tokenizer_encoder_config
-            )
-        elif acoustic_tokenizer_encoder_config is None:
-            acoustic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"]()
-        self.acoustic_tokenizer_encoder_config = acoustic_tokenizer_encoder_config
+            self.acoustic_tokenizer_encoder_config = CONFIG_MAPPING[
+                self.acoustic_tokenizer_encoder_config["model_type"]
+            ](**self.acoustic_tokenizer_encoder_config)
+        elif self.acoustic_tokenizer_encoder_config is None:
+            self.acoustic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"]()
 
-        if isinstance(semantic_tokenizer_encoder_config, dict):
-            semantic_tokenizer_encoder_config["model_type"] = semantic_tokenizer_encoder_config.get(
+        if isinstance(self.semantic_tokenizer_encoder_config, dict):
+            self.semantic_tokenizer_encoder_config["model_type"] = self.semantic_tokenizer_encoder_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            semantic_tokenizer_encoder_config = CONFIG_MAPPING[semantic_tokenizer_encoder_config["model_type"]](
-                **semantic_tokenizer_encoder_config
+            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING[
+                self.semantic_tokenizer_encoder_config["model_type"]
+            ](**self.semantic_tokenizer_encoder_config)
+        elif self.semantic_tokenizer_encoder_config is None:
+            self.semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](
+                hidden_size=128
             )
-        elif semantic_tokenizer_encoder_config is None:
-            semantic_tokenizer_encoder_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
-        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-        self.text_config = text_config
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        self.audio_token_id = audio_token_id
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_eos_token_id = audio_eos_token_id
-        self.acoustic_tokenizer_chunk_size = acoustic_tokenizer_chunk_size
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VibeVoiceAsrConfig"]

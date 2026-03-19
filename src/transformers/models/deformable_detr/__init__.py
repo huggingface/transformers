@@ -21,9 +21,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_deformable_detr import *
-    from .feature_extraction_deformable_detr import *
     from .image_processing_deformable_detr import *
-    from .image_processing_deformable_detr_fast import *
+    from .image_processing_pil_deformable_detr import *
     from .modeling_deformable_detr import *
 else:
     import sys
