@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
 import tempfile
@@ -35,7 +34,6 @@ if is_torch_available():
         AutoModelForMaskedLM,
         AutoTokenizer,
         CharacterBertForMaskedLM,
-        CharacterBertForMultipleChoice,
         CharacterBertForQuestionAnswering,
         CharacterBertForSequenceClassification,
         CharacterBertForTokenClassification,
@@ -60,7 +58,6 @@ class CharacterBertModelTester:
         intermediate_size=37,
         type_vocab_size=2,
         num_labels=3,
-        num_choices=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -76,7 +73,6 @@ class CharacterBertModelTester:
         self.intermediate_size = intermediate_size
         self.type_vocab_size = type_vocab_size
         self.num_labels = num_labels
-        self.num_choices = num_choices
 
     def get_config(self):
         return CharacterBertConfig(
@@ -103,9 +99,7 @@ class CharacterBertModelTester:
 
         sequence_labels = ids_tensor([self.batch_size], self.num_labels)
         token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-        choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        return config, input_ids, attention_mask, token_type_ids, sequence_labels, token_labels, choice_labels
+        return config, input_ids, attention_mask, token_type_ids, sequence_labels, token_labels
 
     def create_and_check_model(self, config, input_ids, attention_mask, token_type_ids):
         model = CharacterBertModel(config=config)
@@ -207,39 +201,12 @@ class CharacterBertModelTester:
         self.parent.assertEqual(outputs.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(outputs.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_for_multiple_choice(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        token_type_ids,
-        choice_labels,
-    ):
-        config.num_choices = self.num_choices
-        model = CharacterBertForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        multiple_choice_input_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1, -1).contiguous()
-        multiple_choice_attention_mask = attention_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-
-        outputs = model(
-            input_ids=multiple_choice_input_ids,
-            attention_mask=multiple_choice_attention_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-
-        self.parent.assertEqual(outputs.logits.shape, (self.batch_size, self.num_choices))
-
     def prepare_config_and_inputs_for_common(self):
         (
             config,
             input_ids,
             attention_mask,
             token_type_ids,
-            _,
             _,
             _,
         ) = self.prepare_config_and_inputs()
@@ -257,7 +224,6 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             CharacterBertModel,
             CharacterBertForMaskedLM,
-            CharacterBertForMultipleChoice,
             CharacterBertForQuestionAnswering,
             CharacterBertForSequenceClassification,
             CharacterBertForTokenClassification,
@@ -277,37 +243,15 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
         )
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        if model_class is not CharacterBertForMultipleChoice:
-            return super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        inputs_dict = copy.deepcopy(inputs_dict)
-        inputs_dict = {
-            k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1, -1).contiguous()
-            if isinstance(v, torch.Tensor) and v.ndim == 3
-            else v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-            if isinstance(v, torch.Tensor) and v.ndim > 1
-            else v
-            for k, v in inputs_dict.items()
-        }
-        if return_labels:
-            inputs_dict["labels"] = torch.ones(
-                self.model_tester.batch_size,
-                dtype=torch.long,
-                device=torch_device,
-            )
-
-        return inputs_dict
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        config, input_ids, attention_mask, token_type_ids, _, _, _ = self.model_tester.prepare_config_and_inputs()
+        config, input_ids, attention_mask, token_type_ids, _, _ = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(config, input_ids, attention_mask, token_type_ids)
 
     def test_for_sequence_classification(self):
-        config, input_ids, attention_mask, token_type_ids, sequence_labels, _, _ = (
+        config, input_ids, attention_mask, token_type_ids, sequence_labels, _ = (
             self.model_tester.prepare_config_and_inputs()
         )
         self.model_tester.create_and_check_for_sequence_classification(
@@ -319,7 +263,7 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_for_masked_lm(self):
-        config, input_ids, attention_mask, token_type_ids, _, _, _ = self.model_tester.prepare_config_and_inputs()
+        config, input_ids, attention_mask, token_type_ids, _, _ = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(
             config,
             input_ids,
@@ -399,7 +343,6 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
             token_type_ids,
             _,
             token_labels,
-            _,
         ) = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(
             config,
@@ -410,7 +353,7 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_for_question_answering(self):
-        config, input_ids, attention_mask, token_type_ids, sequence_labels, _, _ = (
+        config, input_ids, attention_mask, token_type_ids, sequence_labels, _ = (
             self.model_tester.prepare_config_and_inputs()
         )
         self.model_tester.create_and_check_for_question_answering(
@@ -419,24 +362,6 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
             attention_mask,
             token_type_ids,
             sequence_labels,
-        )
-
-    def test_for_multiple_choice(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            _,
-            _,
-            choice_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(
-            config,
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            choice_labels,
         )
 
     @unittest.skip(reason="CharacterBERT uses a CharacterCNN input embedder instead of `nn.Embedding`.")
