@@ -293,7 +293,7 @@ class NemotronHMamba2Mixer(nn.Module):
         global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         global is_fast_path_available
 
-        if config.use_mamba_kernels:
+        if getattr(config, "use_mamba_kernels", True):
             causal_conv1d = lazy_load_kernel("causal-conv1d")
             causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
             causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
@@ -326,7 +326,7 @@ class NemotronHMamba2Mixer(nn.Module):
             mamba_split_conv1d_scan_combined = None
             is_fast_path_available = False
 
-        if config.use_mamba_kernels and not is_fast_path_available:
+        if getattr(config, "use_mamba_kernels", True) and not is_fast_path_available:
             logger.warning_once(
                 "The fast path is not available because one of `(selective_state_update, causal_conv1d_fn, causal_conv1d_update)`"
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
