@@ -407,6 +407,7 @@ def _compile_jinja_template(chat_template):
 
 
 @lru_cache
+@no_type_check
 def _get_template_variables(chat_template: str) -> frozenset[str]:
     """Return the set of undeclared variables referenced by a chat template.
 
