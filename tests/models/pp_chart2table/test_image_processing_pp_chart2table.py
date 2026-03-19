@@ -16,13 +16,8 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_torchvision_available():
-    from transformers import PPChart2TableImageProcessorFast
 
 
 class PPChart2TableImageProcessingTester(unittest.TestCase):
@@ -81,9 +76,6 @@ class PPChart2TableImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class PPChart2TableImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    test_slow_image_processor = False
-    fast_image_processing_class = PPChart2TableImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PPChart2TableImageProcessingTester(self)
@@ -93,7 +85,7 @@ class PPChart2TableImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
