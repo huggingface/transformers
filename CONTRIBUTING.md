@@ -240,6 +240,15 @@ We're always looking for improvements to the documentation that make it more cle
 
 For more details about how to generate, build, and write the documentation, take a look at the documentation [README](https://github.com/huggingface/transformers/tree/main/docs).
 
+## Coding with AI agents
+
+This repository keeps AI-agent configuration in `.ai/` and exposes local agent files via symlinks.
+
+Skills can be exposed to agents by running `make codex` or `make claude`
+
+Cursor reads `AGENTS.md` and reads skills from Claude or Codex paths, so setting up the repository
+for Claude or Codex will work for Claude.
+
 ## Create a Pull Request
 
 Before writing any code, we strongly advise you to search through the existing PRs or
