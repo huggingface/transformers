@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DPTImageProcessor
+    from transformers import DPTImageProcessorPil
 
 
 class DPTModelTester:
@@ -299,7 +299,7 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large").to(torch_device)
 
         image = prepare_img()
@@ -325,7 +325,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_semantic_segmentation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
@@ -346,7 +346,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_post_processing_semantic_segmentation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
@@ -367,7 +367,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(segmentation[0].shape, expected_shape)
 
     def test_post_processing_depth_estimation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
 
         image = prepare_img()

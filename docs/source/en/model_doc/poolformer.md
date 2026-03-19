@@ -69,9 +69,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] PoolFormerImageProcessor
     - preprocess
 
-## PoolFormerImageProcessorFast
+## PoolFormerImageProcessorPil
 
-[[autodoc]] PoolFormerImageProcessorFast
+[[autodoc]] PoolFormerImageProcessorPil
     - preprocess
 
 ## PoolFormerModel
