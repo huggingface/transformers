@@ -586,6 +586,11 @@ class GenerationMixin(ContinuousMixin):
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
         # between `forward`s
         if self.is_remote_code() and "cache_position" in set(inspect.signature(self.forward).parameters):
+            logger.warning_once(
+                "The remote code model you are currently using seems to expect `cache_position`. This arg has been "
+                "removed from the Transformers library, and will stop being created in `generate` even for remote code models "
+                "in a future release. Please open a PR on the remote code hub repo to remove any usage of `cache_position`."
+            )
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
