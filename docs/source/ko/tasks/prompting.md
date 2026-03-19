@@ -46,11 +46,7 @@ Falcon, LLaMA 등의 대규모 언어 모델은 사전 훈련된 트랜스포머
 ### 모델의 유형 [[types-of-models]]
 
 현대의 대부분의 대규모 언어 모델은 디코더만을 이용한 트랜스포머입니다. 예를 들어 [LLaMA](../model_doc/llama), 
-[Llama2](../model_doc/llama2), [Falcon](../model_doc/falcon), [GPT2](../model_doc/gpt2) 등이 있습니다. 그러나 [Flan-T5](../model_doc/flan-t5)와 [BART](../model_doc/bart)와 같은 인코더-디코더 기반의 트랜스포머 대규모 언어 모델을 접할 수도 있습니다.
-
-인코더-디코더 기반의 모델은 일반적으로 출력이 입력에 **크게** 의존하는 생성 작업에 사용됩니다. 예를 들어, 번역과 요약 작업에 사용됩니다. 디코더 전용 모델은 다른 모든 유형의 생성 작업에 사용됩니다.
-
-파이프라인을 사용하여 대규모 언어 모델으로 텍스트를 생성할 때, 어떤 유형의 대규모 언어 모델을 사용하고 있는지 아는 것이 중요합니다. 왜냐하면 이들은 서로 다른 파이프라인을 사용하기 때문입니다.
+[Llama2](../model_doc/llama2), [Falcon](../model_doc/falcon), [GPT2](../model_doc/gpt2) 등이 있습니다.
 
 디코더 전용 모델로 추론을 실행하려면 `text-generation` 파이프라인을 사용하세요:
 
@@ -65,16 +61,6 @@ Falcon, LLaMA 등의 대규모 언어 모델은 사전 훈련된 트랜스포머
 
 >>> generator(prompt, max_length = 30)
 [{'generated_text': "Hello, I'm a language model programmer so you can use some of my stuff. But you also need some sort of a C program to run."}]
-```
-
-인코더-디코더로 추론을 실행하려면 `text2text-generation` 파이프라인을 사용하세요:
-
-```python
->>> text2text_generator = pipeline("text2text-generation", model = 'google/flan-t5-base')
->>> prompt = "Translate from English to French: I'm very happy to see you"
-
->>> text2text_generator(prompt)
-[{'generated_text': 'Je suis très heureuse de vous rencontrer.'}]
 ```
 
 ### 기본 모델 vs 지시/채팅 모델 [[base-vs-instructchat-models]]
@@ -107,7 +93,7 @@ pip install -q transformers accelerate
 ...     "text-generation",
 ...     model=model,
 ...     tokenizer=tokenizer,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ...     device_map="auto",
 ... )
 ```

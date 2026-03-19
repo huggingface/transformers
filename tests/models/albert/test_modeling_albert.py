@@ -15,9 +15,7 @@
 
 import unittest
 
-from packaging import version
-
-from transformers import AlbertConfig, AutoTokenizer, is_torch_available
+from transformers import AlbertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -53,12 +51,12 @@ class AlbertModelTester:
         use_labels=True,
         vocab_size=32,
         embedding_size=8,
-        hidden_size=12,
+        hidden_size=16,
         num_hidden_layers=2,
         # this needs to be the same as `num_hidden_layers`!
         num_hidden_groups=2,
         num_attention_heads=4,
-        intermediate_size=16,
+        intermediate_size=20,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -251,7 +249,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": AlbertModel,
             "fill-mask": AlbertForMaskedLM,
-            "question-answering": AlbertForQuestionAnswering,
             "text-classification": AlbertForSequenceClassification,
             "token-classification": AlbertForTokenClassification,
             "zero-shot": AlbertForSequenceClassification,
@@ -259,7 +256,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -277,7 +273,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlbertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -306,12 +302,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "albert/albert-base-v1"
@@ -335,45 +325,3 @@ class AlbertModelIntegrationTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
-    @slow
-    def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        distilbert_model = "albert/albert-base-v2"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 64
-
-        tokenizer = AutoTokenizer.from_pretrained(distilbert_model)
-        inputs = tokenizer(
-            f"Paris is the {tokenizer.mask_token} of France.",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = AlbertForMaskedLM.from_pretrained(
-            distilbert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
-        self.assertEqual(
-            eg_predicted_mask.split(),
-            ["capital", "capitol", "comune", "arrondissement", "bastille"],
-        )
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

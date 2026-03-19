@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,9 @@ URL: https://github.com/hustvl/ViTMatte
 """
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -112,9 +112,11 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     # verify on dummy image + trimap
     url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_rgb.png?raw=true"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
     url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_trimap.png?raw=true"
-    trimap = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        trimap = Image.open(BytesIO(response.read()))
 
     pixel_values = processor(images=image, trimaps=trimap.convert("L"), return_tensors="pt").pixel_values
 
@@ -163,7 +165,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

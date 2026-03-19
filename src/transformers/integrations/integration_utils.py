@@ -22,33 +22,30 @@ import importlib.util
 import json
 import numbers
 import os
-import pickle
 import re
 import shutil
 import sys
 import tempfile
-from dataclasses import asdict, fields
+import warnings
+from dataclasses import fields
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import packaging.version
 
-from transformers.utils.import_utils import _is_package_available
-
 
 if os.getenv("WANDB_MODE") == "offline":
-    print("⚙️  Running in WANDB offline mode")
+    print("[INFO] Running in WANDB offline mode")
 
-from .. import PreTrainedModel, TFPreTrainedModel, TrainingArguments
+from .. import PreTrainedModel, TrainingArguments
 from .. import __version__ as version
 from ..utils import (
     PushToHubMixin,
     flatten_dict,
     is_datasets_available,
     is_pandas_available,
-    is_tf_available,
     is_torch_available,
     logging,
 )
@@ -56,9 +53,9 @@ from ..utils import (
 
 logger = logging.get_logger(__name__)
 
+
 if is_torch_available():
     import torch
-    import torch.distributed as dist
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
@@ -104,13 +101,6 @@ from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 
 # Integration functions:
 def is_wandb_available():
-    # any value of WANDB_DISABLED disables wandb
-    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
-        logger.warning(
-            "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
-            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
-        )
-        return False
     if importlib.util.find_spec("wandb") is not None:
         import wandb
 
@@ -130,13 +120,6 @@ def is_clearml_available():
 
 
 def is_comet_available():
-    if os.getenv("COMET_MODE", "").upper() == "DISABLED":
-        logger.warning(
-            "Using the `COMET_MODE=DISABLED` environment variable is deprecated and will be removed in v5. Use the "
-            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
-        )
-        return False
-
     if _is_comet_installed is False:
         return False
 
@@ -178,10 +161,6 @@ def is_ray_tune_available():
     if not is_ray_available():
         return False
     return importlib.util.find_spec("ray.tune") is not None
-
-
-def is_sigopt_available():
-    return importlib.util.find_spec("sigopt") is not None
 
 
 def is_azureml_available():
@@ -228,17 +207,20 @@ def is_swanlab_available():
     return importlib.util.find_spec("swanlab") is not None
 
 
+def is_kubeflow_available():
+    if os.getenv("DISABLE_KUBEFLOW_INTEGRATION", "FALSE").upper() == "TRUE":
+        return False
+    return os.getenv("KUBEFLOW_TRAINER_SERVER_URL") is not None
+
+
 def hp_params(trial):
     if is_optuna_available():
         import optuna
 
         if isinstance(trial, optuna.trial.BaseTrial):
             return trial.params
-    if is_ray_tune_available():
-        if isinstance(trial, dict):
-            return trial
 
-    if is_sigopt_available():
+    if is_ray_tune_available():
         if isinstance(trial, dict):
             return trial
 
@@ -286,10 +268,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
         timeout = kwargs.pop("timeout", None)
         n_jobs = kwargs.pop("n_jobs", 1)
         gc_after_trial = kwargs.pop("gc_after_trial", False)
+        catch = kwargs.pop("catch", ())
         directions = direction if isinstance(direction, list) else None
         direction = None if directions is not None else direction
         study = optuna.create_study(direction=direction, directions=directions, **kwargs)
-        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial)
+        study.optimize(
+            _objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs, gc_after_trial=gc_after_trial, catch=catch
+        )
         if not study._is_multi_objective():
             best_trial = study.best_trial
             return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
@@ -312,8 +297,15 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    import ray
-    import ray.train
+    """
+    Environment:
+        - **RAY_SCOPE** (`str`, *optional*, defaults to `"last"`):
+            The scope to use when doing hyperparameter search with Ray. By default, `"last"` will be used. Ray
+            will then use the last checkpoint of all trials, compare those, and select the best one. However,
+            other options are also available. See the Ray documentation (https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial)
+            for more options
+    """
+    import ray.tune
 
     def _objective(trial: dict, local_trainer):
         try:
@@ -326,7 +318,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         local_trainer.objective = None
 
-        checkpoint = ray.train.get_checkpoint()
+        checkpoint = ray.tune.get_checkpoint()
         if checkpoint:
             # Upon trial resume, the local_trainer's objective gets reset to None.
             # If `local_trainer.train` is a noop (training has already reached
@@ -350,8 +342,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
             with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
                 local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
-                ray.train.report(metrics, checkpoint=checkpoint)
+                checkpoint = ray.tune.Checkpoint.from_directory(temp_checkpoint_dir)
+                ray.tune.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -417,7 +409,9 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         Assumes that `_objective`, defined above, is a function.
         """
-        if is_datasets_available():
+        if is_datasets_available() and packaging.version.parse(
+            importlib.metadata.version("datasets")
+        ) < packaging.version.parse("4.0.0"):
             import datasets.load
 
             dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
@@ -438,114 +432,15 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
+    ray_scope = os.getenv("RAY_SCOPE", "last")
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
 
 
-def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    import sigopt
-
-    if trainer.args.process_index == 0:
-        if importlib.metadata.version("sigopt") >= "8.0.0":
-            sigopt.set_project("huggingface")
-
-            experiment = sigopt.create_experiment(
-                name="huggingface-tune",
-                type="offline",
-                parameters=trainer.hp_space(None),
-                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
-                parallel_bandwidth=1,
-                budget=n_trials,
-            )
-
-            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
-
-            for run in experiment.loop():
-                with run:
-                    trainer.objective = None
-                    if trainer.args.world_size > 1:
-                        if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
-                            raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
-                        trainer._hp_search_setup(run.run)
-                        torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                        trainer.train(resume_from_checkpoint=None)
-                    else:
-                        trainer.train(resume_from_checkpoint=None, trial=run.run)
-                    # If there hasn't been any evaluation during the training loop.
-                    if getattr(trainer, "objective", None) is None:
-                        metrics = trainer.evaluate()
-                        trainer.objective = trainer.compute_objective(metrics)
-                    run.log_metric("objective", trainer.objective)
-
-            best = list(experiment.get_best_runs())[0]
-            best_run = BestRun(best.id, best.values["objective"].value, best.assignments)
-        else:
-            from sigopt import Connection
-
-            conn = Connection()
-            proxies = kwargs.pop("proxies", None)
-            if proxies is not None:
-                conn.set_proxies(proxies)
-
-            experiment = conn.experiments().create(
-                name="huggingface-tune",
-                parameters=trainer.hp_space(None),
-                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
-                parallel_bandwidth=1,
-                observation_budget=n_trials,
-                project="huggingface",
-            )
-            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
-
-            while experiment.progress.observation_count < experiment.observation_budget:
-                suggestion = conn.experiments(experiment.id).suggestions().create()
-                trainer.objective = None
-                if trainer.args.world_size > 1:
-                    if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
-                        raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
-                    trainer._hp_search_setup(suggestion)
-                    torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                    trainer.train(resume_from_checkpoint=None)
-                else:
-                    trainer.train(resume_from_checkpoint=None, trial=suggestion)
-                # If there hasn't been any evaluation during the training loop.
-                if getattr(trainer, "objective", None) is None:
-                    metrics = trainer.evaluate()
-                    trainer.objective = trainer.compute_objective(metrics)
-
-                values = [{"name": "objective", "value": trainer.objective}]
-                obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
-                logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
-                experiment = conn.experiments(experiment.id).fetch()
-
-            best = list(conn.experiments(experiment.id).best_assignments().fetch().iterate_pages())[0]
-            best_run = BestRun(best.id, best.value, best.assignments)
-        return best_run
-    else:
-        for i in range(n_trials):
-            trainer.objective = None
-            args_main_rank = list(pickle.dumps(trainer.args))
-            if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
-                raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
-            torch.distributed.broadcast_object_list(args_main_rank, src=0)
-            args = pickle.loads(bytes(args_main_rank))
-            for key, value in asdict(args).items():
-                if key != "local_rank":
-                    setattr(trainer.args, key, value)
-            trainer.train(resume_from_checkpoint=None)
-            # If there hasn't been any evaluation during the training loop.
-            if getattr(trainer, "objective", None) is None:
-                metrics = trainer.evaluate()
-                trainer.objective = trainer.compute_objective(metrics)
-        return None
-
-
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    from ..integrations import is_wandb_available
-
     if not is_wandb_available():
         raise ImportError("This function needs wandb installed: `pip install wandb`")
     import wandb
@@ -646,6 +541,8 @@ def get_available_reporting_integrations():
         integrations.append("swanlab")
     if is_trackio_available():
         integrations.append("trackio")
+    if is_kubeflow_available():
+        integrations.append("kubeflow")
     return integrations
 
 
@@ -665,6 +562,17 @@ def rewrite_logs(d):
     return new_d
 
 
+def default_logdir() -> str:
+    """
+    Same default as PyTorch
+    """
+    import socket
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
+    return os.path.join("runs", current_time + "_" + socket.gethostname())
+
+
 class TensorBoardCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [TensorBoard](https://www.tensorflow.org/tensorboard).
@@ -672,49 +580,47 @@ class TensorBoardCallback(TrainerCallback):
     Args:
         tb_writer (`SummaryWriter`, *optional*):
             The writer to use. Will instantiate one if not set.
+    Environment:
+        - **TENSORBOARD_LOGGING_DIR** (`str`, *optional*, defaults to `None`):
+            The logging dir to log the results. Default value is os.path.join(args.output_dir, default_logdir())
     """
 
     def __init__(self, tb_writer=None):
-        has_tensorboard = is_tensorboard_available()
-        if not has_tensorboard:
+        if not is_tensorboard_available():
             raise RuntimeError(
                 "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or"
                 " install tensorboardX."
             )
-        if has_tensorboard:
-            try:
-                from torch.utils.tensorboard import SummaryWriter  # noqa: F401
+        try:
+            from torch.utils.tensorboard import SummaryWriter
+        except ImportError:
+            from tensorboardX import SummaryWriter
 
-                self._SummaryWriter = SummaryWriter
-            except ImportError:
-                try:
-                    from tensorboardX import SummaryWriter
-
-                    self._SummaryWriter = SummaryWriter
-                except ImportError:
-                    self._SummaryWriter = None
-        else:
-            self._SummaryWriter = None
+        self._SummaryWriter = SummaryWriter
         self.tb_writer = tb_writer
+        self.logging_dir = os.getenv("TENSORBOARD_LOGGING_DIR", None)
+        if self.logging_dir is not None:
+            self.logging_dir = os.path.expanduser(self.logging_dir)
 
-    def _init_summary_writer(self, args, log_dir=None):
-        log_dir = log_dir or args.logging_dir
+    def _init_summary_writer(self, args):
         if self._SummaryWriter is not None:
-            self.tb_writer = self._SummaryWriter(log_dir=log_dir)
+            self.tb_writer = self._SummaryWriter(log_dir=self.logging_dir)
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not state.is_world_process_zero:
             return
 
-        log_dir = None
-
         if state.is_hyper_param_search:
             trial_name = state.trial_name
             if trial_name is not None:
-                log_dir = os.path.join(args.logging_dir, trial_name)
+                # overwrite logging dir for trials
+                self.logging_dir = os.path.join(args.output_dir, default_logdir(), trial_name)
+
+        if self.logging_dir is None:
+            self.logging_dir = os.path.join(args.output_dir, default_logdir())
 
         if self.tb_writer is None:
-            self._init_summary_writer(args, log_dir)
+            self._init_summary_writer(args)
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", args.to_json_string())
@@ -757,12 +663,6 @@ def save_model_architecture_to_file(model: Any, output_dir: str):
     with open(f"{output_dir}/model_architecture.txt", "w+") as f:
         if isinstance(model, PreTrainedModel):
             print(model, file=f)
-        elif is_tf_available() and isinstance(model, TFPreTrainedModel):
-
-            def print_to_file(s):
-                print(s, file=f)
-
-            model.summary(print_fn=print_to_file)
         elif is_torch_available() and (
             isinstance(model, (torch.nn.Module, PushToHubMixin)) and hasattr(model, "base_model")
         ):
@@ -785,13 +685,6 @@ class WandbLogModel(str, Enum):
     def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
             raise TypeError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
-        if value.upper() in ENV_VARS_TRUE_VALUES:
-            raise DeprecationWarning(
-                f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "
-                "version 5 of transformers. Use one of `'end'` or `'checkpoint'` instead."
-            )
-            logger.info(f"Setting `WANDB_LOG_MODEL` from {os.getenv('WANDB_LOG_MODEL')} to `end` instead")
-            return WandbLogModel.END
         logger.warning(
             f"Received unrecognized `WANDB_LOG_MODEL` setting value={value}; so disabling `WANDB_LOG_MODEL`"
         )
@@ -806,24 +699,11 @@ class WandbCallback(TrainerCallback):
     def __init__(self):
         has_wandb = is_wandb_available()
         if not has_wandb:
-            # Check if wandb is actually installed but disabled via WANDB_DISABLED
-            if importlib.util.find_spec("wandb") is not None:
-                # wandb is installed but disabled
-                wandb_disabled = os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES
-                if wandb_disabled:
-                    raise RuntimeError(
-                        "You specified `report_to='wandb'` but also set the `WANDB_DISABLED` environment variable.\n"
-                        "This disables wandb logging, even though it was explicitly requested.\n\n"
-                        "- To enable wandb logging: unset `WANDB_DISABLED`.\n"
-                        "- To disable logging: use `report_to='none'`.\n\n"
-                        "Note: WANDB_DISABLED is deprecated and will be removed in v5."
-                    )
-            # If wandb is not installed at all, use the original error message
             raise RuntimeError("WandbCallback requires wandb to be installed. Run `pip install wandb`.")
-        if has_wandb:
-            import wandb
 
-            self._wandb = wandb
+        import wandb
+
+        self._wandb = wandb
         self._initialized = False
         self._log_model = WandbLogModel(os.getenv("WANDB_LOG_MODEL", "false"))
 
@@ -841,19 +721,11 @@ class WandbCallback(TrainerCallback):
             to `"end"`, the model will be uploaded at the end of training. If set to `"checkpoint"`, the checkpoint
             will be uploaded every `args.save_steps` . If set to `"false"`, the model will not be uploaded. Use along
             with [`~transformers.TrainingArguments.load_best_model_at_end`] to upload best model.
-
-            <Deprecated version="5.0">
-
-            Setting `WANDB_LOG_MODEL` as `bool` will be deprecated in version 5 of 🤗 Transformers.
-
-            </Deprecated>
         - **WANDB_WATCH** (`str`, *optional* defaults to `"false"`):
             Can be `"gradients"`, `"all"`, `"parameters"`, or `"false"`. Set to `"all"` to log gradients and
             parameters.
         - **WANDB_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
             Set this to a custom string to store results in a different project.
-        - **WANDB_DISABLED** (`bool`, *optional*, defaults to `False`):
-            Whether to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return
@@ -863,9 +735,6 @@ class WandbCallback(TrainerCallback):
         from wandb.sdk.lib.config_util import ConfigError as WandbConfigError
 
         if state.is_world_process_zero:
-            logger.info(
-                'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
-            )
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
@@ -873,7 +742,7 @@ class WandbCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None:
@@ -1066,14 +935,15 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
-    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+    It records training metrics, model (including PEFT) configuration.
 
     **Requires**:
     ```bash
     pip install trackio
     ```
     """
+
+    SPACE_URL = "https://huggingface.co/spaces/{space_id}"
 
     def __init__(self):
         has_trackio = is_trackio_available()
@@ -1089,33 +959,24 @@ class TrackioCallback(TrainerCallback):
         """
         Setup the optional Trackio integration.
 
-        To customize the setup you can also override the following environment variables:
-
-        Environment:
-        - **TRACKIO_PROJECT** (`str`, *optional*, defaults to `"huggingface"`):
-            The name of the project (can be an existing project to continue tracking or a new project to start tracking
-            from scratch).
-        - **TRACKIO_SPACE_ID** (`str`, *optional*, defaults to `None`):
-            If set, the project will be logged to a Hugging Face Space instead of a local directory. Should be a
-            complete Space name like `"username/reponame"` or `"orgname/reponame"`, or just `"reponame" in which case
-            the Space will be created in the currently-logged-in Hugging Face user's namespace. If the Space does not
-            exist, it will be created. If the Space already exists, the project will be logged to it.
+        To customize the setup you can also set the arguments `project`, `trackio_space_id` and `hub_private_repo` in
+        [`TrainingArguments`]. Please refer to the docstring of for more details.
         """
         if state.is_world_process_zero:
             combined_dict = {**args.to_dict()}
-
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
 
             self._trackio.init(
-                project=os.getenv("TRACKIO_PROJECT", "huggingface"),
+                project=args.project,
                 name=args.run_name,
-                space_id=os.getenv("TRACKIO_SPACE_ID", None),
+                space_id=args.trackio_space_id,
                 resume="allow",
+                private=args.hub_private_repo,
             )
 
             # Add config parameters (run may have been created manually)
@@ -1145,31 +1006,12 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
-        if is_torch_available() and torch.cuda.is_available():
-            device_idx = torch.cuda.current_device()
-            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
-            memory_allocated = torch.cuda.memory_allocated(device_idx)
-
-            gpu_memory_logs = {
-                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
-                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-            }
-            if _is_package_available("pynvml"):
-                power = torch.cuda.power_draw(device_idx)
-                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
-            if dist.is_available() and dist.is_initialized():
-                gathered_logs = [None] * dist.get_world_size()
-                dist.all_gather_object(gathered_logs, gpu_memory_logs)
-                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
-        else:
-            gpu_memory_logs = {}
-
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
+            self._trackio.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
         return
@@ -1182,6 +1024,39 @@ class TrackioCallback(TrainerCallback):
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._trackio.log(metrics)
+
+    def on_push_begin(self, args, state, control, model, **kwargs):
+        if not state.is_world_process_zero or self._trackio is None:
+            return
+        if (current_project := self._trackio.context_vars.current_project.get()) is None:
+            return
+        trackio_version = packaging.version.parse(self._trackio.__version__)
+        if trackio_version < packaging.version.parse("0.13.0"):
+            warnings.warn(
+                "The version of `trackio` that is installed is <=0.13.0, so "
+                "the local Trackio project will not be pushed to Hugging Face. Run "
+                "`pip install --upgrade trackio` to fix this."
+            )
+            return
+
+        space_id = self._trackio.context_vars.current_space_id.get()
+        if space_id is None:
+            space_id = self._trackio.sync(current_project, force=True)
+        space_url = self.SPACE_URL.format(space_id=space_id)
+
+        badge_markdown = (
+            f'<a href="{space_url}" target="_blank"><img src="https://raw.githubusercontent.com/gradio-app/trackio/refs/heads/main/trackio/assets/badge.png" alt="Visualize in Trackio"'
+            ' title="Visualize in Trackio" style="height: 40px;"/></a>'
+        )
+        if badge_markdown not in modelcard.AUTOGENERATED_TRAINER_COMMENT:
+            modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
+
+        trackio_tags = ["trackio", f"trackio:{space_url}"]
+        if getattr(model, "model_tags", None) is not None:
+            if "trackio" not in model.model_tags:
+                model.model_tags.extend(trackio_tags)
+        else:
+            model.model_tags = trackio_tags
 
 
 class CometCallback(TrainerCallback):
@@ -1212,17 +1087,12 @@ class CometCallback(TrainerCallback):
                 * `create`: Always create a new Comet Experiment.
                 * `get`: Always try to append to an Existing Comet Experiment.
                   Requires `COMET_EXPERIMENT_KEY` to be set.
-                * `ONLINE`: **deprecated**, used to create an online
-                  Experiment. Use `COMET_START_ONLINE=1` instead.
-                * `OFFLINE`: **deprecated**, used to created an offline
-                  Experiment. Use `COMET_START_ONLINE=0` instead.
-                * `DISABLED`: **deprecated**, used to disable Comet logging.
-                  Use the `--report_to` flag to control the integrations used
-                  for logging result instead.
+        - **COMET_START_ONLINE** (`bool`, *optional*):
+            Whether to create an online or offline Experiment.
         - **COMET_PROJECT_NAME** (`str`, *optional*):
             Comet project name for experiments.
         - **COMET_LOG_ASSETS** (`str`, *optional*, defaults to `TRUE`):
-            Whether or not to log training assets (tf event logs, checkpoints, etc), to Comet. Can be `TRUE`, or
+            Whether or not to log training assets (checkpoints, etc), to Comet. Can be `TRUE`, or
             `FALSE`.
 
         For a number of configurable items in the environment, see
@@ -1240,12 +1110,7 @@ class CometCallback(TrainerCallback):
 
             if comet_old_mode is not None:
                 comet_old_mode = comet_old_mode.lower()
-
-                if comet_old_mode == "online":
-                    online = True
-                elif comet_old_mode == "offline":
-                    online = False
-                elif comet_old_mode in ("get", "get_or_create", "create"):
+                if comet_old_mode in ("get", "get_or_create", "create"):
                     mode = comet_old_mode
                 elif comet_old_mode:
                     logger.warning("Invalid COMET_MODE env value %r, Comet logging is disabled", comet_old_mode)
@@ -1591,6 +1456,10 @@ class NeptuneMissingConfiguration(Exception):
 class NeptuneCallback(TrainerCallback):
     """TrainerCallback that sends the logs to [Neptune](https://app.neptune.ai).
 
+    > [!WARNING]
+    > Neptune integration is deprecated and will be removed in a future version of Transformers. We recommend using
+    > other supported experiment tracking integrations.
+
     Args:
         api_token (`str`, *optional*): Neptune API token obtained upon registration.
             You can leave this argument out if you have saved your token to the `NEPTUNE_API_TOKEN` environment
@@ -1627,15 +1496,20 @@ class NeptuneCallback(TrainerCallback):
     def __init__(
         self,
         *,
-        api_token: Optional[str] = None,
-        project: Optional[str] = None,
-        name: Optional[str] = None,
+        api_token: str | None = None,
+        project: str | None = None,
+        name: str | None = None,
         base_namespace: str = "finetuning",
         run=None,
         log_parameters: bool = True,
-        log_checkpoints: Optional[str] = None,
+        log_checkpoints: str | None = None,
         **neptune_run_kwargs,
     ):
+        warnings.warn(
+            "The NeptuneCallback is deprecated and will be removed in a future version of Transformers. We recommend "
+            "using other supported experiment tracking integrations.",
+            FutureWarning,
+        )
         if not is_neptune_available():
             raise ValueError(
                 "NeptuneCallback requires the Neptune client library to be installed. "
@@ -1660,7 +1534,7 @@ class NeptuneCallback(TrainerCallback):
         self._base_namespace_path = base_namespace
         self._log_parameters = log_parameters
         self._log_checkpoints = log_checkpoints
-        self._initial_run: Optional[Run] = run
+        self._initial_run: Run | None = run
 
         self._run = None
         self._is_monitoring_run = False
@@ -1794,7 +1668,7 @@ class NeptuneCallback(TrainerCallback):
 
     def on_init_end(self, args, state, control, **kwargs):
         self._volatile_checkpoints_dir = None
-        if self._log_checkpoints and (args.overwrite_output_dir or args.save_total_limit is not None):
+        if self._log_checkpoints and args.save_total_limit is not None:
             self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
 
         if self._log_checkpoints == "best" and not args.load_best_model_at_end:
@@ -1848,7 +1722,7 @@ class NeptuneCallback(TrainerCallback):
 
         raise Exception("The trainer doesn't have a NeptuneCallback configured.")
 
-    def on_log(self, args, state, control, logs: Optional[dict[str, float]] = None, **kwargs):
+    def on_log(self, args, state, control, logs: dict[str, float] | None = None, **kwargs):
         if not state.is_world_process_zero:
             return
 
@@ -2227,8 +2101,8 @@ class DVCLiveCallback(TrainerCallback):
 
     def __init__(
         self,
-        live: Optional[Any] = None,
-        log_model: Optional[Union[Literal["all"], bool]] = None,
+        live: Any | None = None,
+        log_model: Literal["all"] | bool | None = None,
         **kwargs,
     ):
         if not is_dvclive_available():
@@ -2370,6 +2244,12 @@ class SwanLabCallback(TrainerCallback):
         - **SWANLAB_API_HOST** (`str`, *optional*, defaults to `None`):
             API address for the SwanLab cloud environment for private version (its free)
 
+        - **SWANLAB_RUN_ID** (`str`, *optional*, defaults to `None`):
+            Experiment ID to resume a previous run. Use with `SWANLAB_RESUME` to continue an existing experiment.
+
+        - **SWANLAB_RESUME** (`str`, *optional*, defaults to `None`):
+            Resume mode (`"must"`, `"allow"`, `"never"`). Defaults to `"allow"` when `resume_from_checkpoint` is used.
+
         """
         self._initialized = True
 
@@ -2382,7 +2262,7 @@ class SwanLabCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             if hasattr(model, "peft_config") and model.peft_config is not None:
                 peft_config = model.peft_config
-                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+                combined_dict = {"peft_config": peft_config, **combined_dict}
             trial_name = state.trial_name
             init_args = {}
             if trial_name is not None and args.run_name is not None:
@@ -2392,6 +2272,16 @@ class SwanLabCallback(TrainerCallback):
             elif trial_name is not None:
                 init_args["experiment_name"] = trial_name
             init_args["project"] = os.getenv("SWANLAB_PROJECT", None)
+
+            run_id = os.getenv("SWANLAB_RUN_ID", None)
+            if run_id is not None:
+                init_args["id"] = run_id
+
+            resume = os.getenv("SWANLAB_RESUME", None)
+            if resume is not None:
+                init_args["resume"] = resume
+            elif args.resume_from_checkpoint:
+                init_args["resume"] = "allow"
 
             if self._swanlab.get_run() is None:
                 self._swanlab.init(
@@ -2422,7 +2312,7 @@ class SwanLabCallback(TrainerCallback):
                 badge_markdown = (
                     f'[<img src="https://raw.githubusercontent.com/SwanHubX/assets/main/badge1.svg"'
                     f' alt="Visualize in SwanLab" height="28'
-                    f'0" height="32"/>]({self._swanlab.get_run().public.cloud.exp_url})'
+                    f'0" height="32"/>]({self._swanlab.get_run().public.cloud.experiment_url})'
                 )
 
                 modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
@@ -2472,6 +2362,213 @@ class SwanLabCallback(TrainerCallback):
             self._swanlab.log(metrics)
 
 
+class KubeflowCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that reports training progress to [Kubeflow Trainer](https://github.com/kubeflow/trainer).
+
+    This callback is automatically registered when training inside a Kubeflow TrainJob with the
+    `TrainJobRuntimeStatus` feature gate enabled. The Kubeflow controller injects the required
+    environment variables into the training pod.
+
+    **Environment Variables (injected by controller):**
+
+    - `KUBEFLOW_TRAINER_SERVER_URL`: HTTPS endpoint for status updates
+    - `KUBEFLOW_TRAINER_SERVER_CA_CERT`: Path to CA certificate for TLS verification
+    - `KUBEFLOW_TRAINER_SERVER_TOKEN`: Path to service account token for authentication
+
+    **Reported Information:**
+
+    - Progress percentage (0-100%)
+    - Estimated time remaining (seconds)
+    - Training metrics (loss, learning_rate, etc.)
+
+    **Features:**
+
+    - Automatic throttling (max 1 update per 5 seconds) to avoid overwhelming the controller
+    - Token caching (5 minutes) to minimize file I/O
+    - Only rank 0 reports progress in distributed training
+    - Silent failures - network issues won't interrupt training
+
+    Can be disabled by setting environment variable `DISABLE_KUBEFLOW_INTEGRATION=TRUE`.
+    """
+
+    _MIN_UPDATE_INTERVAL = 5.0
+    _TOKEN_CACHE_DURATION = 300.0  # 5 minutes, aligned with SDK
+    _ENV_SERVER_URL = "KUBEFLOW_TRAINER_SERVER_URL"
+    _ENV_CA_CERT = "KUBEFLOW_TRAINER_SERVER_CA_CERT"
+    _ENV_TOKEN_PATH = "KUBEFLOW_TRAINER_SERVER_TOKEN"
+
+    def __init__(self):
+        if not is_kubeflow_available():
+            raise RuntimeError(
+                "KubeflowCallback requires KUBEFLOW_TRAINER_SERVER_URL environment variable to be set. "
+                "This is automatically set when running inside a Kubeflow TrainJob with TrainJobRuntimeStatus enabled."
+            )
+
+        self._initialized = False
+        self._metrics = {}
+        self._start_time = None
+        self._last_update_time = 0.0
+        self._cached_token = None
+        self._token_read_time = 0.0
+        self._ssl_context = None
+        self._ssl_context_initialized = False
+
+        logger.debug("[Kubeflow] Callback initialized")
+
+    def _get_ssl_context(self):
+        """Get cached SSL context for TLS verification."""
+        import ssl
+
+        if self._ssl_context_initialized:
+            return self._ssl_context
+
+        ca_file = os.environ.get(self._ENV_CA_CERT)
+        if ca_file:
+            try:
+                self._ssl_context = ssl.create_default_context(cafile=ca_file)
+            except Exception as e:
+                logger.warning(f"[Kubeflow] Failed to create SSL context with CA file {ca_file}: {e}")
+                self._ssl_context = None
+        self._ssl_context_initialized = True
+        return self._ssl_context
+
+    def _get_token(self):
+        """Get cached service account token."""
+        import time
+
+        now = time.monotonic()
+        if self._cached_token and (now - self._token_read_time) < self._TOKEN_CACHE_DURATION:
+            return self._cached_token
+
+        token_path = os.environ.get(self._ENV_TOKEN_PATH)
+        if not token_path or not os.path.exists(token_path):
+            logger.debug(f"[Kubeflow] Token file not found: {token_path}")
+            return None
+
+        try:
+            with open(token_path) as f:
+                self._cached_token = f.read().strip()
+                self._token_read_time = now
+                return self._cached_token
+        except OSError as e:
+            logger.debug(f"[Kubeflow] Failed to read token file: {e}")
+            return None
+
+    def _update_status(self, progress_percent=None, estimated_time_remaining=None, metrics=None, force=False):
+        """Send progress update to Kubeflow Trainer controller."""
+        import json
+        import time
+        import urllib.request
+        from datetime import datetime, timezone
+
+        try:
+            url = os.environ.get(self._ENV_SERVER_URL)
+            if not url:
+                return False
+
+            now = time.monotonic()
+            if not force and (now - self._last_update_time) < self._MIN_UPDATE_INTERVAL:
+                return False
+            self._last_update_time = now
+
+            token = self._get_token()
+            if not token:
+                return False
+
+            trainer_status = {"lastUpdatedTime": datetime.now(timezone.utc).isoformat()}
+
+            if progress_percent is not None:
+                trainer_status["progressPercentage"] = max(0, min(100, progress_percent))
+
+            if estimated_time_remaining is not None:
+                trainer_status["estimatedRemainingSeconds"] = max(0, int(estimated_time_remaining))
+
+            if metrics:
+                trainer_status["metrics"] = [{"name": str(k), "value": str(v)} for k, v in metrics.items()]
+
+            data = json.dumps({"trainerStatus": trainer_status}).encode("utf-8")
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=5, context=self._get_ssl_context()) as resp:
+                return resp.status == 200
+        except Exception as e:
+            logger.debug(f"[Kubeflow] Failed to update status: {e}")
+            return False
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        if not state.is_world_process_zero:
+            return
+
+        import time
+
+        self._start_time = time.time()
+        self._metrics = {}
+        self._initialized = True
+
+        logger.debug(f"[Kubeflow] Training started, max_steps={state.max_steps}")
+        self._update_status(
+            progress_percent=0,
+            metrics={"total_steps": state.max_steps} if state.max_steps else None,
+            force=True,
+        )
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not self._initialized or not state.is_world_process_zero or logs is None:
+            return
+
+        for key, value in logs.items():
+            if isinstance(value, (int, float)):
+                self._metrics[key] = value
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if not self._initialized or not state.is_world_process_zero:
+            return
+
+        if not state.max_steps or state.max_steps <= 0:
+            return
+
+        import time
+
+        progress = int((state.global_step / state.max_steps) * 100)
+        # Cap at 99% until on_train_end reports 100% to indicate completion
+        progress = min(progress, 99)
+
+        eta_seconds = None
+        if self._start_time and state.global_step > 0:
+            elapsed = time.time() - self._start_time
+            avg_time_per_step = elapsed / state.global_step
+            remaining_steps = state.max_steps - state.global_step
+            eta_seconds = int(avg_time_per_step * remaining_steps)
+
+        metrics = {
+            **self._metrics,
+            "current_step": state.global_step,
+            "total_steps": state.max_steps,
+        }
+        if state.epoch is not None:
+            metrics["current_epoch"] = round(state.epoch, 2)
+
+        self._update_status(
+            progress_percent=progress,
+            estimated_time_remaining=eta_seconds,
+            metrics=metrics,
+        )
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if not self._initialized or not state.is_world_process_zero:
+            return
+
+        logger.debug("[Kubeflow] Training completed")
+        self._update_status(
+            progress_percent=100,
+            estimated_time_remaining=0,
+            metrics=self._metrics,
+            force=True,
+        )
+
+
 INTEGRATION_TO_CALLBACK = {
     "azure_ml": AzureMLCallback,
     "comet_ml": CometCallback,
@@ -2486,6 +2583,7 @@ INTEGRATION_TO_CALLBACK = {
     "flyte": FlyteCallback,
     "dvclive": DVCLiveCallback,
     "swanlab": SwanLabCallback,
+    "kubeflow": KubeflowCallback,
 }
 
 
@@ -2494,9 +2592,9 @@ def get_reporting_integration_callbacks(report_to):
         return []
 
     if isinstance(report_to, str):
-        if "none" == report_to:
+        if report_to == "none":
             return []
-        elif "all" == report_to:
+        elif report_to == "all":
             report_to = get_available_reporting_integrations()
         else:
             report_to = [report_to]

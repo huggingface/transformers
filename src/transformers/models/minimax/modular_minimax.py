@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 MiniMaxAI and HuggingFace Inc. teams. All rights reserved.
 #
 #
@@ -15,23 +14,25 @@
 # limitations under the License.
 """PyTorch MiniMax model."""
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
-from ...utils.generic import OutputRecorder
-from ..mixtral.configuration_mixtral import MixtralConfig
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
     MixtralDecoderLayer,
@@ -43,100 +44,32 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
+    MixtralTopKRouter,
 )
 
 
 logger = logging.get_logger(__name__)
 
 
-class MiniMaxConfig(MixtralConfig):
+@auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
+@strict(accept_kwargs=True)
+class MiniMaxConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
-    MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MiniMax.
-
-    [MiniMaxAI/MiniMax-Text-01-hf](https://huggingface.co/MiniMaxAI/MiniMax-Text-01-hf)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the MiniMax model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MiniMaxModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 14336):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `8`.
-        head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
-            The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
-            The maximum sequence length that this model might ever be used with. MiniMax's sliding window attention
-            allows sequence of up to 4096*32 tokens.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the "end-of-sequence" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
-        sliding_window (`int`, *optional*):
-            Sliding window attention window size. If not specified, will default to `4096`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_experts_per_tok (`int`, *optional*, defaults to 2):
-            The number of experts to route per-token, can be also interpreted as the `top-k` routing
-            parameter
-        num_local_experts (`int`, *optional*, defaults to 8):
-            Number of experts per Sparse MLP layer.
-        output_router_logits (`bool`, *optional*, defaults to `False`):
-            Whether or not the router logits should be returned by the model. Enabeling this will also
-            allow the model to output the auxiliary loss. See [here]() for more details
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        router_jitter_noise (`float`, *optional*, defaults to 0.0):
-            Amount of noise to add to the router.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        block_size (`int`, *optional*, defaults to 256):
-            The length of each attention block, determining how queries, keys, and values
-            are grouped and processed for intra- and inter-block attention.
-        full_attn_alpha_factor (`float`, *optional*, defaults to 1):
-            Weight for residual value in residual connection after normal attention.
-        full_attn_beta_factor (`float`, *optional*, defaults to 1):
-            Weight for hidden state value in residual connection after normal attention.
-        linear_attn_alpha_factor (`float`, *optional*, defaults to 1):
-            Weight for residual value in residual connection after lightning attention.
-        linear_attn_beta_factor (`float`, *optional*, defaults to 1):
-            Weight for hidden state value in residual connection after lightning attention.
-        mlp_alpha_factor (`float`, *optional*, defaults to 1):
-            Weight for residual value in residual connection after MLP.
-        mlp_beta_factor (`float`, *optional*, defaults to 1):
-            Weight for hidden state value in residual connection after MLP.
+    block_size (`int`, *optional*, defaults to 256):
+        The length of each attention block, determining how queries, keys, and values
+        are grouped and processed for intra- and inter-block attention.
+    full_attn_alpha_factor (`float`, *optional*, defaults to 1):
+        Weight for residual value in residual connection after normal attention.
+    full_attn_beta_factor (`float`, *optional*, defaults to 1):
+        Weight for hidden state value in residual connection after normal attention.
+    linear_attn_alpha_factor (`float`, *optional*, defaults to 1):
+        Weight for residual value in residual connection after lightning attention.
+    linear_attn_beta_factor (`float`, *optional*, defaults to 1):
+        Weight for hidden state value in residual connection after lightning attention.
+    mlp_alpha_factor (`float`, *optional*, defaults to 1):
+        Weight for residual value in residual connection after MLP.
+    mlp_beta_factor (`float`, *optional*, defaults to 1):
+        Weight for hidden state value in residual connection after MLP.
 
     ```python
     >>> from transformers import MiniMaxModel, MiniMaxConfig
@@ -151,33 +84,68 @@ class MiniMaxConfig(MixtralConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        layer_types=None,
-        block_size=256,
-        full_attn_alpha_factor=1,
-        full_attn_beta_factor=1,
-        linear_attn_alpha_factor=1,
-        linear_attn_beta_factor=1,
-        mlp_alpha_factor=1,
-        mlp_beta_factor=1,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
-        self.layer_types = layer_types
-        self.block_size = block_size
-        self.full_attn_alpha_factor = full_attn_alpha_factor
-        self.full_attn_beta_factor = full_attn_beta_factor
-        self.linear_attn_alpha_factor = linear_attn_alpha_factor
-        self.linear_attn_beta_factor = linear_attn_beta_factor
-        self.mlp_alpha_factor = mlp_alpha_factor
-        self.mlp_beta_factor = mlp_beta_factor
+    model_type = "minimax"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {"num_experts": "num_local_experts"}
+
+    vocab_size: int = 32000
+    hidden_size: int = 4096
+    intermediate_size: int = 14336
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    head_dim: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096 * 32
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    num_experts_per_tok: int = 2
+    num_local_experts: int = 8
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    router_jitter_noise: float = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    layer_types: list[str] | None = None
+    block_size: int = 256
+    full_attn_alpha_factor: int | float = 1
+    full_attn_beta_factor: int | float = 1
+    linear_attn_alpha_factor: int | float = 1
+    linear_attn_beta_factor: int | float = 1
+    mlp_alpha_factor: int | float = 1
+    mlp_beta_factor: int | float = 1
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         if self.layer_types is None:
             self.layer_types = [
                 "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types)
+
+        super().__post_init__(**kwargs)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
@@ -202,15 +170,6 @@ class MiniMaxCache(DynamicCache):
 
     def __len__(self):
         return max(super().__len__(), len(self.linear_cache))
-
-    def __getitem__(self, layer_idx: int):
-        if layer_idx < len(self.linear_cache) and self.linear_cache[layer_idx] != []:
-            return (self.linear_cache[layer_idx],)
-        return super().__getitem__(layer_idx)
-
-    def __iter__(self):
-        for layer_idx in range(len(self)):
-            yield self[layer_idx]
 
     def batch_repeat_interleave(self, repeats: int):
         for layer_idx in range(len(self)):
@@ -282,11 +241,10 @@ class MiniMaxLightningAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
@@ -301,8 +259,8 @@ class MiniMaxLightningAttention(nn.Module):
 
         # calculated (K.T @ V) and saved as cache
         attn_weights_inter = None
-        if past_key_value is not None:
-            attn_weights_inter = past_key_value.get_linear_cache(self.layer_idx)
+        if past_key_values is not None:
+            attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
 
         if attn_weights_inter is None:
             attn_weights_inter = torch.zeros(batch_size, self.num_attention_heads, self.head_dim, self.head_dim).to(
@@ -340,7 +298,7 @@ class MiniMaxLightningAttention(nn.Module):
                 current_attn_output = attn_output_inter + attn_output_intra
                 attn_output.append(current_attn_output)
 
-                # cacluate attn_weights_inter for next block or cache
+                # calculate attn_weights_inter for next block or cache
                 next_attn_weights_inter = torch.matmul(
                     (current_key_states * current_key_decay).transpose(-1, -2), current_value_states
                 )
@@ -371,13 +329,21 @@ class MiniMaxLightningAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         # update cache
-        if past_key_value is not None:
-            past_key_value.set_linear_cache(self.layer_idx, attn_weights_inter)
+        if past_key_values is not None:
+            past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
 
         return attn_output, attn_weights_inter
 
 
+class MiniMaxRotaryEmbedding(Gemma2RotaryEmbedding):
+    pass
+
+
 class MiniMaxAttention(MixtralAttention):
+    pass
+
+
+class MiniMaxTopKRouter(MixtralTopKRouter):
     pass
 
 
@@ -390,10 +356,11 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         super().__init__(config, layer_idx)
 
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx]
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
-
+        del self.mlp
+        self.mlp = MiniMaxSparseMoeBlock(config)
         if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
@@ -406,89 +373,65 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            attention_mask (`torch.Tensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_router_logits (`bool`, *optional*):
-                Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
-                should not be returned during inference.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         hidden_states = self.input_layernorm(hidden_states)
         residual = hidden_states
-
-        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
-
-        # Fully Connected
         hidden_states = self.post_attention_layernorm(hidden_states)
         residual = hidden_states
-        hidden_states, _ = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 
         return hidden_states
 
 
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class MiniMaxCache
     _can_record_outputs = {
-        "router_logits": OutputRecorder(MiniMaxSparseMoeBlock, index=1),
+        "router_logits": OutputRecorder(MiniMaxTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, MiniMaxLightningAttention):
+            slope_rate = module.get_slope_rate()
+            query_decay, key_decay, diagonal_decay = module.decay_factors(slope_rate)
+            init.copy_(module.slope_rate, slope_rate)
+            init.copy_(module.query_decay, query_decay)
+            init.copy_(module.key_decay, key_decay)
+            init.copy_(module.diagonal_decay, diagonal_decay)
+
 
 class MiniMaxModel(MixtralModel):
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[MiniMaxCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: MiniMaxCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -502,27 +445,21 @@ class MiniMaxModel(MixtralModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
 
         hidden_states = inputs_embeds
-
-        # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers:
@@ -534,12 +471,11 @@ class MiniMaxModel(MixtralModel):
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
                 attention_mask=input_attention_mask,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 

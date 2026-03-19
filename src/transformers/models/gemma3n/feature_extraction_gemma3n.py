@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import math
 from collections.abc import Sequence
-from typing import Optional, Union
 
 import numpy as np
 
@@ -34,7 +32,7 @@ def create_fb_matrix(
     n_mels: int,
     sample_rate: int,
     fft_length: int,
-    norm: Optional[str] = None,
+    norm: str | None = None,
 ) -> np.ndarray:
     r"""Create a frequency bin conversion matrix (NumPy version).
 
@@ -108,7 +106,7 @@ def _unfold(array: np.ndarray, dimension: int, size: int, step: int) -> np.ndarr
 
 
 class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
-    """An audio feature extractor Universal Speech Models https://arxiv.org/abs/2303.01037.
+    """An audio feature extractor Universal Speech Models https://huggingface.co/papers/2303.01037.
 
     Args:
         feature_size (`int`, *optional*, defaults to 128):
@@ -169,8 +167,8 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         dither: float = 0.0,
         input_scale_factor: float = 1.0,
         mel_floor: float = 1e-5,
-        per_bin_mean: Optional[Sequence[float]] = None,
-        per_bin_stddev: Optional[Sequence[float]] = None,
+        per_bin_mean: Sequence[float] | None = None,
+        per_bin_stddev: Sequence[float] | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -268,20 +266,20 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = "longest",
-        max_length: Optional[int] = 480_000,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = "longest",
+        max_length: int | None = 480_000,
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = 128,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = True,
+        pad_to_multiple_of: int | None = 128,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = True,
         **kwargs,
     ) -> BatchFeature:
         """Creates a batch of MEL spectrograms from the provided raw speech.
 
         This implementation uses a different algorithm for windowing and preemphasis compared to the built-in
         `transformers.audio_utils.spectrogram()` function that _will_ result in different outputs. Consider this
-        carefully when selecting an audio feature extactor, especially with pre-trained models.
+        carefully when selecting an audio feature extractor, especially with pre-trained models.
 
         Args:
             raw_speech:
@@ -296,7 +294,7 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*, defaults to 128):
                 When padding, pad to a multiple of this value. The default value is defined for optimal TPU support.
             return_tensors (`Union[str, TensorType]`, *optional*, defaults to `None`):
-                The type of tensors to return (e.g., NumPy, Torch, JAX, TensorFlow).
+                The type of tensors to return (e.g., NumPy, or Torch).
             return_attention_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the attention mask for the generated MEL spectrograms.
         """
@@ -305,13 +303,10 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         is_batched_sequence = isinstance(raw_speech, Sequence) and isinstance(raw_speech[0], (np.ndarray, Sequence))
         is_batched = is_batched_numpy or is_batched_sequence
 
-        if is_batched:
-            raw_speech = [np.asarray([rs]).T for rs in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
-
-        if not is_batched:  # always return a batch
-            raw_speech = [np.asarray([raw_speech])]
+        # Always return a batch
+        if not is_batched:
+            raw_speech = [raw_speech]
+        raw_speech = [np.asarray([rs]).T for rs in raw_speech]
 
         batched_speech = self.pad(
             BatchFeature({"input_features": raw_speech}),

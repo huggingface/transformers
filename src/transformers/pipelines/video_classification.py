@@ -11,11 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from io import BytesIO
-from typing import Any, Optional, Union, overload
+from typing import Any, overload
 
-import requests
+import httpx
 
 from ..utils import (
     add_end_docstrings,
@@ -88,7 +87,7 @@ class VideoClassificationPipeline(Pipeline):
     @overload
     def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, inputs: Optional[Union[str, list[str]]] = None, **kwargs):
+    def __call__(self, inputs: str | list[str] | None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 
@@ -126,13 +125,6 @@ class VideoClassificationPipeline(Pipeline):
             - **label** (`str`) -- The label identified by the model.
             - **score** (`int`) -- The score attributed by the model for that label.
         """
-        # After deprecation of this is completed, remove the default `None` value for `images`
-        if "videos" in kwargs:
-            warnings.warn(
-                "The `videos` argument has been renamed to `inputs`. In version 5 of Transformers, `videos` will no longer be accepted",
-                FutureWarning,
-            )
-            inputs = kwargs.pop("videos")
         if inputs is None:
             raise ValueError("Cannot call the video-classification pipeline without an inputs argument!")
         return super().__call__(inputs, **kwargs)
@@ -142,7 +134,7 @@ class VideoClassificationPipeline(Pipeline):
             num_frames = self.model.config.num_frames
 
         if video.startswith("http://") or video.startswith("https://"):
-            video = BytesIO(requests.get(video).content)
+            video = BytesIO(httpx.get(video, follow_redirects=True).content)
 
         container = av.open(video)
 
@@ -153,9 +145,8 @@ class VideoClassificationPipeline(Pipeline):
         video = read_video_pyav(container, indices)
         video = list(video)
 
-        model_inputs = self.image_processor(video, return_tensors=self.framework)
-        if self.framework == "pt":
-            model_inputs = model_inputs.to(self.torch_dtype)
+        model_inputs = self.image_processor(video, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -166,16 +157,13 @@ class VideoClassificationPipeline(Pipeline):
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
 
-        if self.framework == "pt":
-            if function_to_apply == "softmax":
-                probs = model_outputs.logits[0].softmax(-1)
-            elif function_to_apply == "sigmoid":
-                probs = model_outputs.logits[0].sigmoid()
-            else:
-                probs = model_outputs.logits[0]
-            scores, ids = probs.topk(top_k)
+        if function_to_apply == "softmax":
+            probs = model_outputs.logits[0].softmax(-1)
+        elif function_to_apply == "sigmoid":
+            probs = model_outputs.logits[0].sigmoid()
         else:
-            raise ValueError(f"Unsupported framework: {self.framework}")
+            probs = model_outputs.logits[0]
+        scores, ids = probs.topk(top_k)
 
         scores = scores.tolist()
         ids = ids.tolist()

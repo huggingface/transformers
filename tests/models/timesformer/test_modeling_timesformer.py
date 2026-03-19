@@ -15,6 +15,7 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -22,7 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import TimesformerConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -162,16 +163,12 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         else {}
     )
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
+            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=32
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

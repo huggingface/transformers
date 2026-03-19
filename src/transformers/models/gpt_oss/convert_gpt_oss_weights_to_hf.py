@@ -17,7 +17,6 @@ import gc
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import regex as re
 import tiktoken
@@ -57,7 +56,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -102,6 +101,9 @@ def convert_moe_packed_tensors(
     dtype: torch.dtype = torch.bfloat16,
     rows_per_chunk: int = 32768 * 1024,
 ) -> torch.Tensor:
+    """
+    TODO this needs to be documented
+    """
     import math
 
     scales = scales.to(torch.int32) - 127
@@ -136,36 +138,48 @@ def convert_moe_packed_tensors(
         del idx_lo, idx_hi, blk, exp
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
-    # to match for now existing implementation
-    return out.to(torch.float8_e5m2)
+    out = out.to(torch.float8_e5m2).permute(0, 2, 1).contiguous()
+    return out
 
 
 def write_model(
     model_path,
     input_base_path,
-    safe_serialization=True,
-    instruct=False,
     mxfp4=False,
 ):
     os.makedirs(model_path, exist_ok=True)
-    eos_token_id = 199999 if not instruct else 200002
+    eos_token_id = 200002
     pad_token_id = 199999
 
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
-    num_local_experts = original_config.pop("num_experts")
-    rope_scaling = {
-        "beta_fast": float(original_config.pop("rope_ntk_beta")),
-        "beta_slow": float(original_config.pop("rope_ntk_alpha")),
-        "factor": float(original_config.pop("rope_scaling_factor")),
-        "rope_type": "yarn",
-        "truncate": False,
-        "original_max_position_embeddings": 4096,
-    }
+    # GPT OSS Models are distributed with either num_experts or num_local_experts depending whether the original subfolder
+    # or the root folder is used.
+    num_local_experts = original_config.get("num_experts") or original_config.get("num_local_experts")
+    if num_local_experts is None:
+        raise ValueError("num_local_experts or num_experts must be specified in the config.")
+
+    # Handle both old and new config formats for rope_parameters
+    if "rope_parameters" in original_config:
+        # New format: rope_parameters already exists as a dict
+        rope_parameters = original_config.pop("rope_parameters")
+        # Ensure rope_type is set
+        if "rope_type" not in rope_parameters:
+            rope_parameters["rope_type"] = "yarn"
+    else:
+        # Old format: construct rope_parameters from individual keys with defaults matching GptOssConfig
+        rope_parameters = {
+            "factor": float(original_config.pop("rope_parameters_factor", 32.0)),
+            "beta_fast": float(original_config.pop("rope_ntk_beta", 32.0)),
+            "beta_slow": float(original_config.pop("rope_ntk_alpha", 1.0)),
+            "rope_type": "yarn",
+            "truncate": False,
+            "original_max_position_embeddings": 4096,
+        }
 
     config = GptOssConfig(
         num_local_experts=num_local_experts,
-        rope_scaling=rope_scaling,
+        rope_parameters=rope_parameters,
         eos_token_id=eos_token_id,
         pad_token_id=pad_token_id,
         **original_config,
@@ -212,7 +226,6 @@ def write_model(
                     scales = final_[key.replace("blocks", "scales")]
                     new_key = new_key.replace(".blocks", "")
                     unpacked_tensors = convert_moe_packed_tensors(blocks, scales, dtype=torch.bfloat16)
-                    unpacked_tensors = unpacked_tensors.permute(0, 2, 1).contiguous()  # einsum in orignal, I use bmm
                     state_dict[new_key] = unpacked_tensors
                 else:
                     raise (f"Unidentified {key}, please double check the state dict")
@@ -243,7 +256,7 @@ def write_model(
         del config._name_or_path
 
         print("Saving the model")
-        model.save_pretrained(model_path, safe_serialization=safe_serialization)
+        model.save_pretrained(model_path)
         del state_dict, model
 
     else:
@@ -265,21 +278,20 @@ def write_model(
 
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    GptOssForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    GptOssForCausalLM.from_pretrained(model_path, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
     # generation config
-    if instruct:
-        print("Saving generation config...")
-        generation_config = GenerationConfig(
-            bos_token_id=199998,  # <|startoftext|>
-            do_sample=True,
-            eos_token_id=[200002, 199999],  # <|return|>, <|endoftext|>
-            pad_token_id=199999,  # <|endoftext|>
-            temperature=1.0,
-            top_p=1.0,
-        )
-        generation_config.save_pretrained(model_path)
+    print("Saving generation config...")
+    generation_config = GenerationConfig(
+        bos_token_id=199998,  # <|startoftext|>
+        do_sample=True,
+        eos_token_id=[200002, 199999],  # <|return|>, <|endoftext|>
+        pad_token_id=199999,  # <|endoftext|>
+        temperature=1.0,
+        top_p=1.0,
+    )
+    generation_config.save_pretrained(model_path)
 
 
 def save_sharded_model(state_dict, model_path):
@@ -320,7 +332,6 @@ def create_safetensors_index(safetensors_index, num_shards, model_path):
         json.dump(safetensors_index, f)
 
 
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -376,12 +387,12 @@ class GptOssConverter(TikTokenConverter):
         self,
         vocab_file,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=None)
 
-        # TODO 1st donwload the vocabfile!!!
+        # TODO 1st download the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
         self.additional_special_tokens = {}
         # Complete list of Harmony special tokens as per o200k_harmony spec
@@ -421,7 +432,7 @@ class GptOssConverter(TikTokenConverter):
         )
 
 
-def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
+def write_tokenizer(tokenizer_path: str, save_dir: str):
     # Updated Harmony chat template
     chat_template = """{#-
   In addition to the normal inputs of `messages` and `tools`, this template also accepts the
@@ -758,44 +769,26 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     converter = GptOssConverter(
         vocab_file=tokenizer_path,
         model_max_length=None,
-        chat_template=chat_template if instruct else None,
+        chat_template=chat_template,
     )
     tokenizer = converter.tokenizer
     tokenizer.save_pretrained(save_dir)
 
-    if instruct:
-        print("Saving chat template...")
-        chat_template_path = os.path.join(save_dir, "chat_template.json")
-        with open(chat_template_path, "w") as f:
-            json.dump({"chat_template": chat_template}, f, indent=2)
+    print("Saving chat template...")
+    chat_template_path = os.path.join(save_dir, "chat_template.jinja")
+    with open(chat_template_path, "w", encoding="utf-8") as f:
+        f.write(chat_template)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/fsx/mohamed/oai-hf/tests/120b",
-        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
+        help="Location of `./original` subfolder of the GPT OSS model repo.",
     )
     parser.add_argument(
         "--output_dir",
-        default="/fsx/mohamed/oai-hf/tests/120b_converted_packed",
-        help="Location to write HF model and tokenizer",
-    )
-    parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
-        "--special_tokens",
-        default=None,
-        type=list[str],
-        help="The list of special tokens that should be added to the ",
-    )
-
-    parser.add_argument(
-        "--instruct",
-        action="store_true",
-        help="Whether the model is an instruct model",
+        help="Location to write the converted HF model and tokenizer",
     )
 
     # Only specify this if you want to use the model with mxfp4 quantization
@@ -813,15 +806,12 @@ def main():
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
-        instruct=args.instruct,
         mxfp4=args.mxfp4,
     )
 
     write_tokenizer(
         tokenizer_path="o200k_base",
         save_dir=args.output_dir,
-        instruct=args.instruct,
     )
 
 

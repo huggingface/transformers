@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import itertools
 import math
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -29,10 +28,11 @@ from ...image_utils import (
     ImageInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_scipy_available, is_torch_available, is_vision_available, logging
 
 
@@ -52,9 +52,21 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_affine_transform (`bool`, *optional*):
+        Whether to apply an affine transformation to the input images based on the bounding boxes.
+    normalize_factor (`float`, *optional*, defaults to `200.0`):
+        Width and height scale factor used for normalization when computing center and scale from bounding boxes.
+    """
+
+    do_affine_transform: bool | None
+    normalize_factor: float | None
+
+
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
-    box: Union[tuple, list, np.ndarray],
+    box: tuple | list | np.ndarray,
     image_width: int,
     image_height: int,
     normalize_factor: float = 200.0,
@@ -348,17 +360,18 @@ class VitPoseImageProcessor(BaseImageProcessor):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
+    valid_kwargs = VitPoseImageProcessorKwargs
     model_input_names = ["pixel_values"]
 
     def __init__(
         self,
         do_affine_transform: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -373,19 +386,19 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def affine_transform(
         self,
-        image: np.array,
+        image: np.ndarray,
         center: tuple[float],
         scale: tuple[float],
         rotation: float,
         size: dict[str, int],
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> np.ndarray:
         """
         Apply an affine transformation to an image.
 
         Args:
-            image (`np.array`):
+            image (`np.ndarray`):
                 Image to transform.
             center (`tuple[float]`):
                 Center of the bounding box (x, y).
@@ -423,17 +436,17 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        boxes: Union[list[list[float]], np.ndarray],
-        do_affine_transform: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        boxes: list[list[float]] | np.ndarray,
+        do_affine_transform: bool | None = None,
+        size: dict[str, int] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -465,10 +478,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -484,13 +495,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if isinstance(boxes, list) and len(images) != len(boxes):
             raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
@@ -597,10 +605,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def post_process_pose_estimation(
         self,
         outputs: "VitPoseEstimatorOutput",
-        boxes: Union[list[list[list[float]]], np.ndarray],
+        boxes: list[list[list[float]]] | np.ndarray,
         kernel_size: int = 11,
-        threshold: Optional[float] = None,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        threshold: float | None = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.

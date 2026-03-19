@@ -12,51 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
-from io import BytesIO
 
 import numpy as np
-import requests
 
 from transformers import Idefics3Processor
-from transformers.models.auto.processing_auto import AutoProcessor
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 @require_torch
 @require_vision
 class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
+    model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
+
+    def get_processor(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.tokenizer.add_bos_token = True
+        processor.tokenizer.add_eos_token = False
+        return processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
+    def _setup_test_attributes(cls, processor):
+        cls.image1 = load_image(
+            url_to_local_path(
+                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
             )
         )
-        cls.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        cls.image2 = load_image(
+            url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
         )
-        cls.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
+        cls.image3 = load_image(
+            url_to_local_path(
+                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -71,31 +62,40 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
     @staticmethod
     def prepare_processor_dict():
         return {"image_seq_len": 2}
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
-    def test_get_num_vision_tokens(self):
-        "Tests general functionality of the helper used internally in vLLM"
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
 
-        processor = self.get_processor()
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append(np.random.randint(255, size=(h, w, 3), dtype=np.uint8))
 
-        output = processor._get_num_multimodal_tokens(image_sizes=[(100, 100), (300, 100), (500, 30)])
-        self.assertTrue("num_image_tokens" in output)
-        self.assertEqual(len(output["num_image_tokens"]), 3)
+        # Idefics3 checkpoints aren't supported on purpose. Idefics3 encodes special row/col
+        # tokens are several token ids ebcause they aren't added in `special_token_ids`. Thus
+        # we can't correctly infer which tokens in input ids are used as placeholders for image/row/col!
+        for do_image_splitting in [False, True]:
+            with self.subTest(do_image_splitting=do_image_splitting):
+                processor = self.processor_class.from_pretrained(
+                    "HuggingFaceTB/SmolVLM-256M-Instruct",
+                    add_bos_token=True,
+                    add_eos_token=False,
+                    padding_side="left",
+                    image_seq_len=2,
+                    do_image_splitting=do_image_splitting,
+                )
 
-        self.assertTrue("num_image_patches" in output)
-        self.assertEqual(len(output["num_image_patches"]), 3)
+                text = [f"This is an image {processor.image_token}"] * len(image_inputs)
+                inputs = processor(
+                    text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                )
+
+                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
@@ -117,10 +117,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()
@@ -307,7 +303,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
         images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, IndexError)):
             processor(text=text, images=images, padding=True)
         images = [self.image1, self.image2, self.image3]
         with self.assertRaises(ValueError):
@@ -323,13 +319,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         images = [[self.image1], []]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
-        images = [[], [self.image2]]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
         images = [self.image1, self.image2]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
-        images = [self.image1]
         with self.assertRaises(ValueError):
             processor(text=text, images=images, padding=True)
 

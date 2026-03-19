@@ -47,9 +47,11 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
 		<b>العربية</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
     </p>
 </h4>
 
@@ -245,7 +247,7 @@ limitations under the License.
 
 ### باستخدام pip
 
-تم اختبار هذا المستودع على Python 3.9+، Flax 0.4.1+، PyTorch 2.1+، و TensorFlow 2.6+.
+تم اختبار هذا المستودع على Python 3.10+ و PyTorch 2.4+.
 
 يجب تثبيت 🤗 Transformers في [بيئة افتراضية](https://docs.python.org/3/library/venv.html). إذا كنت غير معتاد على البيئات الافتراضية Python، فراجع [دليل المستخدم](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

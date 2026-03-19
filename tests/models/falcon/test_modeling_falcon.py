@@ -18,13 +18,13 @@ import unittest
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     FalconConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -37,20 +37,13 @@ if is_torch_available():
 
     from transformers import (
         FalconForCausalLM,
-        FalconForQuestionAnswering,
-        FalconForSequenceClassification,
-        FalconForTokenClassification,
         FalconModel,
     )
 
 
 class FalconModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = FalconConfig
         base_model_class = FalconModel
-        causal_lm_class = FalconForCausalLM
-        sequence_class = FalconForSequenceClassification
-        token_class = FalconForTokenClassification
 
     def __init__(self, parent, new_decoder_architecture=True):
         super().__init__(parent)
@@ -60,30 +53,6 @@ class FalconModelTester(CausalLMModelTester):
 @require_torch
 class FalconModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = FalconModelTester
-    all_model_classes = (
-        (
-            FalconModel,
-            FalconForCausalLM,
-            FalconForSequenceClassification,
-            FalconForTokenClassification,
-            FalconForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": FalconModel,
-            "text-classification": FalconForSequenceClassification,
-            "token-classification": FalconForTokenClassification,
-            "text-generation": FalconForCausalLM,
-            "zero-shot": FalconForSequenceClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    test_headmasking = False
-    test_pruning = False
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -97,6 +66,10 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
         processor_name,
     ):
         return True
+
+    @unittest.skip(reason="To support alibi, we are forced to create a mask in all cases")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 
 @require_torch
@@ -123,7 +96,9 @@ class FalconLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_falcon_11b(self):
         tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-11B", padding_side="left")
         model = FalconForCausalLM.from_pretrained(
-            "tiiuae/falcon-11B", device_map={"": torch_device}, load_in_8bit=True
+            "tiiuae/falcon-11B",
+            device_map={"": torch_device},
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
         )
         model.eval()
         inputs = tokenizer(
@@ -183,7 +158,7 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "tiiuae/falcon-7b",
             device_map={"": torch_device},
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
@@ -203,14 +178,13 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         self.assertEqual(padded_gen_text[0], expected_output)
 
     @slow
-    @require_torch_sdpa
     def test_falcon_alibi_sdpa_matches_eager(self):
         input_ids = torch.randint(0, 1000, (5, 20))
 
         config = FalconConfig(
             vocab_size=1000,
             hidden_size=64,
-            num_hidden_layers=3,
+            num_hidden_layers=2,
             num_attention_heads=4,
             new_decoder_architecture=True,
             alibi=True,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,103 +13,64 @@
 # limitations under the License.
 """Informer model configuration"""
 
-from typing import Optional, Union
+from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 
 
-class InformerConfig(PretrainedConfig):
+@auto_docstring(checkpoint="huggingface/informer-tourism-monthly")
+@strict(accept_kwargs=True)
+class InformerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`InformerModel`]. It is used to instantiate an
-    Informer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Informer
-    [huggingface/informer-tourism-monthly](https://huggingface.co/huggingface/informer-tourism-monthly) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
-            typically dictated by the dataset and we recommend to set it appropriately.
-        context_length (`int`, *optional*, defaults to `prediction_length`):
-            The context length for the encoder. If `None`, the context length will be the same as the
-            `prediction_length`.
-        distribution_output (`string`, *optional*, defaults to `"student_t"`):
-            The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
-        loss (`string`, *optional*, defaults to `"nll"`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood (nll) - which currently is the only supported one.
-        input_size (`int`, *optional*, defaults to 1):
-            The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
-            multivariate targets.
-        scaling (`string` or `bool`, *optional* defaults to `"mean"`):
-            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
-            scaler is set to "mean".
-        lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
-            The lags of the input time series as covariates often dictated by the frequency of the data. Default is
-            `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
-        num_time_features (`int`, *optional*, defaults to 0):
-            The number of time features in the input time series.
-        num_dynamic_real_features (`int`, *optional*, defaults to 0):
-            The number of dynamic real valued features.
-        num_static_categorical_features (`int`, *optional*, defaults to 0):
-            The number of static categorical features.
-        num_static_real_features (`int`, *optional*, defaults to 0):
-            The number of static real valued features.
-        cardinality (`list[int]`, *optional*):
-            The cardinality (number of different values) for each of the static categorical features. Should be a list
-            of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
-            `num_static_categorical_features` is > 0.
-        embedding_dimension (`list[int]`, *optional*):
-            The dimension of the embedding for each of the static categorical features. Should be a list of integers,
-            having the same length as `num_static_categorical_features`. Cannot be `None` if
-            `num_static_categorical_features` is > 0.
-        d_model (`int`, *optional*, defaults to 64):
-            Dimensionality of the transformer layers.
-        encoder_layers (`int`, *optional*, defaults to 2):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 2):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 32):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 32):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and decoder. If string, `"gelu"` and
-            `"relu"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the encoder, and decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention and fully connected layers for each encoder layer.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention and fully connected layers for each decoder layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability used between the two layers of the feed-forward networks.
-        num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for each time step of inference.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal weight initialization distribution.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        attention_type (`str`, *optional*, defaults to "prob"):
-            Attention used in encoder. This can be set to "prob" (Informer's ProbAttention) or "full" (vanilla
-            transformer's canonical self-attention).
-        sampling_factor (`int`, *optional*, defaults to 5):
-            ProbSparse sampling factor (only makes affect when `attention_type`="prob"). It is used to control the
-            reduced query matrix (Q_reduce) input length.
-        distil (`bool`, *optional*, defaults to `True`):
-            Whether to use distilling in encoder.
+    prediction_length (`int`):
+        The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
+        typically dictated by the dataset and we recommend to set it appropriately.
+    context_length (`int`, *optional*, defaults to `prediction_length`):
+        The context length for the encoder. If `None`, the context length will be the same as the
+        `prediction_length`.
+    distribution_output (`string`, *optional*, defaults to `"student_t"`):
+        The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
+    loss (`string`, *optional*, defaults to `"nll"`):
+        The loss function for the model corresponding to the `distribution_output` head. For parametric
+        distributions it is the negative log likelihood (nll) - which currently is the only supported one.
+    input_size (`int`, *optional*, defaults to 1):
+        The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
+        multivariate targets.
+    scaling (`string` or `bool`, *optional* defaults to `"mean"`):
+        Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+        scaler is set to "mean".
+    lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
+        The lags of the input time series as covariates often dictated by the frequency of the data. Default is
+        `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
+    num_time_features (`int`, *optional*, defaults to 0):
+        The number of time features in the input time series.
+    num_dynamic_real_features (`int`, *optional*, defaults to 0):
+        The number of dynamic real valued features.
+    num_static_categorical_features (`int`, *optional*, defaults to 0):
+        The number of static categorical features.
+    num_static_real_features (`int`, *optional*, defaults to 0):
+        The number of static real valued features.
+    cardinality (`list[int]`, *optional*):
+        The cardinality (number of different values) for each of the static categorical features. Should be a list
+        of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
+        `num_static_categorical_features` is > 0.
+    embedding_dimension (`list[int]`, *optional*):
+        The dimension of the embedding for each of the static categorical features. Should be a list of integers,
+        having the same length as `num_static_categorical_features`. Cannot be `None` if
+        `num_static_categorical_features` is > 0.
+    activation_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout probability used between the two layers of the feed-forward networks.
+    num_parallel_samples (`int`, *optional*, defaults to 100):
+        The number of samples to generate in parallel for each time step of inference.
+    attention_type (`str`, *optional*, defaults to "prob"):
+        Attention used in encoder. This can be set to "prob" (Informer's ProbAttention) or "full" (vanilla
+        transformer's canonical self-attention).
+    sampling_factor (`int`, *optional*, defaults to 5):
+        ProbSparse sampling factor (only makes affect when `attention_type`="prob"). It is used to control the
+        reduced query matrix (Q_reduce) input length.
+    distil (`bool`, *optional*, defaults to `True`):
+        Whether to use distilling in encoder.
 
     Example:
 
@@ -135,106 +95,72 @@ class InformerConfig(PretrainedConfig):
         "initializer_range": "init_std",
     }
 
-    def __init__(
-        self,
-        prediction_length: Optional[int] = None,
-        context_length: Optional[int] = None,
-        distribution_output: str = "student_t",
-        loss: str = "nll",
-        input_size: int = 1,
-        lags_sequence: Optional[list[int]] = None,
-        scaling: Optional[Union[str, bool]] = "mean",
-        num_dynamic_real_features: int = 0,
-        num_static_real_features: int = 0,
-        num_static_categorical_features: int = 0,
-        num_time_features: int = 0,
-        cardinality: Optional[list[int]] = None,
-        embedding_dimension: Optional[list[int]] = None,
-        d_model: int = 64,
-        encoder_ffn_dim: int = 32,
-        decoder_ffn_dim: int = 32,
-        encoder_attention_heads: int = 2,
-        decoder_attention_heads: int = 2,
-        encoder_layers: int = 2,
-        decoder_layers: int = 2,
-        is_encoder_decoder: bool = True,
-        activation_function: str = "gelu",
-        dropout: float = 0.05,
-        encoder_layerdrop: float = 0.1,
-        decoder_layerdrop: float = 0.1,
-        attention_dropout: float = 0.1,
-        activation_dropout: float = 0.1,
-        num_parallel_samples: int = 100,
-        init_std: float = 0.02,
-        use_cache=True,
-        # Informer arguments
-        attention_type: str = "prob",
-        sampling_factor: int = 5,
-        distil: bool = True,
-        **kwargs,
-    ):
-        # time series specific configuration
-        self.prediction_length = prediction_length
-        self.context_length = context_length or prediction_length
-        self.distribution_output = distribution_output
-        self.loss = loss
-        self.input_size = input_size
-        self.num_time_features = num_time_features
-        self.lags_sequence = lags_sequence if lags_sequence is not None else [1, 2, 3, 4, 5, 6, 7]
-        self.scaling = scaling
-        self.num_dynamic_real_features = num_dynamic_real_features
-        self.num_static_real_features = num_static_real_features
-        self.num_static_categorical_features = num_static_categorical_features
+    prediction_length: int | None = None
+    context_length: int | None = None
+    distribution_output: str = "student_t"
+    loss: str = "nll"
+    input_size: int = 1
+    lags_sequence: list[int] | None = None
+    scaling: str | bool | None = "mean"
+    num_dynamic_real_features: int = 0
+    num_static_real_features: int = 0
+    num_static_categorical_features: int = 0
+    num_time_features: int = 0
+    cardinality: list[int] | None = None
+    embedding_dimension: list[int] | None = None
+    d_model: int = 64
+    encoder_ffn_dim: int = 32
+    decoder_ffn_dim: int = 32
+    encoder_attention_heads: int = 2
+    decoder_attention_heads: int = 2
+    encoder_layers: int = 2
+    decoder_layers: int = 2
+    is_encoder_decoder: bool = True
+    activation_function: str = "gelu"
+    dropout: float | int = 0.05
+    encoder_layerdrop: float | int = 0.1
+    decoder_layerdrop: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    activation_dropout: float | int = 0.1
+    num_parallel_samples: int = 100
+    init_std: float = 0.02
+    use_cache: bool = True
+    attention_type: str = "prob"
+    sampling_factor: int = 5
+    distil: bool = True
 
-        # set cardinality
-        if cardinality and num_static_categorical_features > 0:
-            if len(cardinality) != num_static_categorical_features:
-                raise ValueError(
-                    "The cardinality should be a list of the same length as `num_static_categorical_features`"
-                )
-            self.cardinality = cardinality
-        else:
+    def __post_init__(self, **kwargs):
+        self.context_length = self.context_length or self.prediction_length
+        self.lags_sequence = self.lags_sequence if self.lags_sequence is not None else [1, 2, 3, 4, 5, 6, 7]
+
+        if not (self.cardinality and self.num_static_categorical_features > 0):
             self.cardinality = [0]
 
-        # set embedding_dimension
-        if embedding_dimension and num_static_categorical_features > 0:
-            if len(embedding_dimension) != num_static_categorical_features:
-                raise ValueError(
-                    "The embedding dimension should be a list of the same length as `num_static_categorical_features`"
-                )
-            self.embedding_dimension = embedding_dimension
-        else:
+        if not (self.embedding_dimension and self.num_static_categorical_features > 0):
             self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]
 
-        self.num_parallel_samples = num_parallel_samples
+        self.feature_size = self.input_size * len(self.lags_sequence) + self._number_of_features
+        super().__post_init__(**kwargs)
 
-        # Transformer architecture configuration
-        self.feature_size = input_size * len(self.lags_sequence) + self._number_of_features
-        self.d_model = d_model
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_attention_heads = decoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.decoder_layers = decoder_layers
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if (
+            self.cardinality
+            and self.num_static_categorical_features > 0
+            and len(self.cardinality) != self.num_static_categorical_features
+        ):
+            raise ValueError(
+                "The cardinality should be a list of the same length as `num_static_categorical_features`"
+            )
 
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-
-        self.activation_function = activation_function
-        self.init_std = init_std
-
-        self.use_cache = use_cache
-
-        # Informer
-        self.attention_type = attention_type
-        self.sampling_factor = sampling_factor
-        self.distil = distil
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        if (
+            self.embedding_dimension
+            and self.num_static_categorical_features > 0
+            and len(self.embedding_dimension) != self.num_static_categorical_features
+        ):
+            raise ValueError(
+                "The embedding dimension should be a list of the same length as `num_static_categorical_features`"
+            )
 
     @property
     def _number_of_features(self) -> int:

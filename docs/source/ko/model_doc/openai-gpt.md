@@ -97,10 +97,6 @@ OpenAI GPT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤�
 
 [[autodoc]] models.openai.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
 
-[[autodoc]] models.openai.modeling_tf_openai.TFOpenAIGPTDoubleHeadsModelOutput
-
-<frameworkcontent>
-<pt>
 
 ## OpenAIGPTModel [[transformers.OpenAIGPTModel]]
 
@@ -122,28 +118,3 @@ OpenAI GPT를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤�
 [[autodoc]] OpenAIGPTForSequenceClassification
     - forward
 
-</pt>
-<tf>
-
-## TFOpenAIGPTModel [[transformers.TFOpenAIGPTModel]]
-
-[[autodoc]] TFOpenAIGPTModel
-    - call
-
-## TFOpenAIGPTLMHeadModel [[transformers.TFOpenAIGPTLMHeadModel]]
-
-[[autodoc]] TFOpenAIGPTLMHeadModel
-    - call
-
-## TFOpenAIGPTDoubleHeadsModel [[transformers.TFOpenAIGPTDoubleHeadsModel]]
-
-[[autodoc]] TFOpenAIGPTDoubleHeadsModel
-    - call
-
-## TFOpenAIGPTForSequenceClassification [[transformers.TFOpenAIGPTForSequenceClassification]]
-
-[[autodoc]] TFOpenAIGPTForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>

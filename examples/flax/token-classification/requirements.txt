@@ -1,6 +1,0 @@
-datasets >= 1.8.0
-jax>=0.2.8
-jaxlib>=0.1.59
-flax>=0.3.5
-optax>=0.0.8
-seqeval

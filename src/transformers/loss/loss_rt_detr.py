@@ -35,11 +35,7 @@ if is_vision_available():
 
 
 # different for RT-DETR: not slicing the last element like in DETR one
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
@@ -226,8 +222,8 @@ class RTDetrLoss(nn.Module):
         logits = outputs["logits"]
         device = logits.device
         target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        # Count the number of predictions that are NOT "no-object" (sigmoid > 0.5 threshold)
+        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
         card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
@@ -451,6 +447,7 @@ def RTDetrForObjectDetectionLoss(
     outputs_loss = {}
     outputs_loss["logits"] = logits
     outputs_loss["pred_boxes"] = pred_boxes
+    auxiliary_outputs = None
     if config.auxiliary_loss:
         if denoising_meta_values is not None:
             dn_out_coord, outputs_coord = torch.split(outputs_coord, denoising_meta_values["dn_num_split"], dim=2)

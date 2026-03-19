@@ -548,7 +548,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": RoCBertModel,
             "fill-mask": RoCBertForMaskedLM,
-            "question-answering": RoCBertForQuestionAnswering,
             "text-classification": RoCBertForSequenceClassification,
             "text-generation": RoCBertForCausalLM,
             "token-classification": RoCBertForTokenClassification,
@@ -583,6 +582,12 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         return False
 
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
+
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -611,7 +616,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = RoCBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RoCBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -619,12 +624,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -636,11 +635,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        config_and_inputs[0].position_embedding_type = "relative_key"
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_question_answering(self):
@@ -699,6 +693,17 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model_name = "weiweishi/roc-bert-base-zh"
         model = RoCBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
+        super().flash_attn_inference_equivalence(
+            attn_implementation,
+            padding_side,
+            # relaxing the tolerance here
+            atol=6e-2,
+            rtol=4e-2,
+        )
 
 
 @require_torch

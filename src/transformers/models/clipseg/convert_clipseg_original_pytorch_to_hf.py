@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,9 @@
 """Convert CLIPSeg checkpoints from the original repository. URL: https://github.com/timojl/clipseg."""
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -39,9 +39,9 @@ def get_clipseg_config(model_name):
     use_complex_transposed_convolution = "refined" in model_name
     reduce_dim = 16 if "rd16" in model_name else 64
 
-    config = CLIPSegConfig.from_text_vision_configs(
-        text_config,
-        vision_config,
+    config = CLIPSegConfig(
+        text_config=text_config,
+        vision_config=vision_config,
         use_complex_transposed_convolution=use_complex_transposed_convolution,
         reduce_dim=reduce_dim,
     )
@@ -160,7 +160,8 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -257,7 +258,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

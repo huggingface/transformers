@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Suno AI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """BARK model generation configuration"""
 
 import copy
-from typing import Optional
 
 from ...generation.configuration_utils import GenerationConfig
 from ...utils import logging
@@ -235,7 +233,6 @@ class BarkFineGenerationConfig(GenerationConfig):
         Overrides GenerationConfig.validate because BarkFineGenerationConfig don't use any parameters outside
         temperature.
         """
-        pass
 
 
 class BarkGenerationConfig(GenerationConfig):
@@ -245,9 +242,9 @@ class BarkGenerationConfig(GenerationConfig):
 
     def __init__(
         self,
-        semantic_config: Optional[dict] = None,
-        coarse_acoustics_config: Optional[dict] = None,
-        fine_acoustics_config: Optional[dict] = None,
+        semantic_config: dict | None = None,
+        coarse_acoustics_config: dict | None = None,
+        fine_acoustics_config: dict | None = None,
         sample_rate=24_000,
         codebook_size=1024,
         **kwargs,
@@ -315,7 +312,7 @@ class BarkGenerationConfig(GenerationConfig):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+        Serializes this instance to a Python dictionary. Override the default [`~PreTrainedConfig.to_dict`].
 
         Returns:
             `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,

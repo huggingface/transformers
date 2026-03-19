@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -500,96 +499,15 @@ class EncoderDecoderMixin:
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
         enc_dec_model.to(torch_device)
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
             input_ids,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
-
-    def create_and_check_encoder_decoder_shared_weights(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        encoder_hidden_states,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        labels,
-        **kwargs,
-    ):
-        torch.manual_seed(0)
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
-        model.to(torch_device)
-        model.eval()
-        # load state dict copies weights but does not tie them
-        decoder_state_dict = model.decoder._modules[model.decoder.base_model_prefix].state_dict()
-        model.encoder.load_state_dict(decoder_state_dict, strict=False)
-
-        torch.manual_seed(0)
-        tied_encoder_model, tied_decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(
-            tied_encoder_model.config, tied_decoder_model.config, tie_encoder_decoder=True
-        )
-        tied_model = EncoderDecoderModel(encoder=tied_encoder_model, decoder=tied_decoder_model, config=config)
-        tied_model.to(torch_device)
-        tied_model.eval()
-
-        model_result = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-
-        tied_model_result = tied_model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-
-        # check that models has less parameters
-        self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
-        random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-        # check that outputs are equal
-        self.assertTrue(
-            torch.allclose(
-                model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
-            )
-        )
-
-        # check that outputs after saving and loading are equal
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tied_model.save_pretrained(tmpdirname)
-            tied_model = EncoderDecoderModel.from_pretrained(tmpdirname)
-            tied_model.to(torch_device)
-            tied_model.eval()
-
-            # check that models has less parameters
-            self.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
-            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-            tied_model_result = tied_model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
-
-            # check that outputs are equal
-            self.assertTrue(
-                torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
-                )
-            )
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -634,10 +552,6 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
-
-    def test_encoder_decoder_model_shared_weights(self):
-        input_ids_dict = self.prepare_config_and_inputs()
-        self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)
 
     def test_training_gradient_checkpointing(self):
         inputs_dict = self.prepare_config_and_inputs()
@@ -696,7 +610,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.supports_sdpa:
             self.skipTest("SDPA is not supported")
@@ -802,24 +715,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             "encoder_hidden_states": encoder_hidden_states,
             "labels": decoder_token_labels,
         }
-
-    def test_relative_position_embeds(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-
-        encoder_config = config_and_inputs["config"]
-        decoder_config = config_and_inputs["decoder_config"]
-
-        encoder_config.position_embedding_type = "relative_key_query"
-        decoder_config.position_embedding_type = "relative_key_query"
-
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
-        model = EncoderDecoderModel(config).eval().to(torch_device)
-
-        logits = model(
-            input_ids=config_and_inputs["input_ids"], decoder_input_ids=config_and_inputs["decoder_input_ids"]
-        ).logits
-
-        self.assertTrue(logits.shape, (13, 7))
 
     @slow
     def test_bert2bert_summarization(self):
@@ -1071,7 +966,6 @@ class GPT2EncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
             decoder_config,
             decoder_input_ids,
             decoder_input_mask,
-            decoder_head_mask,
             decoder_token_type_ids,
             decoder_sequence_labels,
             decoder_token_labels,

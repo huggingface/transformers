@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 NVIDIA and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,19 +15,22 @@
 
 import collections.abc
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
 
@@ -75,7 +77,7 @@ def gumbel_softmax(logits: torch.Tensor, tau: float = 1, hard: bool = False, dim
         y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
         ret = y_hard - y_soft.detach() + y_soft
     else:
-        # Reparametrization trick.
+        # Reparameterization trick.
         ret = y_soft
     return ret
 
@@ -292,12 +294,12 @@ class GroupViTModelOutput(ModelOutput):
         The output of the [`GroupViTVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_image: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
-    segmentation_logits: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_per_image: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    segmentation_logits: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    image_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -315,8 +317,8 @@ class GroupViTPatchEmbeddings(nn.Module):
 
     def __init__(
         self,
-        image_size: int = 224,
-        patch_size: Union[int, tuple[int, int]] = 16,
+        image_size: int | list[int] | tuple[int, int] = 224,
+        patch_size: int | tuple[int, int] = 16,
         num_channels: int = 3,
         embed_dim: int = 768,
     ):
@@ -432,9 +434,9 @@ class GroupViTTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -504,7 +506,7 @@ class GroupViTStage(nn.Module):
         else:
             return x, None
 
-    def concat_x(self, x: torch.Tensor, group_token: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def concat_x(self, x: torch.Tensor, group_token: torch.Tensor | None = None) -> torch.Tensor:
         if group_token is None:
             return x
         return torch.cat([x, group_token], dim=1)
@@ -512,8 +514,8 @@ class GroupViTStage(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        prev_group_token: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        prev_group_token: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -535,8 +537,7 @@ class GroupViTStage(nn.Module):
 
         cat_x = self.concat_x(x, group_token)
         for layer in self.layers:
-            layer_out = layer(cat_x, attention_mask=None, causal_attention_mask=None)
-            cat_x = layer_out[0]
+            cat_x = layer(cat_x, attention_mask=None)
 
         x, group_token = self.split_x(cat_x)
 
@@ -555,9 +556,9 @@ class GroupViTMLP(nn.Module):
     def __init__(
         self,
         config: GroupViTVisionConfig,
-        hidden_size: Optional[int] = None,
-        intermediate_size: Optional[int] = None,
-        output_size: Optional[int] = None,
+        hidden_size: int | None = None,
+        intermediate_size: int | None = None,
+        output_size: int | None = None,
     ):
         super().__init__()
         self.config = config
@@ -609,11 +610,10 @@ class GroupViTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -642,16 +642,6 @@ class GroupViTAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
@@ -662,15 +652,12 @@ class GroupViTAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
+        # this operation is a bit awkward, but it's required to
+        # make sure that attn_weights keeps its gradient.
+        # In order to do so, attn_weights have to reshaped
+        # twice and have to be reused in the following
+        attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
@@ -705,27 +692,15 @@ class GroupViTEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -734,52 +709,56 @@ class GroupViTEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
 class GroupViTPreTrainedModel(PreTrainedModel):
     config: GroupViTConfig
     base_model_prefix = "groupvit"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": GroupViTEncoderLayer,
+        "attentions": GroupViTAttention,
+    }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
 
         init_range = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=init_range)
+            init.normal_(module.weight, mean=0.0, std=init_range)
             if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+                init.zeros_(module.bias)
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
         factor = self.config.initializer_factor
         if isinstance(module, GroupViTTextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, GroupViTAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.q_proj.weight, std=in_proj_std)
+            init.normal_(module.k_proj.weight, std=in_proj_std)
+            init.normal_(module.v_proj.weight, std=in_proj_std)
+            init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, GroupViTMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.fc1.weight, std=fc_std)
+            init.normal_(module.fc2.weight, std=in_proj_std)
 
 
 class GroupViTVisionEncoder(nn.Module):
@@ -803,15 +782,15 @@ class GroupViTVisionEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         all_hidden_states = () if output_hidden_states else None
         all_groupings = () if output_attentions else None
@@ -858,12 +837,9 @@ class GroupViTTextEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -877,61 +853,23 @@ class GroupViTTextEncoder(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Causal mask for the text model. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
-                causal_attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
         )
 
 
-class GroupViTTextTransformer(nn.Module):
+class GroupViTTextTransformer(GroupViTPreTrainedModel):
     def __init__(self, config: GroupViTTextConfig):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         embed_dim = config.hidden_size
         self.embeddings = GroupViTTextEmbeddings(config)
         self.encoder = GroupViTTextEncoder(config)
@@ -940,22 +878,18 @@ class GroupViTTextTransformer(nn.Module):
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
 
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
@@ -964,24 +898,19 @@ class GroupViTTextTransformer(nn.Module):
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
-        # CLIP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = _create_4d_causal_attention_mask(
-            input_shape, hidden_states.dtype, device=hidden_states.device
-        )
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
-
-        encoder_outputs = self.encoder(
+        attention_mask = create_causal_mask(
+            config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            past_key_values=None,
+        )
+
+        kwargs.pop("is_causal", None)
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            is_causal=True,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -999,7 +928,7 @@ class GroupViTTextTransformer(nn.Module):
                 input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
             ]
         else:
-            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
+            # The config gets updated `eos_token_id` from PR #24773 (so the use of extra new tokens is possible)
             pooled_output = last_hidden_state[
                 torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
                 # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
@@ -1009,19 +938,15 @@ class GroupViTTextTransformer(nn.Module):
                 .argmax(dim=-1),
             ]
 
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
 class GroupViTTextModel(GroupViTPreTrainedModel):
     config: GroupViTTextConfig
+    input_modalities = ("text",)
 
     def __init__(self, config: GroupViTTextConfig):
         super().__init__(config)
@@ -1038,13 +963,11 @@ class GroupViTTextModel(GroupViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1064,9 +987,7 @@ class GroupViTTextModel(GroupViTPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
 
@@ -1083,16 +1004,16 @@ class GroupViTVisionTransformer(nn.Module):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        pixel_values: torch.FloatTensor | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -1126,6 +1047,8 @@ class GroupViTVisionTransformer(nn.Module):
 class GroupViTVisionModel(GroupViTPreTrainedModel):
     config: GroupViTVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _can_record_outputs = {}
 
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__(config)
@@ -1139,24 +1062,27 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1219,115 +1145,86 @@ class GroupViTModel(GroupViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`GroupViTTextModel`].
-
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import CLIPTokenizer, GroupViTModel
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        # Use GROUPVIT model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        return text_outputs
 
-        return text_features
-
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`GroupViTVisionModel`].
-
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import AutoProcessor, GroupViTModel
+        >>> from transformers.image_utils import load_image
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
-        # Use GROUPVIT model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values, return_dict=True, **kwargs)
+        vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        return vision_outputs
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
-
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_segmentation: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, GroupViTModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_segmentation: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | GroupViTModelOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -1338,14 +1235,16 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GroupViTModel
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
@@ -1365,28 +1264,26 @@ class GroupViTModel(GroupViTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # Vision side uses explicit flags (nn.Module-based, not hook-based)
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        image_embeds = vision_outputs[1]
+        image_embeds = vision_outputs.pooler_output
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
@@ -1402,13 +1299,10 @@ class GroupViTModel(GroupViTPreTrainedModel):
         if output_segmentation:
             # grouped features
             # [batch_size_image, num_group, hidden_size]
-            image_group_embeds = vision_outputs[0]
+            image_group_embeds = vision_outputs.last_hidden_state
             # [batch_size_image*num_group, hidden_size]
             image_group_embeds = self.visual_projection(image_group_embeds.reshape(-1, image_group_embeds.shape[-1]))
-            if output_hidden_states:
-                attentions = vision_outputs[3]
-            else:
-                attentions = vision_outputs[2]
+            attentions = vision_outputs.attentions
             # [batch_size_image, num_group, height, width]
             grouping = get_grouping_from_attentions(attentions, pixel_values.shape[2:])
 
@@ -1433,21 +1327,6 @@ class GroupViTModel(GroupViTPreTrainedModel):
         loss = None
         if return_loss:
             loss = groupvit_loss(logits_per_text)
-
-        if not return_dict:
-            if seg_logits is not None:
-                output = (
-                    logits_per_image,
-                    logits_per_text,
-                    seg_logits,
-                    text_embeds,
-                    image_embeds,
-                    text_outputs,
-                    vision_outputs,
-                )
-            else:
-                output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
-            return ((loss,) + output) if loss is not None else output
 
         return GroupViTModelOutput(
             loss=loss,

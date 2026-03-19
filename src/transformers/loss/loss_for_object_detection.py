@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -440,7 +439,7 @@ def _max_by_axis(the_list):
 
 
 class NestedTensor:
-    def __init__(self, tensors, mask: Optional[Tensor]):
+    def __init__(self, tensors, mask: Tensor | None):
         self.tensors = tensors
         self.mask = mask
 
@@ -478,11 +477,7 @@ def nested_tensor_from_tensor_list(tensor_list: list[Tensor]):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 

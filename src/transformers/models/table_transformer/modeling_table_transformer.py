@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,29 +15,23 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...backbone_utils import load_backbone
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    is_timm_available,
     logging,
-    requires_backends,
 )
-from ...utils.backbone_utils import load_backbone
 from .configuration_table_transformer import TableTransformerConfig
-
-
-if is_timm_available():
-    from timm import create_model
 
 
 logger = logging.get_logger(__name__)
@@ -64,7 +57,7 @@ class TableTransformerDecoderOutput(BaseModelOutputWithCrossAttentions):
         layernorm.
     """
 
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -85,7 +78,7 @@ class TableTransformerModelOutput(Seq2SeqModelOutput):
         layernorm.
     """
 
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -118,18 +111,18 @@ class TableTransformerObjectDetectionOutput(ModelOutput):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[list[dict]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->TableTransformer
@@ -186,10 +179,10 @@ def replace_batch_norm(model):
             new_module = TableTransformerFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -197,7 +190,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->TableTransformer
 class TableTransformerConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -211,47 +204,25 @@ class TableTransformerConvEncoder(nn.Module):
 
         self.config = config
 
-        # For backwards compatibility we have to use the timm library directly instead of the AutoBackbone API
-        if config.use_timm_backbone:
-            # We default to values which were previously hard-coded. This enables configurability from the config
-            # using backbone arguments, while keeping the default behavior the same.
-            requires_backends(self, ["timm"])
-            kwargs = getattr(config, "backbone_kwargs", {})
-            kwargs = {} if kwargs is None else kwargs.copy()
-            out_indices = kwargs.pop("out_indices", (1, 2, 3, 4))
-            num_channels = kwargs.pop("in_chans", config.num_channels)
-            if config.dilation:
-                kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
+        self.intermediate_channel_sizes = backbone.channels
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
+
+        # We used to load with timm library directly instead of the AutoBackbone API
+        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        is_timm_model = False
+        if hasattr(backbone, "_backbone"):
+            backbone = backbone._backbone
+            is_timm_model = True
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
 
-        backbone_model_type = None
-        if config.backbone is not None:
-            backbone_model_type = config.backbone
-        elif config.backbone_config is not None:
-            backbone_model_type = config.backbone_config.model_type
-        else:
-            raise ValueError("Either `backbone` or `backbone_config` should be provided in the config")
-
+        backbone_model_type = config.backbone_config.model_type
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
+                if is_timm_model:
                     if "layer2" not in name and "layer3" not in name and "layer4" not in name:
                         parameter.requires_grad_(False)
                 else:
@@ -260,7 +231,9 @@ class TableTransformerConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values)
+        if isinstance(features, dict):
+            features = features.feature_maps
 
         out = []
         for feature_map in features:
@@ -270,7 +243,7 @@ class TableTransformerConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->TableTransformer
 class TableTransformerConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -292,7 +265,7 @@ class TableTransformerConvModel(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->TableTransformer
 class TableTransformerSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -330,7 +303,7 @@ class TableTransformerSinePositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding with Detr->TableTransformer
 class TableTransformerLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -354,7 +327,7 @@ class TableTransformerLearnedPositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->TableTransformer
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
@@ -368,7 +341,7 @@ def build_position_encoding(config):
     return position_embedding
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
@@ -403,18 +376,18 @@ class TableTransformerAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Tensor | None):
         return tensor if object_queries is None else tensor + object_queries
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        object_queries: Optional[torch.Tensor] = None,
-        key_value_states: Optional[torch.Tensor] = None,
-        spatial_position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        object_queries: torch.Tensor | None = None,
+        key_value_states: torch.Tensor | None = None,
+        spatial_position_embeddings: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -464,6 +437,10 @@ class TableTransformerAttention(nn.Module):
                     f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
                     f" {attention_mask.size()}"
                 )
+            if attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
+                    attention_mask, -torch.inf
+                )
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
 
@@ -499,7 +476,7 @@ class TableTransformerAttention(nn.Module):
 
 
 class TableTransformerEncoderLayer(nn.Module):
-    # Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -520,7 +497,7 @@ class TableTransformerEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        object_queries: Optional[torch.Tensor] = None,
+        object_queries: torch.Tensor | None = None,
         output_attentions: bool = False,
     ):
         """
@@ -559,7 +536,7 @@ class TableTransformerEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -572,7 +549,7 @@ class TableTransformerEncoderLayer(nn.Module):
 
 
 class TableTransformerDecoderLayer(GradientCheckpointingLayer):
-    # Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -600,12 +577,12 @@ class TableTransformerDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        object_queries: Optional[torch.Tensor] = None,
-        query_position_embeddings: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        object_queries: torch.Tensor | None = None,
+        query_position_embeddings: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ):
         """
         Args:
@@ -683,28 +660,29 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
     config: TableTransformerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"TableTransformerConvEncoder",
         r"TableTransformerEncoderLayer",
         r"TableTransformerDecoderLayer",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
         if isinstance(module, TableTransformerLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 class TableTransformerEncoder(TableTransformerPreTrainedModel):
@@ -743,6 +721,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -773,15 +752,18 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=attention_mask,
+            )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -823,7 +805,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerDecoder(TableTransformerPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TableTransformerDecoderLayer`].
@@ -863,6 +845,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -904,25 +887,25 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
-        combined_attention_mask = None
-
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _prepare_4d_attention_mask(
-                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+        if attention_mask is not None:
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=attention_mask,
             )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=hidden_states,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
             )
 
         # optional intermediate hidden states
@@ -944,7 +927,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                combined_attention_mask,
+                attention_mask,
                 object_queries,
                 query_position_embeddings,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
@@ -997,7 +980,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
     """
 )
 class TableTransformerModel(TableTransformerPreTrainedModel):
-    # Copied from transformers.models.detr.modeling_detr.DetrModel.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrModel.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 
@@ -1017,12 +1000,6 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
@@ -1035,15 +1012,16 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], TableTransformerModelOutput]:
+        pixel_mask: torch.FloatTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | TableTransformerModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1083,7 +1061,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1171,7 +1149,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
     """
 )
 class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
-    # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 
@@ -1193,16 +1171,17 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[list[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], TableTransformerObjectDetectionOutput]:
+        pixel_mask: torch.FloatTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: list[dict] | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | TableTransformerObjectDetectionOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1249,7 +1228,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         ...     )
         Detected table with confidence 1.0 at location [202.1, 210.59, 1119.22, 385.09]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # First, sent images through TABLE_TRANSFORMER base model to obtain encoder + decoder outputs
         outputs = self.model(
@@ -1304,7 +1283,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->TableTransformer,detr->table_transformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->TableTransformer,detr->table_transformer
 class TableTransformerMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,

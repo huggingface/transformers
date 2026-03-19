@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Image processor class for Pixtral."""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -32,12 +30,13 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_kwargs,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
@@ -47,6 +46,15 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
+class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+        Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
+    """
+
+    patch_size: dict[str, int] | int
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.
@@ -98,9 +106,9 @@ def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) 
 
 def get_resize_output_image_size(
     input_image: ImageInput,
-    size: Union[int, tuple[int, int], list[int], tuple[int]],
-    patch_size: Union[int, tuple[int, int], list[int], tuple[int]],
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    size: int | tuple[int, int] | list[int] | tuple[int],
+    patch_size: int | tuple[int, int] | list[int] | tuple[int],
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple:
     """
     Find the target (height, width) dimension of the output image after resizing given the input image and the desired
@@ -170,19 +178,20 @@ class PixtralImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "image_sizes"]
+    valid_kwargs = PixtralImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        patch_size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
+        patch_size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -224,8 +233,8 @@ class PixtralImageProcessor(BaseImageProcessor):
         size: dict[str, int],
         patch_size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -277,8 +286,8 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         pixel_values: list[np.ndarray],
         image_sizes: list[list[int]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
@@ -302,8 +311,8 @@ class PixtralImageProcessor(BaseImageProcessor):
         """
 
         max_shape = (
-            max([size[0] for size in image_sizes]),
-            max([size[1] for size in image_sizes]),
+            max(size[0] for size in image_sizes),
+            max(size[1] for size in image_sizes),
         )
         pixel_values = [
             pad(
@@ -319,19 +328,19 @@ class PixtralImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        patch_size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        patch_size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -366,10 +375,8 @@ class PixtralImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -397,13 +404,11 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images = make_list_of_images(images)
+        images = self.fetch_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

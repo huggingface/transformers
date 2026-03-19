@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,77 +15,27 @@
 Text/audio processor class for MusicGen
 """
 
-from typing import Optional
+from typing import Any
 
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import to_numpy
+from ...utils import auto_docstring, to_numpy
 
 
+@auto_docstring
 class MusicgenProcessor(ProcessorMixin):
-    r"""
-    Constructs a MusicGen processor which wraps an EnCodec feature extractor and a T5 tokenizer into a single processor
-    class.
-
-    [`MusicgenProcessor`] offers all the functionalities of [`EncodecFeatureExtractor`] and [`TTokenizer`]. See
-    [`~MusicgenProcessor.__call__`] and [`~MusicgenProcessor.decode`] for more information.
-
-    Args:
-        feature_extractor (`EncodecFeatureExtractor`):
-            An instance of [`EncodecFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`T5Tokenizer`):
-            An instance of [`T5Tokenizer`]. The tokenizer is a required input.
-    """
-
-    feature_extractor_class = "EncodecFeatureExtractor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
+    @auto_docstring
     def __call__(self, *args, **kwargs):
-        """
-        Forwards the `audio` argument to EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`] and the `text`
-        argument to [`~T5Tokenizer.__call__`]. Please refer to the docstring of the above two methods for more
-        information.
-        """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
-        audio = kwargs.pop("audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
         if len(args) > 0:
-            audio = args[0]
-            args = args[1:]
-
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
-
-        if text is not None:
-            inputs = self.tokenizer(text, **kwargs)
-
-        if audio is not None:
-            audio_inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
-
-        if audio is None:
-            return inputs
-
-        elif text is None:
-            return audio_inputs
-
-        else:
-            inputs["input_values"] = audio_inputs["input_values"]
-            if "padding_mask" in audio_inputs:
-                inputs["padding_mask"] = audio_inputs["padding_mask"]
-            return inputs
+            kwargs["audio"] = args[0]
+        return super().__call__(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -106,14 +55,7 @@ class MusicgenProcessor(ProcessorMixin):
         else:
             return self.tokenizer.batch_decode(*args, **kwargs)
 
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to T5Tokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
-        docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    def _decode_audio(self, audio_values, padding_mask: Optional = None) -> list[np.ndarray]:
+    def _decode_audio(self, audio_values, padding_mask: Any = None) -> list[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc. team and MosaicML NLP team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,15 @@
 """PyTorch MPT model."""
 
 import math
-from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -70,7 +67,7 @@ class MptAttention(nn.Module):
     Using torch or triton attention implementation enables user to also use additive bias.
     """
 
-    def __init__(self, config: MptConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MptConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.n_heads = config.n_heads
@@ -90,9 +87,9 @@ class MptAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_bias: torch.Tensor,
-        past_key_value: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -105,12 +102,11 @@ class MptAttention(nn.Module):
         key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
 
-        if past_key_value is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
-        query_length = seq_length if past_key_value is None else seq_length + past_key_value.get_seq_length()
+        query_length = seq_length if past_key_values is None else seq_length + past_key_values.get_seq_length()
 
         if position_bias is not None:
             if len(position_bias.shape) != 3:
@@ -160,7 +156,7 @@ class MptMLP(nn.Module):
 
 
 class MptBlock(GradientCheckpointingLayer):
-    def __init__(self, config: MptConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MptConfig, layer_idx: int | None = None):
         super().__init__()
         hidden_size = config.hidden_size
 
@@ -185,10 +181,10 @@ class MptBlock(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_bias: torch.Tensor,
         attention_mask: torch.Tensor,
-        layer_past: Optional[Cache] = None,
+        layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
         # Layer norm at the beginning of the transformer layer.
@@ -201,8 +197,7 @@ class MptBlock(GradientCheckpointingLayer):
             layernorm_output,
             position_bias=position_bias,
             attention_mask=attention_mask,
-            past_key_value=layer_past,
-            cache_position=cache_position,
+            past_key_values=layer_past,
         )
 
         hidden_states = self.resid_attn_dropout(attn_outputs) + residual
@@ -223,46 +218,6 @@ class MptPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
-    _keys_to_ignore_on_load_missing = [r"lm_head.*."]
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, LayerNorm):
-            if module.bias is not None:
-                module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    @staticmethod
-    def _convert_to_mpt_cache(
-        past_key_value: tuple[tuple[torch.Tensor, torch.Tensor]],
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
-        """
-        batch_size, num_heads, head_dim, seq_length = past_key_value[0][0].shape
-        batch_size_times_num_heads = batch_size * num_heads
-        # key:  [batch_size, num_heads, head_dim, seq_length] -> [batch_size * num_heads, head_dim, seq_length]
-        # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
-        return tuple(
-            (
-                layer_past[0].reshape(batch_size_times_num_heads, head_dim, seq_length),
-                layer_past[1].reshape(batch_size_times_num_heads, seq_length, head_dim),
-            )
-            for layer_past in past_key_value
-        )
 
 
 @auto_docstring
@@ -301,17 +256,16 @@ class MptModel(MptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[tuple[tuple[torch.Tensor, torch.Tensor], ...], Cache]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # NOOP kwargs, for now
-    ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -330,7 +284,7 @@ class MptModel(MptPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -351,15 +305,8 @@ class MptModel(MptPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            return_legacy_cache = True
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
 
         hidden_states = inputs_embeds
 
@@ -367,19 +314,14 @@ class MptModel(MptPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        seq_length_with_past = seq_length + past_key_values_length
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
-        else:
-            attention_mask = attention_mask.to(hidden_states.device)
-
         alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
 
-        causal_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        )
-        causal_mask = causal_mask.bool()
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+        ).to(torch.bool)
 
         for block in self.blocks:
             if output_hidden_states:
@@ -392,7 +334,6 @@ class MptModel(MptPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 position_bias=alibi,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -401,9 +342,6 @@ class MptModel(MptPreTrainedModel):
 
         # Add last hidden state
         hidden_states = self.norm_f(hidden_states)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -428,7 +366,7 @@ class MptModel(MptPreTrainedModel):
     """
 )
 class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -444,18 +382,18 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -473,7 +411,7 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -484,31 +422,24 @@ class MptForCausalLM(MptPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
-        hidden_states = transformer_outputs[0]
 
-        lm_logits = self.lm_head(hidden_states)
+        hidden_states = transformer_outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
-            # Flatten the tokens
-            loss = self.loss_function(
-                lm_logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (lm_logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
@@ -539,19 +470,23 @@ class MptForSequenceClassification(MptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def set_output_embeddings(self, new_embeddings: torch.Tensor):
+        self.score = new_embeddings
+
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -569,7 +504,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -665,17 +600,17 @@ class MptForTokenClassification(MptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor, torch.Tensor], ...]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **deprecated_arguments,
-    ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -693,7 +628,7 @@ class MptForTokenClassification(MptPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -712,7 +647,7 @@ class MptForTokenClassification(MptPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
+            # move labels to correct device
             labels = labels.to(logits.device)
             batch_size, seq_length = labels.shape
             loss_fct = CrossEntropyLoss()
@@ -745,15 +680,16 @@ class MptForQuestionAnswering(MptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, QuestionAnsweringModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else `past_key_values.get_seq_length()`
@@ -767,7 +703,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,

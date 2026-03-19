@@ -131,18 +131,16 @@ class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     test_generate_without_input_ids = False
 
     # Ignoring of a failing tests from ModelTesterMixin, as the model does not implement these features
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     test_attention_outputs = False
     test_hidden_states_output = False
     test_inputs_embeds = False
     test_gradient_checkpointing = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = DecisionTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DecisionTransformerConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

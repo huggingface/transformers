@@ -41,6 +41,7 @@ from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
 from huggingface_hub import HfApi
+from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.transforms import (
     CenterCrop,
@@ -56,12 +57,13 @@ from tqdm.auto import tqdm
 
 import transformers
 from transformers import AutoConfig, AutoImageProcessor, AutoModelForImageClassification, SchedulerType, get_scheduler
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.trainer_pt_utils import get_parameter_names
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.56.0.dev0")
+check_min_version("4.57.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -234,10 +236,6 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_image_classification_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
@@ -293,8 +291,9 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    if args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
+    if (
+        args.dataset_name is not None and args.train_dir is None and args.validation_dir is None
+    ):  # Downloading and loading a dataset from the hub.
         dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_code)
     else:
         data_files = {}
@@ -426,14 +425,15 @@ def main():
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
-    no_decay = ["bias", "LayerNorm.weight"]
+    forbidden_name_patterns = [r"bias", r"layernorm", r"rmsnorm", r"(?:^|\.)norm(?:$|\.)", r"_norm(?:$|\.)"]
+    decay_parameters = get_parameter_names(model, [nn.LayerNorm], forbidden_layer_names=forbidden_name_patterns)
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if n in decay_parameters and p.requires_grad],
             "weight_decay": args.weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [p for n, p in model.named_parameters() if n not in decay_parameters and p.requires_grad],
             "weight_decay": 0.0,
         },
     ]

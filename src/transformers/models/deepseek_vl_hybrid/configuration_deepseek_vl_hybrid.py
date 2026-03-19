@@ -18,33 +18,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DeepseekVLHybridConfig(PretrainedConfig):
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
+@strict(accept_kwargs=True)
+class DeepseekVLHybridConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekVLHybridModel`]. It is used to instantiate a
-    DeepseekVLHybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
-    [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
-            The config object or dictionary of the high resolution vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100015):
-            The index representing image tokens in the model's token vocabulary.
+    high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
+        The config object or dictionary of the high resolution vision backbone.
 
     Example:
 
@@ -64,45 +53,40 @@ class DeepseekVLHybridConfig(PretrainedConfig):
     model_type = "deepseek_vl_hybrid"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "high_res_vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        text_config: AutoConfig = None,
-        vision_config: AutoConfig = None,
-        high_res_vision_config: AutoConfig = None,
-        image_token_id: int = 100015,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 100015
+    tie_word_embeddings: bool = True
 
-        if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
+    high_res_vision_config: dict | PreTrainedConfig | None = None
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-
-        if high_res_vision_config is None:
-            high_res_vision_config = {}
+    def __post_init__(self, **kwargs):
+        if self.high_res_vision_config is None:
+            self.high_res_vision_config = {}
             logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
 
-        if isinstance(high_res_vision_config, dict):
-            high_res_vision_config["model_type"] = high_res_vision_config.get("model_type", "sam_vision_model")
-            high_res_vision_config = CONFIG_MAPPING[high_res_vision_config["model_type"]](**high_res_vision_config)
+        if isinstance(self.high_res_vision_config, dict):
+            self.high_res_vision_config["model_type"] = self.high_res_vision_config.get(
+                "model_type", "sam_vision_model"
+            )
+            self.high_res_vision_config = CONFIG_MAPPING[self.high_res_vision_config["model_type"]](
+                **self.high_res_vision_config
+            )
+        if self.text_config is None:
+            self.text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
 
-        self.high_res_vision_config = high_res_vision_config
+        if self.vision_config is None:
+            self.vision_config = {}
+            logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DeepseekVLHybridConfig"]

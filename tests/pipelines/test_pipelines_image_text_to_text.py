@@ -18,7 +18,9 @@ import unittest
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageTextToTextPipeline, pipeline
 from transformers.testing_utils import (
+    Expectations,
     is_pipeline_test,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -42,8 +44,8 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
-        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype, max_new_tokens=10)
+    def get_test_pipeline(self, model, tokenizer, processor, image_processor, dtype="float32"):
+        pipe = ImageTextToTextPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
         examples = [
             {
@@ -101,6 +103,22 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             ],
         ]
         outputs = pipe(text=messages)
+        EXPECTED_CONTENT = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and",
+                (
+                    "rocm",
+                    (9, 4),
+                ): "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they do it all\n\nThey help us to create and share\nContent that is both true and true\nAnd make the world a better place\nWith their tools and services, we can do it all\n\nFrom image and video to text and speech\nThey make it all possible\nWith their tools and services, we can do it all\nAnd make the world a better place\n\nSo let us embrace and use\nHugging Face's tools and services\nTo create and share\nContent that is true and true\nAnd make the world a better place.",
+                (
+                    "xpu",
+                    3,
+                ): "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they do it all\n\nThey help us to create and share\nContent that's both engaging and informative\nWith their tools, we can write\nAnd create stories that are both true and true\n\nThey help us to analyze\nAnd make sense of data that's hard to see\nWith their tools, we can see\nAnd make sense of the world around us\n\nThey help us to create\nAnd share content that's both true and true\nWith their tools, we can see\nAnd make sense of the world around us\n\nSo here's to Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they do it all\n\nThank you, Hugging Face, for all you do\nWith tools and services that make our lives easier\nSo here's to you, and all the great things you do",
+            }
+        ).get_expectation()
         self.assertEqual(
             outputs,
             [
@@ -119,7 +137,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             },
                             {
                                 "role": "assistant",
-                                "content": "Hugging Face, a company of minds\nWith tools and services that make our lives easier\nFrom natural language processing\nTo machine learning and more, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and services\nFrom image and speech recognition\nTo text and language translation, they've got it all\n\nThey've made it possible for us to be more\nInformed and efficient, with their tools and",
+                                "content": EXPECTED_CONTENT,
                             },
                         ],
                     }
@@ -127,10 +145,16 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 [
                     {
                         "input_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "What is the capital of France?"}],
+                            }
                         ],
                         "generated_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "What is the capital of France?"}],
+                            },
                             {"role": "assistant", "content": "Paris"},
                         ],
                     }
@@ -139,33 +163,66 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    @require_deterministic_for_xpu
     def test_small_model_pt_token(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         text = "<image> What this is? Assistant: This is"
 
         outputs = pipe(image, text=text)
+        EXPECTED_CONTENT = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable. The photo captures a moment of tranquility and companionship between the two feline friends.",
+                (
+                    "rocm",
+                    (9, 4),
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
+                (
+                    "xpu",
+                    3,
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a surface that looks like a couch or a chair, and it is covered with a soft fabric. The cats' fur is a mix of black, white, and brown, and they have a variety of patterns on their bodies. The image captures a moment of tranquility and companionship between the cats.",
+            }
+        ).get_expectation()
         self.assertEqual(
             outputs,
             [
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are sleeping and appear to be comfortable. The photo captures a moment of tranquility and companionship between the two feline friends.",
+                    "generated_text": EXPECTED_CONTENT,
                 }
             ],
         )
 
         outputs = pipe([image, image], text=[text, text])
+        EXPECTED_CONTENT = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
+                (
+                    "rocm",
+                    (9, 4),
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the overall setting is cozy and comfortable.",
+                (
+                    "xpu",
+                    3,
+                ): "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a surface that looks like a couch or a chair, and it is covered with a soft fabric. The cats' fur is a mix of black, white, and brown, and they have a variety of patterns on their bodies. The image captures a moment of tranquility and companionship between the cats.",
+            }
+        ).get_expectation()
         self.assertEqual(
             outputs,
             [
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
+                    "generated_text": EXPECTED_CONTENT,
                 },
                 {
                     "input_text": "<image> What this is? Assistant: This is",
-                    "generated_text": "<image> What this is? Assistant: This is a photo of two cats lying on a pink blanket. The cats are facing the camera, and they appear to be sleeping or resting. The blanket is placed on a couch, and the cats are positioned in such a way that they are facing the camera. The image captures a peaceful moment between the two cats, and it's a great way to showcase their cuteness and relaxed demeanor.",
+                    "generated_text": EXPECTED_CONTENT,
                 },
             ],
         )
@@ -196,7 +253,29 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
+        # Deprecated behavior should raise an error after v5
+        with self.assertRaises(ValueError):
+            outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What’s the difference between these two images?"},
+                    {"type": "image", "url": image_ny},
+                    {"type": "image", "url": image_chicago},
+                ],
+            }
+        ]
+        outputs = pipe(text=messages, return_full_text=True, max_new_tokens=10)
+        EXPECTED_CONTENT = Expectations(
+            {
+                ("rocm", (9, 4)): "The first image shows a statue of the Statue of",
+                ("cuda", 8): "The first image shows a statue of Liberty in the",
+                ("xpu", 3): "The first image shows a statue of Liberty in the",
+            }
+        ).get_expectation()
+
         self.assertEqual(
             outputs,
             [
@@ -208,11 +287,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
                                 },
                             ],
                         }
@@ -224,17 +303,17 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
                                 },
                             ],
                         },
                         {
                             "role": "assistant",
-                            "content": "The first image shows a statue of Liberty in the",
+                            "content": EXPECTED_CONTENT,
                         },
                     ],
                 }

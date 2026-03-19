@@ -41,7 +41,7 @@ model = AutoModelForCausalLM.from_pretrained(path, device_map="auto")
 
 ## Kernels
 
-`@torch.compile` is used to unpack the weights and perform the forward pass. It’s very straightforward to implement and delivers significant speed improvements. Additional optimized kernels will be integrated in future versions.
+`@torch.compile` is used to unpack the weights and perform the forward pass. It's very straightforward to implement and delivers significant speed improvements. Additional optimized kernels will be integrated in future versions.
 
 ## Resources
 

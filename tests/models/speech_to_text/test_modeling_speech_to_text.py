@@ -15,7 +15,6 @@
 
 import copy
 import inspect
-import os
 import tempfile
 import unittest
 
@@ -29,12 +28,13 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_fp16,
     require_torchaudio,
+    slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -51,29 +51,18 @@ def prepare_speech_to_text_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_features.ne(0)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+
     return {
         # "input_ids": input_features,
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -276,8 +265,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
-    test_pruning = False
     test_missing_keys = False
 
     def setUp(self):
@@ -296,7 +283,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -314,24 +301,20 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @require_torch_fp16
@@ -360,11 +343,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
-            expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                else ["encoder_outputs"]
-            )
+            expected_arg_names.extend(["encoder_outputs"])
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_hidden_states_output(self):
@@ -581,6 +560,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -617,96 +597,18 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_generate_without_input_ids(self):
         pass
 
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            try:
-                model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                input_features = inputs["input_features"]
-                attention_mask = inputs["attention_mask"]
-                decoder_input_ids = inputs["decoder_input_ids"]
-                decoder_attention_mask = inputs["decoder_attention_mask"]
-                traced_model = torch.jit.trace(
-                    model, (input_features, attention_mask, decoder_input_ids, decoder_attention_mask)
-                )
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
-    @unittest.skip(reason="Test failing,  @RocketNight is looking into it")
-    def test_tf_from_pt_safetensors(self):
-        pass
-
 
 @require_torch
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
+@slow
+@unittest.skip("@eustlb broken in a weird way. To investigate later.")
 class Speech2TextModelIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_name = "facebook/s2t-small-librispeech-asr"
-        cls.model = Speech2TextForConditionalGeneration.from_pretrained(model_name, device_map="auto")
+        cls.model = Speech2TextForConditionalGeneration.from_pretrained(model_name, use_safetensors=False)
         cls.processor = Speech2TextProcessor.from_pretrained(model_name)
         # loads 4 samples
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

@@ -18,7 +18,6 @@ import numpy as np
 
 from transformers import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     AutoModelForTokenClassification,
     AutoTokenizer,
     TokenClassificationPipeline,
@@ -26,6 +25,7 @@ from transformers import (
 )
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
+    Expectations,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
@@ -51,14 +51,9 @@ _TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
 @is_pipeline_test
 class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
         model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
-    if not hasattr(tf_model_mapping, "is_dummy"):
-        tf_model_mapping = {
-            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
-        }
 
     def get_test_pipeline(
         self,
@@ -67,7 +62,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         token_classifier = TokenClassificationPipeline(
             model=model,
@@ -75,7 +70,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return token_classifier, ["A simple string", "A simple string that is quite a bit longer"]
 
@@ -216,15 +211,6 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 for i in range(n)
             ],
         )
-
-        with self.assertWarns(UserWarning):
-            token_classifier = pipeline(task="ner", model=model, tokenizer=tokenizer, grouped_entities=True)
-        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.SIMPLE)
-        with self.assertWarns(UserWarning):
-            token_classifier = pipeline(
-                task="ner", model=model, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
-            )
-        self.assertEqual(token_classifier._postprocess_params["aggregation_strategy"], AggregationStrategy.FIRST)
 
     @slow
     @require_torch
@@ -368,34 +354,54 @@ class TokenClassificationPipelineTests(unittest.TestCase):
 
         results = pipe(sentence, aggregation_strategy="first")
         # This is what this random model gives on the full sentence
-        self.assertEqual(
-            nested_simplify(results),
-            [
-                # This is 2 actual tokens
-                {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
-                {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
-            ],
-        )
+        expected_results = Expectations(
+            {
+                ("cuda", 8): [
+                    {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                    {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+                ],
+                # ROCm produces different output due to precision differences
+                ("rocm", (9, 4)): [
+                    {"end": 3, "entity_group": "MISC", "score": 0.115, "start": 0, "word": "The"},
+                    {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(results), expected_results)
 
         # This will force the tokenizer to split after "city was".
         pipe.tokenizer.model_max_length = 12
+        expected_decode = Expectations(
+            {
+                ("cuda", 8): "[CLS] the company, based in new york city was [SEP]",
+                # ROCm tokenizer produces different output (preserves case and includes more tokens)
+                ("rocm", (9, 4)): "[CLS] The company, based in New York City was founded [SEP]",
+            }
+        ).get_expectation()
         self.assertEqual(
             pipe.tokenizer.decode(pipe.tokenizer.encode(sentence, truncation=True)),
-            "[CLS] the company, based in new york city was [SEP]",
+            expected_decode,
         )
 
         stride = 4
         results = pipe(sentence, aggregation_strategy="first", stride=stride)
-        self.assertEqual(
-            nested_simplify(results),
-            [
-                {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
-                # This is an extra entity found by this random model, but at least both original
-                # entities are there
-                {"end": 58, "entity_group": "MISC", "score": 0.115, "start": 56, "word": "by"},
-                {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
-            ],
-        )
+        expected_stride_results = Expectations(
+            {
+                ("cuda", 8): [
+                    {"end": 39, "entity_group": "MISC", "score": 0.115, "start": 31, "word": "city was"},
+                    # This is an extra entity found by this random model, but at least both original
+                    # entities are there
+                    {"end": 58, "entity_group": "MISC", "score": 0.115, "start": 56, "word": "by"},
+                    {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+                ],
+                # ROCm produces different output due to precision differences
+                ("rocm", (9, 4)): [
+                    {"end": 3, "entity_group": "MISC", "score": 0.115, "start": 0, "word": "The"},
+                    {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(results), expected_stride_results)
 
     @require_torch
     @slow
@@ -550,7 +556,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy_no_b_i_prefix(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
         # Just to understand scores indexes in this test
         token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
         example = [
@@ -599,7 +605,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
         # Just to understand scores indexes in this test
         self.assertEqual(
             token_classifier.model.config.id2label,
@@ -672,7 +678,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_aggregation_strategy_example2(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
         # Just to understand scores indexes in this test
         self.assertEqual(
             token_classifier.model.config.id2label,
@@ -748,7 +754,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_gather_pre_entities(self):
         model_name = "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
 
         sentence = "Hello there"
 
@@ -793,7 +799,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_word_heuristic_leading_space(self):
         model_name = "hf-internal-testing/tiny-random-deberta-v2"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
 
         sentence = "I play the theremin"
 
@@ -828,50 +834,64 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     def test_no_offset_tokenizer(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer, framework="pt")
+        token_classifier = pipeline(task="token-classification", model=model_name, tokenizer=tokenizer)
         outputs = token_classifier("This is a test !")
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": None, "end": None},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": None, "end": None},
-            ],
-        )
+        expected_outputs = Expectations(
+            {
+                ("cuda", 8): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": None, "end": None},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": None, "end": None},
+                ],
+                # ROCm tokenizer provides offsets and detects different tokens
+                ("rocm", (9, 4)): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
     @require_torch
     def test_small_model_pt(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        token_classifier = pipeline(task="token-classification", model=model_name)
         outputs = token_classifier("This is a test !")
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-            ],
-        )
+        expected_outputs = Expectations(
+            {
+                ("cuda", 8): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+                ("rocm", (9, 4)): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", ignore_labels=["O", "I-MISC"]
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, ignore_labels=["O", "I-MISC"])
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),
             [],
         )
 
-        token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
+        token_classifier = pipeline(task="token-classification", model=model_name)
         # Overload offset_mapping
         outputs = token_classifier(
             "This is a test !", offset_mapping=[(0, 0), (0, 1), (0, 2), (0, 0), (0, 0), (0, 0), (0, 0)]
         )
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
-            ],
-        )
+        expected_offset_outputs = Expectations(
+            {
+                ("cuda", 8): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 1},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
+                ],
+                ("rocm", (9, 4)): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_offset_outputs)
 
         # Batch size does not affect outputs (attention_mask are required)
         sentences = ["This is a test !", "Another test this is with longer sentence"]
@@ -879,46 +899,60 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         outputs_batched = token_classifier(sentences, batch_size=2)
         # Batching does not make a difference in predictions
         self.assertEqual(nested_simplify(outputs_batched), nested_simplify(outputs))
-        self.assertEqual(
-            nested_simplify(outputs_batched),
-            [
-                [
-                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+        expected_batched_outputs = Expectations(
+            {
+                ("cuda", 8): [
+                    [
+                        {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                        {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                    ],
+                    [],
                 ],
-                [],
-            ],
-        )
+                ("rocm", (9, 4)): [
+                    [
+                        {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                    ],
+                    [],
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs_batched), expected_batched_outputs)
 
     @require_torch
     def test_small_model_pt_fp16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.float16
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, dtype=torch.float16)
         outputs = token_classifier("This is a test !")
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-            ],
-        )
+        expected_outputs = Expectations(
+            {
+                ("cuda", 8): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+                ("rocm", (9, 4)): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
     @require_torch
     def test_small_model_pt_bf16(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-        token_classifier = pipeline(
-            task="token-classification", model=model_name, framework="pt", torch_dtype=torch.bfloat16
-        )
+        token_classifier = pipeline(task="token-classification", model=model_name, dtype=torch.bfloat16)
         outputs = token_classifier("This is a test !")
-        self.assertEqual(
-            nested_simplify(outputs),
-            [
-                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
-                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
-            ],
-        )
+        expected_outputs = Expectations(
+            {
+                ("cuda", 8): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+                ("rocm", (9, 4)): [
+                    {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
@@ -937,7 +971,9 @@ class TokenClassificationPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_simple(self):
-        token_classifier = pipeline(task="ner", model="dslim/bert-base-NER", grouped_entities=True)
+        token_classifier = pipeline(
+            task="ner", model="dslim/bert-base-NER", aggregation_strategy=AggregationStrategy.SIMPLE
+        )
         sentence = "Hello Sarah Jessica Parker who Jessica lives in New York"
         sentence2 = "This is a simple test"
         output = token_classifier(sentence)

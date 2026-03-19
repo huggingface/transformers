@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Bitsandbytes
 
-The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around CUDA functions. It enables working with large models using limited computational resources by reducing their memory footprint.
+The [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) library provides quantization tools for LLMs through a lightweight Python wrapper around hardware accelerator functions. It enables working with large models using limited computational resources by reducing their memory footprint.
 
 At its core, bitsandbytes provides:
 
@@ -32,36 +32,39 @@ bitsandbytes offers two main quantization features:
 
 > **Note:** For a user-friendly quantization experience, you can use the `bitsandbytes` [community space](https://huggingface.co/spaces/bnb-community/bnb-my-repo).
 
-
 Run the command below to install bitsandbytes.
 
 ```bash
 pip install --upgrade transformers accelerate bitsandbytes
 ```
+
 To compile from source, follow the instructions in the [bitsandbytes installation guide](https://huggingface.co/docs/bitsandbytes/main/en/installation).
 
 ## Hardware Compatibility
-bitsandbytes is currently only supported on CUDA GPUs for CUDA versions 11.0 - 12.8. However, there's an ongoing multi-backend effort under development, which is currently in alpha. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
 
-### CUDA
+bitsandbytes is supported on NVIDIA GPUs for CUDA versions 11.8 - 13.0, Intel XPU, Intel Gaudi (HPU), and CPU. There is an ongoing effort to support additional platforms. If you're interested in providing feedback or testing, check out the [bitsandbytes repository](https://github.com/bitsandbytes-foundation/bitsandbytes) for more information.
+
+### NVIDIA GPUs (CUDA)
+
+This backend is supported on Linux x86-64, Linux aarch64, and Windows platforms.
 
 | Feature | Minimum Hardware Requirement |
 |---------|-------------------------------|
-| 8-bit optimizers | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
-| LLM.int8() | NVIDIA Turing (RTX 20 series, T4) or newer GPUs |
-| NF4/FP4 quantization | NVIDIA Maxwell (GTX 900 series, TITAN X, M40) or newer GPUs * |
+| 8-bit optimizers | NVIDIA Pascal (GTX 10X0 series, P100) or newer GPUs * |
+| LLM.int8() | NVIDIA Turing (RTX 20X0 series, T4) or newer GPUs |
+| NF4/FP4 quantization | NVIDIA Pascal (GTX 10X0 series, P100) or newer GPUs * |
 
-### Multi-backend
+### Intel GPUs (XPU)
 
-| Backend | Supported Versions | Python versions | Architecture Support | Status |
-|---------|-------------------|----------------|---------------------|---------|
-| AMD ROCm | 6.1+ | 3.10+ | minimum CDNA - gfx90a, RDNA - gfx1100 | Alpha |
-| Apple Silicon (MPS) | WIP | 3.10+ | M1/M2 chips | Planned |
-| Intel CPU | v2.4.0+ (ipex) | 3.10+ | Intel CPU | Alpha |
-| Intel GPU | v2.4.0+ (ipex) | 3.10+ | Intel GPU | Experimental |
-| Ascend NPU | 2.1.0+ (torch_npu) | 3.10+ | Ascend NPU | Experimental |
+This backend is supported on Linux x86-64 and Windows x86-64 platforms.
 
-> **Note:** Bitsandbytes is moving away from the multi-backend approach towards using [Pytorch Custom Operators](https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html), as the main mechanism for supporting new hardware, and dispatching to the correct backend.
+### Intel Gaudi (HPU)
+
+This backend is supported on Linux x86-64 for Gaudi2 and Gaudi3.
+
+### CPU
+
+This backend is supported on Linux x86-64, Linux aarch64, and Windows x86-64 platforms.
 
 ## Quantization Examples
 
@@ -84,7 +87,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `torch_dtype` parameter. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `dtype` parameter. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -96,7 +99,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m", 
     device_map="auto",
     quantization_config=quantization_config, 
-    torch_dtype="auto"
+    dtype="auto"
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -116,6 +119,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 model.push_to_hub("bloom-560m-8bit")
 ```
+
 </div>
 </hfoption>
 <hfoption id="4-bit">
@@ -134,7 +138,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter.. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `dtype` parameter. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -146,7 +150,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
     device_map="auto",
     quantization_config=quantization_config, 
-    torch_dtype="auto"
+    dtype="auto"
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -166,6 +170,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 model.push_to_hub("bloom-560m-4bit")
 ```
+
 </div>
 </hfoption>
 </hfoptions>
@@ -218,7 +223,7 @@ Now load your model with the custom `device_map` and `quantization_config`.
 ```py
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7",
-    torch_dtype="auto",
+    dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -242,7 +247,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype="auto",
+    dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -263,7 +268,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config,
 )
@@ -300,10 +305,10 @@ nf4_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 
-model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", quantization_config=nf4_config)
+model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", quantization_config=nf4_config)
 ```
 
-For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `torch_dtype` values.
+For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `dtype` values.
 
 ### Nested quantization
 
@@ -317,7 +322,7 @@ double_quant_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", torch_dtype="auto", quantization_config=double_quant_config)
+model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", dtype="auto", quantization_config=double_quant_config)
 ```
 
 ## Dequantizing bitsandbytes models
@@ -335,4 +340,4 @@ model.dequantize()
 
 Learn more about the details of 8-bit quantization in [A Gentle Introduction to 8-bit Matrix Multiplication for transformers at scale using Hugging Face Transformers, Accelerate and bitsandbytes](https://huggingface.co/blog/hf-bitsandbytes-integration).
 
-Try 4-bit quantization in this [notebook](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf) and learn more about it's details in [Making LLMs even more accessible with bitsandbytes, 4-bit quantization and QLoRA](https://huggingface.co/blog/4bit-transformers-bitsandbytes).
+Try 4-bit quantization in this [notebook](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf) and learn more about its details in [Making LLMs even more accessible with bitsandbytes, 4-bit quantization and QLoRA](https://huggingface.co/blog/4bit-transformers-bitsandbytes).

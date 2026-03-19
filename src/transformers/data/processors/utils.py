@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -18,9 +17,8 @@ import csv
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import Optional, Union
 
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -43,8 +41,8 @@ class InputExample:
 
     guid: str
     text_a: str
-    text_b: Optional[str] = None
-    label: Optional[str] = None
+    text_b: str | None = None
+    label: str | None = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
@@ -68,9 +66,9 @@ class InputFeatures:
     """
 
     input_ids: list[int]
-    attention_mask: Optional[list[int]] = None
-    token_type_ids: Optional[list[int]] = None
-    label: Optional[Union[int, float]] = None
+    attention_mask: list[int] | None = None
+    token_type_ids: list[int] | None = None
+    label: int | float | None = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
@@ -82,7 +80,7 @@ class DataProcessor:
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """
-        Gets an example from a dict with tensorflow tensors.
+        Gets an example from a dict.
 
         Args:
             tensor_dict: Keys and values should match the corresponding Glue
@@ -251,9 +249,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 values)
 
         Returns:
-            If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the
-            task-specific features. If the input is a list of `InputExamples`, will return a list of task-specific
-            `InputFeatures` which can be fed to the model.
+            Will return a list of task-specific `InputFeatures` which can be fed to the model.
 
         """
         if max_length is None:
@@ -315,21 +311,6 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
         if return_tensors is None:
             return features
-        elif return_tensors == "tf":
-            if not is_tf_available():
-                raise RuntimeError("return_tensors set to 'tf' but TensorFlow 2.0 can't be imported")
-            import tensorflow as tf
-
-            def gen():
-                for ex in features:
-                    yield ({"input_ids": ex.input_ids, "attention_mask": ex.attention_mask}, ex.label)
-
-            dataset = tf.data.Dataset.from_generator(
-                gen,
-                ({"input_ids": tf.int32, "attention_mask": tf.int32}, tf.int64),
-                ({"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None])}, tf.TensorShape([])),
-            )
-            return dataset
         elif return_tensors == "pt":
             if not is_torch_available():
                 raise RuntimeError("return_tensors set to 'pt' but PyTorch can't be imported")
@@ -346,4 +327,4 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             dataset = TensorDataset(all_input_ids, all_attention_mask, all_labels)
             return dataset
         else:
-            raise ValueError("return_tensors should be one of 'tf' or 'pt'")
+            raise ValueError("return_tensors should be `'pt'` or `None`")

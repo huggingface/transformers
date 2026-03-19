@@ -13,12 +13,13 @@
 # limitations under the License.
 import inspect
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
 from transformers.models.lightglue.configuration_lightglue import LightGlueConfig
 from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -126,14 +127,13 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LightGlueForKeypointMatching,) if is_torch_available() else ()
     all_generative_model_classes = () if is_torch_available() else ()
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = LightGlueModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LightGlueConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LightGlueConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -162,20 +162,20 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="LightGlue does not output any loss term in the forward pass")
@@ -330,30 +330,30 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         predicted_matches_values1 = outputs.matches[1, 0, 10:30]
         predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
 
-        expected_number_of_matches0 = 140
+        expected_number_of_matches0 = 866
         expected_matches_values0 = torch.tensor(
-            [14, -1, -1, 15, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11],
-            dtype=torch.int64,
-            device=torch_device,
-        )
-        expected_matching_scores_values0 = torch.tensor(
-            [0.3796, 0, 0, 0.3772, 0.4439, 0.2411, 0, 0, 0.0032, 0, 0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583],
-            device=torch_device,
-        )
-
-        expected_number_of_matches1 = 866
-        expected_matches_values1 = torch.tensor(
             [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
             dtype=torch.int64,
             device=torch_device,
         )
-        expected_matching_scores_values1 = torch.tensor(
+        expected_matching_scores_values0 = torch.tensor(
             [
                 0.6188,0.7817,0.5686,0.9353,0.9801,0.9193,0.8632,0.9111,0.9821,0.5496,
                 0.9906,0.8682,0.9679,0.9914,0.9318,0.1910,0.9669,0.3240,0.9971,0.9923,
             ],
             device=torch_device
         )  # fmt:skip
+
+        expected_number_of_matches1 = 140
+        expected_matches_values1 = torch.tensor(
+            [14, -1, -1, 15, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11],
+            dtype=torch.int64,
+            device=torch_device,
+        )
+        expected_matching_scores_values1 = torch.tensor(
+            [0.3796, 0, 0, 0.3772, 0.4439, 0.2411, 0, 0, 0.0032, 0, 0, 0, 0.2997, 0, 0, 0.6762, 0, 0.8826, 0, 0.5583],
+            device=torch_device,
+        )
 
         # expected_early_stopping_layer = 2
         # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()
@@ -374,7 +374,6 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         Such CUDA inconsistencies can be found
         [here](https://github.com/huggingface/transformers/pull/33200/files#r1785980300)
         """
-
         self.assertTrue(abs(predicted_number_of_matches0 - expected_number_of_matches0) < 4)
         self.assertTrue(abs(predicted_number_of_matches1 - expected_number_of_matches1) < 4)
         self.assertTrue(
@@ -499,63 +498,25 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         predicted_matches_values1 = outputs.matches[1, 0, 10:30]
         predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
 
-        expected_number_of_matches0 = 144
+        expected_number_of_matches0 = 143
         expected_matches_values0 = torch.tensor(
-            [-1, -1, 17, -1, -1, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64
+            [-1, -1, -1, -1, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64
         ).to(torch_device)
+        # fmt: off
         expected_matching_scores_values0 = torch.tensor(
-            [
-                0.0699,
-                0.0302,
-                0.3356,
-                0.0820,
-                0,
-                0.2266,
-                0,
-                0,
-                0.0241,
-                0,
-                0,
-                0,
-                0.1674,
-                0,
-                0,
-                0.8114,
-                0,
-                0.8120,
-                0,
-                0.2936,
-            ]
+            [0.0696, 0.0283, 0.0000, 0.0863, 0.2834, 0.2308, 0.0000, 0.0000, 0.0189, 0.0000, 0.0000, 0.0000, 0.1792, 0.0000, 0.0000, 0.8197, 0.0000, 0.8194, 0.0000, 0.3058]
         ).to(torch_device)
+        # fmt: on
 
         expected_number_of_matches1 = 862
         expected_matches_values1 = torch.tensor(
             [10, 11, -1, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, -1, 26, -1, 28, 29], dtype=torch.int64
         ).to(torch_device)
+        # fmt: off
         expected_matching_scores_values1 = torch.tensor(
-            [
-                0.4772,
-                0.3781,
-                0.0631,
-                0.9559,
-                0.8746,
-                0.9271,
-                0.4882,
-                0.5406,
-                0.9439,
-                0.1526,
-                0.5028,
-                0.4107,
-                0.5591,
-                0.9130,
-                0.7572,
-                0.0302,
-                0.4532,
-                0.0893,
-                0.9490,
-                0.4880,
-            ]
+            [0.4744, 0.3749, 0.0628, 0.9572, 0.8744, 0.9277, 0.4843, 0.5365, 0.9441, 0.1519, 0.5004, 0.4058, 0.5569, 0.9113, 0.7525, 0.0301, 0.4510, 0.0892, 0.9483, 0.4815]
         ).to(torch_device)
+        # fmt: on
 
         # expected_early_stopping_layer = 2
         # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()
@@ -589,3 +550,28 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.sum(predicted_matches_values0 != expected_matches_values0) < 4)
         self.assertTrue(torch.sum(predicted_matches_values1 != expected_matches_values1) < 4)
+
+    @slow
+    def test_inference_order_with_early_stop(self):
+        model = LightGlueForKeypointMatching.from_pretrained(
+            "ETH-CVG/lightglue_superpoint", attn_implementation="eager"
+        ).to(torch_device)
+        preprocessor = self.default_image_processor
+        images = prepare_imgs()
+        # [[image2, image0], [image1, image1]] -> [[image2, image0], [image2, image0], [image1, image1]]
+        images = [images[0]] + images  # adding a 3rd pair to test batching with early stopping
+        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
+
+        predicted_number_of_matches_pair0 = torch.sum(outputs.matches[0][0] != -1).item()
+        predicted_number_of_matches_pair1 = torch.sum(outputs.matches[1][0] != -1).item()
+        predicted_number_of_matches_pair2 = torch.sum(outputs.matches[2][0] != -1).item()
+
+        # pair 0 and 1 are the same, so should have the same number of matches
+        # pair 2 is [image1, image1] so should have more matches than first two pairs
+        # This ensures that early stopping does not affect the order of the outputs
+        # See : https://huggingface.co/ETH-CVG/lightglue_superpoint/discussions/6
+        # The bug made the pairs switch order when early stopping was activated
+        self.assertTrue(predicted_number_of_matches_pair0 == predicted_number_of_matches_pair1)
+        self.assertTrue(predicted_number_of_matches_pair0 < predicted_number_of_matches_pair2)

@@ -15,15 +15,12 @@ rendered properly in your Markdown viewer.
 
 # Hyperparameter search
 
-Hyperparameter search discovers an optimal set of hyperparameters that produces the best model performance. [`Trainer`] supports several hyperparameter search backends - [Optuna](https://optuna.readthedocs.io/en/stable/index.html), [SigOpt](https://docs.sigopt.com/), [Weights & Biases](https://docs.wandb.ai/), [Ray Tune](https://docs.ray.io/en/latest/tune/index.html) - through  [`~Trainer.hyperparameter_search`] to optimize an objective or even multiple objectives.
+Hyperparameter search discovers an optimal set of hyperparameters that produces the best model performance. [`Trainer`] supports several hyperparameter search backends - [Optuna](https://optuna.readthedocs.io/en/stable/index.html), [Weights & Biases](https://docs.wandb.ai/), [Ray Tune](https://docs.ray.io/en/latest/tune/index.html) - through  [`~Trainer.hyperparameter_search`] to optimize an objective or even multiple objectives.
 
 This guide will go over how to set up a hyperparameter search for each of the backends.
 
-> [!WARNING]
-> [SigOpt](https://github.com/sigopt/sigopt-server) is in public archive mode and is no longer actively maintained. Try using Optuna, Weights & Biases or Ray Tune instead.
-
 ```bash
-pip install optuna/sigopt/wandb/ray[tune]
+pip install optuna/wandb/ray[tune]
 ```
 
 To use [`~Trainer.hyperparameter_search`], you need to create a `model_init` function. This function includes basic model information (arguments and configuration) because it needs to be reinitialized for each search trial in the run.
@@ -37,11 +34,9 @@ An example `model_init` function is shown below.
 def model_init(trial):
     return AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
     )
 ```
 
@@ -103,38 +98,14 @@ def ray_hp_space(trial):
         "per_device_train_batch_size": tune.choice([16, 32, 64, 128]),
     }
 
-best_trials = trainer.hyperparameter_search( 
+best_trials = trainer.hyperparameter_search(
     direction=["minimize", "maximize"],
     backend="ray",
     hp_space=ray_hp_space,
     n_trials=20,
     compute_objective=compute_objective,
 )
-```
 
-</hfoption>
-<hfoption id="SigOpt">
-
-[SigOpt](https://docs.sigopt.com/ai-module-api-references/api_reference/objects/object_parameter) optimizes double, integer, and categorical parameters.
-
-```py
-def sigopt_hp_space(trial):
-    return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double"},
-        {
-            "categorical_values": ["16", "32", "64", "128"],
-            "name": "per_device_train_batch_size",
-            "type": "categorical",
-        },
-    ]
-
-best_trials = trainer.hyperparameter_search( 
-    direction=["minimize", "maximize"],
-    backend="sigopt",
-    hp_space=sigopt_hp_space,
-    n_trials=20,
-    compute_objective=compute_objective,
-)
 ```
 
 </hfoption>
@@ -153,7 +124,7 @@ def wandb_hp_space(trial):
         },
     }
 
-best_trials = trainer.hyperparameter_search( 
+best_trials = trainer.hyperparameter_search(
     direction=["minimize", "maximize"],
     backend="wandb",
     hp_space=wandb_hp_space,
@@ -167,4 +138,4 @@ best_trials = trainer.hyperparameter_search(
 
 ## Distributed Data Parallel
 
-[`Trainer`] only supports hyperparameter search for distributed data parallel (DDP) on the Optuna and SigOpt backends. Only the rank-zero process is used to generate the search trial, and the resulting parameters are passed along to the other ranks.
+[`Trainer`] only supports hyperparameter search for distributed data parallel (DDP) on the Optuna backends. Only the rank-zero process is used to generate the search trial, and the resulting parameters are passed along to the other ranks.

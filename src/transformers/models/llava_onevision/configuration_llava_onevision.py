@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,55 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Literal
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import (
-    logging,
-)
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-class LlavaOnevisionConfig(PretrainedConfig):
+@auto_docstring(checkpoint="llava-hf/llava-onevision-qwen2-7b-ov-hf")
+@strict(accept_kwargs=True)
+class LlavaOnevisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaOnevisionForConditionalGeneration`]. It is used to instantiate an
-    Llava-NeXT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the [llava-hf/llava-onevision-qwen2-7b-ov-hf](https://huggingface.co/llava-hf/llava-onevision-qwen2-7b-ov-hf)
-    model.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `Qwen2Config`):
-            The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 151646):
-            The image token index to encode the image prompt.
-        video_token_index (`int`, *optional*, defaults to 151647):
-            The video token index to encode the video prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function used by the multimodal projector.
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"full"`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
-            If `"full"`, the full vision features are used.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*, defaults to -1):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
-        image_grid_pinpoints (`List`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the multimodal projector.
+    vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+        Aspect ratio used when processong image features. The default value is "anyres_max_9".
+    image_grid_pinpoints (`List`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
+        of the form `(height, width)`.
 
     Example:
 
@@ -91,38 +59,42 @@ class LlavaOnevisionConfig(PretrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        image_token_index=151646,
-        video_token_index=151647,
-        projector_hidden_act="gelu",
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-1,
-        vision_aspect_ratio="anyres_max_9",
-        image_grid_pinpoints=None,
-        tie_word_embeddings=False,
-        multimodal_projector_bias=True,
-        **kwargs,
-    ):
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.multimodal_projector_bias = multimodal_projector_bias
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_index: int = 151646
+    video_token_index: int = 151647
+    projector_hidden_act: str = "gelu"
+    vision_feature_select_strategy: Literal["default", "full"] = "full"
+    vision_feature_layer: int | list[int] = -1
+    multimodal_projector_bias: bool = True
+    tie_word_embeddings: bool = False
+    image_grid_pinpoints: list | None = None
+    vision_aspect_ratio: str = "anyres_max_9"
 
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
-                f"Got: {vision_feature_select_strategy}"
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
+                hidden_size=1152,
+                intermediate_size=4304,
+                patch_size=14,
+                image_size=384,
+                num_hidden_layers=26,
+                num_attention_heads=16,
+                vision_use_head=False,
             )
 
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.vision_aspect_ratio = vision_aspect_ratio
-        image_grid_pinpoints = (
-            image_grid_pinpoints
-            if image_grid_pinpoints is not None
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
+
+        self.image_grid_pinpoints = (
+            self.image_grid_pinpoints
+            if self.image_grid_pinpoints is not None
             else [
                 [384, 384],
                 [384, 768],
@@ -162,33 +134,14 @@ class LlavaOnevisionConfig(PretrainedConfig):
                 [2304, 2304],
             ]
         )
-        self.image_grid_pinpoints = image_grid_pinpoints
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["siglip_vision_model"](
-                hidden_size=1152,
-                intermediate_size=4304,
-                patch_size=14,
-                image_size=384,
-                num_hidden_layers=26,
-                num_attention_heads=16,
-                vision_use_head=False,
-            )
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
-        self.vision_config = vision_config
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-
-        self.text_config = text_config
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["LlavaOnevisionConfig"]

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GptOss model."""
 
+import difflib
 import inspect
 import json
 import os
@@ -27,74 +28,86 @@ from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    GptOssConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
+    require_deterministic_for_xpu,
+    require_kernels,
     require_torch,
-    require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        GptOssForCausalLM,
         GptOssModel,
     )
 
-    NUM_GPUS = torch.cuda.device_count()
+    if torch.cuda.is_available():
+        NUM_GPUS = torch.cuda.device_count()
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        NUM_GPUS = torch.xpu.device_count()
+    else:
+        NUM_GPUS = 0
 
 
 class GptOssModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = GptOssConfig
         base_model_class = GptOssModel
-        causal_lm_class = GptOssForCausalLM
-
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-generation": GptOssForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
 
 
 @require_torch
 class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (GptOssModel, GptOssForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GptOssModel,
-            "text-generation": GptOssForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
-    def setUp(self):
-        self.model_tester = GptOssModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GptOssConfig, hidden_size=37)
+    @require_kernels
+    @pytest.mark.flash_attn_test
+    @require_torch_gpu
+    def test_default_flash_implementation_auto_correction(self):
+        """
+        Tests that setting attn_implementation="flash_attention_2" during model initialization
+        automatically corrects to the model's `_compatible_flash_implementations`.
+        """
+        from kernels import get_kernel
 
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        expected_kernel = "kernels-community/vllm-flash-attn3"
+        flash = get_kernel(expected_kernel)
+        if flash is None:
+            self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
+
+        # Option 1: Auto correction on setting config on init
+        config._attn_implementation = "flash_attention_2"
+        tmp_model = GptOssModel(config).to(device=torch_device, dtype=torch.bfloat16)
+        self.assertEqual(tmp_model.config._attn_implementation, expected_kernel)
+
+        # Option 2: Auto correction on load time
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            tmp_model.save_pretrained(tmp_dir_name)
+            model = GptOssModel.from_pretrained(tmp_dir_name, attn_implementation="flash_attention_2").to(
+                device=torch_device
+            )
+            self.assertEqual(model.config._attn_implementation, expected_kernel)
+
+        # Option 3: Auto correction on `set_attn_implementation`
+        model.set_attn_implementation("eager")
+        self.assertEqual(model.config._attn_implementation, "eager")
+        model.set_attn_implementation("flash_attention_2")
+        self.assertEqual(model.config._attn_implementation, expected_kernel)
+
+        # Verify model still works
+        with torch.no_grad():
+            output = model(**inputs_dict)
+        self.assertIsNotNone(output)
 
     @unittest.skip("GptOss's forcefully disables sdpa due to Sink")
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -102,64 +115,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("GptOss's eager attn/sdpa attn outputs are expected to be different")
     def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("GptOss has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("GptOss has HybridCache which auto-compiles. Compile and FA2 don't work together.")
-    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip("GptOss eager/FA2 attention outputs are expected to be different")
@@ -173,6 +128,13 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("GptOss does not support flex officially")
     def test_flex_attention_with_grads(self):
         pass
+
+    @unittest.skipIf(torch_device == "cpu", "GptOss does not support flex officially")
+    def test_generate_compile_model_forward_fullgraph(self):
+        return super().test_generate_compile_model_forward_fullgraph()
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
 
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
@@ -188,6 +150,10 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from transformers.testing_utils import torch_device
 
+    def generate_config_key(quantized, model, kernels, attn_impl, mode):
+        """Generate a key for the restructured integration test results."""
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
+
     input_text = [
         "Roses are red, violets",
         "How are you? Tell me the name of the president of",
@@ -198,10 +164,10 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     kernels = kernels.lower() == "true"
 
     # Distributed model loading
-    model_id = f"/fsx/vb/new-oai/gpt-oss-{model_size}-trfs"
+    model_id = f"openai/gpt-oss-{model_size}"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        torch_dtype="auto",
+        dtype="auto",
         tp_plan="auto",  # distributed inference
         use_kernels=kernels,
     ).to(torch_device)
@@ -213,35 +179,67 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
     output_texts = tokenizer.batch_decode(output, skip_special_tokens=False)
 
-    # Only rank 0 writes results
+    # Only rank 0 writes results and validates against expected outputs
     if int(os.environ.get("RANK", "0")) == 0:
-        result_entry = {
-            "quantized": quantized,
-            "model": model_size,
-            "kernels": kernels,
-            "attn_impl": attn_impl,
-            "mode": mode,
-            "outputs": output_texts,
-        }
+        # Generate key to look up expected outputs
+        key = generate_config_key(quantized, model_size, kernels, attn_impl, mode)
 
+        # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
-                results = json.load(f)
-        else:
-            results = []
-        results.append(result_entry)
+                expected_results = json.load(f)
 
-        with open(RESULTS_PATH, "w") as f:
-            json.dump(results, f, indent=2)
+            # Check if we have expected results for this configuration
+            if key in expected_results:
+                expected_outputs = expected_results[key]
+
+                # Compare actual outputs with expected outputs
+                assert len(output_texts) == len(expected_outputs), f"Output length mismatch for {key}"
+
+                for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
+                    actual_stripped = actual.strip()
+                    expected_stripped = expected.strip()
+
+                    # Make lengths match by taking minimum length to be resilient to generation differences
+                    min_length = min(len(actual_stripped), len(expected_stripped))
+                    actual_truncated = actual_stripped[:min_length]
+                    expected_truncated = expected_stripped[:min_length]
+
+                    if actual_truncated != expected_truncated:
+                        diff = "\n".join(
+                            difflib.unified_diff(
+                                expected_truncated.splitlines(keepends=True),
+                                actual_truncated.splitlines(keepends=True),
+                                fromfile=f"expected[{i}]",
+                                tofile=f"actual[{i}]",
+                                lineterm="",
+                            )
+                        )
+                        raise AssertionError(
+                            f"Output mismatch at index {i} for {key}:\n"
+                            f"Expected: '{expected_stripped}'\n"
+                            f"Actual:   '{actual_stripped}'\n"
+                            f"Diff (truncated to min length {min_length}):\n{diff}"
+                        )
+
+                print(f"✓ Outputs match expected results for {key}")
+            else:
+                print(f"Warning: No expected results found for configuration: {key}")
+        else:
+            print(f"Warning: Results file {RESULTS_PATH} not found")
 
 
 @slow
-@require_torch_accelerator
 class GptOssIntegrationTest(unittest.TestCase):
     input_text = [
         "Roses are red, violets",
         "How are you? Tell me the name of the president of",
     ]
+
+    @staticmethod
+    def generate_config_key(quantized, model, kernels, attn_impl, mode):
+        """Generate a key for the restructured integration test results."""
+        return f"device={torch_device}|quantized={str(quantized).lower()}|model={model}|kernels={str(kernels).lower()}|attn_impl={attn_impl}|mode={mode}"
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
@@ -252,20 +250,32 @@ class GptOssIntegrationTest(unittest.TestCase):
     # ------------------------
     # Non-distributed inference
     # ------------------------
-    @staticmethod
-    def load_and_forward(model_id, attn_implementation, input_text, **pretrained_kwargs):
+    def load_and_forward(self, model_id, attn_implementation, input_text, mode="eval", **pretrained_kwargs):
+        if torch_device == "cpu":
+            if attn_implementation == "kernels-community/vllm-flash-attn3":
+                self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            if pretrained_kwargs.get("kernels", False) and mode == "train":
+                self.skipTest("CPU kernels only support inference.")
+
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation=attn_implementation,
             **pretrained_kwargs,
         )
+
+        # Set the correct mode
+        if mode == "train":
+            model.train()
+        else:
+            model.eval()
+
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
         inputs = tokenizer(input_text, return_tensors="pt", padding=True).to(model.device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         return output_text
 
     # ------------------------
@@ -314,71 +324,108 @@ if __name__ == "__main__":
     # Shared parameterization
     # ------------------------
     PARAMETERS = [
-        (False, "120b", False, "eager", "eval"),
-        (False, "120b", False, "eager", "train"),
-        (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-        (False, "120b", True, "eager", "eval"),
-        (False, "120b", True, "eager", "train"),
-        (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
-        (True, "120b", False, "eager", "eval"),
-        (True, "120b", False, "eager", "train"),
-        (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "120b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
-        (True, "120b", True, "eager", "eval"),
-        (True, "120b", True, "eager", "train"),
-        (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "120b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
         (False, "20b", False, "eager", "eval"),
         (False, "20b", False, "eager", "train"),
-        (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "20b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "20b", False, "kernels-community/vllm-flash-attn3", "train"),
         (False, "20b", True, "eager", "eval"),
         (False, "20b", True, "eager", "train"),
-        (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (False, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (False, "20b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "20b", True, "kernels-community/vllm-flash-attn3", "train"),
         (True, "20b", False, "eager", "eval"),
         (True, "20b", False, "eager", "train"),
-        (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "20b", False, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "20b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "20b", False, "kernels-community/vllm-flash-attn3", "train"),
         (True, "20b", True, "eager", "eval"),
         (True, "20b", True, "eager", "train"),
-        (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "eval"),
-        (True, "20b", True, "ft-hf-o-c/vllm-flash-attn3", "train"),
+        (True, "20b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "20b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "120b", False, "eager", "eval"),
+        (False, "120b", False, "eager", "train"),
+        (False, "120b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "120b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (False, "120b", True, "eager", "eval"),
+        (False, "120b", True, "eager", "train"),
+        (False, "120b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (False, "120b", True, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "120b", False, "eager", "eval"),
+        (True, "120b", False, "eager", "train"),
+        (True, "120b", False, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "120b", False, "kernels-community/vllm-flash-attn3", "train"),
+        (True, "120b", True, "eager", "eval"),
+        (True, "120b", True, "eager", "train"),
+        (True, "120b", True, "kernels-community/vllm-flash-attn3", "eval"),
+        (True, "120b", True, "kernels-community/vllm-flash-attn3", "train"),
     ]
 
     # ------------------------
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
+    @require_deterministic_for_xpu
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
-        model_id = f"/fsx/vb/new-oai/gpt-oss-{model}-trfs"
+        if torch_device == "cpu":
+            if attn_impl == "kernels-community/vllm-flash-attn3":
+                self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            if kernels and mode == "train":
+                self.skipTest("CPU kernels only support inference.")
+
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
+        model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
             attn_impl,
             self.input_text,
+            mode=mode,
             use_kernels=kernels,
         )
 
-        result_entry = {
-            "quantized": quantized,
-            "model": model,
-            "kernels": kernels,
-            "attn_impl": attn_impl,
-            "mode": mode,
-            "outputs": output_texts,
-        }
+        # Generate key to look up expected outputs
+        key = self.generate_config_key(quantized, model, kernels, attn_impl, mode)
 
+        # Load expected outputs from restructured JSON
         if os.path.exists(RESULTS_PATH):
             with open(RESULTS_PATH, "r") as f:
-                results = json.load(f)
-        else:
-            results = []
-        results.append(result_entry)
-        with open(RESULTS_PATH, "w") as f:
-            json.dump(results, f, indent=2)
+                expected_results = json.load(f)
+
+            # Check if we have expected results for this configuration
+            if key in expected_results:
+                expected_outputs = expected_results[key]
+
+                # Compare actual outputs with expected outputs
+                self.assertEqual(len(output_texts), len(expected_outputs), f"Output length mismatch for {key}")
+
+                for i, (actual, expected) in enumerate(zip(output_texts, expected_outputs)):
+                    actual_stripped = actual.strip()
+                    expected_stripped = expected.strip()
+
+                    # Make lengths match by taking minimum length to be resilient to generation differences
+                    min_length = min(len(actual_stripped), len(expected_stripped))
+                    actual_truncated = actual_stripped[:min_length]
+                    expected_truncated = expected_stripped[:min_length]
+
+                    if actual_truncated != expected_truncated:
+                        diff = "\n".join(
+                            difflib.unified_diff(
+                                expected_truncated.splitlines(keepends=True),
+                                actual_truncated.splitlines(keepends=True),
+                                fromfile=f"expected[{i}]",
+                                tofile=f"actual[{i}]",
+                                lineterm="",
+                            )
+                        )
+                        self.fail(
+                            f"Output mismatch at index {i} for {key}:\n"
+                            f"Expected: '{expected_stripped}'\n"
+                            f"Actual:   '{actual_stripped}'\n"
+                            f"Diff (truncated to min length {min_length}):\n{diff}"
+                        )
+            else:
+                # If no expected results exist, this is a new configuration
+                # We could optionally add it to the results file here
+                print(f"Warning: No expected results found for configuration: {key}")
 
         self.assertIsInstance(output_texts, list)
         self.assertTrue(all(isinstance(x, str) for x in output_texts))
@@ -387,9 +434,64 @@ if __name__ == "__main__":
     # Distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "cpu":
+            self.skipTest("Skip TP on CPU until verified.")
+
+        if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
+            self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
+
+    # ------------------------
+    # Training test
+    # ------------------------
+    @parameterized.expand(PARAMETERS)
+    def test_training_step(self, quantized, model, kernels, attn_impl, mode):
+        if torch_device == "cpu":
+            if attn_impl == "kernels-community/vllm-flash-attn3":
+                self.skipTest("vllm-flash-attn3 is not supported on CPU.")
+            if kernels and mode == "train":
+                self.skipTest("CPU kernels only support inference.")
+
+        if mode != "train":
+            self.skipTest("This test is only for training mode.")
+
+        if quantized:
+            self.skipTest("Training test for quantized models is not supported.")
+
+        model_id = f"openai/gpt-oss-{model}"
+
+        model_obj = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation=attn_impl,
+            use_kernels=kernels,
+        )
+        model_obj.train()
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(model_obj.device)
+        inputs["labels"] = inputs["input_ids"].clone()
+
+        outputs = model_obj(**inputs)
+        loss = outputs.loss
+        self.assertIsNotNone(loss)
+
+        loss.backward()
+
+        # Check that gradients were computed for all parameters that have a grad field
+        for name, param in model_obj.named_parameters():
+            if param.requires_grad:
+                self.assertIsNotNone(param.grad, f"Parameter '{name}' did not receive a gradient.")
+                # Check that gradients are not all zero
+                self.assertTrue(
+                    torch.sum(torch.abs(param.grad)).item() > 0, f"Gradient for parameter '{name}' is all zeros."
+                )
 
     def test_model_matches_original_20b(self):
         input_text = "Roses are red, violets"
@@ -420,11 +522,11 @@ if __name__ == "__main__":
             ]
         )
 
-        model_id = "/fsx/vb/new-oai/gpt-oss-20b-trfs"
+        model_id = "openai/gpt-oss-20b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation="eager",
         )
@@ -486,11 +588,11 @@ I am a language model, not a human being"""
             ]
         )
 
-        model_id = "/fsx/vb/new-oai/gpt-oss-120b-trfs"
+        model_id = "openai/gpt-oss-120b"
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             attn_implementation="eager",
         )

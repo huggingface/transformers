@@ -224,8 +224,6 @@ Ahora tu función `compute_metrics` (computar métricas) está lista y podrás u
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 Si no tienes experiencia haciéndole fine-tuning a un modelo con el [`Trainer`], ¡échale un vistazo al tutorial básico [aquí](../training#train-with-pytorch-trainer)!
@@ -259,7 +257,7 @@ En este punto, solo quedan tres pasos:
 ...     max_steps=2000,
 ...     gradient_checkpointing=True,
 ...     fp16=True,
-...     group_by_length=True,
+...     train_sampling_strategy="group_by_length",
 ...     eval_strategy="steps",
 ...     per_device_eval_batch_size=8,
 ...     save_steps=1000,
@@ -289,8 +287,6 @@ Una vez que el entrenamiento haya sido completado, comparte tu modelo en el Hub 
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -331,8 +327,6 @@ La transcripción es decente, pero podría ser mejor. ¡Intenta hacerle fine-tun
 
 También puedes replicar de forma manual los resultados del `pipeline` si lo deseas:
 
-<frameworkcontent>
-<pt>
 Carga un procesador para preprocesar el archivo de audio y la transcripción y devuelve el `input` como un tensor de PyTorch:
 
 ```py
@@ -362,5 +356,3 @@ Obtén los identificadores de los tokens con mayor probabilidad en las prediccio
 >>> transcription
 ['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
-</pt>
-</frameworkcontent>

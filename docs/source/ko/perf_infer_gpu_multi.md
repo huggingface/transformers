@@ -61,7 +61,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct" # 모든 가능한 전략을 시각화하기에 더 좋음
 model_id = "meta-llama/Meta-Llama-3-8B-Instruct"  # 적은 수의 GPU에 더 좋음
 
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan="auto")
 print(model._tp_plan)
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
@@ -97,7 +97,7 @@ tp_plan = {
     ...
 }
 
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
 print(model._tp_plan)
 ```
 
@@ -123,7 +123,7 @@ class ParallelInterface(MutableMapping):
         "local_colwise": ColwiseParallel(use_dtensor=False),
         "local_rowwise": RowwiseParallel(use_dtensor=False),
         "local": IsolatedParallel(),
-        "gather": GatherParallel(),
+        "moe_tp_experts": MoeTensorParalellExperts(),
         "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
         "sequence_parallel": SequenceParallel(),
         "replicate": ReplicateParallel(),
@@ -152,7 +152,7 @@ class ParallelInterface(MutableMapping):
 ```python
 class Llama4TextExperts(nn.Module):
     ...
-    self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+    self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size, 2 * self.expert_dim))
 ```
 
 배치 행렬 곱셈을 `forward` 패스에서 사용하여 `gate_up_proj` 모듈의 출력을 계산할 수 있습니다.
@@ -247,7 +247,7 @@ Readd this when I get the exact error message
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...
     }
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, tp_plan=tp_plan)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, tp_plan=tp_plan)
     ```
 
 ## 벤치마크[[benchmarks]]

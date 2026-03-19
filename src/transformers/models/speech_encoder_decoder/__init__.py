@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_speech_encoder_decoder import *
-    from .modeling_flax_speech_encoder_decoder import *
     from .modeling_speech_encoder_decoder import *
 else:
     import sys

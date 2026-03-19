@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "muellerzr", "eustlb", "MekkCyber", "manueldeprada", "vasqu", "ivarflakstad", "stevhliu", "ebezzam"]'), github.actor) && (startsWith(github.event.comment.body, 'build-doc')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "itazap", "tarekziade"]'), github.actor) && (startsWith(github.event.comment.body, 'build-doc')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -98,7 +98,7 @@ jobs:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
       package: transformers
-      languages: ar de en es fr hi it ko pt tr zh ja te
+      languages: ar de en es fr hi it ja ko pt zh
 
   update_run_status:
     name: Update Check Run Status
@@ -110,7 +110,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.create_run.result) }}
+      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.build-doc.result) }}
     steps:
       - name: Get `build-doc` job status
         run: |

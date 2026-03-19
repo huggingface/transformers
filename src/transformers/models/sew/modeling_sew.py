@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sew.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2021 ASAPP Inc. and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,23 +19,24 @@
 # limitations under the License.
 
 import math
-import warnings
-from typing import Callable, Optional, Union
+from collections.abc import Callable
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_sew import SEWConfig
 
 
@@ -234,25 +234,23 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -270,7 +268,7 @@ class SEWAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[SEWConfig] = None,
+        config: SEWConfig | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -296,14 +294,13 @@ class SEWAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        key_value_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -324,9 +321,9 @@ class SEWAttention(nn.Module):
         key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
         value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -337,7 +334,6 @@ class SEWAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -432,7 +428,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
@@ -514,44 +510,44 @@ class SEWPreTrainedModel(PreTrainedModel):
     config: SEWConfig
     base_model_prefix = "sew"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = False  # needs a proper look into the mask creation
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, SEWPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
                     with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
+                        init.kaiming_normal_(module.weight)
                 else:
                     with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-                        nn.init.kaiming_normal_(module.weight.data)
+                        init.kaiming_normal_(module.weight)
             else:
-                nn.init.kaiming_normal_(module.weight.data)
+                init.kaiming_normal_(module.weight)
 
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            module.bias.data.zero_()
+            init.zeros_(module.bias)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
         Computes the output length of the convolutional layers
         """
@@ -583,7 +579,7 @@ def _compute_mask_indices(
     shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    attention_mask: Optional[torch.LongTensor] = None,
+    attention_mask: torch.LongTensor | None = None,
     min_masks: int = 0,
 ) -> np.ndarray:
     """
@@ -723,8 +719,8 @@ class SEWModel(SEWPreTrainedModel):
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
@@ -769,13 +765,14 @@ class SEWModel(SEWPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -785,7 +782,7 @@ class SEWModel(SEWPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -830,7 +827,7 @@ _HIDDEN_STATES_START_POSITION = 1
     """
 )
 class SEWForCTC(SEWPreTrainedModel):
-    def __init__(self, config, target_lang: Optional[str] = None):
+    def __init__(self, config, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -859,13 +856,16 @@ class SEWForCTC(SEWPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self):
+    def tie_weights(self, **kwargs):
         """
         This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
         passing `target_lang=...` to `from_pretrained(...)`.
 
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
+
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
 
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for SEW so that we do not have to introduce a new API to
@@ -879,18 +879,6 @@ class SEWForCTC(SEWPreTrainedModel):
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -910,13 +898,14 @@ class SEWForCTC(SEWPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, CausalLMOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -924,7 +913,7 @@ class SEWForCTC(SEWPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -1003,18 +992,6 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1033,13 +1010,14 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
@@ -1053,7 +1031,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.sew(

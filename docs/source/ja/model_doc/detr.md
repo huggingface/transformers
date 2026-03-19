@@ -140,7 +140,7 @@ DETR モデルをインスタンス化するには 3 つの方法があります
 オプション 3: バックボーン + トランスフォーマーのランダムに初期化された重みを使用して DETR をインスタンス化します。
 
 ```py
->>> config = DetrConfig(use_pretrained_backbone=False)
+>>> config = DetrConfig()
 >>> model = DetrForObjectDetection(config)
 ```
 
@@ -188,15 +188,6 @@ DETR の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] DetrImageProcessorFast
     - preprocess
-    - post_process_object_detection
-    - post_process_semantic_segmentation
-    - post_process_instance_segmentation
-    - post_process_panoptic_segmentation
-
-## DetrFeatureExtractor
-
-[[autodoc]] DetrFeatureExtractor
-    - __call__
     - post_process_object_detection
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

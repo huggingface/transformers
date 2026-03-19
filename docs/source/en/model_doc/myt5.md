@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-03-15 and added to Hugging Face Transformers on 2024-10-06.*
 
 # myt5
 
@@ -39,8 +40,3 @@ The original code can be found [here](https://github.com/tomlimi/MYTE).
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
-
-## MyT5Tokenizer
-
-[[autodoc]] MyT5Tokenizer
-

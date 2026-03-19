@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_eomt.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Mobile Perception Systems Lab at TU/e and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,19 +20,23 @@
 
 import collections.abc
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_accelerate_available
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, is_accelerate_available
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_eomt import EomtConfig
 
 
@@ -75,16 +78,16 @@ class EomtForUniversalSegmentationOutput(ModelOutput):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    class_queries_logits: Optional[torch.FloatTensor] = None
-    masks_queries_logits: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    patch_offsets: Optional[list[torch.Tensor]] = None
+    loss: torch.FloatTensor | None = None
+    class_queries_logits: torch.FloatTensor | None = None
+    masks_queries_logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    patch_offsets: list[torch.Tensor] | None = None
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -573,7 +576,7 @@ class EomtLoss(nn.Module):
         class_queries_logits: torch.Tensor,
         mask_labels: list[torch.Tensor],
         class_labels: list[torch.Tensor],
-        auxiliary_predictions: Optional[dict[str, torch.Tensor]] = None,
+        auxiliary_predictions: dict[str, torch.Tensor] | None = None,
     ) -> dict[str, torch.Tensor]:
         """
         This performs the loss computation.
@@ -626,7 +629,7 @@ class EomtLoss(nn.Module):
         """
         Computes the average number of target masks across the batch, for normalization purposes.
         """
-        num_masks = sum([len(classes) for classes in class_labels])
+        num_masks = sum(len(classes) for classes in class_labels)
         num_masks = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         world_size = 1
         if is_accelerate_available():
@@ -713,7 +716,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -757,9 +760,9 @@ class EomtAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -772,9 +775,9 @@ class EomtAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -806,11 +809,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -825,7 +823,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class EomtDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -894,21 +892,14 @@ class EomtLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
-        self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in Eomt, layernorm is applied before self-attention
-            head_mask,
-            output_attentions=output_attentions,
-        )
-        attention_output = self_attention_outputs[0]
-
-        attention_output = self.layer_scale1(attention_output)
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        hidden_states_norm = self.norm1(hidden_states)
+        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask)
+        self_attention_output = self.layer_scale1(self_attention_output)
 
         # first residual connection
-        hidden_states = self.drop_path(attention_output) + hidden_states
+        hidden_states = self.drop_path(self_attention_output) + hidden_states
 
         # in Eomt, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
@@ -918,9 +909,7 @@ class EomtLayer(GradientCheckpointingLayer):
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
 
-        outputs = (layer_output,) + outputs
-
-        return outputs
+        return layer_output
 
 
 class EomtLayerNorm2d(nn.LayerNorm):
@@ -951,7 +940,7 @@ class EomtScaleLayer(nn.Module):
 
         self.layernorm2d = EomtLayerNorm2d(hidden_size)
 
-    def forward(self, hidden_states: torch.tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.conv2(hidden_states)
@@ -998,34 +987,45 @@ class EomtPreTrainedModel(PreTrainedModel):
     config: EomtConfig
     base_model_prefix = "eomt"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtLayer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
+    _can_record_outputs = {
+        "hidden_states": EomtLayer,
+        "attentions": EomtAttention,
+    }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                nn.init.uniform_(module.bias, -bound, bound)
+                init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=1)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=1)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, EomtLayerScale):
             if hasattr(module, "lambda1"):
-                module.lambda1.data.fill_(self.config.layerscale_value)
+                init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, EomtEmbeddings):
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32), mean=0.0, std=std
-            ).to(module.cls_token.dtype)
-            module.register_tokens.data.zero_()
+            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            init.zeros_(module.register_tokens)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, EomtLoss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
+        elif isinstance(module, EomtForUniversalSegmentation):
+            init.ones_(module.attn_mask_probs)
 
 
 @auto_docstring(
@@ -1036,7 +1036,7 @@ class EomtPreTrainedModel(PreTrainedModel):
 class EomtForUniversalSegmentation(EomtPreTrainedModel):
     main_input_name = "pixel_values"
 
-    def __init__(self, config: EomtConfig) -> None:
+    def __init__(self, config: EomtConfig):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
@@ -1091,16 +1091,16 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    @can_return_tuple
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[list[Tensor]] = None,
-        class_labels: Optional[list[Tensor]] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        patch_offsets: Optional[list[Tensor]] = None,
+        mask_labels: list[Tensor] | None = None,
+        class_labels: list[Tensor] | None = None,
+        patch_offsets: list[Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> EomtForUniversalSegmentationOutput:
         r"""
         mask_labels (`list[torch.Tensor]`, *optional*):
@@ -1109,15 +1109,8 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         patch_offsets (`list[torch.Tensor]`, *optional*):
-            list of tuples indicating the image index and start and end positions of patches for semantic segementation.
+            list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
 
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
         attention_mask = None
@@ -1128,9 +1121,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
         hidden_states = self.embeddings(pixel_values)
 
         for idx, layer_module in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
             if idx == self.num_hidden_layers - self.config.num_blocks:
                 query = self.query.weight[None, :, :].expand(hidden_states.shape[0], -1, -1).to(hidden_states.device)
                 hidden_states = torch.cat((query, hidden_states), dim=1)
@@ -1176,15 +1166,9 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
                 attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
 
-            layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions += (layer_outputs[1],)
+            hidden_states = layer_module(hidden_states, attention_mask)
 
         sequence_output = self.layernorm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states += (sequence_output,)
 
         masks_queries_logits, class_queries_logits = self.predict(sequence_output)
         masks_queries_logits_per_layer += (masks_queries_logits,)
@@ -1210,8 +1194,6 @@ class EomtForUniversalSegmentation(EomtPreTrainedModel):
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
             last_hidden_state=sequence_output,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
             patch_offsets=patch_offsets,
         )
 

@@ -19,6 +19,7 @@ from transformers import ElectraConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -125,6 +126,7 @@ class ElectraModelTester:
     def get_config(self):
         return ElectraConfig(
             vocab_size=self.vocab_size,
+            embedding_size=self.hidden_size,  # Match hidden_size to avoid dimension expansion amplifying BF16 rounding errors
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -373,7 +375,7 @@ class ElectraModelTester:
 
 
 @require_torch
-class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ElectraModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ElectraModel,
@@ -388,13 +390,10 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ElectraModel,
             "fill-mask": ElectraForMaskedLM,
-            "question-answering": ElectraForQuestionAnswering,
             "text-classification": ElectraForSequenceClassification,
             "text-generation": ElectraForCausalLM,
             "token-classification": ElectraForTokenClassification,
@@ -403,7 +402,12 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+
+    # Overwriting to add `is_decoder` flag
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
+        config.is_decoder = True
+        return config, inputs
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -418,7 +422,7 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ElectraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ElectraConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ElectraConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -430,12 +434,6 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_electra_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_electra_model_as_decoder(*config_and_inputs)
-
-    def test_electra_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_electra_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

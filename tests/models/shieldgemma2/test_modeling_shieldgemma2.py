@@ -19,10 +19,9 @@ from io import BytesIO
 import requests
 from PIL import Image
 
-from transformers import is_torch_available
+from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -35,7 +34,6 @@ if is_torch_available():
 
 @slow
 @require_torch_accelerator
-@require_read_token
 class ShieldGemma2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -48,7 +46,9 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         response = requests.get(url)
         image = Image.open(BytesIO(response.content))
 
-        model = ShieldGemma2ForImageClassification.from_pretrained(model_id, load_in_4bit=True)
+        model = ShieldGemma2ForImageClassification.from_pretrained(
+            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+        )
 
         inputs = processor(images=[image], return_tensors="pt").to(torch_device)
         output = model(**inputs)

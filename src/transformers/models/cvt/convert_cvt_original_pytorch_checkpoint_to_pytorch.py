@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -283,11 +282,9 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
     id2label = json.loads(Path(hf_hub_download(repo_id, img_labels_file, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     config = CvtConfig(num_labels=num_labels, id2label=id2label, label2id=label2id)

@@ -7,6 +7,8 @@
     title: Instalación
   title: Empezar
 - sections:
+  - local: conversations
+    title: Conceptos básicos de chat
   - local: pipeline_tutorial
     title: Pipelines para inferencia
   - local: autoclass_tutorial
@@ -64,12 +66,6 @@
     title: Entrenador
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
-  - local: converting_tensorflow_models
-    title: Convertir checkpoints de TensorFlow
-  - local: serialization
-    title: Exportar a ONNX
-  - local: torchscript
-    title: Exportar a TorchScript
   - local: community
     title: Los recursos de la comunidad
   title: Guías para desarrolladores

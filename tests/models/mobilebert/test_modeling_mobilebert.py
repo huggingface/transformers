@@ -15,9 +15,7 @@
 
 import unittest
 
-from packaging import version
-
-from transformers import AutoTokenizer, MobileBertConfig, MobileBertForMaskedLM, is_torch_available
+from transformers import MobileBertConfig, MobileBertForMaskedLM, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
@@ -274,7 +272,6 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "feature-extraction": MobileBertModel,
             "fill-mask": MobileBertForMaskedLM,
-            "question-answering": MobileBertForQuestionAnswering,
             "text-classification": MobileBertForSequenceClassification,
             "token-classification": MobileBertForTokenClassification,
             "zero-shot": MobileBertForSequenceClassification,
@@ -282,7 +279,6 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -305,7 +301,7 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = MobileBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MobileBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MobileBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -360,7 +356,9 @@ TOLERANCE = 1e-3
 class MobileBertModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = MobileBertModel.from_pretrained("google/mobilebert-uncased").to(torch_device)
+        model = MobileBertModel.from_pretrained("google/mobilebert-uncased", attn_implementation="eager").to(
+            torch_device
+        )
         input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
@@ -385,42 +383,3 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
         upper_bound = torch.all((expected_slice / output[..., :3, :3]) <= 1 + TOLERANCE)
 
         self.assertTrue(lower_bound and upper_bound)
-
-    @slow
-    def test_export(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        mobilebert_model = "google/mobilebert-uncased"
-        device = "cpu"
-        attn_implementation = "eager"
-        max_length = 512
-
-        tokenizer = AutoTokenizer.from_pretrained(mobilebert_model)
-        inputs = tokenizer(
-            f"the man worked as a {tokenizer.mask_token}.",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = MobileBertForMaskedLM.from_pretrained(
-            mobilebert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "mechanic", "teacher", "clerk"])
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

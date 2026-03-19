@@ -36,7 +36,7 @@ Example for creating the old state dict file with Python:
     from aria.model.language_model.aria_llama import AriaTextForCausalLM
 
     # load model
-    kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
+    kwargs = {"device_map": "auto", "dtype": torch.float16}
     model = AriaTextForCausalLM.from_pretrained("rhymes-ai/Aria", **kwargs)
 
     # load vision tower
@@ -121,9 +121,6 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
     state_dict = convert_state_dict_to_hf(state_dict)
     model.load_state_dict(state_dict, strict=False, assign=True)
 
-    # print("Saving models")
-    # model.save_pretrained("local_aria", safe_serialization=False)
-    # processor.save_pretrained("local_aria")
     print("Pushing to hub")
     model.push_to_hub(output_hub_path, create_pr=True)
     processor.push_to_hub(output_hub_path, create_pr=True)

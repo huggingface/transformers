@@ -13,18 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch chameleon model."""
 
-import tempfile
 import unittest
 
-from transformers import ChameleonProcessor, LlamaTokenizer
+from transformers import ChameleonProcessor
 from transformers.testing_utils import get_tests_dir
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import ChameleonImageProcessor
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -34,23 +28,29 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChameleonProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = ChameleonImageProcessor()
-        tokenizer = LlamaTokenizer(vocab_file=SAMPLE_VOCAB)
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
+
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        print("SAMPLE_VOCAB", SAMPLE_VOCAB)
+        tokenizer = tokenizer_class.from_pretrained(SAMPLE_VOCAB)
         tokenizer.pad_token_id = 0
         tokenizer.sep_token_id = 1
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        processor = cls.processor_class(image_processor=image_processor, tokenizer=tokenizer, image_seq_length=2)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<racm3:break>", "<eoss>"]})
+        return tokenizer
+
+    @unittest.skip("Chameleon processor add a sep_token at the end of each sample")
+    def test_tokenizer_defaults(self):
+        pass
 
     def test_special_mm_token_truncation(self):
         """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
 
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
+        input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
         image_input = self.prepare_image_inputs(batch_size=2)
 
         _ = processor(
@@ -60,7 +60,6 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             truncation=None,
             padding=True,
         )
-
         with self.assertRaises(ValueError):
             _ = processor(
                 text=input_str,
@@ -68,7 +67,7 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_tensors="pt",
                 truncation=True,
                 padding=True,
-                max_length=20,
+                max_length=1,
             )
 
     @staticmethod

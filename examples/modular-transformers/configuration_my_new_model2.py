@@ -4,19 +4,24 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_my_new_model2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
+from ...utils.type_validators import interval
 
 
-class MyNewModel2Config(PretrainedConfig):
+@auto_docstring(checkpoint="meta-my_new_model2/MyNewModel2-2-7b-hf")
+@strict(accept_kwargs=True)
+class MyNewModel2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GemmaModel`]. It is used to instantiate an Gemma
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma-7B.
     e.g. [google/gemma-7b](https://huggingface.co/google/gemma-7b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma model. Defines the number of different tokens that can be represented by the
@@ -49,65 +54,40 @@ class MyNewModel2Config(PretrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        head_dim=None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 32000
+    hidden_size: int = 4096
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    pretraining_tp: int | None = 1
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: int | float | None = 0.0
+    mlp_bias: bool = False
+    head_dim: int | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.head_dim is None:
+            self.head_dim = self.hidden_size // self.num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        super().__post_init__(**kwargs)
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )

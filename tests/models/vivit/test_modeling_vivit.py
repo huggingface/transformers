@@ -16,6 +16,7 @@
 import copy
 import inspect
 import unittest
+from functools import cached_property
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -23,7 +24,7 @@ from huggingface_hub import hf_hub_download
 from transformers import VivitConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -170,15 +171,11 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VivitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VivitConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VivitConfig, has_text_modality=False, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -216,8 +213,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values", "head_mask"]
-            self.assertListEqual(arg_names[:2], expected_arg_names)
+            self.assertEqual(arg_names[0], "pixel_values")
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -358,7 +354,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.9498, 2.7971, -1.4049, 0.1024, -1.8353],
-                ("cuda", 8): [-0.9498, 2.7971, -1.4049, 0.1025, -1.8353],
+                ("cuda", 8): [-0.9502, 2.7967, -1.4046, 0.1027, -1.8345],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

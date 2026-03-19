@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,7 +38,7 @@ python src/transformers/models/colpali/convert_colpali_weights_to_hf.py \
 import argparse
 import glob
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from huggingface_hub import snapshot_download
@@ -70,7 +69,7 @@ def rename_state_dict_keys(state_dict: dict[str, Any]) -> dict[str, Any]:
     return new_state_dict
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> dict[str, torch.Tensor]:
+def load_original_state_dict(model_id: str, revision: str | None = None) -> dict[str, torch.Tensor]:
     directory_path = snapshot_download(
         repo_id=model_id,
         revision=revision,
@@ -98,8 +97,8 @@ def convert_colpali_weights_to_hf(
     model_id: str,
     output_dir: str,
     push_to_hub: bool,
-    revision: Optional[str] = None,
-    original_vlm_name_or_path: Optional[str] = None,
+    revision: str | None = None,
+    original_vlm_name_or_path: str | None = None,
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(
@@ -130,7 +129,7 @@ def convert_colpali_weights_to_hf(
 
     # NOTE: The model was initialized with float32 weights. We need to convert it to the desired precision.
     # There are two ways to set the model's dtype:
-    # - Using `model.from_pretrained(..., torch_dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
+    # - Using `model.from_pretrained(..., dtype=dtype_precision)` doesn't convert the hyperparameters to the desired precision.
     # - Using `model.to(dtype_precision)` converts all values - including the hyperparameters - to the desired precision.
     # The following snippet allows a fine-grained control over the model's dtype, making sure that all
     # the new weights' dtypes match the original model.
@@ -144,7 +143,15 @@ def convert_colpali_weights_to_hf(
 
     # Tie the weights (following ColPali's `__init__`` step)
     if model.vlm.language_model._tied_weights_keys is not None:
-        model._tied_weights_keys = [f"vlm.language_model.{k}" for k in model.vlm.language_model._tied_weights_keys]
+        prefix = "vlm.language_model."
+        prefixed_mapping = {
+            f"{prefix}{target}": f"{prefix}{source}"
+            for target, source in model.vlm.language_model._tied_weights_keys.items()
+        }
+        if isinstance(model._tied_weights_keys, dict):
+            model._tied_weights_keys.update(prefixed_mapping)
+        else:
+            model._tied_weights_keys = prefixed_mapping
 
     # Sanity check: ensure all keys are the same
     state_dict_keys_old = set(original_state_dict.keys())

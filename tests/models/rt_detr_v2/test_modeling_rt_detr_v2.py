@@ -14,10 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch RT_DETR_V2 model."""
 
+import copy
 import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -35,10 +37,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -183,7 +184,7 @@ class RTDetrV2ModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return RTDetrV2Config.from_backbone_configs(
+        return RTDetrV2Config(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
@@ -262,11 +263,8 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
-    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -330,6 +328,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    def test_load_save_without_tied_weights(self):
         pass
 
     def test_attention_outputs(self):
@@ -530,150 +532,84 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.backbone_config = None
-        config.use_timm_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "RTDetrV2ForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        self.model_tester.num_labels,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                else:
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
-            if model_class.__name__ == "RTDetrV2ForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
-    def test_hf_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "RTDetrV2ForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
-
-            self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.initializer_bias_prior_prob = 0.2
-        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
-
-        failed_cases = []
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            # Skip the check for the backbone
-            for name, module in model.named_modules():
-                if module.__class__.__name__ == "RTDetrV2ConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
-                    break
-
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
-                        bias_tensor = torch.full_like(param.data, bias_value)
-                        if not torch.allclose(param.data, bias_tensor, atol=1e-4):
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Biases should be initialized to {bias_value}, got {param.data}"
-                            )
-                    elif (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "enc_score_head.weight" in name
-                        or ("class_embed" in name and "weight" in name)
-                        or name in backbone_params
-                    ):
-                        continue
-                    else:
-                        mean = param.data.mean()
-                        round_mean = (mean * 1e9).round() / 1e9
-                        round_mean = round_mean.item()
-                        if round_mean not in [0.0, 1.0]:
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Mean is {round_mean}, but should be in [0, 1]"
-                            )
-
-        message = "\n" + "\n".join(failed_cases)
-        self.assertTrue(not failed_cases, message)
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_with_different_dtypes(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_with_different_dtypes(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device).to(torch_dtype)
+            model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
                 if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(torch_dtype)
+                    inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         h, w = inputs_dict["pixel_values"].shape[-2:]
@@ -681,16 +617,16 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
             if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(torch_dtype)
+                inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
@@ -719,6 +655,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class RTDetrV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):

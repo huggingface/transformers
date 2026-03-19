@@ -56,7 +56,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-기본적으로 `torch.nn.LayerNorm`과 같은 다른 모듈은 `torch.float16`으로 변환됩니다. 원한다면 `torch_dtype` 매개변수로 이들 모듈의 데이터 유형을 변경할 수 있습니다:
+기본적으로 `torch.nn.LayerNorm`과 같은 다른 모듈은 `torch.float16`으로 변환됩니다. 원한다면 `dtype` 매개변수로 이들 모듈의 데이터 유형을 변경할 수 있습니다:
 
 ```py
 import torch
@@ -67,7 +67,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m", 
     quantization_config=quantization_config, 
-    torch_dtype=torch.float32
+    dtype=torch.float32
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -104,7 +104,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-기본적으로 `torch.nn.LayerNorm`과 같은 다른 모듈은 `torch.float16`으로 변환됩니다. 원한다면 `torch_dtype` 매개변수로 이들 모듈의 데이터 유형을 변경할 수 있습니다:
+기본적으로 `torch.nn.LayerNorm`과 같은 다른 모듈은 `torch.float16`으로 변환됩니다. 원한다면 `dtype` 매개변수로 이들 모듈의 데이터 유형을 변경할 수 있습니다:
 
 ```py
 import torch
@@ -115,7 +115,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
     quantization_config=quantization_config, 
-    torch_dtype=torch.float32
+    dtype=torch.float32
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -270,7 +270,7 @@ nf4_config = BitsAndBytesConfig(
 model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=nf4_config)
 ```
 
-추론의 경우, `bnb_4bit_quant_type`은 성능에 큰 영향을 미치지 않습니다. 그러나 모델 가중치와 일관성을 유지하기 위해 `bnb_4bit_compute_dtype` 및 `torch_dtype` 값을 사용해야 합니다.
+추론의 경우, `bnb_4bit_quant_type`은 성능에 큰 영향을 미치지 않습니다. 그러나 모델 가중치와 일관성을 유지하기 위해 `bnb_4bit_compute_dtype` 및 `dtype` 값을 사용해야 합니다.
 
 ### 중첩 양자화[[nested-quantization]]
 

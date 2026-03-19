@@ -60,10 +60,10 @@ pip install transformers bitsandbytes>=0.39.0 -q
 أولاً، تحتاج إلى تحميل النموذج.
 
 ```py
->>> from transformers import AutoModelForCausalLM
+>>> from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -113,12 +113,12 @@ pip install transformers bitsandbytes>=0.39.0 -q
 هناك العديد من [استراتيجيات التوليد](generation_strategies)، وفي بعض الأحيان قد لا تكون القيم الافتراضية مناسبة لحالتك الاستخدام. إذا لم تكن الإخراج الخاصة بك متوافقة مع ما تتوقعه، فقد قمنا بإنشاء قائمة بأكثر الأخطاء الشائعة وكيفية تجنبها.
 
 ```py
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -192,7 +192,7 @@ LLMs هي [معماريات فك التشفير فقط](https://huggingface.co/l
 ```python
 >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-alpha")
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", load_in_4bit=True
+...     "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 >>> set_seed(0)
 >>> prompt = """How many helicopters can a human eat in one sitting? Reply as a thug."""
@@ -238,7 +238,7 @@ LLMs هي [معماريات فك التشفير فقط](https://huggingface.co/l
 
 ### زمن الاستجابة والإنتاجية واستهلاك الذاكرة
 1. دليل تحسين نماذج اللغات الكبيرة من حيث السرعة والذاكرة: دليل تحسين نماذج اللغات الكبيرة.
-2. التكميم (Quantization): دليل حول تقنية التكميم التكميم مثل تقنيتي bitsandbytes و autogptq، والتي توضح كيفية تقليل متطلبات الذاكرة بشكل كبير.
+2. التكميم (Quantization): دليل حول تقنية التكميم التكميم مثل تقنيتي bitsandbytes و GPT-QModel، والتي توضح كيفية تقليل متطلبات الذاكرة بشكل كبير.
 
 ### مكتبات مرتبطة
 1. [`optimum`](https://github.com/huggingface/optimum), امتداد لمكتبة Transformers يعمل على تحسين الأداء لأجهزة معينة.

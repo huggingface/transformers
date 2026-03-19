@@ -35,9 +35,9 @@ class TQAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
 
     @require_torch
-    def test_small_model_pt(self, torch_dtype="float32"):
+    def test_small_model_pt(self, dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-wtq"
-        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, dtype=dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.assertIsInstance(model.config.aggregation_labels, dict)
         self.assertIsInstance(model.config.no_aggregation_label_index, int)
@@ -138,12 +138,12 @@ class TQAPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt_fp16(self):
-        self.test_small_model_pt(torch_dtype="float16")
+        self.test_small_model_pt(dtype="float16")
 
     @require_torch
-    def test_slow_tokenizer_sqa_pt(self, torch_dtype="float32"):
+    def test_slow_tokenizer_sqa_pt(self, dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-sqa"
-        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, dtype=dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer, max_new_tokens=20)
 
@@ -261,12 +261,12 @@ class TQAPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_slow_tokenizer_sqa_pt_fp16(self):
-        self.test_slow_tokenizer_sqa_pt(torch_dtype="float16")
+        self.test_slow_tokenizer_sqa_pt(dtype="float16")
 
     @slow
     @require_torch
-    def test_integration_wtq_pt(self, torch_dtype="float32"):
-        table_querier = pipeline("table-question-answering", torch_dtype=torch_dtype)
+    def test_integration_wtq_pt(self, dtype="float32"):
+        table_querier = pipeline("table-question-answering", dtype=dtype)
 
         data = {
             "Repository": ["Transformers", "Datasets", "Tokenizers"],
@@ -311,16 +311,16 @@ class TQAPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_integration_wtq_pt_fp16(self):
-        self.test_integration_wtq_pt(torch_dtype="float16")
+        self.test_integration_wtq_pt(dtype="float16")
 
     @slow
     @require_torch
-    def test_integration_sqa_pt(self, torch_dtype="float32"):
+    def test_integration_sqa_pt(self, dtype="float32"):
         table_querier = pipeline(
             "table-question-answering",
             model="google/tapas-base-finetuned-sqa",
             tokenizer="google/tapas-base-finetuned-sqa",
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
@@ -341,16 +341,16 @@ class TQAPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_integration_sqa_pt_fp16(self):
-        self.test_integration_sqa_pt(torch_dtype="float16")
+        self.test_integration_sqa_pt(dtype="float16")
 
     @slow
     @require_torch
-    def test_large_model_pt_tapex(self, torch_dtype="float32"):
+    def test_large_model_pt_tapex(self, dtype="float32"):
         model_id = "microsoft/tapex-large-finetuned-wtq"
         table_querier = pipeline(
             "table-question-answering",
             model=model_id,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],

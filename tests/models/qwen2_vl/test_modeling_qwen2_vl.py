@@ -18,6 +18,7 @@ import gc
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -33,7 +34,7 @@ from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -42,10 +43,10 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -65,24 +66,26 @@ class Qwen2VLVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=14,
-        bos_token_id=0,
-        eos_token_id=1,
-        pad_token_id=2,
+        text_config={
+            "bos_token_id": 0,
+            "eos_token_id": 1,
+            "pad_token_id": 2,
+            "hidden_act": "silu",
+            "hidden_size": 32,
+            "vocab_size": 99,
+            "intermediate_size": 37,
+            "max_position_embeddings": 512,
+            "max_window_layers": 3,
+            "num_attention_heads": 4,
+            "num_hidden_layers": 2,
+            "num_key_value_heads": 2,
+            "rope_theta": 10000,
+            "tie_word_embeddings": True,
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
+        },
         vision_start_token_id=3,
         image_token_id=4,
         video_token_id=5,
-        hidden_act="silu",
-        hidden_size=32,
-        vocab_size=99,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        max_window_layers=3,
-        model_type="qwen2_vl",
-        num_attention_heads=4,
-        num_hidden_layers=4,
-        num_key_value_heads=2,
-        rope_theta=10000,
-        tie_word_embeddings=True,
         is_training=True,
         vision_config={
             "depth": 2,
@@ -95,58 +98,35 @@ class Qwen2VLVisionText2TextModelTester:
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
-        rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+        self.hidden_size = text_config["hidden_size"]
         self.vision_start_token_id = vision_start_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.max_window_layers = max_window_layers
-        self.model_type = model_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.num_key_value_heads = num_key_value_heads
-        self.rope_theta = rope_theta
-        self.tie_word_embeddings = tie_word_embeddings
+        self.text_config = text_config
         self.vision_config = vision_config
-        self.rope_scaling = rope_scaling
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
-        self.vocab_size = vocab_size
+        self.vocab_size = text_config["vocab_size"]
         self.num_image_tokens = 32
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
         return Qwen2VLConfig(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
+            text_config=self.text_config,
             vision_config=self.vision_config,
-            model_type=self.model_type,
-            max_window_layers=self.max_window_layers,
-            rope_scaling=self.rope_scaling,
-            tie_word_embeddings=self.tie_word_embeddings,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
             vision_start_token_id=self.vision_start_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
-            vocab_size=self.vocab_size,
         )
 
     def prepare_config_and_inputs(self):
@@ -176,17 +156,21 @@ class Qwen2VLVisionText2TextModelTester:
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
 
 @require_torch
-class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
@@ -199,9 +183,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
-    test_pruning = False
-    test_head_masking = False
+    pipeline_model_mapping = {
+        "image-text-to-text": Qwen2VLForConditionalGeneration,
+        "any-to-any": Qwen2VLForConditionalGeneration,
+    }
     _is_composite = True
 
     def setUp(self):
@@ -210,20 +195,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -234,31 +205,44 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successfull forward with no modifications
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
             patch_size = config.vision_config.patch_size
             one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
             curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
+            model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
             image_grid_thw = curr_input_dict["image_grid_thw"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
+            mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
+                _ = model(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=mm_token_type_ids,
+                )
 
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
+            model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
+            _ = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
 
     def test_forward_with_rope_deltas_cached(self):
         """
@@ -281,6 +265,14 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             forward_output = model(**input_dict)
             torch.testing.assert_close(
                 generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4
+            )
+
+            # Same happens if we call `generate` API instead of `forward`
+            generation_output_second = model.generate(
+                **input_dict, max_new_tokens=10, return_dict_in_generate=True, output_logits=True
+            )
+            torch.testing.assert_close(
+                generation_output.logits[0], generation_output_second.logits[0], rtol=1e-4, atol=1e-4
             )
 
     def attention_mask_padding_matches_padding_free_with_position_ids(
@@ -311,7 +303,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 model = (
                     model_class.from_pretrained(
                         tmpdirname,
-                        torch_dtype=torch.bfloat16,
+                        dtype=torch.bfloat16,
                         attn_implementation=attn_implementation,
                     )
                     .to(torch_device)
@@ -330,6 +322,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                     input_ids=inputs_dict["input_ids"],
                     image_grid_thw=inputs_dict["image_grid_thw"],
                     attention_mask=inputs_dict["attention_mask"],
+                    mm_token_type_ids=inputs_dict["mm_token_type_ids"],
                 )  # [3, bs, padded-seq-len]
                 vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
                     3, -1
@@ -366,6 +359,14 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # Conversion happens only for the `ConditionalGeneration` model, not the base model
+        try:
+            self.all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
+            super().test_reverse_loading_mapping(check_keys_were_modified)
+        finally:
+            self.all_model_classes = (Qwen2VLModel, Qwen2VLForConditionalGeneration) if is_torch_available() else ()
+
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
         pass
@@ -394,9 +395,61 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester not in training mode")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            model.enable_input_require_grads()
+            model.train()
+
+            for parameter in model.parameters():
+                parameter.requires_grad = False
+
+            vision_module = None
+            if hasattr(model, "visual"):
+                vision_module = model.visual
+            elif hasattr(model, "model") and hasattr(model.model, "visual"):
+                vision_module = model.model.visual
+
+            if vision_module is None:
+                continue
+
+            target_linear = vision_module.blocks[0].attn.qkv
+            target_linear.weight.requires_grad = True
+            if target_linear.bias is not None:
+                target_linear.bias.requires_grad = True
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            outputs = model(**inputs)
+
+            if hasattr(outputs, "loss") and outputs.loss is not None:
+                loss = outputs.loss
+            else:
+                logits = outputs.logits if hasattr(outputs, "logits") else outputs[0]
+                loss = logits.sum()
+
+            loss.backward()
+
+            self.assertIsNotNone(
+                target_linear.weight.grad,
+                f"qkv weights should receive gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
+            )
+            self.assertGreater(
+                target_linear.weight.grad.abs().sum().item(),
+                0,
+                f"qkv weights should have non-zero gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
+            )
 
 
 @require_torch
@@ -422,7 +475,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -459,7 +512,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
@@ -481,7 +534,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_expand(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
@@ -501,7 +554,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
@@ -528,7 +581,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
@@ -563,11 +616,12 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
@@ -590,11 +644,12 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2-VL-7B-Instruct",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )

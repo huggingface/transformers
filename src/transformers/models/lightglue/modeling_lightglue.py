@@ -17,8 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -26,11 +26,11 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2FN
+from ...integrations import use_kernelized_func
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
 
@@ -70,14 +70,14 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
         `config.output_attentions=True`
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    prune: Optional[torch.IntTensor] = None
-    mask: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    matches: torch.FloatTensor | None = None
+    matching_scores: torch.FloatTensor | None = None
+    keypoints: torch.FloatTensor | None = None
+    prune: torch.IntTensor | None = None
+    mask: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class LightGluePositionalEncoder(nn.Module):
@@ -86,8 +86,8 @@ class LightGluePositionalEncoder(nn.Module):
         self.projector = nn.Linear(2, config.descriptor_dim // config.num_attention_heads // 2, bias=False)
 
     def forward(
-        self, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> Union[tuple[torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        self, keypoints: torch.Tensor, output_hidden_states: bool | None = False
+    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         projected_keypoints = self.projector(keypoints)
         embeddings = projected_keypoints.repeat_interleave(2, dim=-1)
         cosines = torch.cos(embeddings)
@@ -105,7 +105,7 @@ def rotate_half(x):
     return rot_x
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -113,8 +113,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -152,7 +150,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -162,8 +160,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -173,6 +170,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class LightGlueAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -202,12 +200,12 @@ class LightGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -224,9 +222,9 @@ class LightGlueAttention(nn.Module):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -274,9 +272,9 @@ class LightGlueTransformerLayer(nn.Module):
         descriptors: torch.Tensor,
         keypoints: torch.Tensor,
         attention_mask: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
+        output_hidden_states: bool | None = False,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None, tuple[torch.Tensor] | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -422,6 +420,7 @@ class LightGluePreTrainedModel(PreTrainedModel):
     config: LightGlueConfig
     base_model_prefix = "lightglue"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -498,7 +497,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     The correspondence ids use -1 to indicate non-matching points.
 
     Philipp Lindenberger, Paul-Edouard Sarlin and Marc Pollefeys. LightGlue: Local Feature Matching at Light Speed.
-    In ICCV 2023. https://arxiv.org/pdf/2306.13643.pdf
+    In ICCV 2023. https://huggingface.co/papers/2306.13643
     """
 
     def __init__(self, config: LightGlueConfig):
@@ -539,7 +538,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         return np.clip(threshold, 0, 1)
 
     def _keypoint_processing(
-        self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: Optional[bool] = False
+        self, descriptors: torch.Tensor, keypoints: torch.Tensor, output_hidden_states: bool | None = False
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         descriptors = descriptors.detach().contiguous()
         projected_descriptors = self.input_projection(descriptors)
@@ -626,6 +625,10 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         matching_scores,
     ):
         early_stops_indices = torch.stack(early_stops_indices)
+        # Rearrange tensors to have the same order as the input batch
+        ids = torch.arange(early_stops_indices.shape[0])
+        order_indices = early_stops_indices[ids]
+        early_stops_indices = early_stops_indices[order_indices]
         matches, final_pruned_keypoints_indices = (
             pad_sequence(tensor, batch_first=True, padding_value=-1)
             for tensor in [matches, final_pruned_keypoints_indices]
@@ -688,9 +691,9 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         descriptors: torch.Tensor,
         height: int,
         width: int,
-        mask: torch.Tensor = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple, tuple]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -860,10 +863,11 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ) -> Union[tuple, LightGlueKeypointMatchingOutput]:
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
+    ) -> tuple | LightGlueKeypointMatchingOutput:
         loss = None
         if labels is not None:
             raise ValueError("LightGlue is not trainable, no labels should be provided.")

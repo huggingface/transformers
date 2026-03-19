@@ -9,8 +9,8 @@ class MyNewModelConfig(LlamaConfig):
     defaults will yield a similar configuration to that of the MyNewModel-7B.
     e.g. [meta-my_new_model/MyNewModel-2-7b-hf](https://huggingface.co/meta-my_new_model/MyNewModel-2-7b-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -120,7 +120,5 @@ class MyNewModelConfig(LlamaConfig):
     ```
     """
 
-    def __init__(self, mlp_bias=True, new_param=0, **super_kwargs):
-        super().__init__(self, **super_kwargs)
-        self.mlp_bias = mlp_bias
-        self.new_param = new_param
+    mlp_bias: bool = True
+    new_param: int = 0

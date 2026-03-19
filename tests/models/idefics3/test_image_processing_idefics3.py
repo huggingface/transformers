@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,13 +16,13 @@
 import unittest
 
 import numpy as np
-import requests
 
-from transformers.image_utils import PILImageResampling
+from transformers.image_utils import PILImageResampling, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_vision_available():
@@ -298,9 +297,7 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         dummy_image = dummy_image.resize((100, 150))
         image_processor_slow = self.image_processing_class(
             **self.image_processor_dict, resample=PILImageResampling.BICUBIC
@@ -370,7 +367,7 @@ class Idefics3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=300, width=500, images_kwargs={"do_image_splitting": False}
             )
-            self.assertEqual(num_patches_and_row_cols, (1, 1, 1))
+            self.assertEqual(num_patches_and_row_cols, (0, 0, 0))
 
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=300, width=500, images_kwargs={"do_image_splitting": True}

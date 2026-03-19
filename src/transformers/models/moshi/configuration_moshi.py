@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,72 +13,25 @@
 # limitations under the License.
 """Moshi model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-class MoshiDepthConfig(PretrainedConfig):
+@auto_docstring(checkpoint="kmhf/hf-moshiko")
+@strict(accept_kwargs=True)
+class MoshiDepthConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MoshiDepthDecoder`]. It is used to instantiate a
-    Moshi depth decoder model according to the specified arguments, defining the Moshi depth decoder config.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the MoshiDepthDecoder model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`MoshiDepthDecoder`].
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the layers and the pooler layer of the depth decoder.
-        input_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the input hidden states. Used to connect the main decoder to the depth decoder.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of depth decoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the depth decoder block.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
-        audio_vocab_size (`int`, *optional*, defaults to 2048):
-            Vocabulary size of the audio part of model. Defines the number of different tokens that can be
-            represented by the `audio_codes` passed when calling the Moshi models.
-        max_position_embeddings (`int`, *optional*, defaults to 9):
-            The maximum sequence length that this model might ever be used with. Typically, set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the depth decoder.
-        head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
-            The attention head dimension.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        sliding_window (`int`, *optional*, defaults to 8):
-            Sliding window attention window size. If not specified, will default to `8`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        ffn_dim (`int`, *optional*, defaults to 5632):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the depth decoder block. Must be even.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-08):
-            The epsilon used by the rms normalization layers.
-        num_codebooks (`int`, *optional*, defaults to 8):
-            The number of audio codebooks for each audio channels.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
+    input_size (`int`, *optional*, defaults to 4096):
+        Dimensionality of the input hidden states. Used to connect the main decoder to the depth decoder.
+    audio_vocab_size (`int`, *optional*, defaults to 2048):
+        Vocabulary size of the audio part of model. Defines the number of different tokens that can be
+        represented by the `audio_codes` passed when calling the Moshi models.
+    ffn_dim (`int`, *optional*, defaults to 5632):
+        Dimensionality of the "intermediate" (often named feed-forward) layer in the depth decoder block. Must be even.
 
     Example:
 
@@ -101,114 +53,54 @@ class MoshiDepthConfig(PretrainedConfig):
     model_type = "moshi_depth"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        hidden_size=1024,
-        input_size=4096,
-        num_hidden_layers=6,
-        num_attention_heads=16,
-        num_key_value_heads=None,
-        audio_vocab_size=2048,
-        max_position_embeddings=9,
-        hidden_act="silu",
-        head_dim=None,
-        initializer_range=0.02,
-        use_cache=True,
-        sliding_window=8,
-        attention_dropout=0.0,
-        ffn_dim=5632,
-        rms_norm_eps=1e-8,
-        num_codebooks=8,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.input_size = input_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_act = hidden_act
-        self.head_dim = head_dim or hidden_size // num_attention_heads
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.sliding_window = sliding_window
-        self.attention_dropout = attention_dropout
-        if ffn_dim % 2 == 1:
-            raise ValueError(f"`ffn_dim={ffn_dim}` must be even.")
-        self.ffn_dim = ffn_dim
-        self.rms_norm_eps = rms_norm_eps
-        self.num_codebooks = num_codebooks
-        self.audio_vocab_size = audio_vocab_size
+    vocab_size: int = 32000
+    hidden_size: int = 1024
+    input_size: int = 4096
+    num_hidden_layers: int = 6
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    audio_vocab_size: int = 2048
+    max_position_embeddings: int = 9
+    hidden_act: str = "silu"
+    head_dim: int | None = None
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    sliding_window: int = 8
+    attention_dropout: float | int = 0.0
+    ffn_dim: int = 5632
+    rms_norm_eps: float = 1e-8
+    num_codebooks: int = 8
+    tie_word_embeddings: bool = False
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = (
+            self.num_key_value_heads if self.num_key_value_heads is not None else self.num_attention_heads
+        )
+        self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.ffn_dim % 2 == 1:
+            raise ValueError(f"`ffn_dim={self.ffn_dim}` must be even.")
 
 
-class MoshiConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
-    Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
-    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Moshiko model,
-    e.g. [kmhf/hf-moshiko](https://huggingface.co/kmhf/hf-moshiko)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the MoshiDecoder model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`MoshiDecoder`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the layers and the pooler layer of the main decoder.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of decoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the main decoder block.
-        num_key_value_heads (`int`, *optional*):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `num_attention_heads`.
-        audio_vocab_size (`int`, *optional*):
-            Vocabulary size of the audio part of model. Defines the number of different tokens that can be
-            represented by the `audio_codes` passed when calling the Moshi models.
-        max_position_embeddings (`int`, *optional*, defaults to 3000):
-            The maximum sequence length that this model might ever be used with. Typically, set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
-            The attention head dimension.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        sliding_window (`int`, *optional*, defaults to 3000):
-            Sliding window attention window size. If not specified, will default to `3000`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        ffn_dim (`int`, *optional*, defaults to 22528):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-08):
-            The epsilon used by the rms normalization layers.
-        num_codebooks (`int`, *optional*, defaults to 8):
-            The number of audio codebooks for each audio channels.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-                - **audio_encoder_config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
-                - **depth__config** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the depth decoder config.
-
+@auto_docstring(checkpoint="kmhf/hf-moshiko")
+@strict(accept_kwargs=True)
+class MoshiConfig(PreTrainedConfig):
+    """
+    depth_decoder_config (`PreTrainedConfig | dict`, *optional*):
+        Configuration for the depth decoder.
+    audio_encoder_config (`PreTrainedConfig | dict`, *optional*):
+        Configuration for the audio encoder.
+    audio_vocab_size (`int`, *optional*):
+        Vocabulary size of the audio part of model. Defines the number of different tokens that can be
+        represented by the `audio_codes` passed when calling the Moshi models.
+    ffn_dim (`int`, *optional*, defaults to 22528):
+        Dimensionality of the "intermediate" (often named feed-forward) layer in the main decoder block. Must be even.
 
     Example:
 
@@ -238,74 +130,69 @@ class MoshiConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"audio_encoder_config": AutoConfig, "depth_decoder_config": MoshiDepthConfig}
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        hidden_size=4096,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        audio_vocab_size=None,
-        max_position_embeddings=3000,
-        rope_theta=10000.0,
-        hidden_act="silu",
-        head_dim=None,
-        initializer_range=0.02,
-        use_cache=True,
-        sliding_window=3000,
-        attention_dropout=0.0,
-        ffn_dim=22528,
-        rms_norm_eps=1e-8,
-        num_codebooks=8,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_theta = rope_theta
-        self.hidden_act = hidden_act
-        self.head_dim = head_dim or hidden_size // num_attention_heads
-        self.initializer_range = initializer_range
-        self.use_cache = use_cache
-        self.sliding_window = sliding_window
-        self.attention_dropout = attention_dropout
-        if ffn_dim % 2 == 1:
-            raise ValueError(f"`ffn_dim={ffn_dim}` must be even.")
-        self.ffn_dim = ffn_dim
-        self.rms_norm_eps = rms_norm_eps
-        self.num_codebooks = num_codebooks
+    vocab_size: int = 32000
+    hidden_size: int = 4096
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    audio_vocab_size: int | None = None
+    max_position_embeddings: int = 3000
+    rope_parameters: RopeParameters | dict | None = None
+    hidden_act: str = "silu"
+    head_dim: int | None = None
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    sliding_window: int = 3000
+    attention_dropout: float | int = 0.0
+    ffn_dim: int = 22528
+    rms_norm_eps: float = 1e-8
+    num_codebooks: int = 8
+    tie_word_embeddings: bool = False
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    audio_encoder_config: dict | PreTrainedConfig | None = None
+    depth_decoder_config: dict | PreTrainedConfig | None = None
 
-        audio_encoder_config = kwargs.pop("audio_encoder_config", {})
-        audio_encoder_model_type = audio_encoder_config.pop("model_type", "mimi")
+    def __post_init__(self, **kwargs):
+        self.num_key_value_heads = (
+            self.num_key_value_heads if self.num_key_value_heads is not None else self.num_attention_heads
+        )
+        self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
 
-        self.audio_encoder_config = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
+        if isinstance(self.audio_encoder_config, dict):
+            audio_encoder_model_type = self.audio_encoder_config.pop("model_type", "mimi")
+            self.audio_encoder_config = AutoConfig.for_model(audio_encoder_model_type, **self.audio_encoder_config)
+        elif self.audio_encoder_config is None:
+            self.audio_encoder_config = AutoConfig.for_model("mimi")
+
+        self.audio_vocab_size = (
+            self.audio_encoder_config.codebook_size if self.audio_vocab_size is None else self.audio_vocab_size
+        )
+
+        if isinstance(self.depth_decoder_config, dict):
+            self.depth_decoder_config.update(
+                {
+                    "audio_vocab_size": self.audio_vocab_size,
+                    "input_size": self.hidden_size,
+                    "vocab_size": self.vocab_size,
+                    "num_codebooks": self.num_codebooks,
+                }
+            )
+            self.depth_decoder_config = MoshiDepthConfig(**self.depth_decoder_config)
+        elif self.depth_decoder_config is None:
+            self.depth_decoder_config = MoshiDepthConfig()
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.ffn_dim % 2 == 1:
+            raise ValueError(f"`ffn_dim={self.ffn_dim}` must be even.")
 
         if self.num_codebooks > self.audio_encoder_config.num_codebooks:
             raise ValueError(
-                f"`num_codebooks={num_codebooks}` is greater than the maximum number of codebooks that the audio encoder can deal with ({self.audio_encoder_config.num_codebooks}). Please lower it."
+                f"`num_codebooks={self.num_codebooks}` is greater than the maximum number of codebooks that the audio encoder can deal with ({self.audio_encoder_config.num_codebooks}). Please lower it."
             )
-
-        self.audio_vocab_size = (
-            self.audio_encoder_config.codebook_size if audio_vocab_size is None else audio_vocab_size
-        )
-
-        depth_decoder_config = kwargs.pop("depth_decoder_config", {})
-        depth_decoder_config.update(
-            {
-                "audio_vocab_size": self.audio_vocab_size,
-                "input_size": hidden_size,
-                "vocab_size": vocab_size,
-                "num_codebooks": num_codebooks,
-            }
-        )
-
-        self.depth_decoder_config = MoshiDepthConfig(**depth_decoder_config)
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
     @property
     def sampling_rate(self):
@@ -314,7 +201,7 @@ class MoshiConfig(PretrainedConfig):
     @classmethod
     def from_audio_encoder_config(
         cls,
-        audio_encoder_config: PretrainedConfig,
+        audio_encoder_config: PreTrainedConfig,
         **kwargs,
     ):
         r"""

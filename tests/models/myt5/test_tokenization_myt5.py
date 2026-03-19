@@ -16,17 +16,8 @@ import unittest
 
 from transformers import MyT5Tokenizer
 from transformers.testing_utils import slow
-from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-if is_torch_available():
-    FRAMEWORK = "pt"
-elif is_tf_available():
-    FRAMEWORK = "tf"
-else:
-    FRAMEWORK = "jax"
 
 
 def bytes_to_hex(bline: bytes, sep: str = " ") -> str:
@@ -91,9 +82,10 @@ class TestByteRewriter(unittest.TestCase):
 @slow
 class MyT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MyT5Tokenizer
+    from_pretrained_id = "Tomlim/myt5-base"
     test_rust_tokenizer = False
 
-    def get_tokenizer(cls, **kwargs) -> MyT5Tokenizer:
+    def get_tokenizer(cls, pretrained_name=None, **kwargs) -> MyT5Tokenizer:
         return cls.tokenizer_class.from_pretrained("Tomlim/myt5-base", **kwargs)
 
     @unittest.skip(reason="inputs cannot be pretokenized as ids depend on whole input string")

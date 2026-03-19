@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,10 @@
 import argparse
 import json
 import re
+from io import BytesIO
 from pathlib import Path
-from typing import Optional
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -320,7 +319,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     # Use the mapping to rename keys
     for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
         for key in list(state_dict_keys.keys()):
@@ -364,8 +363,8 @@ def read_in_q_k_v(state_dict, config, model_name):
         if model_name in ["dfine_n_coco", "dfine_n_obj2coco_e25", "dfine_n_obj365"]:
             state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:128, :]
             state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:128]
-            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:384, :]
-            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:384]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[128:256, :]
+            state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[128:256]
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-128:, :]
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-128:]
         else:
@@ -380,9 +379,10 @@ def read_in_q_k_v(state_dict, config, model_name):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()

@@ -17,44 +17,19 @@ rendered properly in your Markdown viewer.
 # Callbacks
 
 Callbacks are objects that can customize the behavior of the training loop in the PyTorch
-[`Trainer`] (this feature is not yet implemented in TensorFlow) that can inspect the training loop
-state (for progress reporting, logging on TensorBoard or other ML platforms...) and take decisions (like early
-stopping).
+[`Trainer`] that can inspect the training loop state (for progress reporting, logging on TensorBoard or other ML
+platforms...) and take decisions (like early stopping).
 
 Callbacks are "read only" pieces of code, apart from the [`TrainerControl`] object they return, they
 cannot change anything in the training loop. For customizations that require changes in the training loop, you should
 subclass [`Trainer`] and override the methods you need (see [trainer](trainer) for examples).
 
-By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] will use the following callbacks.
-
-- [`DefaultFlowCallback`] which handles the default behavior for logging, saving and evaluation.
-- [`PrinterCallback`] or [`ProgressCallback`] to display progress and print the
-  logs (the first one is used if you deactivate tqdm through the [`TrainingArguments`], otherwise
-  it's the second one).
-- [`~integrations.TensorBoardCallback`] if tensorboard is accessible (either through PyTorch >= 1.4
-  or tensorboardX).
-- [`~integrations.TrackioCallback`] if [trackio](https://github.com/gradio-app/trackio) is installed.
-- [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
-- [`~integrations.CometCallback`] if [comet_ml](https://www.comet.com/site/) is installed.
-- [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
-- [`~integrations.NeptuneCallback`] if [neptune](https://neptune.ai/) is installed.
-- [`~integrations.AzureMLCallback`] if [azureml-sdk](https://pypi.org/project/azureml-sdk/) is
-  installed.
-- [`~integrations.CodeCarbonCallback`] if [codecarbon](https://pypi.org/project/codecarbon/) is
-  installed.
-- [`~integrations.ClearMLCallback`] if [clearml](https://github.com/allegroai/clearml) is installed.
-- [`~integrations.DagsHubCallback`] if [dagshub](https://dagshub.com/) is installed.
-- [`~integrations.FlyteCallback`] if [flyte](https://flyte.org/) is installed.
-- [`~integrations.DVCLiveCallback`] if [dvclive](https://dvc.org/doc/dvclive) is installed.
-- [`~integrations.SwanLabCallback`] if [swanlab](http://swanlab.cn/) is installed.
-
-If a package is installed but you don't wish to use the accompanying integration, you can change `TrainingArguments.report_to` to a list of just those integrations you want to use (e.g. `["azure_ml", "wandb"]`). 
+By default, `TrainingArguments.report_to` is set to `"none"`.
 
 The main class that implements callbacks is [`TrainerCallback`]. It gets the
 [`TrainingArguments`] used to instantiate the [`Trainer`], can access that
 Trainer's internal state via [`TrainerState`], and can take some actions on the training loop via
 [`TrainerControl`].
-
 
 ## Available Callbacks
 
@@ -86,13 +61,13 @@ Here is the list of the available [`TrainerCallback`] in the library:
 
 [[autodoc]] integrations.CodeCarbonCallback
 
-[[autodoc]] integrations.NeptuneCallback
-
 [[autodoc]] integrations.ClearMLCallback
 
 [[autodoc]] integrations.DagsHubCallback
 
 [[autodoc]] integrations.FlyteCallback
+
+[[autodoc]] integrations.KubeflowCallback
 
 [[autodoc]] integrations.DVCLiveCallback
     - setup

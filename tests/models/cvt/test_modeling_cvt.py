@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch CvT model."""
 
 import unittest
+from functools import cached_property
 from math import floor
 
 from transformers import CvtConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -153,12 +154,8 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
-    test_torchscript = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
@@ -166,7 +163,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self,
             config_class=CvtConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["hidden_size", "num_channels"],
         )
 
@@ -269,6 +266,6 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.9287, 0.9016, -0.3152]).to(torch_device)
+        expected_slice = torch.tensor([0.9282, 0.9025, -0.3145]).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)

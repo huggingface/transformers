@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import subprocess
-from typing import Any, Union
+from typing import Any
 
+import httpx
 import numpy as np
-import requests
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -103,12 +103,9 @@ class AudioClassificationPipeline(Pipeline):
             kwargs["top_k"] = 5
         super().__init__(*args, **kwargs)
 
-        if self.framework != "pt":
-            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
-
         self.check_model_type(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES)
 
-    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
+    def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
         Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
         information.
@@ -171,7 +168,7 @@ class AudioClassificationPipeline(Pipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = requests.get(inputs).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 with open(inputs, "rb") as f:
                     inputs = f.read()
@@ -237,8 +234,8 @@ class AudioClassificationPipeline(Pipeline):
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
-        if self.torch_dtype is not None:
-            processed = processed.to(dtype=self.torch_dtype)
+        if self.dtype is not None:
+            processed = processed.to(dtype=self.dtype)
         return processed
 
     def _forward(self, model_inputs):

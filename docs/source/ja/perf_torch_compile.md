@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 ```diff
 from transformers import AutoModelForImageClassification
 
-model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
+model = AutoModelForImageClassification.from_pretrained(MODEL_ID, device_map="auto")
 + model = torch.compile(model)
 ```
 
@@ -52,10 +52,10 @@ url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
-model = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224").to("cuda")
+model = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224", device_map="auto")
 model = torch.compile(model)
 
-processed_input = processor(image, return_tensors='pt').to(device="cuda")
+processed_input = processor(image, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     _ = model(**processed_input)
@@ -67,11 +67,11 @@ with torch.no_grad():
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
-model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50").to("cuda")
+model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50", device_map="auto")
 model = torch.compile(model)
 
 texts = ["a photo of a cat", "a photo of a dog"]
-inputs = processor(text=texts, images=image, return_tensors="pt").to("cuda")
+inputs = processor(text=texts, images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     _ = model(**inputs)
@@ -83,9 +83,9 @@ with torch.no_grad():
 from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
 
 processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512").to("cuda")
+model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512", device_map="auto")
 model = torch.compile(model)
-seg_inputs = processor(images=image, return_tensors="pt").to("cuda")
+seg_inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     _ = model(**seg_inputs)

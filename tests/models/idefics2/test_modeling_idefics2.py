@@ -23,6 +23,7 @@ import requests
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     Idefics2Config,
     Idefics2ForConditionalGeneration,
     Idefics2Model,
@@ -35,9 +36,8 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -87,7 +87,7 @@ class Idefics2VisionText2TextModelTester:
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
-            "num_hidden_layers": 3,
+            "num_hidden_layers": 2,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "hidden_act": "silu",
@@ -177,11 +177,10 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (Idefics2Model,) if is_torch_available() else ()
-    fx_compatible = False
-    test_torchscript = False
-    test_pruning = False
+    # Idefics2 merges batch_size and num_frames in the first output dimension
+    skip_test_image_features_output_shape = True
+
     test_resize_embeddings = True
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -193,11 +192,11 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
@@ -298,6 +297,7 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # if no output embeddings -> leave test
             if model.get_output_embeddings() is None:
@@ -335,7 +335,6 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -370,17 +369,17 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+    skip_test_image_features_output_shape = (
+        True  # Idefics2 merges batch_size and num_frames in the first output dimension
+    )
+
     test_resize_embeddings = True
-    test_head_masking = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Idefics2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Idefics2Config, has_text_modality=False)
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
+    @unittest.skip(reason="inputs_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
         pass
 
@@ -392,26 +391,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Contrastive search is not implemented for VLMs that do cross-attn")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip(
-        reason="Prompt lookup decoding needs a way to indicate `bad_word_ids` that should not be suggested as candidates"
-    )
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
     @pytest.mark.generate
-    @require_torch_sdpa
     @slow
     @unittest.skip(
         reason="Idefics2 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
@@ -501,6 +481,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+            model.eval()
 
             # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
             model_vocab_size = config.text_config.vocab_size
@@ -534,31 +515,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        # overwrite because IDEFICS needs ids and embeds at the input to be not None
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
-
-            wte = model.get_input_embeddings()
-
-            input_ids = inputs["input_ids"]
-            # some models infer position ids/attn mask differently when input ids
-            # by check if pad_token let's make sure no padding is in input ids
-            not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-            input_ids[input_ids == pad_token_id] = not_pad_token_id
-            del inputs["input_ids"]
-            inputs_embeds = wte(input_ids)
-            out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)
-            out_embeds = model.generate(input_ids=input_ids, inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
-
-            torch.testing.assert_close(out_embeds, out_ids)
-
 
 @require_torch
 class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -590,7 +546,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test(self):
         model = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
         )
 
@@ -612,8 +568,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_integration_test_4bit(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2-8b-base",
-            load_in_4bit=True,
+            "HuggingFaceM4/idefics2-8b-base", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
 
         # Create pixel inputs
@@ -640,8 +595,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
 
         model = Idefics2ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/idefics2-8b-base",
-            load_in_4bit=True,
+            "HuggingFaceM4/idefics2-8b-base", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
         )
 
         from datasets import load_dataset
@@ -669,8 +623,9 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(batched_generated_texts[0], generated_text_0[0])
         self.assertEqual(batched_generated_texts[1], generated_text_1[0])
 
+    @pytest.mark.flash_attn_test
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_flash_attn_2_eager_equivalence(self):
         # Create inputs
@@ -683,7 +638,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_eager = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
             attn_implementation="eager",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         generated_ids_eager = model_eager.generate(**inputs, max_new_tokens=10)
         generated_texts_eager = self.processor.batch_decode(generated_ids_eager, skip_special_tokens=True)
@@ -694,7 +649,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_flash_attention_2 = Idefics2ForConditionalGeneration.from_pretrained(
             "HuggingFaceM4/idefics2-8b-base",
             attn_implementation="flash_attention_2",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
         generated_ids_flash_attention_2 = model_flash_attention_2.generate(**inputs, max_new_tokens=10)
         generated_texts_flash_attention_2 = self.processor.batch_decode(

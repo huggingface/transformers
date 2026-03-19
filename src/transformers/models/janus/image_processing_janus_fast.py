@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,14 @@
 # limitations under the License.
 
 
-from typing import Optional, Union
+from typing import Optional
+
+import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -34,28 +35,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
-
-
-class JanusFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
+from .image_processing_janus import JanusImageProcessorKwargs
 
 
 @auto_docstring
@@ -68,14 +49,15 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = JanusFastImageProcessorKwargs
+    do_pad = True
+    valid_kwargs = JanusImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[JanusFastImageProcessorKwargs]):
-        if kwargs.get("image_mean", None) is None:
+    def __init__(self, **kwargs: Unpack[JanusImageProcessorKwargs]):
+        super().__init__(**kwargs)
+        if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
-        super().__init__(**kwargs)
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         self.background_color = tuple(background_color)
 
     def resize(
@@ -83,7 +65,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -99,8 +81,8 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = SizeDict(
-            height=max(int(height * delta), min_size),
-            width=max(int(width * delta), min_size),
+            height=max(round(height * delta), min_size),
+            width=max(round(width * delta), min_size),
         )
 
         return super().resize(image, size=output_size_nonpadded, interpolation=interpolation, antialias=antialias)
@@ -108,7 +90,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, tuple[int, int, int]] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
@@ -119,7 +101,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
 
         Returns:
             `torch.Tensor`: The padded images.
@@ -161,14 +143,14 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         do_pad: bool = True,
         **kwargs,
     ) -> BatchFeature:
@@ -197,19 +179,18 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def postprocess(
         self,
         images: ImageInput,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[list[float]] = None,
-        image_std: Optional[list[float]] = None,
-        return_tensors: Optional[str] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: list[float] | None = None,
+        image_std: list[float] | None = None,
+        return_tensors: str | None = None,
     ) -> "torch.Tensor":
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
@@ -234,12 +215,12 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
             images = [image.clip(0, 255).to(torch.uint8) for image in images]
 
         if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
-            images = [F.to_pil_image(image) for image in images]
+            images = [tvF.to_pil_image(image) for image in images]
 
-        data = {"pixel_values": images}
         return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
+        images = torch.stack(images, dim=0) if return_tensors == "pt" else images
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
 
 __all__ = ["JanusImageProcessorFast"]

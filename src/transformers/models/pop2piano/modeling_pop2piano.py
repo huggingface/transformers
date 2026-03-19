@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Pop2Piano Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import copy
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -24,22 +22,16 @@ from torch.nn import CrossEntropyLoss
 
 from transformers.generation import GenerationConfig
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, is_torch_flex_attn_available, is_torch_fx_proxy, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from .configuration_pop2piano import Pop2PianoConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -57,7 +49,6 @@ except ImportError:
     pass
 except Exception:
     logger.warning("Discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
-    pass
 
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pop2Piano
@@ -87,7 +78,7 @@ class Pop2PianoLayerNorm(nn.Module):
 
 
 if not _load_pop2piano_layer_norm:
-    Pop2PianoLayerNorm = FusedRMSNorm  # noqa
+    Pop2PianoLayerNorm = FusedRMSNorm
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Pop2Piano,t5->pop2piano
@@ -168,7 +159,7 @@ class Pop2PianoAttention(nn.Module):
         self,
         config: Pop2PianoConfig,
         has_relative_attention_bias=False,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -188,7 +179,6 @@ class Pop2PianoAttention(nn.Module):
                 "when creating this class."
             )
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -196,24 +186,8 @@ class Pop2PianoAttention(nn.Module):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
-        self.gradient_checkpointing = False
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
-        )
-        # Prune linear layers
-        self.q = prune_linear_layer(self.q, index)
-        self.k = prune_linear_layer(self.k, index)
-        self.v = prune_linear_layer(self.v, index)
-        self.o = prune_linear_layer(self.o, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.inner_dim = self.key_value_proj_dim * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+        self.gradient_checkpointing = False
 
     @staticmethod
     def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -263,14 +237,11 @@ class Pop2PianoAttention(nn.Module):
         relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length, device=None, cache_position=None):
+    def compute_bias(self, query_length, key_length, device=None, past_seen_tokens=0):
         """Compute binned relative position bias"""
         if device is None:
             device = self.relative_attention_bias.weight.device
-        if cache_position is None:
-            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        else:
-            context_position = cache_position[:, None].to(device)
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None] + past_seen_tokens
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
@@ -289,12 +260,9 @@ class Pop2PianoAttention(nn.Module):
         mask=None,
         key_value_states=None,
         position_bias=None,
-        past_key_value=None,
-        layer_head_mask=None,
-        query_length=None,
-        use_cache=False,
+        past_key_values=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -302,6 +270,9 @@ class Pop2PianoAttention(nn.Module):
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
         batch_size, seq_length = hidden_states.shape[:2]
+        past_seen_tokens = past_key_values.get_seq_length(self.layer_idx) if past_key_values is not None else 0
+        # We clone here for StaticCache, as we get the value before updating it, but use it after and it's the same ref
+        past_seen_tokens = past_seen_tokens.clone() if isinstance(past_seen_tokens, torch.Tensor) else past_seen_tokens
 
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
@@ -310,44 +281,39 @@ class Pop2PianoAttention(nn.Module):
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
-        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        is_updated = False
+        if isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_values = past_key_values.cross_attention_cache
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                curr_past_key_values = past_key_values.self_attention_cache
         else:
-            curr_past_key_value = past_key_value
+            curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k(current_states)
             value_states = self.v(current_states)
             key_states = key_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
             value_states = value_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+            if past_key_values is not None:
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         scores = torch.matmul(query_states, key_states.transpose(3, 2))
 
         if position_bias is None:
             key_length = key_states.shape[-2]
-            # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
-            real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
                     (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
@@ -356,30 +322,19 @@ class Pop2PianoAttention(nn.Module):
                     position_bias.requires_grad = True
             else:
                 position_bias = self.compute_bias(
-                    real_seq_length, key_length, device=scores.device, cache_position=cache_position
+                    seq_length, key_length, device=scores.device, past_seen_tokens=past_seen_tokens
                 )
-                position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
                 causal_mask = mask[:, :, :, : key_states.shape[-2]]
                 position_bias = position_bias + causal_mask
 
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
-        else:
-            position_bias_masked = position_bias
-
+        position_bias_masked = position_bias
         scores += position_bias_masked
 
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
 
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -396,7 +351,7 @@ class Pop2PianoAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.SelfAttention = Pop2PianoAttention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
@@ -409,22 +364,19 @@ class Pop2PianoLayerSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -433,7 +385,7 @@ class Pop2PianoLayerSelfAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoLayerCrossAttention(nn.Module):
-    def __init__(self, config, layer_idx: Optional[int] = None):
+    def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.EncDecAttention = Pop2PianoAttention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
         self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -445,12 +397,9 @@ class Pop2PianoLayerCrossAttention(nn.Module):
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        query_length=None,
+        past_key_values=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -458,12 +407,8 @@ class Pop2PianoLayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            query_length=query_length,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
@@ -472,7 +417,7 @@ class Pop2PianoLayerCrossAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5Block with T5->Pop2Piano,t5->pop2piano
 class Pop2PianoBlock(GradientCheckpointingLayer):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
@@ -494,23 +439,19 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
-        past_key_value=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         return_dict=True,
-        cache_position=None,
+        **kwargs,
     ):
         self_attention_outputs = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = self_attention_outputs[0]
         attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
@@ -531,10 +472,7 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
-                query_length=cache_position[-1] + 1,
-                use_cache=use_cache,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
             )
             hidden_states = cross_attention_outputs[0]
@@ -574,58 +512,52 @@ class Pop2PianoBlock(GradientCheckpointingLayer):
 class Pop2PianoPreTrainedModel(PreTrainedModel):
     config: Pop2PianoConfig
     base_model_prefix = "transformer"
-    is_parallelizable = False
+    output_modalities = ("audio",)
     supports_gradient_checkpointing = True
 
     _can_compile_fullgraph = False
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, Pop2PianoLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
+            init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, Pop2PianoConcatEmbeddingToMel):
-            module.embedding.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.embedding.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoForConditionalGeneration):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head"):
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, Pop2PianoDenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, Pop2PianoDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                init.zeros_(module.wi_0.bias)
+            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi_1.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, Pop2PianoAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -636,15 +568,9 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
                 "self.model.config.decoder_start_token_id has to be defined. In Pop2Piano it is usually set to the pad_token_id."
             )
 
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
             raise ValueError("self.model.config.pad_token_id has to be defined.")
@@ -656,10 +582,10 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
 
 class Pop2PianoStack(Pop2PianoPreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5Stack.__init__ with T5->Pop2Piano,t5->pop2piano
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -673,9 +599,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
 
     # Copied from transformers.models.t5.modeling_t5.T5Stack.set_input_embeddings
@@ -689,21 +612,19 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cache_position=None,
+        **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
@@ -740,34 +661,28 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         if self.is_decoder:
             if use_cache and past_key_values is None:
                 if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                    past_key_values = EncoderDecoderCache(
+                        DynamicCache(config=self.config), DynamicCache(config=self.config)
+                    )
                 else:
-                    past_key_values = DynamicCache()
+                    past_key_values = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
             past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
-            causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache
-                if isinstance(past_key_values, EncoderDecoderCache)
-                else past_key_values,
-                output_attentions,
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
             )
         else:
             causal_mask = attention_mask[:, None, None, :]
@@ -785,9 +700,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and self.is_decoder) else None
@@ -797,8 +709,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for i, layer_module in enumerate(self.block):
-            layer_head_mask = head_mask[i]
-            cross_attn_layer_head_mask = cross_attn_head_mask[i]
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -809,12 +719,9 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 encoder_hidden_states,
                 encoder_extended_attention_mask,
                 encoder_decoder_position_bias,  # as a positional argument for gradient checkpointing
-                layer_head_mask=layer_head_mask,
-                cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -858,131 +765,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        sequence_length = input_tensor.shape[1]
-        if using_compilable_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
-
 
 class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """Embedding Matrix for `composer` tokens."""
@@ -1004,7 +786,10 @@ class Pop2PianoConcatEmbeddingToMel(nn.Module):
     """
 )
 class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: Pop2PianoConfig):
         super().__init__(config)
@@ -1018,15 +803,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
 
-        self.encoder = Pop2PianoStack(encoder_config, self.shared)
+        self.encoder = Pop2PianoStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = Pop2PianoStack(decoder_config, self.shared)
+        self.decoder = Pop2PianoStack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1041,18 +824,12 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
     def get_mel_conditioner_outputs(
         self,
         input_features: torch.FloatTensor,
         composer: str,
         generation_config: GenerationConfig,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
     ):
         """
         This method is used to concatenate mel conditioner tokens at the front of the input_features in order to
@@ -1099,25 +876,22 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Pop2Piano is a model with relative position embeddings
@@ -1134,23 +908,13 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
-            1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
-            `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
             config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
             labels in `[0, ..., config.vocab_size]`
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None and input_features is not None:
             raise ValueError("Both `inputs_embeds` and `input_features` received! Please provide only one of them")
@@ -1164,7 +928,6 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1190,20 +953,15 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         sequence_output = decoder_outputs[0]
 
         if self.config.tie_word_embeddings:
-            # Rescale output before projecting on vocab
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
             sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
@@ -1260,7 +1018,7 @@ class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel, GenerationMixi
                 - 0 for tokens that are **padded**.
             composer (`str`, *optional*, defaults to `"composer1"`):
                 This value is passed to `Pop2PianoConcatEmbeddingToMel` to generate different embeddings for each
-                `"composer"`. Please make sure that the composet value is present in `composer_to_feature_token` in
+                `"composer"`. Please make sure that the composer value is present in `composer_to_feature_token` in
                 `generation_config`. For an example please see
                 https://huggingface.co/sweetcocoa/pop2piano/blob/main/generation_config.json .
             generation_config (`~generation.GenerationConfig`, *optional*):

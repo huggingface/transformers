@@ -14,10 +14,12 @@
 """Testing suite for the PyTorch Grounding DINO model."""
 
 import collections
+import copy
 import inspect
 import math
 import re
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
@@ -27,7 +29,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
@@ -40,7 +41,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -247,9 +248,7 @@ class GroundingDinoModelTester:
 class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroundingDinoModel, GroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     pipeline_model_mapping = (
         {"image-feature-extraction": GroundingDinoModel, "zero-shot-object-detection": GroundingDinoForObjectDetection}
@@ -319,6 +318,23 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    def test_tie_weights_is_not_modified(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+
+        config.decoder_bbox_embed_share = False
+        model = GroundingDinoForObjectDetection(config)
+        self.assertFalse(r"bbox_embed.(?![0])\d+" in model._tied_weights_keys)
+
+        # if we update config attr, model's tied weights keys also change
+        config.decoder_bbox_embed_share = True
+        model = GroundingDinoForObjectDetection(config)
+        self.assertTrue(r"bbox_embed.(?![0])\d+" in model._tied_weights_keys)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -516,85 +532,47 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             expected_arg_names = ["pixel_values", "input_ids"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.use_timm_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"in_chans": 3, "out_indices": (2, 3, 4)}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "GroundingDinoForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    config.max_text_len,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-
-            self.assertTrue(outputs)
-
-    @require_timm
-    def test_hf_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "GroundingDinoForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    config.max_text_len,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-
-            self.assertTrue(outputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "text_param" in name
-                        or "vision_param" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "vision_proj" in name
-                        or "text_proj" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                if model_class.__name__ == "GroundingDinoForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        config.max_text_len,
                     )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
+
+                self.assertTrue(outputs)
+
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"in_chans": 3, "out_indices": (2, 3, 4)}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
+
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
     # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_two_stage_training with DeformableDetr->GroundingDino
     def test_two_stage_training(self):
@@ -638,7 +616,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
             # GroundingDino when sharing weights also uses the shared ones in GroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in GroundingDinoForObejectDetection and another one
+            # one for self.bbox_embed in GroundingDinoForObjectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
@@ -710,7 +688,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [[0.4526, 0.4082]],
+                (None, None): [0.4526, 0.4082],
                 ("cuda", 8): [0.4524, 0.4074],
             }
         )

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,10 @@ URL: https://github.com/facebookresearch/ConvNeXt"""
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -113,8 +113,9 @@ def rename_key(name):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -214,11 +215,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     if "22k" in checkpoint_url and "1k" in checkpoint_url:
         model_name += "-22k-1k"
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
+    model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -26,10 +26,11 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 
 
@@ -45,9 +46,18 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
+
+
 def is_grayscale(
     image: np.ndarray,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
@@ -61,11 +71,10 @@ def is_grayscale(
 
 def convert_to_grayscale(
     image: ImageInput,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
-    and tensorflow grayscale conversion
+    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -121,11 +130,12 @@ class SuperPointImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = SuperPointImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -147,8 +157,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -185,15 +195,15 @@ class SuperPointImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_grayscale: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_grayscale: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -219,10 +229,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -245,13 +253,10 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
@@ -300,7 +305,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
-        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, list[tuple]]
+        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: TensorType | list[tuple]
     ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors

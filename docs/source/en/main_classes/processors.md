@@ -17,6 +17,7 @@ rendered properly in your Markdown viewer.
 # Processors
 
 Processors can mean two different things in the Transformers library:
+
 - the objects that pre-process inputs for multi-modal models such as [Wav2Vec2](../model_doc/wav2vec2) (speech and text)
   or [CLIP](../model_doc/clip) (text and vision)
 - deprecated objects that were used in older versions of the library to preprocess data for GLUE or SQUAD.
@@ -30,6 +31,22 @@ such as tokenizers (for the text modality), image processors (for vision) and fe
 Those processors inherit from the following base class that implements the saving and loading functionality:
 
 [[autodoc]] ProcessorMixin
+
+### Processing kwargs
+
+Processor `__call__` methods accept keyword arguments organized by modality. The following TypedDict classes define
+the available keyword arguments for each modality. Model-specific processors may subclass these to add or override
+fields.
+
+[[autodoc]] ProcessingKwargs
+
+[[autodoc]] TextKwargs
+
+[[autodoc]] ImagesKwargs
+
+[[autodoc]] VideosKwargs
+
+[[autodoc]] AudioKwargs
 
 ## Deprecated processors
 
@@ -71,7 +88,6 @@ Additionally, the following method can be used to load values from a data file a
 
 [[autodoc]] data.processors.glue.glue_convert_examples_to_features
 
-
 ## XNLI
 
 [The Cross-Lingual NLI Corpus (XNLI)](https://www.nyu.edu/projects/bowman/xnli/) is a benchmark that evaluates the
@@ -87,7 +103,6 @@ This library hosts the processor to load the XNLI data:
 Please note that since the gold labels are available on the test set, evaluation is performed on the test set.
 
 An example using these processors is given in the [run_xnli.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_xnli.py) script.
-
 
 ## SQuAD
 
@@ -115,10 +130,8 @@ Additionally, the following method can be used to convert SQuAD examples into
 
 [[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
-
 These processors as well as the aforementioned method can be used with files containing the data as well as with the
 *tensorflow_datasets* package. Examples are given below.
-
 
 ### Example usage
 

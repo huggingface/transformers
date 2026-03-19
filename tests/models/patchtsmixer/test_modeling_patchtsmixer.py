@@ -18,7 +18,6 @@ import itertools
 import random
 import tempfile
 import unittest
-from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -64,6 +63,7 @@ if is_torch_available():
 class PatchTSMixerModelTester:
     def __init__(
         self,
+        parent,
         context_length: int = 32,
         patch_length: int = 8,
         num_input_channels: int = 3,
@@ -87,24 +87,24 @@ class PatchTSMixerModelTester:
         masked_loss: bool = False,
         mask_mode: str = "mask_before_encoder",
         channel_consistent_masking: bool = True,
-        scaling: Optional[Union[str, bool]] = "std",
+        scaling: str | bool | None = "std",
         # Head related
         head_dropout: float = 0.2,
         # forecast related
         prediction_length: int = 16,
-        out_channels: Optional[int] = None,
+        out_channels: int | None = None,
         # Classification/regression related
         # num_labels: int = 3,
         num_targets: int = 3,
-        output_range: Optional[list] = None,
-        head_aggregation: Optional[str] = None,
+        output_range: list | None = None,
+        head_aggregation: str | None = None,
         # Trainer related
         batch_size=13,
         is_training=True,
         seed_number=42,
-        post_init=True,
         num_parallel_samples=4,
     ):
+        self.parent = parent
         self.num_input_channels = num_input_channels
         self.context_length = context_length
         self.patch_length = patch_length
@@ -144,7 +144,6 @@ class PatchTSMixerModelTester:
         self.batch_size = batch_size
         self.is_training = is_training
         self.seed_number = seed_number
-        self.post_init = post_init
         self.num_parallel_samples = num_parallel_samples
 
     def get_config(self):
@@ -179,7 +178,6 @@ class PatchTSMixerModelTester:
             num_targets=self.num_targets,
             output_range=self.output_range,
             head_aggregation=self.head_aggregation,
-            post_init=self.post_init,
         )
         self.num_patches = config_.num_patches
         return config_
@@ -221,20 +219,17 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
-    test_torchscript = False
     test_inputs_embeds = False
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
-    test_model_parallel = False
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = PatchTSMixerModelTester()
+        self.model_tester = PatchTSMixerModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PatchTSMixerConfig,
@@ -280,7 +275,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

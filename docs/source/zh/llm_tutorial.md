@@ -79,10 +79,10 @@ pip install transformers bitsandbytes>=0.39.0 -q
 首先，您需要加载模型。
 
 ```py
->>> from transformers import AutoModelForCausalLM
+>>> from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -99,7 +99,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 >>> from transformers import AutoTokenizer
 
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_side="left")
->>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to(model.device)
 ```
 
 `model_inputs`变量保存着分词后的文本输入以及注意力掩码。尽管[`~generation.GenerationMixin.generate`]在未传递注意力掩码时会尽其所能推断出注意力掩码，但建议尽可能传递它以获得最佳结果。
@@ -118,7 +118,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model_inputs = tokenizer(
 ...     ["A list of colors: red, blue", "Portugal is"], return_tensors="pt", padding=True
-... ).to("cuda")
+... ).to(model.device)
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ['A list of colors: red, blue, green, yellow, orange, purple, pink,',
@@ -133,12 +133,12 @@ pip install transformers bitsandbytes>=0.39.0 -q
 有许多[生成策略](generation_strategies)，有时默认值可能不适合您的用例。如果您的输出与您期望的结果不匹配，我们已经创建了一个最常见的陷阱列表以及如何避免它们。
 
 ```py
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 ```
 
@@ -147,7 +147,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 如果在[`~generation.GenerationConfig`]文件中没有指定，`generate`默认返回20个tokens。我们强烈建议在您的`generate`调用中手动设置`max_new_tokens`以控制它可以返回的最大新tokens数量。请注意，LLMs（更准确地说，仅[解码器模型](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)）也将输入提示作为输出的一部分返回。
 
 ```py
->>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to(model.device)
 
 >>> # By default, the output will contain up to 20 tokens
 >>> generated_ids = model.generate(**model_inputs)
@@ -169,7 +169,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 >>> from transformers import set_seed
 >>> set_seed(42)
 
->>> model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to(model.device)
 
 >>> # LLM + greedy decoding = repetitive, boring output
 >>> generated_ids = model.generate(**model_inputs)
@@ -191,7 +191,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 >>> # which is shorter, has padding on the right side. Generation fails to capture the logic.
 >>> model_inputs = tokenizer(
 ...     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-... ).to("cuda")
+... ).to(model.device)
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 33333333333'
@@ -201,7 +201,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model_inputs = tokenizer(
 ...     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-... ).to("cuda")
+... ).to(model.device)
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 3, 4, 5, 6,'
@@ -214,11 +214,11 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ```python
 >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-alpha")
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", load_in_4bit=True
+...     "HuggingFaceH4/zephyr-7b-alpha", device_map="auto", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
 ... )
 >>> set_seed(0)
 >>> prompt = """How many helicopters can a human eat in one sitting? Reply as a thug."""
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 >>> input_length = model_inputs.input_ids.shape[1]
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=20)
 >>> print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])
@@ -234,7 +234,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ...     },
 ...     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
 ... ]
->>> model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 >>> input_length = model_inputs.shape[1]
 >>> generated_ids = model.generate(model_inputs, do_sample=True, max_new_tokens=20)
 >>> print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])
@@ -261,7 +261,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ### 延迟、吞吐量和内存利用率
 
 1. [指南](llm_tutorial_optimization),如何优化LLMs以提高速度和内存利用；
-2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和autogptq的指南，教您如何大幅降低内存需求。
+2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和GPT-QModel的指南，教您如何大幅降低内存需求。
 
 ### 相关库
 

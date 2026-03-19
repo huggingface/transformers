@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,46 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class VoxtralEncoderConfig(PretrainedConfig):
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
+@strict(accept_kwargs=True)
+class VoxtralEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VoxtralEncoder`]. It is used to instantiate a
-    Voxtral audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Voxtral
-    architecture.
-
-    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 51866):
-            Vocabulary size of the model.
-        hidden_size (`int`, *optional*, defaults to 1280):
-            Dimensionality of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by dividing by sqrt(hidden_size) if True.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `VoxtralProcessor` class.
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
 
     ```python
     >>> from transformers import VoxtralEncoderConfig, VoxtralEncoder
@@ -77,65 +50,31 @@ class VoxtralEncoderConfig(PretrainedConfig):
         "encoder_layerdrop": "layerdrop",
     }
 
-    def __init__(
-        self,
-        vocab_size=51866,
-        hidden_size=1280,
-        intermediate_size=5120,
-        num_hidden_layers=32,
-        num_attention_heads=20,
-        scale_embedding=False,
-        activation_function="gelu",
-        num_mel_bins=128,
-        max_source_positions=1500,
-        initializer_range=0.02,
-        attention_dropout=0.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    vocab_size: int = 51866
+    hidden_size: int = 1280
+    intermediate_size: int = 5120
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 20
+    scale_embedding: bool = False
+    activation_function: str = "gelu"
+    num_mel_bins: int = 128
+    max_source_positions: int = 1500
+    initializer_range: float = 0.02
+    attention_dropout: float | int = 0.0
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-
-        self.num_attention_heads = num_attention_heads
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True
-        self.activation_function = activation_function
-        self.num_mel_bins = num_mel_bins
-        self.max_source_positions = max_source_positions
-        self.initializer_range = initializer_range
-
-        # TODO: @eustlb, we do not use dropout and layerdrop, yet we need to hardcode them
-        # to be able to use Whisper with modular (here actually from Qwen2-Audio and copied from).
-        # After a future Whisper refactor, we should remove this.
-        self.dropout = 0.0
-        self.layerdrop = 0.0
-        self.activation_dropout = 0.0
-
-        self.attention_dropout = attention_dropout
+    # TODO: @eustlb, we do not use dropout and layerdrop, yet we need to hardcode them
+    # to be able to use Whisper with modular (here actually from Qwen2-Audio and copied from).
+    # After a future Whisper refactor, we should remove this.
+    dropout: float | int = 0.0
+    layerdrop: float | int = 0.0
+    activation_dropout: float | int = 0.0
 
 
-class VoxtralConfig(PretrainedConfig):
+@auto_docstring(checkpoint="mistralai/Voxtral-Mini-3B-2507")
+@strict(accept_kwargs=True)
+class VoxtralConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VoxtralForConditionalGeneration`]. It is used to instantiate an
-    Voxtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Voxtral-Mini-3B.
-
-    e.g. [mistralai/Voxtral-Mini-3B-2507](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        audio_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the audio encoder.
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object or dictionary of the text model.
-        audio_token_id (`int`, *optional*):
-            The image token index to encode the image prompt.
-        projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The activation function (function or string) in the multi-modal projector.
+    Example:
 
     ```python
     >>> from transformers import VoxtralForConditionalGeneration, VoxtralConfig
@@ -166,36 +105,28 @@ class VoxtralConfig(PretrainedConfig):
         "head_dim": 128,
     }
 
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_id=None,
-        projector_hidden_act="gelu",
-        **kwargs,
-    ):
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "voxtral_encoder")
-            audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
-        elif audio_config is None:
-            audio_config = CONFIG_MAPPING["voxtral_encoder"]()
-        self.audio_config = audio_config
+    audio_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    audio_token_id: int | None = None
+    projector_hidden_act: str = "gelu"
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **text_config}
+    def __post_init__(self, **kwargs):
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "voxtral_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["voxtral_encoder"]()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **self.text_config}
             )
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
-        self.text_config = text_config
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
 
-        self.vocab_size = text_config.vocab_size
-        self.hidden_size = text_config.hidden_size
-        self.audio_token_id = audio_token_id
-        self.projector_hidden_act = projector_hidden_act
-
-        super().__init__(**kwargs)
+        self.hidden_size = self.text_config.hidden_size
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VoxtralEncoderConfig", "VoxtralConfig"]

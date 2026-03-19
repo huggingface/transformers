@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import pathlib
 from collections.abc import Iterable
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -26,6 +25,7 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     pad,
     rescale,
     resize,
@@ -42,20 +42,16 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_annotations,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     filter_out_non_signature_kwargs,
-    is_flax_available,
-    is_jax_tensor,
-    is_tf_available,
-    is_tf_tensor,
     is_torch_available,
-    is_torch_tensor,
     logging,
     requires_backends,
 )
@@ -71,52 +67,34 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION,)
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
+class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
+        Annotations to transform according to the padding that is applied to the images.
+    masks_path (`str` or `pathlib.Path`, *optional*):
+        Path to the directory containing the segmentation masks.
     """
-    Computes the output image size given the input image size and the desired output size.
 
-    Args:
-        image_size (`tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = int(raw_size * height / width)
-        else:
-            oh = int(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = int(raw_size * width / height)
-        else:
-            ow = int(size * width / height)
-
-    return (oh, ow)
+    format: str | AnnotationFormat
+    do_convert_annotations: bool
+    return_segmentation_masks: bool
+    annotations: AnnotationType | list[AnnotationType] | None
+    masks_path: str | pathlib.Path | None
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    size: Union[int, tuple[int, int], list[int]],
-    max_size: Optional[int] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    size: int | tuple[int, int] | list[int],
+    max_size: int | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size. If the desired output size
@@ -145,7 +123,7 @@ def get_image_size_for_max_height_width(
     input_image: np.ndarray,
     max_height: int,
     max_width: int,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
@@ -174,33 +152,8 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
-# Copied from transformers.models.detr.image_processing_detr.get_numpy_to_framework_fn
-def get_numpy_to_framework_fn(arr) -> Callable:
-    """
-    Returns a function that converts a numpy array to the framework of the input array.
-
-    Args:
-        arr (`np.ndarray`): The array to convert.
-    """
-    if isinstance(arr, np.ndarray):
-        return np.array
-    if is_tf_available() and is_tf_tensor(arr):
-        import tensorflow as tf
-
-        return tf.convert_to_tensor
-    if is_torch_available() and is_torch_tensor(arr):
-        import torch
-
-        return torch.tensor
-    if is_flax_available() and is_jax_tensor(arr):
-        import jax.numpy as jnp
-
-        return jnp.array
-    raise ValueError(f"Cannot convert arrays of type {type(arr)}")
-
-
 # Copied from transformers.models.detr.image_processing_detr.safe_squeeze
-def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
+def safe_squeeze(arr: np.ndarray, axis: int | None = None) -> np.ndarray:
     """
     Squeezes an array, but only if the axis specified has dim 1.
     """
@@ -238,7 +191,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: list[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: list[np.ndarray], input_data_format: str | ChannelDimension | None = None
 ) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -257,7 +210,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: str | ChannelDimension | None = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -278,7 +231,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by RTDETR.
@@ -436,21 +389,22 @@ class RTDetrImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_kwargs = RTDetrImageProcessorKwargs
 
     def __init__(
         self,
-        format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
+        format: str | AnnotationFormat = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = False,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_annotations: bool = True,
         do_pad: bool = False,
-        pad_size: Optional[dict[str, int]] = None,
+        pad_size: dict[str, int] | None = None,
         **kwargs,
     ) -> None:
         size = size if size is not None else {"height": 640, "width": 640}
@@ -477,10 +431,10 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         """
         Prepare an annotation for feeding into RTDETR model.
@@ -502,8 +456,8 @@ class RTDetrImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -531,15 +485,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size, max_size=None, default_to_square=False)
         if "shortest_edge" in size and "longest_edge" in size:
             new_size = get_resize_output_image_size(
                 image, size["shortest_edge"], size["longest_edge"], input_data_format=input_data_format
@@ -584,8 +530,8 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Rescale the image by the given factor. image = image * rescale_factor.
@@ -665,10 +611,10 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         output_size: tuple[int, int],
-        annotation: Optional[dict[str, Any]] = None,
-        constant_values: Union[float, Iterable[float]] = 0,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        annotation: dict[str, Any] | None = None,
+        constant_values: float | Iterable[float] = 0,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         update_bboxes: bool = True,
     ) -> np.ndarray:
         """
@@ -698,14 +644,14 @@ class RTDetrImageProcessor(BaseImageProcessor):
     def pad(
         self,
         images: list[np.ndarray],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        constant_values: Union[float, Iterable[float]] = 0,
+        annotations: AnnotationType | list[AnnotationType] | None = None,
+        constant_values: float | Iterable[float] = 0,
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         update_bboxes: bool = True,
-        pad_size: Optional[dict[str, int]] = None,
+        pad_size: dict[str, int] | None = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -723,10 +669,8 @@ class RTDetrImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -784,24 +728,24 @@ class RTDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        annotations: AnnotationType | list[AnnotationType] | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
         resample=None,  # PILImageResampling
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        do_convert_annotations: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        format: Optional[Union[str, AnnotationFormat]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        pad_size: Optional[dict[str, int]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: int | float | None = None,
+        do_normalize: bool | None = None,
+        do_convert_annotations: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        format: str | AnnotationFormat | None = None,
+        return_tensors: TensorType | str | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
+        pad_size: dict[str, int] | None = None,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -893,13 +837,10 @@ class RTDetrImageProcessor(BaseImageProcessor):
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor.")
 
         # Here, the pad() method pads to the maximum of (width, height). It does not need to be validated.
 
@@ -926,12 +867,9 @@ class RTDetrImageProcessor(BaseImageProcessor):
         if annotations is not None:
             validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
@@ -1031,7 +969,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
         use_focal_loss: bool = True,
     ):
         """

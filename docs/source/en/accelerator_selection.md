@@ -55,6 +55,7 @@ deepspeed --num_gpus 2 trainer-program.py ...
 </hfoptions>
 
 ## Order of accelerators
+
 To select specific accelerators to use and their order, use the environment variable appropriate for your hardware. This is often set on the command line for each run, but can also be added to your `~/.bashrc` or other startup config file.
 
 For example, if there are 4 accelerators (0, 1, 2, 3) and you only want to run accelerators 0 and 2:
@@ -68,7 +69,6 @@ CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 
 Only GPUs 0 and 2 are "visible" to PyTorch and are mapped to `cuda:0` and `cuda:1` respectively.  
 To reverse the order (use GPU 2 as `cuda:0` and GPU 0 as `cuda:1`):
-
 
 ```bash
 CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
@@ -108,7 +108,6 @@ To reverse the order (use XPU 2 as `xpu:0` and XPU 0 as `xpu:1`):
 ZE_AFFINITY_MASK=2,0 torchrun trainer-program.py ...
 ```
 
-
 You can also control the order of Intel XPUs with:
 
 ```bash
@@ -119,8 +118,6 @@ For more information about device enumeration and sorting on Intel XPU, please r
 
 </hfoption>
 </hfoptions>
-
-
 
 > [!WARNING]
 > Environment variables can be exported instead of being added to the command line. This is not recommended because it can be confusing if you forget how the environment variable was set up and you end up using the wrong accelerators. Instead, it is common practice to set the environment variable for a specific training run on the same command line.

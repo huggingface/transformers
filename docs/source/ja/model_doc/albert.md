@@ -60,9 +60,7 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 ## AlbertTokenizer
 
 [[autodoc]] AlbertTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## AlbertTokenizerFast
@@ -73,10 +71,6 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
-[[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
-
-<frameworkcontent>
-<pt>
 
 ## AlbertModel
 
@@ -112,82 +106,3 @@ ALBERTモデルは、「[ALBERT: A Lite BERT for Self-supervised Learning of Lan
 [[autodoc]] AlbertForQuestionAnswering
     - forward
 
-</pt>
-
-<tf>
-
-## TFAlbertModel
-
-[[autodoc]] TFAlbertModel
-    - call
-
-## TFAlbertForPreTraining
-
-[[autodoc]] TFAlbertForPreTraining
-    - call
-
-## TFAlbertForMaskedLM
-
-[[autodoc]] TFAlbertForMaskedLM
-    - call
-
-## TFAlbertForSequenceClassification
-
-[[autodoc]] TFAlbertForSequenceClassification
-    - call
-
-## TFAlbertForMultipleChoice
-
-[[autodoc]] TFAlbertForMultipleChoice
-    - call
-
-## TFAlbertForTokenClassification
-
-[[autodoc]] TFAlbertForTokenClassification
-    - call
-
-## TFAlbertForQuestionAnswering
-
-[[autodoc]] TFAlbertForQuestionAnswering
-    - call
-
-</tf>
-<jax>
-
-## FlaxAlbertModel
-
-[[autodoc]] FlaxAlbertModel
-    - __call__
-
-## FlaxAlbertForPreTraining
-
-[[autodoc]] FlaxAlbertForPreTraining
-    - __call__
-
-## FlaxAlbertForMaskedLM
-
-[[autodoc]] FlaxAlbertForMaskedLM
-    - __call__
-
-## FlaxAlbertForSequenceClassification
-
-[[autodoc]] FlaxAlbertForSequenceClassification
-    - __call__
-
-## FlaxAlbertForMultipleChoice
-
-[[autodoc]] FlaxAlbertForMultipleChoice
-    - __call__
-
-## FlaxAlbertForTokenClassification
-
-[[autodoc]] FlaxAlbertForTokenClassification
-    - __call__
-
-## FlaxAlbertForQuestionAnswering
-
-[[autodoc]] FlaxAlbertForQuestionAnswering
-    - __call__
-
-</jax>
-</frameworkcontent>

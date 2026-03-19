@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -31,15 +30,32 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires
 
 
 if is_vision_available():
     import PIL
 
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
+
+
+class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
+        The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
+        in `preprocess`.
+    do_color_quantize (`bool`, *optional*, defaults to `True`):
+        Controls whether to apply color quantization to convert continuous pixel values to discrete cluster indices.
+        When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
+    """
+
+    clusters: Union[np.ndarray, list[list[int]], "torch.Tensor"] | None
+    do_color_quantize: bool
 
 
 def squared_euclidean_distance(a, b):
@@ -83,13 +99,14 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = ImageGPTImageProcessorKwargs
 
     def __init__(
         self,
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
-        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
+        clusters: list[list[int]] | np.ndarray | None = None,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -111,8 +128,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -157,8 +174,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Normalizes an images' pixel values to between [-1, 1].
@@ -179,15 +196,15 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_normalize: Optional[bool] = None,
-        do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_normalize: bool | None = None,
+        do_color_quantize: bool | None = None,
+        clusters: list[list[int]] | np.ndarray | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -213,10 +230,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -241,13 +256,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         images = make_list_of_images(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         # Here, normalize() is using a constant factor to divide pixel values.
-        # hence, the method does not need iamge_mean and image_std.
+        # hence, the method does not need image_mean and image_std.
         validate_preprocess_arguments(
             do_resize=do_resize,
             size=size,
@@ -291,14 +303,24 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
             # We need to convert back to a list of images to keep consistent behaviour across processors.
             images = list(images)
+            data = {"input_ids": images}
         else:
-            images = [
-                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-                for image in images
-            ]
-
-        data = {"input_ids": images}
+            images = [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
+            data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Ensure clusters are JSON/equality friendly
+        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray):
+            output["clusters"] = output["clusters"].tolist()
+        # Need to set missing keys from slow processor to match the expected behavior in save/load tests compared to fast processor
+        missing_keys = ["image_mean", "image_std", "rescale_factor", "do_rescale"]
+        for key in missing_keys:
+            if key in output:
+                output[key] = None
+
+        return output
 
 
 __all__ = ["ImageGPTImageProcessor"]

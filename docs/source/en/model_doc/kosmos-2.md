@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2023-06-26 and added to Hugging Face Transformers on 2023-10-30.*
 
 # KOSMOS-2
 
@@ -95,6 +96,7 @@ This model was contributed by [Yih-Dar SHIEH](https://huggingface.co/ydshieh). T
 
 [[autodoc]] Kosmos2Model
     - forward
+    - get_image_features
 
 ## Kosmos2ForConditionalGeneration
 

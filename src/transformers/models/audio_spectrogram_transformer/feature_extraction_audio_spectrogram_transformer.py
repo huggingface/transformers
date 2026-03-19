@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for Audio Spectrogram Transformer.
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -160,9 +157,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        sampling_rate: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        sampling_rate: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -179,7 +176,6 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         """

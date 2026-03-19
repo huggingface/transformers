@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -23,8 +22,6 @@ python src/transformers/models/gemma3n/convert_gemma3n_weights.py \
     --output_path="$HOME/checkpoints/gemma-3n-safetensors/"
 """
 
-import json
-import os
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -44,11 +41,12 @@ from transformers import (
     Gemma3nProcessor,
     Gemma3nTextConfig,
     Gemma3nVisionConfig,
-    GemmaTokenizerFast,
+    GemmaTokenizer,
     GenerationConfig,
     SiglipImageProcessorFast,
 )
 from transformers.image_utils import PILImageResampling
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
 # ==== Internal Constants and Classes ====
@@ -519,7 +517,7 @@ def convert_vision_weights(
     weights: np.ndarray,
 ) -> Iterable[tuple[str, np.ndarray]]:
     def generate_base_path(path: str, block_type: str) -> tuple[str, tuple[int, int]]:
-        re_str = r"{}(\d+)/".format(block_type)
+        re_str = rf"{block_type}(\d+)/"
         re_pattern = re.compile(re_str)
         match = re.search(re_pattern, path).group(1)
         idx = abs(int(match)) - 1
@@ -663,36 +661,34 @@ def convert(checkpoint_path: str, config: Gemma3nConfig) -> dict[str, torch.Tens
 
     for (path, param), value in tree.flatten_with_path(ckpt):
         if param == "audio_input_embedding_extra":
-            update_tree("model.embed_audio.embedding.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.embedding.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_embedding_norm"):
-            update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.hard_embedding_norm.weight", value, config.audio_config.dtype)
         elif path.endswith("audio_input_projection"):
-            update_tree(
-                "model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.torch_dtype
-            )
+            update_tree("model.embed_audio.embedding_projection.weight", value.transpose(), config.audio_config.dtype)
         elif path.endswith("audio_soft_embedding_norm"):
-            update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.torch_dtype)
+            update_tree("model.embed_audio.soft_embedding_norm.weight", value, config.audio_config.dtype)
         elif param == "mm_input_embedding_extra":
-            update_tree("model.embed_vision.embedding.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.embedding.weight", value, config.vision_config.dtype)
         elif path.endswith("mm_hard_embedding_norm"):
-            update_tree("model.embed_vision.hard_embedding_norm.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.hard_embedding_norm.weight", value, config.vision_config.dtype)
         elif path.endswith("mm_input_projection"):
             update_tree(
-                "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.torch_dtype
+                "model.embed_vision.embedding_projection.weight", value.transpose(), config.vision_config.dtype
             )
         elif path.endswith("mm_soft_embedding_norm"):
-            update_tree("model.embed_vision.soft_embedding_norm.weight", value, config.vision_config.torch_dtype)
+            update_tree("model.embed_vision.soft_embedding_norm.weight", value, config.vision_config.dtype)
         elif path.startswith(_TRANSFORMER_PARAMETER):
             for path, weights in convert_transformer_weights(config.text_config, path, param, value):
-                update_tree(f"model.language_model.{path}", weights, config.text_config.torch_dtype)
+                update_tree(f"model.language_model.{path}", weights, config.text_config.dtype)
         elif _MOBILE_NET_PREFIX in path:
             mobilenet_prefix_idx = path.index(_MOBILE_NET_PREFIX)
             path = path[mobilenet_prefix_idx:]
             for path, weights in convert_vision_weights(config.vision_config, path, param, value):
-                update_tree(f"model.vision_tower.timm_model.{path}", weights, config.vision_config.torch_dtype)
+                update_tree(f"model.vision_tower.timm_model.{path}", weights, config.vision_config.dtype)
         elif path.startswith(_AUDIO_ENCODER_PARAMETER):
             for path, weights in convert_audio_encoder_weights(config.audio_config, path, param, value):
-                update_tree(f"model.audio_tower.{path}", weights, config.audio_config.torch_dtype)
+                update_tree(f"model.audio_tower.{path}", weights, config.audio_config.dtype)
 
     hf_tree["lm_head.weight"] = hf_tree["model.language_model.embed_tokens.weight"]
 
@@ -706,9 +702,9 @@ def main(*args):
     variant = _VARIANT.value
 
     config = _VARIANTS[variant]
-    config.audio_config.torch_dtype = getattr(torch, _AUDIO_DTYPE.value)
-    config.text_config.torch_dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
-    config.vision_config.torch_dtype = getattr(torch, _VISION_DTYPE.value)
+    config.audio_config.dtype = getattr(torch, _AUDIO_DTYPE.value)
+    config.text_config.dtype = getattr(torch, _TRANSFORMER_DTYPE.value)
+    config.vision_config.dtype = getattr(torch, _VISION_DTYPE.value)
     if _INCLUDE_CHAT_TEMPLATE.value:
         # Chat template is included for instruction tuned models, which treat
         # both "<eos>" and "<end_of_turn>" as generation stoppers.
@@ -732,7 +728,7 @@ def main(*args):
         variant,
         type(model).__name__,
     )
-    model.save_pretrained(output_path, state_dict=state_tree, safe_serialization=True)
+    model.save_pretrained(output_path, state_dict=state_tree)
     logging.info(
         "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
         variant,
@@ -744,9 +740,13 @@ def main(*args):
 
     chat_template_kwargs = {"chat_template": _CHAT_TEMPLATE} if _INCLUDE_CHAT_TEMPLATE.value else {}
 
-    tokenizer = GemmaTokenizerFast(
-        _TOKENIZER_PATH.value,
+    sentencepiece_extractor = SentencePieceExtractor(_TOKENIZER_PATH.value)
+    vocab, _, merges = sentencepiece_extractor.extract()
+    tokenizer = GemmaTokenizer(
+        vocab=vocab,
+        merges=merges,
         add_bos_token=True,
+        padding_side="left",
         extra_special_tokens={
             "image_token": "<image_soft_token>",  # Should be ID=262_145
             "boi_token": "<start_of_image>",  # Should be ID=255_999
@@ -778,17 +778,6 @@ def main(*args):
     processor.save_pretrained(output_path)
 
     logging.info("Saved Gemma3nProcessor for %s to %s", variant, output_path)
-
-    # NOTE: feature_extractor and image_processor both use the same filename, preprocessor_config.json, when saved to
-    # disk, but the files are overwritten by processor.save_pretrained(). However, the configs can be unioned, saved,
-    # and loaded from the same preprocessor_config.json file, so we do that explicitly here.
-    feature_extractor_config = json.loads(feature_extractor.to_json_string())
-    image_processor_config = json.loads(image_processor.to_json_string())
-    preprocessor_config = {**feature_extractor_config, **image_processor_config}
-    with open(os.path.join(output_path, "preprocessor_config.json"), "w", encoding="utf-8") as writer:
-        writer.write(json.dumps(preprocessor_config, indent=2, sort_keys=True) + "\n")
-
-    logging.info("Saved joint preprocessor_config.json for %s to %s", variant, output_path)
 
     del feature_extractor, image_processor, processor, tokenizer
 

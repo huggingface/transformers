@@ -36,7 +36,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate jiwer
+pip install transformers datasets evaluate jiwer soundfile librosa torchcodec
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -219,17 +219,15 @@ Then create a function that passes your predictions and labels to [`~evaluate.Ev
 ...     pred_str = processor.batch_decode(pred_ids)
 ...     label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-...     wer = wer.compute(predictions=pred_str, references=label_str)
+...     wer_score = wer.compute(predictions=pred_str, references=label_str)
 
-...     return {"wer": wer}
+...     return {"wer": wer_score}
 ```
 
 Your `compute_metrics` function is ready to go now, and you'll return to it when you setup your training.
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -264,7 +262,7 @@ At this point, only three steps remain:
 ...     max_steps=2000,
 ...     gradient_checkpointing=True,
 ...     fp16=True,
-...     group_by_length=True,
+...     train_sampling_strategy="group_by_length",
 ...     eval_strategy="steps",
 ...     per_device_eval_batch_size=8,
 ...     save_steps=1000,
@@ -274,6 +272,7 @@ At this point, only three steps remain:
 ...     metric_for_best_model="wer",
 ...     greater_is_better=False,
 ...     push_to_hub=True,
+...     report_to="trackio",
 ... )
 
 >>> trainer = Trainer(
@@ -294,8 +293,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -336,8 +333,6 @@ The transcription is decent, but it could be better! Try finetuning your model o
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Load a processor to preprocess the audio file and transcription and return the `input` as PyTorch tensors:
 
 ```py
@@ -367,5 +362,3 @@ Get the predicted `input_ids` with the highest probability, and use the processo
 >>> transcription
 ['I WOUL LIKE O SET UP JOINT ACOUNT WTH Y PARTNER']
 ```
-</pt>
-</frameworkcontent>

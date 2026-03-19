@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch EfficientNet model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import EfficientNetConfig
 from transformers.testing_utils import is_pipeline_test, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -133,12 +134,8 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
@@ -146,7 +143,7 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             self,
             config_class=EfficientNetConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "image_size", "hidden_dim"],
         )
 

@@ -26,61 +26,6 @@ if __name__ == "__main__":
 
     job_name = os.environ.get("JOB_NAME")
 
-    with open("new_failures_with_bad_commit.json") as fp:
-        data = json.load(fp)
-
-    with open(f"ci_results_{job_name}/job_links.json") as fp:
-        job_links = json.load(fp)
-
-    # TODO: extend
-    team_members = [
-        "ydshieh",
-        "zucchini-nlp",
-        "ArthurZucker",
-        "gante",
-        "LysandreJik",
-        "molbap",
-        "qubvel",
-        "Rocketknight1",
-        "muellerzr",
-        "SunMarc",
-    ]
-
-    # Counting the number of failures grouped by authors
-    new_data = {}
-    for model, model_result in data.items():
-        for device, failed_tests in model_result.items():
-            for failed_test in failed_tests:
-                author = failed_test["author"]
-
-                if author not in team_members:
-                    author = failed_test["merged_by"]
-
-                if author not in new_data:
-                    new_data[author] = Counter()
-                new_data[author].update([model])
-    for author in new_data:
-        new_data[author] = dict(new_data[author])
-
-    # Group by author
-    new_data_full = {author: deepcopy(data) for author in new_data}
-    for author, _data in new_data_full.items():
-        for model, model_result in _data.items():
-            for device, failed_tests in model_result.items():
-                # prepare job_link and add it to each entry of new failed test information.
-                # need to change from `single-gpu` to `single` and same for `multi-gpu` to match `job_link`.
-                key = model
-                if list(job_links.keys()) == [job_name]:
-                    key = job_name
-                job_link = job_links[key][device.replace("-gpu", "")]
-
-                failed_tests = [x for x in failed_tests if x["author"] == author or x["merged_by"] == author]
-                for x in failed_tests:
-                    x.update({"job_link": job_link})
-                model_result[device] = failed_tests
-            _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
-        new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
-
     # Upload to Hub and get the url
     # if it is not a scheduled run, upload the reports to a subfolder under `report_repo_folder`
     report_repo_subfolder = ""
@@ -99,6 +44,90 @@ if __name__ == "__main__":
         report_repo_folder = f"{report_repo_folder}/{report_repo_subfolder}"
 
     report_repo_id = os.getenv("REPORT_REPO_ID")
+
+    with open("new_failures_with_bad_commit.json") as fp:
+        data = json.load(fp)
+
+    with open(f"ci_results_{job_name}/job_links.json") as fp:
+        job_links = json.load(fp)
+
+    # Update `new_failures_with_bad_commit.json` with job links information before uploading to Hub repository
+    #   - need to change `single-gpu` to `single` and same for `multi-gpu` to match the keys in `job_link`.
+    for model, model_result in data.items():
+        for device, failed_tests in model_result.items():
+            for failed_test in failed_tests:
+                key = model
+                if list(job_links.keys()) == [job_name]:
+                    key = job_name
+                failed_test["job_link"] = job_links[key][device.replace("-gpu", "")]
+
+    with open("new_failures_with_bad_commit.json", "w") as fp:
+        json.dump(data, fp, indent=4, ensure_ascii=False)
+
+    commit_info = api.upload_file(
+        path_or_fileobj="new_failures_with_bad_commit.json",
+        path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/new_failures_with_bad_commit.json",
+        repo_id=report_repo_id,
+        repo_type="dataset",
+        token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+    )
+    url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/new_failures_with_bad_commit.json"
+
+    with open("new_failures_with_bad_commit_url.txt", "w") as fp:
+        fp.write(url)
+
+    # TODO: extend
+    team_members = [
+        "ArthurZucker",
+        "Cyrilvallez",
+        "LysandreJik",
+        "MekkCyber",
+        "Rocketknight1",
+        "SunMarc",
+        "ebezzam",
+        "eustlb",
+        "gante",
+        "itazap",
+        "ivarflakstad",
+        "molbap",
+        "remi-or",
+        "stevhliu",
+        "vasqu",
+        "ydshieh",
+        "zucchini-nlp",
+        "tarekziade",
+    ]
+
+    # Counting the number of failures grouped by authors
+    new_data = {}
+    for model, model_result in data.items():
+        for device, failed_tests in model_result.items():
+            for failed_test in failed_tests:
+                author = failed_test["author"]
+
+                # If author is not a team member, and the PR is already merged: change to the one who merged the PR
+                if author not in team_members and failed_test["merged_by"] is not None:
+                    author = failed_test["merged_by"]
+
+                if author not in new_data:
+                    new_data[author] = Counter()
+                new_data[author].update([model])
+    for author in new_data:
+        new_data[author] = dict(new_data[author])
+
+    # Group by author
+    new_data_full = {author: deepcopy(data) for author in new_data}
+    for author, _data in new_data_full.items():
+        for model, model_result in _data.items():
+            for device, failed_tests in model_result.items():
+                failed_tests = [
+                    x
+                    for x in failed_tests
+                    if x["author"] == author or (x["merged_by"] is not None and x["merged_by"] == author)
+                ]
+                model_result[device] = failed_tests
+            _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
+        new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
 
     with open("new_failures_with_bad_commit_grouped_by_authors.json", "w") as fp:
         json.dump(new_data_full, fp, ensure_ascii=False, indent=4)

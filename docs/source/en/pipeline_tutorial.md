@@ -22,7 +22,7 @@ Tailor the [`Pipeline`] to your task with task specific parameters such as addin
 
 <Youtube id=tiZFewofSLM/>
 
-Transformers has two pipeline classes, a generic [`Pipeline`] and many individual task-specific pipelines like [`TextGenerationPipeline`] or [`VisualQuestionAnsweringPipeline`]. Load these individual pipelines by setting the task identifier in the `task` parameter in [`Pipeline`]. You can find the task identifier for each pipeline in their API documentation.
+Transformers has two pipeline classes, a generic [`Pipeline`] and many individual task-specific pipelines like [`TextGenerationPipeline`]. Load these individual pipelines by setting the task identifier in the `task` parameter in [`Pipeline`]. You can find the task identifier for each pipeline in their API documentation.
 
 Each task is configured to use a default pretrained model and preprocessor, but this can be overridden with the `model` parameter if you want to use a different model.
 
@@ -40,8 +40,11 @@ When you have more than one input, pass them as a list.
 
 ```py
 from transformers import pipeline
+from accelerate import Accelerator
 
-pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device="cuda")
+device = Accelerator().device
+
+pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device=device)
 pipeline(["the secret to baking a really good cake is ", "a baguette is "])
 [[{'generated_text': 'the secret to baking a really good cake is 1. the right ingredients 2. the'}],
  [{'generated_text': 'a baguette is 100% bread.\n\na baguette is 100%'}]]
@@ -56,17 +59,6 @@ This guide will introduce you to the [`Pipeline`], demonstrate its features, and
 Here are some examples of how to use [`Pipeline`] for different tasks and modalities.
 
 <hfoptions id="tasks">
-<hfoption id="summarization">
-
-```py
-from transformers import pipeline
-
-pipeline = pipeline(task="summarization", model="google/pegasus-billsum")
-pipeline("Section was formerly set out as section 44 of this title. As originally enacted, this section contained two further provisions that 'nothing in this act shall be construed as in any wise affecting the grant of lands made to the State of California by virtue of the act entitled 'An act authorizing a grant to the State of California of the Yosemite Valley, and of the land' embracing the Mariposa Big-Tree Grove, approved June thirtieth, eighteen hundred and sixty-four; or as affecting any bona-fide entry of land made within the limits above described under any law of the United States prior to the approval of this act.' The first quoted provision was omitted from the Code because the land, granted to the state of California pursuant to the Act cite, was receded to the United States. Resolution June 11, 1906, No. 27, accepted the recession.")
-[{'summary_text': 'Instructs the Secretary of the Interior to convey to the State of California all right, title, and interest of the United States in and to specified lands which are located within the Yosemite and Mariposa National Forests, California.'}]
-```
-
-</hfoption>
 <hfoption id="automatic speech recognition">
 
 ```py
@@ -172,8 +164,11 @@ In the example below, when there are 4 inputs and `batch_size` is set to 2, [`Pi
 
 ```py
 from transformers import pipeline
+from accelerate import Accelerator
 
-pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device="cuda", batch_size=2)
+device = Accelerator().device
+
+pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device=device, batch_size=2)
 pipeline(["the secret to baking a really good cake is", "a baguette is", "paris is the", "hotdogs are"])
 [[{'generated_text': 'the secret to baking a really good cake is to use a good cake mix.\n\ni’'}],
  [{'generated_text': 'a baguette is'}],
@@ -185,12 +180,15 @@ Another good use case for batch inference is for streaming data in [`Pipeline`].
 
 ```py
 from transformers import pipeline
+from accelerate import Accelerator
 from transformers.pipelines.pt_utils import KeyDataset
 import datasets
 
+device = Accelerator().device
+
 # KeyDataset is a utility that returns the item in the dict returned by the dataset
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
-pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device="cuda")
+pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
 ```
@@ -297,10 +295,13 @@ For inference with large datasets, you can iterate directly over the dataset its
 ```py
 from transformers.pipelines.pt_utils import KeyDataset
 from transformers import pipeline
+from accelerate import Accelerator
 from datasets import load_dataset
 
+device = Accelerator().device
+
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
-pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device="cuda")
+pipeline = pipeline(task="text-classification", model="distilbert/distilbert-base-uncased-finetuned-sst-2-english", device=device)
 for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
 ```
@@ -333,13 +334,13 @@ The `device_map="auto"` setting is useful for automatically distributing the mod
 > [!TIP]
 > Inputs are internally converted to torch.float16 and it only works for models with a PyTorch backend.
 
-Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `load_in_8bit=True` to `model_kwargs` in the pipeline.
+Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `quantization_config` to `model_kwargs` in the pipeline.
 
 ```py
 import torch
 from transformers import pipeline, BitsAndBytesConfig
 
-pipeline = pipeline(model="google/gemma-7b", torch_dtype=torch.bfloat16, device_map="auto", model_kwargs={"quantization_config": BitsAndBytesConfig(load_in_8bit=True)})
+pipeline = pipeline(model="google/gemma-7b", dtype=torch.bfloat16, device_map="auto", model_kwargs={"quantization_config": BitsAndBytesConfig(load_in_8bit=True)})
 pipeline("the secret to baking a good cake is ")
 [{'generated_text': 'the secret to baking a good cake is 1. the right ingredients 2. the right'}]
 ```

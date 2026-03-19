@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Amazon and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,29 +13,23 @@
 # limitations under the License.
 """PyTorch Informer model."""
 
-from typing import Optional, Union
-
 import numpy as np
 import torch
 from torch import nn
 
-from ...cache_utils import EncoderDecoderCache
-from ...modeling_attn_mask_utils import (
-    _prepare_4d_attention_mask,
-    _prepare_4d_attention_mask_for_sdpa,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
+from ... import initialization as init
+from ...cache_utils import Cache, EncoderDecoderCache
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-)
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bart.modeling_bart import BartAttention
 from ..time_series_transformer.modeling_time_series_transformer import (
     TimeSeriesFeatureEmbedder,
@@ -53,10 +46,6 @@ from ..time_series_transformer.modeling_time_series_transformer import (
     TimeSeriesValueEmbedding,
 )
 from .configuration_informer import InformerConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
@@ -95,111 +84,14 @@ class InformerPreTrainedModel(PreTrainedModel):
     config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, InformerSinusoidalPositionalEmbedding):
-            module._init_weight()
-
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
-    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_causal_mask
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-        past_key_values_length: int,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self.config._attn_implementation == "sdpa":
-            # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                input_shape,
-                inputs_embeds,
-                past_key_values_length,
-            )
-        elif self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            # Other attention flavors support in-built causal (when `mask is None`)
-            # while we need to create our specific block mask regardless
-            elif attention_mask is None:
-                attention_mask = make_flex_block_causal_mask(
-                    torch.ones(
-                        size=(input_shape),
-                        device=inputs_embeds.device,
-                    )
-                )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, input_shape, inputs_embeds, past_key_values_length
-            )
-
-        return attention_mask
-
-    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenDecoder._update_cross_attn_mask
-    def _update_cross_attn_mask(
-        self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
-        input_shape: torch.Size,
-        inputs_embeds: torch.Tensor,
-    ):
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
-                # the manual implementation that requires a 4D causal mask in all cases.
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                    encoder_attention_mask,
-                    inputs_embeds.dtype,
-                    tgt_len=input_shape[-1],
-                )
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(encoder_attention_mask, torch.Tensor):
-                    encoder_attention_mask = make_flex_block_causal_mask(
-                        encoder_attention_mask,
-                        query_length=input_shape[-1],
-                        is_causal=False,
-                    )
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_attention_mask(
-                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
-                )
-
-        return encoder_attention_mask
+            init.copy_(module.weight, module.create_weight())
 
 
 class InformerAttention(BartAttention):
@@ -215,11 +107,11 @@ class InformerProbSparseAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
         is_decoder: bool = False,
         sampling_factor: int = 5,
         bias: bool = True,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.factor = sampling_factor
@@ -248,13 +140,11 @@ class InformerProbSparseAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -268,37 +158,34 @@ class InformerProbSparseAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
 
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
+        is_updated = False
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_value.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_value
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
             key_states = key_states.view(*kv_input_shape).transpose(1, 2)
             value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+            if past_key_values is not None:
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -366,24 +253,12 @@ class InformerProbSparseAttention(nn.Module):
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, u, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, u, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, u, src_len)
-        else:
-            attn_weights_reshaped = None
+        # this operation is a bit awkward, but it's required to
+        # make sure that attn_weights keeps its gradient.
+        # In order to do so, attn_weights have to be reshaped
+        # twice and have to be reused in the following
+        attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, u, src_len)
+        attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, u, src_len)
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.bmm(attn_probs, value_states)
@@ -472,7 +347,7 @@ class InformerEncoderLayer(TimeSeriesTransformerEncoderLayer):
 
 
 class InformerDecoderLayer(TimeSeriesTransformerDecoderLayer):
-    def __init__(self, config: InformerConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: InformerConfig, layer_idx: int | None = None):
         super().__init__(config)
 
         del self.self_attn
@@ -498,6 +373,11 @@ class InformerDecoderLayer(TimeSeriesTransformerDecoderLayer):
 
 
 class InformerEncoder(TimeSeriesTransformerEncoder):
+    _can_record_outputs = {
+        "hidden_states": InformerEncoderLayer,
+        "attentions": OutputRecorder(target_class=None, index=1, class_name="self_attn"),
+    }
+
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
@@ -525,74 +405,27 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
-        r"""
-        Args:
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutput:
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(inputs_embeds.size())
 
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            if head_mask.size()[0] != (len(self.layers)):
-                raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+        )
 
         for idx, (encoder_layer, conv_layer) in enumerate(zip(self.layers, self.conv_layers)):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -600,35 +433,27 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
 
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                layer_outputs = encoder_layer(
+            if not to_drop:
+                hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions,
+                    **kwargs,
                 )
                 if conv_layer is not None:
-                    output = conv_layer(layer_outputs[0])
-                    layer_outputs = (output,) + layer_outputs[1:]
+                    hidden_states = conv_layer(hidden_states)
 
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
         )
 
 
 class InformerDecoder(TimeSeriesTransformerDecoder):
+    _can_record_outputs = {
+        "hidden_states": InformerDecoderLayer,
+        "attentions": OutputRecorder(target_class=None, index=1, class_name="self_attn"),
+        "cross_attentions": OutputRecorder(InformerAttention, index=1, layer_name="encoder_attn"),
+    }
+
     def __init__(self, config: InformerConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -648,9 +473,9 @@ class InformerDecoder(TimeSeriesTransformerDecoder):
         self.post_init()
 
 
-class InformerModel(TimeSeriesTransformerModel, nn.Module):
+class InformerModel(TimeSeriesTransformerModel):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         if config.scaling == "mean" or config.scaling is True:
             self.scaler = InformerMeanScaler(config)
@@ -757,11 +582,6 @@ class InformerModel(TimeSeriesTransformerModel, nn.Module):
             must but known at prediction time.
 
             The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
@@ -798,9 +618,9 @@ class InformerModel(TimeSeriesTransformerModel, nn.Module):
         super().forward(**super_kwargs)
 
 
-class InformerForPrediction(TimeSeriesTransformerForPrediction, nn.Module):
+class InformerForPrediction(TimeSeriesTransformerForPrediction):
     def __init__(self, config: InformerConfig):
-        nn.Module().__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         self.model = InformerModel(config)
         if config.distribution_output == "student_t":
@@ -823,6 +643,8 @@ class InformerForPrediction(TimeSeriesTransformerForPrediction, nn.Module):
         # Initialize weights of distribution_output and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(self, **super_kwargs):
         r"""
@@ -917,11 +739,6 @@ class InformerForPrediction(TimeSeriesTransformerForPrediction, nn.Module):
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
             This mask is used to filter out missing values for the final loss calculation.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of

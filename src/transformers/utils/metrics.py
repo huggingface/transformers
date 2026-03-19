@@ -1,10 +1,11 @@
 import functools
 import logging
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
-import torch
+from .import_utils import is_opentelemetry_available
 
 
 class RequestStatus(Enum):
@@ -19,12 +20,12 @@ class RequestStatus(Enum):
     FAILED = "failed"
 
 
-try:
+if is_opentelemetry_available():
     from opentelemetry import metrics
     from opentelemetry.trace import Status, StatusCode, get_tracer
 
     _has_opentelemetry = True
-except ImportError:
+else:
     _has_opentelemetry = False
 
 
@@ -80,7 +81,7 @@ def traced(
     *,
     span_name=None,
     standalone=False,
-    additional_attributes: Optional[list[tuple[str, str, Union[Any, Callable[[Any], Any]]]]] = None,
+    additional_attributes: list[tuple[str, str, Any | Callable[[Any], Any]]] | None = None,
 ):
     """
     Decorator to trace function calls with OpenTelemetry.
@@ -106,8 +107,6 @@ def traced(
     def decorator(func):
         if not _has_opentelemetry:
             return func
-
-        import functools
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -186,7 +185,10 @@ class ContinuousBatchProcessorMetrics:
         """Initialize OpenTelemetry metrics and tracing if the library is available."""
 
         if not _has_opentelemetry:
-            logger.info("OpenTelemetry is not installed. Metrics and tracing will not be recorded.")
+            logger.info(
+                "OpenTelemetry is not installed. Metrics and tracing will not be recorded."
+                "You can install it with `pip install opentelemetry-api>=1.30.0`"
+            )
             return
 
         self.meter = metrics.get_meter("transformers.generation.continuous_batch_processor")
@@ -337,42 +339,28 @@ class ContinuousBatchProcessorMetrics:
             return
 
         try:
-            # Calculate memory usage based on cache configuration
-            num_used_blocks = cache.num_blocks - len(cache._free_blocks)
-            num_layers = len(cache.key_cache)
+            # Retrieve the memory footprint of the cache
+            page_size = cache.head_dim * cache.num_key_value_heads
+            page_mem_in_bytes = page_size * cache.dtype.itemsize
+            # When a block is allocated, it is for both K and V, so we multiply by 2
+            # It's also allocated across all cache tensors, so we multiply by the nb of tensors: len(cache.key_cache)
+            block_mem_in_bytes = 2 * len(cache.key_cache) * cache.block_size * page_mem_in_bytes
 
-            # Each used block stores key and value states
-            # Each with shape: (num_kv_heads, block_size, head_dim)
-            bytes_per_parameter = 2 if cache.dtype in [torch.float16, torch.bfloat16] else 4  # Size in bytes
+            # Retrieve the number of used and free blocks
+            free_blocks = cache.get_num_free_blocks()
+            used_blocks = cache.num_blocks - free_blocks
 
-            # Total bytes = num_layers * num_used_blocks * block_size *
-            #               num_kv_heads * head_dim * 2 (both K and V) * bytes_per_parameter
-            memory_bytes = (
-                num_layers
-                * num_used_blocks
-                * cache.block_size
-                * cache.num_key_value_heads
-                * cache.head_dim
-                * 2  # For both key and value caches
-                * bytes_per_parameter
-            )
+            # Convert that into used and free memory in bytes
+            used_memory_bytes = used_blocks * block_mem_in_bytes
+            free_memory_bytes = free_blocks * block_mem_in_bytes
 
-            free_memory_bytes = (
-                num_layers
-                * len(cache._free_blocks)
-                * cache.block_size
-                * cache.num_key_value_heads
-                * cache.head_dim
-                * 2  # For both key and value caches
-                * bytes_per_parameter
-            )
-
-            self.kv_cache_memory_gauge.set(memory_bytes)
+            # Update the telemetry gauges and add a message in the logs
+            self.kv_cache_memory_gauge.set(used_memory_bytes)
             self.kv_cache_free_memory_gauge.set(free_memory_bytes)
             logger.debug(
-                f"KV Cache memory: {memory_bytes / (1024 * 1024):.2f}MB, "
-                f"Used blocks: {num_used_blocks}/{cache.num_blocks} "
-                f"({num_used_blocks / cache.num_blocks * 100:.1f}%)"
+                f"KV Cache memory: {used_memory_bytes / (1024 * 1024):.2f}MB, "
+                f"Used blocks: {used_blocks}/{cache.num_blocks} "
+                f"({used_blocks / cache.num_blocks * 100:.1f}%)"
             )
         except Exception as e:
             logger.warning(f"Failed to record KV cache memory metrics: {e}")

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,31 +14,26 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class SpeechEncoderDecoderConfig(PretrainedConfig):
+@auto_docstring(checkpoint="")
+@strict(accept_kwargs=True)
+class SpeechEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    [`SpeechEncoderDecoderConfig`] is the configuration class to store the configuration of a
-    [`SpeechEncoderDecoderModel`]. It is used to instantiate an Encoder Decoder model according to the specified
-    arguments, defining the encoder and decoder configs.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
+    kwargs (*optional*):
+        Dictionary of keyword arguments. Notably:
+            - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
+              the encoder config.
+            - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
+              the decoder config.
 
     Examples:
 
@@ -74,8 +68,9 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    is_encoder_decoder: int | None = True
+
+    def __post_init__(self, **kwargs):
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
                 f"A configuration of type {self.model_type} cannot be instantiated because not both `encoder` and"
@@ -89,12 +84,12 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
-        self.is_encoder_decoder = True
+        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_decoder_configs(
-        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
-    ) -> PretrainedConfig:
+        cls, encoder_config: PreTrainedConfig, decoder_config: PreTrainedConfig, **kwargs
+    ) -> PreTrainedConfig:
         r"""
         Instantiate a [`SpeechEncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model
         configuration and decoder model configuration.

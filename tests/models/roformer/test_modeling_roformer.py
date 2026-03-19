@@ -13,7 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch RoFormer model."""
 
+import copy
 import unittest
+
+import pytest
 
 from transformers import RoFormerConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -209,6 +212,8 @@ class RoFormerModelTester:
         token_labels,
         choice_labels,
     ):
+        config = copy.deepcopy(config)
+        config.is_decoder = True
         model = RoFormerForCausalLM(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
@@ -379,7 +384,6 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "feature-extraction": RoFormerModel,
             "fill-mask": RoFormerForMaskedLM,
-            "question-answering": RoFormerForQuestionAnswering,
             "text-classification": RoFormerForSequenceClassification,
             "text-generation": RoFormerForCausalLM,
             "token-classification": RoFormerForTokenClassification,
@@ -391,7 +395,7 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = RoFormerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RoFormerConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -465,23 +469,17 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = RoFormerModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 @require_torch
@@ -514,7 +512,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
     def test_basic(self):
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=6, embedding_dim=6)
-        emb1._init_weight()
+        emb1.weight.copy_(emb1.create_weight())
         emb1 = emb1.to(torch_device)
         emb = emb1(input_ids.shape)
         desired_weights = torch.tensor(
@@ -534,7 +532,7 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
             ]
         ).to(torch_device)
         emb1 = RoFormerSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512).to(torch_device)
-        emb1._init_weight()
+        emb1.weight.copy_(emb1.create_weight())
         weights = emb1.weight.data[:3, :5].to(torch_device)
 
         self.assertTrue(
@@ -556,7 +554,7 @@ class RoFormerSelfAttentionRotaryPositionEmbeddingTest(unittest.TestCase):
             -torch.arange(2 * 12 * 16 * 64, dtype=torch.float, device=torch_device).reshape(2, 12, 16, 64) / 100
         ).to(torch_device)
         embed_positions = RoFormerSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=64)
-        embed_positions._init_weight()
+        embed_positions.weight.copy_(embed_positions.create_weight())
         embed_positions = embed_positions.to(torch_device)
         sinusoidal_pos = embed_positions([2, 16, 768])[None, None, :, :]
 

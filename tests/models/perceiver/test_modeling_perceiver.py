@@ -305,9 +305,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
 
     maxDiff = None
 
@@ -316,7 +313,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.config_tester = ConfigTester(
             self,
             config_class=PerceiverConfig,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["d_model", "num_self_attention_heads", "num_cross_attention_heads"],
         )
 

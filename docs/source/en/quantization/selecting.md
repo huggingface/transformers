@@ -26,10 +26,11 @@ Consider the quantization methods below for inference.
 
 | quantization method | use case |
 |---|---|
-| bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA GPUs |
+| bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA and Intel GPUs |
 | compressed-tensors | loading specific quantized formats (FP8, Sparse) |
 | GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
 | HQQ | fast on the fly quantization without calibration |
+| SINQ | super-fast but high-quality on the fly quantization without calibration |
 | torchao | flexibility and fast inference with torch.compile |
 
 ### No Calibration Required (On-the-fly Quantization)
@@ -55,6 +56,16 @@ See the [bitsandbytes documentation](./bitsandbytes) for more details.
 | Supports wide range of bit depths (8, 4, 3, 2, 1-bit).              |                                                                            |
 
 See the [HQQ documentation](./hqq) for more details.
+
+#### SINQ
+
+| Pros                                                                 | Cons                                                                       |
+|----------------------------------------------------------------------|----------------------------------------------------------------------------|
+| Super-fast but high-quality quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit widths <=2-bit.                     |
+| GemLite backend for faster inference.                                  | Slower inference for 3-bit models (no gemlite kernel)
+| Supports wide range of bit widths (8, 4, 3, 2 bits).              |                                                                            |
+
+See the [SINQ documentation](./sinq) for more details.
 
 #### torchao
 
@@ -112,22 +123,22 @@ Consider the quantization method below during fine-tuning to save memory.
 
 ### bitsandbytes[[training]]
 
-*   **Description:** The standard method for QLoRA fine-tuning via PEFT.
-*   **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
-*   **Cons:** Primarily for NVIDIA GPUs.
+* **Description:** The standard method for QLoRA fine-tuning via PEFT.
+* **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
+* **Cons:** Primarily for NVIDIA GPUs.
 
 Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
 
-See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details. 
+See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details.
 
 ## Research
 
 Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), etc., push the boundaries of compression (< 2-bit) or explore novel techniques.
 
-*   Consider these if:
-    *   You need extreme compression (sub-4-bit).
-    *   You are conducting research or require state-of-the-art results from their respective papers.
-    *   You have significant compute resources available for potentially complex quantization procedures.
+* Consider these if:
+  * You need extreme compression (sub-4-bit).
+  * You are conducting research or require state-of-the-art results from their respective papers.
+  * You have significant compute resources available for potentially complex quantization procedures.
 We recommend consulting each methods documentation and associated papers carefully before choosing one for use in production.
 
 ## Benchmark Comparison
@@ -150,7 +161,7 @@ The key takeaways are:
 | Quantization & Methods                      | Memory Savings (vs bf16) | Accuracy             | Other Notes                                                        |
 |-------------------------------------------- |------------------------- |--------------------- |------------------------------------------------------------------- |
 | **8-bit** (bnb-int8, HQQ, Quanto, torchao, fp8) | ~2x             | Very close to baseline bf16 model   |                                                                    |
-| **4-bit** (AWQ, GPTQ, HQQ, bnb-nf4)    | ~4x                      | Relatively high accuracy            | AWQ/GPTQ often lead in accuracy but need calibration. HQQ/bnb-nf4 are easy on-the-fly. |
+| **4-bit** (AWQ, GPTQ, HQQ, bnb-nf4, SINQ)    | ~4x                      | Relatively high accuracy            | AWQ/GPTQ often lead in accuracy but need calibration. HQQ/bnb-nf4/SINQ are easy on-the-fly. |
 | **Sub-4-bit** (VPTQ, AQLM, 2-bit GPTQ) | Extreme (>4x)            | Noticeable drop, especially at 2-bit | Quantization times can be very long (AQLM, VPTQ). Performance varies. |
 
 > [!TIP]

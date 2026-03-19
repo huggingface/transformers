@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,24 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-
-
-class AyaVisionImagesKwargs(ImagesKwargs, total=False):
-    crop_to_patches: Optional[bool]
-    min_patches: Optional[int]
-    max_patches: Optional[int]
+from ...utils import auto_docstring
 
 
 class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: AyaVisionImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
@@ -43,16 +35,26 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
-    r"""
-    Constructs a AyaVision processor which wraps a [`AutoImageProcessor`] and
-    [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~AyaVisionProcessor.__call__`] and [`~AyaVisionProcessor.decode`] for more information.
-    Args:
-        image_processor ([`AutoImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size: int = 28,
+        img_size: int = 364,
+        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
+        downsample_factor: int = 1,
+        start_of_img_token="<|START_OF_IMG|>",
+        end_of_img_token="<|END_OF_IMG|>",
+        img_patch_token="<|IMG_PATCH|>",
+        img_line_break_token="<|IMG_LINE_BREAK|>",
+        tile_token="TILE",
+        tile_global_token="TILE_GLOBAL",
+        chat_template=None,
+        **kwargs,
+    ):
+        r"""
         patch_size (`int`, *optional*, defaults to 28):
             The size of image patches for tokenization.
         img_size (`int`, *optional*, defaults to 364):
@@ -73,31 +75,7 @@ class AyaVisionProcessor(ProcessorMixin):
             The token to be used to represent an image patch in the text.
         tile_global_token (`str`, *optional*, defaults to `"TILE_GLOBAL"`):
             The token to be used to represent the cover image in the text.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        patch_size: int = 28,
-        img_size: int = 364,
-        image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
-        downsample_factor: int = 1,
-        start_of_img_token="<|START_OF_IMG|>",
-        end_of_img_token="<|END_OF_IMG|>",
-        img_patch_token="<|IMG_PATCH|>",
-        img_line_break_token="<|IMG_LINE_BREAK|>",
-        tile_token="TILE",
-        tile_global_token="TILE_GLOBAL",
-        chat_template=None,
-        **kwargs,
-    ):
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
@@ -136,35 +114,14 @@ class AyaVisionProcessor(ProcessorMixin):
         img_string += f"{self.end_of_img_token}"
         return img_string
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio=None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[AyaVisionProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text.
-        To prepare the vision inputs, this method forwards the `images` and `kwargs` arguments to
-        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -189,6 +146,7 @@ class AyaVisionProcessor(ProcessorMixin):
         # Process images
         image_inputs = {}
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_flat_list_of_images(images)
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             num_patches = image_inputs.pop("num_patches")
@@ -251,26 +209,6 @@ class AyaVisionProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(tokenizer_input_names) + list(image_processor_input_names)
 
 
 __all__ = ["AyaVisionProcessor"]

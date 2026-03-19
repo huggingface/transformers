@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,13 @@
 # limitations under the License.
 """PyTorch VisionTextDualEncoder model."""
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPOutput, CLIPVisionConfig, CLIPVisionModel
@@ -46,14 +45,15 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    input_modalities = ("image", "text")
     _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
         self,
-        config: Optional[VisionTextDualEncoderConfig] = None,
-        vision_model: Optional[PreTrainedModel] = None,
-        text_model: Optional[PreTrainedModel] = None,
+        config: VisionTextDualEncoderConfig | None = None,
+        vision_model: PreTrainedModel | None = None,
+        text_model: PreTrainedModel | None = None,
     ):
         r"""
         vision_model (`PreTrainedModel`):
@@ -100,103 +100,88 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
+        self.post_init()
+
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        token_type_ids=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPTextModel`].
-
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import VisionTextDualEncoderModel, AutoTokenizer
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
         >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
         >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        return text_outputs
 
-        return text_features
-
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self,
-        pixel_values=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPVisionModel`].
-
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> import torch
         >>> from transformers import VisionTextDualEncoderModel, AutoImageProcessor
+        >>> from transformers.image_utils import load_image
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> image = load_image(url)
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        vision_outputs = self.vision_model(pixel_values=pixel_values, return_dict=True, **kwargs)
+        vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], CLIPOutput]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | CLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -205,7 +190,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
@@ -225,7 +211,14 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
         ...     "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
         ... ]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+        >>> with httpx.stream("GET", urls[0]) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", urls[1]) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
+
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True
         ... )
@@ -301,8 +294,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: Optional[str] = None,
-        text_model_name_or_path: Optional[str] = None,
+        vision_model_name_or_path: str | None = None,
+        text_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -314,10 +307,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
-                      conversion scripts and loading the Flax model afterwards.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                      object should be provided as `config` argument.
 
             text_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the text model. Can be either:
@@ -325,10 +316,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
-                      conversion scripts and loading the Flax model afterwards.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                      object should be provided as `config` argument.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.

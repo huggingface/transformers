@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-02-28 and added to Hugging Face Transformers on 2022-10-12.*
 
 # LiLT
 
@@ -61,6 +62,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - Demo notebooks for LiLT can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LiLT).
 
 **Documentation resources**
+
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Question answering task guide](../tasks/question_answering)

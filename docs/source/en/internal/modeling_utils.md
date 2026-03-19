@@ -20,6 +20,24 @@ This page lists all the custom layers used by the library, as well as the utilit
 
 Most of those are only useful if you are studying the code of the models in the library.
 
+## WeightConverter
+
+[[autodoc]] WeightConverter
+
+### Conversion operations
+
+[[autodoc]] ConversionOps
+
+[[autodoc]] Chunk
+
+[[autodoc]] Concatenate
+
+[[autodoc]] MergeModulelist
+
+[[autodoc]] SplitModulelist
+
+[[autodoc]] PermuteForRope
+
 ## Layers
 
 [[autodoc]] GradientCheckpointingLayer
@@ -46,38 +64,4 @@ Most of those are only useful if you are studying the code of the models in the 
 
 [[autodoc]] pytorch_utils.apply_chunking_to_forward
 
-[[autodoc]] pytorch_utils.find_pruneable_heads_and_indices
-
-[[autodoc]] pytorch_utils.prune_layer
-
-[[autodoc]] pytorch_utils.prune_conv1d_layer
-
 [[autodoc]] pytorch_utils.prune_linear_layer
-
-## TensorFlow custom layers
-
-[[autodoc]] modeling_tf_utils.TFConv1D
-
-[[autodoc]] modeling_tf_utils.TFSequenceSummary
-
-## TensorFlow loss functions
-
-[[autodoc]] modeling_tf_utils.TFCausalLanguageModelingLoss
-
-[[autodoc]] modeling_tf_utils.TFMaskedLanguageModelingLoss
-
-[[autodoc]] modeling_tf_utils.TFMultipleChoiceLoss
-
-[[autodoc]] modeling_tf_utils.TFQuestionAnsweringLoss
-
-[[autodoc]] modeling_tf_utils.TFSequenceClassificationLoss
-
-[[autodoc]] modeling_tf_utils.TFTokenClassificationLoss
-
-## TensorFlow Helper Functions
-
-[[autodoc]] modeling_tf_utils.get_initializer
-
-[[autodoc]] modeling_tf_utils.keras_serializable
-
-[[autodoc]] modeling_tf_utils.shape_list

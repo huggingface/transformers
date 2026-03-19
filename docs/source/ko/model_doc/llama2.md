@@ -28,9 +28,9 @@ Llama2 모델은 Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Al
 
 <Tip warning={true}>
 
-`Llama2` 모델은 `bfloat16`을 사용하여 훈련되었지만, 원래 추론은 `float16`을 사용합니다. 허브에 업로드된 체크포인트는 `torch_dtype = 'float16'`을 사용하며, 이는 `AutoModel` API에 의해 체크포인트를 `torch.float32`에서 `torch.float16`으로 캐스팅하는 데 사용됩니다. 
+`Llama2` 모델은 `bfloat16`을 사용하여 훈련되었지만, 원래 추론은 `float16`을 사용합니다. 허브에 업로드된 체크포인트는 `dtype = 'float16'`을 사용하며, 이는 `AutoModel` API에 의해 체크포인트를 `torch.float32`에서 `torch.float16`으로 캐스팅하는 데 사용됩니다. 
 
-온라인 가중치의 `dtype`은 `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`를 사용하여 모델을 초기화할 때 `torch_dtype="auto"`를 사용하지 않는 한 대부분 관련이 없습니다. 그 이유는 모델이 먼저 다운로드될 것이고 (온라인 체크포인트의 `dtype`을 사용하여) 그다음에 기본 `dtype`인 `torch`로 캐스팅하고(`torch.float32`가 됨), 마지막으로 구성(configuration)에서 제공된 `torch_dtype`이 있는 경우 이를 사용하기 때문입니다.
+온라인 가중치의 `dtype`은 `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`를 사용하여 모델을 초기화할 때 `dtype="auto"`를 사용하지 않는 한 대부분 관련이 없습니다. 그 이유는 모델이 먼저 다운로드될 것이고 (온라인 체크포인트의 `dtype`을 사용하여) 그다음에 기본 `dtype`인 `torch`로 캐스팅하고(`torch.float32`가 됨), 마지막으로 구성(configuration)에서 제공된 `dtype`이 있는 경우 이를 사용하기 때문입니다.
 
 모델을 `float16`에서 훈련하는 것은 권장되지 않으며 `nan`을 생성하는 것으로 알려져 있습니다. 따라서 모델은 `bfloat16`에서 훈련되어야 합니다.
 
@@ -82,7 +82,7 @@ LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티
 - 개인 컴퓨터에서 QLoRA와 TRL을 사용하여 Llama 2 모델을 미세 조정하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1SYpgFpcmtIUzdE7pxqknrM4ArCASfkFQ?usp=sharing)입니다. 🌎
 
 ⚡️ 추론
-- AutoGPTQ 라이브러리의 GPTQ를 사용하여 Llama 2 모델을 양자화하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1TC56ArKerXUpbgRy5vM3woRsbTEVNq7h?usp=sharing)입니다. 🌎
+- GPT-QModel 라이브러리의 GPTQ를 사용하여 Llama 2 모델을 양자화하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1TC56ArKerXUpbgRy5vM3woRsbTEVNq7h?usp=sharing)입니다. 🌎
 - 로컬 컴퓨터나 Google Colab에서 4-bit 양자화로 Llama 2 채팅 모델을 실행하는 방법에 대한 [노트북](https://colab.research.google.com/drive/1X1z9Q6domMKl2CnEM0QGHNwidLfR4dW2?usp=sharing)입니다. 🌎
 
 🚀 배포
@@ -98,17 +98,13 @@ LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티
 ## LlamaTokenizer [[llamatokenizer]]
 
 [[autodoc]] LlamaTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## LlamaTokenizerFast [[llamatokenizerfast]]
 
 [[autodoc]] LlamaTokenizerFast
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - update_post_processor
     - save_vocabulary
 

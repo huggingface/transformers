@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 ABEJA, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,11 +18,10 @@ import json
 import os
 import re
 import sys
-from typing import Optional
 
 import numpy as np
 
-from ...tokenization_utils_fast import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -135,6 +133,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
             bos_token=bos_token,
             eos_token=eos_token,
             do_clean_text=do_clean_text,
+            special_tokens_pattern="none",
             **kwargs,
         )
 
@@ -162,7 +161,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -318,7 +317,7 @@ class SubWordJapaneseTokenizer:
                         candidates.append((self.vocab[wd], wd, e))
             if len(candidates) > 0:
                 # the smallest token_id is adopted
-                _, wd, e = sorted(candidates, key=lambda x: x[0])[0]
+                _, wd, e = min(candidates, key=lambda x: x[0])
                 result.append(wd)
                 pos = e
             else:

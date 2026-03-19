@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_unispeech.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,19 +19,19 @@
 # limitations under the License.
 
 import math
-import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -42,14 +41,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     Wav2Vec2BaseModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, get_torch_context_manager_or_global_device
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from .configuration_unispeech import UniSpeechConfig
-
-
-if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -65,7 +60,7 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-        paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+        paper](https://huggingface.co/papers/2006.11477).
     projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
         Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
         projected quantized states.
@@ -76,12 +71,12 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
         The perplexity of the codevector distribution, used to measure the diversity of the codebook.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    projected_states: Optional[torch.FloatTensor] = None
-    projected_quantized_states: Optional[torch.FloatTensor] = None
-    codevector_perplexity: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    projected_states: torch.FloatTensor | None = None
+    projected_quantized_states: torch.FloatTensor | None = None
+    codevector_perplexity: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class UniSpeechSamePadLayer(nn.Module):
@@ -273,25 +268,23 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
-    head_mask: Optional[torch.Tensor] = None,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    if head_mask is not None:
-        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
-
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -309,7 +302,7 @@ class UniSpeechAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[UniSpeechConfig] = None,
+        config: UniSpeechConfig | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -335,14 +328,13 @@ class UniSpeechAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        key_value_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -363,9 +355,9 @@ class UniSpeechAttention(nn.Module):
         key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
         value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -376,7 +368,6 @@ class UniSpeechAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            head_mask=layer_head_mask,
             **kwargs,
         )
 
@@ -459,7 +450,7 @@ class UniSpeechEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -472,13 +463,14 @@ class UniSpeechEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            hidden_states,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
+        hidden_states = hidden_states + position_embeddings.to(hidden_states.device)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -515,28 +507,6 @@ class UniSpeechEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
 
 
 class UniSpeechAttnAdapterLayer(nn.Module):
@@ -587,7 +557,7 @@ class UniSpeechEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
     ):
         attn_residual = hidden_states
@@ -638,9 +608,10 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
-        attention_mask = self._update_full_mask(
-            attention_mask,
-            hidden_states,
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -684,28 +655,6 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
             attentions=all_self_attentions,
         )
 
-    def _update_full_mask(
-        self,
-        attention_mask: Union[torch.Tensor, None],
-        inputs_embeds: torch.Tensor,
-    ):
-        if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif self.config._attn_implementation == "flex_attention":
-                if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
-            else:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
-
-        return attention_mask
-
 
 class UniSpeechGumbelVectorQuantizer(nn.Module):
     """
@@ -736,7 +685,7 @@ class UniSpeechGumbelVectorQuantizer(nn.Module):
     @staticmethod
     def _compute_perplexity(probs):
         marginal_probs = probs.mean(dim=0)
-        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
+        perplexity = torch.exp(-torch.sum(torch.xlogy(marginal_probs, marginal_probs), dim=-1)).sum()
         return perplexity
 
     def forward(self, hidden_states):
@@ -782,45 +731,47 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     config: UniSpeechConfig
     base_model_prefix = "unispeech"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechGumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
-            nn.init.uniform_(module.codevectors)
+            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            init.zeros_(module.weight_proj.bias)
+            init.uniform_(module.codevectors)
         elif isinstance(module, UniSpeechPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, UniSpeechFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
         Computes the output length of the convolutional layers
         """
@@ -855,7 +806,7 @@ def _compute_mask_indices(
     shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
-    attention_mask: Optional[torch.LongTensor] = None,
+    attention_mask: torch.LongTensor | None = None,
     min_masks: int = 0,
 ) -> np.ndarray:
     """
@@ -995,8 +946,8 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
@@ -1041,13 +992,14 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, UniSpeechBaseModelOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | UniSpeechBaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1057,7 +1009,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
@@ -1119,18 +1071,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         """
         self.quantizer.temperature = temperature
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1161,12 +1101,13 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, UniSpeechForPreTrainingOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | UniSpeechForPreTrainingOutput:
         r"""
         Example:
 
@@ -1179,7 +1120,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         >>> # TODO: Add full pretraining example
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.unispeech(
             input_values,
@@ -1239,7 +1180,7 @@ _HIDDEN_STATES_START_POSITION = 2
     """
 )
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
-    def __init__(self, config, target_lang: Optional[str] = None):
+    def __init__(self, config, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1268,13 +1209,16 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def tie_weights(self):
+    def tie_weights(self, **kwargs):
         """
         This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
         passing `target_lang=...` to `from_pretrained(...)`.
 
         This method is **not** supposed to be called by the user and is prone to be changed in the future.
         """
+
+        if get_torch_context_manager_or_global_device() == torch.device("meta"):
+            return
 
         # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
         # correctly load adapter layers for UniSpeech so that we do not have to introduce a new API to
@@ -1288,18 +1232,6 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
-
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
 
     def freeze_feature_encoder(self):
         """
@@ -1319,13 +1251,14 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, CausalLMOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1333,7 +1266,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -1412,18 +1345,6 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1442,13 +1363,14 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | SequenceClassifierOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
@@ -1462,7 +1384,7 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.unispeech(

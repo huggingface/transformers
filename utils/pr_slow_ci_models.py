@@ -27,6 +27,7 @@ python utils/pr_slow_ci_models.py
 """
 
 import argparse
+import json
 import os.path
 import re
 import string
@@ -169,4 +170,6 @@ if __name__ == "__main__":
         elif os.path.isdir(f"tests/quantization/{model}"):
             final_list.append(f"quantization/{model}")
 
-    print(sorted(set(final_list)))
+    # Use `json.dumps` to get the double quotes instead of single quote, e.g. `["model/vit"]`.
+    # (to avoid some shell expansion issues when this script is called from a Github Actions workflow)
+    print(json.dumps(sorted(set(final_list))))

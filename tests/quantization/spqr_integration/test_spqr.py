@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, SpQRConfig, StaticCache
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -26,14 +28,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_gpu
@@ -113,7 +112,7 @@ class SpQRTest(unittest.TestCase):
         quantization_config = AutoConfig.from_pretrained(self.model_name, return_dict=False).quantization_config
         quantization_config = SpQRConfig.from_dict(quantization_config)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id, config=config)
 
         nb_linears = 0
@@ -179,6 +178,7 @@ class SpQRTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    @pytest.mark.torch_compile_test
     def test_quantized_model_compile(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -204,11 +204,7 @@ class SpQRTest(unittest.TestCase):
 
         # Setup static KV cache for generation
         past_key_values = StaticCache(
-            config=self.quantized_model.config,
-            max_batch_size=1,
-            max_cache_len=seq_length + self.max_new_tokens + 1,
-            device=torch_device,
-            dtype=self.quantized_model.config._pre_quantization_dtype,
+            config=self.quantized_model.config, max_cache_len=seq_length + self.max_new_tokens + 1
         )
 
         # Allocate token ids to be generated and copy prefix ids

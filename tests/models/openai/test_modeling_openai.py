@@ -114,30 +114,27 @@ class OpenAIGPTModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
-            head_mask,
             token_type_ids,
             sequence_labels,
             token_labels,
             choice_labels,
         )
 
-    def create_and_check_openai_gpt_model(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_openai_gpt_model(self, config, input_ids, token_type_ids, *args):
         model = OpenAIGPTModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, token_type_ids, *args):
         model = OpenAIGPTLMHeadModel(config)
         model.to(torch_device)
         model.eval()
@@ -146,7 +143,7 @@ class OpenAIGPTModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
+    def create_and_check_double_lm_head_model(self, config, input_ids, token_type_ids, *args):
         model = OpenAIGPTDoubleHeadsModel(config)
         model.to(torch_device)
         model.eval()
@@ -155,9 +152,7 @@ class OpenAIGPTModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_openai_gpt_for_sequence_classification(
-        self, config, input_ids, head_mask, token_type_ids, *args
-    ):
+    def create_and_check_openai_gpt_for_sequence_classification(self, config, input_ids, token_type_ids, *args):
         config.num_labels = self.num_labels
         model = OpenAIGPTForSequenceClassification(config)
         model.to(torch_device)
@@ -172,7 +167,6 @@ class OpenAIGPTModelTester:
         (
             config,
             input_ids,
-            head_mask,
             token_type_ids,
             sequence_labels,
             token_labels,
@@ -181,7 +175,6 @@ class OpenAIGPTModelTester:
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -223,6 +216,22 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             return True
 
         return False
+
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as openai cannot use cache at all."""
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -276,6 +285,14 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = OpenAIGPTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip("Openai cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("Openai cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_with_and_without_position_ids(self):
+        pass
+
 
 @require_torch
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
@@ -307,5 +324,5 @@ class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
             481,
         ]  # the president is a very good man. " \n " i\'m sure he is, " said the
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

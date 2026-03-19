@@ -14,9 +14,10 @@
 """Testing suite for the PyTorch RegNet model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import RegNetConfig
-from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, is_flaky, require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -26,7 +27,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import RegNetForImageClassification, RegNetModel
 
@@ -128,11 +128,8 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = RegNetModelTester(self)
@@ -161,22 +158,6 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, module in model.named_modules():
-                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-                    self.assertTrue(
-                        torch.all(module.weight == 1),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-                    self.assertTrue(
-                        torch.all(module.bias == 0),
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

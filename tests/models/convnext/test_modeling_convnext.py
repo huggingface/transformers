@@ -14,10 +14,11 @@
 """Testing suite for the PyTorch ConvNext model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -174,12 +175,8 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
 
-    fx_compatible = True
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)
@@ -187,7 +184,7 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self,
             config_class=ConvNextConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "hidden_sizes"],
         )
 
@@ -286,7 +283,7 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0261, -0.4739, 0.1910]).to(torch_device)
+        expected_slice = torch.tensor([-0.0267, -0.4735, 0.1901]).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 

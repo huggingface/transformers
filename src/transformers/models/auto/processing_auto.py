@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,16 +16,16 @@
 import importlib
 import inspect
 import json
-import warnings
 from collections import OrderedDict
+from typing import TYPE_CHECKING
 
 # Build the list of all feature extractors
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import TOKENIZER_CONFIG_FILE
+from ...tokenization_python import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, VIDEO_PROCESSOR_NAME, cached_file, logging
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -39,113 +38,149 @@ from .configuration_auto import (
 from .feature_extraction_auto import AutoFeatureExtractor
 from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
+from .video_processing_auto import AutoVideoProcessor
 
 
 logger = logging.get_logger(__name__)
-
-PROCESSOR_MAPPING_NAMES = OrderedDict(
-    [
-        ("aimv2", "CLIPProcessor"),
-        ("align", "AlignProcessor"),
-        ("altclip", "AltCLIPProcessor"),
-        ("aria", "AriaProcessor"),
-        ("aya_vision", "AyaVisionProcessor"),
-        ("bark", "BarkProcessor"),
-        ("blip", "BlipProcessor"),
-        ("blip-2", "Blip2Processor"),
-        ("bridgetower", "BridgeTowerProcessor"),
-        ("chameleon", "ChameleonProcessor"),
-        ("chinese_clip", "ChineseCLIPProcessor"),
-        ("clap", "ClapProcessor"),
-        ("clip", "CLIPProcessor"),
-        ("clipseg", "CLIPSegProcessor"),
-        ("clvp", "ClvpProcessor"),
-        ("cohere2_vision", "Cohere2VisionProcessor"),
-        ("colpali", "ColPaliProcessor"),
-        ("colqwen2", "ColQwen2Processor"),
-        ("deepseek_vl", "DeepseekVLProcessor"),
-        ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
-        ("dia", "DiaProcessor"),
-        ("emu3", "Emu3Processor"),
-        ("evolla", "EvollaProcessor"),
-        ("flava", "FlavaProcessor"),
-        ("fuyu", "FuyuProcessor"),
-        ("gemma3", "Gemma3Processor"),
-        ("gemma3n", "Gemma3nProcessor"),
-        ("git", "GitProcessor"),
-        ("glm4v", "Glm4vProcessor"),
-        ("got_ocr2", "GotOcr2Processor"),
-        ("granite_speech", "GraniteSpeechProcessor"),
-        ("grounding-dino", "GroundingDinoProcessor"),
-        ("groupvit", "CLIPProcessor"),
-        ("hubert", "Wav2Vec2Processor"),
-        ("idefics", "IdeficsProcessor"),
-        ("idefics2", "Idefics2Processor"),
-        ("idefics3", "Idefics3Processor"),
-        ("instructblip", "InstructBlipProcessor"),
-        ("instructblipvideo", "InstructBlipVideoProcessor"),
-        ("internvl", "InternVLProcessor"),
-        ("janus", "JanusProcessor"),
-        ("kosmos-2", "Kosmos2Processor"),
-        ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
-        ("layoutlmv2", "LayoutLMv2Processor"),
-        ("layoutlmv3", "LayoutLMv3Processor"),
-        ("llama4", "Llama4Processor"),
-        ("llava", "LlavaProcessor"),
-        ("llava_next", "LlavaNextProcessor"),
-        ("llava_next_video", "LlavaNextVideoProcessor"),
-        ("llava_onevision", "LlavaOnevisionProcessor"),
-        ("markuplm", "MarkupLMProcessor"),
-        ("mctct", "MCTCTProcessor"),
-        ("mgp-str", "MgpstrProcessor"),
-        ("mistral3", "PixtralProcessor"),
-        ("mllama", "MllamaProcessor"),
-        ("mm-grounding-dino", "GroundingDinoProcessor"),
-        ("moonshine", "Wav2Vec2Processor"),
-        ("oneformer", "OneFormerProcessor"),
-        ("owlv2", "Owlv2Processor"),
-        ("owlvit", "OwlViTProcessor"),
-        ("paligemma", "PaliGemmaProcessor"),
-        ("perception_lm", "PerceptionLMProcessor"),
-        ("phi4_multimodal", "Phi4MultimodalProcessor"),
-        ("pix2struct", "Pix2StructProcessor"),
-        ("pixtral", "PixtralProcessor"),
-        ("pop2piano", "Pop2PianoProcessor"),
-        ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
-        ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
-        ("qwen2_audio", "Qwen2AudioProcessor"),
-        ("qwen2_vl", "Qwen2VLProcessor"),
-        ("sam", "SamProcessor"),
-        ("sam_hq", "SamHQProcessor"),
-        ("seamless_m4t", "SeamlessM4TProcessor"),
-        ("sew", "Wav2Vec2Processor"),
-        ("sew-d", "Wav2Vec2Processor"),
-        ("shieldgemma2", "ShieldGemma2Processor"),
-        ("siglip", "SiglipProcessor"),
-        ("siglip2", "Siglip2Processor"),
-        ("smolvlm", "SmolVLMProcessor"),
-        ("speech_to_text", "Speech2TextProcessor"),
-        ("speech_to_text_2", "Speech2Text2Processor"),
-        ("speecht5", "SpeechT5Processor"),
-        ("trocr", "TrOCRProcessor"),
-        ("tvlt", "TvltProcessor"),
-        ("tvp", "TvpProcessor"),
-        ("udop", "UdopProcessor"),
-        ("unispeech", "Wav2Vec2Processor"),
-        ("unispeech-sat", "Wav2Vec2Processor"),
-        ("video_llava", "VideoLlavaProcessor"),
-        ("vilt", "ViltProcessor"),
-        ("vipllava", "LlavaProcessor"),
-        ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
-        ("voxtral", "VoxtralProcessor"),
-        ("wav2vec2", "Wav2Vec2Processor"),
-        ("wav2vec2-bert", "Wav2Vec2Processor"),
-        ("wav2vec2-conformer", "Wav2Vec2Processor"),
-        ("wavlm", "Wav2Vec2Processor"),
-        ("whisper", "WhisperProcessor"),
-        ("xclip", "XCLIPProcessor"),
-    ]
-)
+if TYPE_CHECKING:
+    # This significantly improves completion suggestion performance when
+    # the transformers package is used with Microsoft's Pylance language server.
+    PROCESSOR_MAPPING_NAMES: OrderedDict[str, str | None] = OrderedDict()
+else:
+    PROCESSOR_MAPPING_NAMES = OrderedDict(
+        [
+            ("aimv2", "CLIPProcessor"),
+            ("align", "AlignProcessor"),
+            ("altclip", "AltCLIPProcessor"),
+            ("aria", "AriaProcessor"),
+            ("audioflamingo3", "AudioFlamingo3Processor"),
+            ("aya_vision", "AyaVisionProcessor"),
+            ("bark", "BarkProcessor"),
+            ("blip", "BlipProcessor"),
+            ("blip-2", "Blip2Processor"),
+            ("bridgetower", "BridgeTowerProcessor"),
+            ("chameleon", "ChameleonProcessor"),
+            ("chinese_clip", "ChineseCLIPProcessor"),
+            ("clap", "ClapProcessor"),
+            ("clip", "CLIPProcessor"),
+            ("clipseg", "CLIPSegProcessor"),
+            ("clvp", "ClvpProcessor"),
+            ("cohere2_vision", "Cohere2VisionProcessor"),
+            ("colmodernvbert", "ColModernVBertProcessor"),
+            ("colpali", "ColPaliProcessor"),
+            ("colqwen2", "ColQwen2Processor"),
+            ("deepseek_vl", "DeepseekVLProcessor"),
+            ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
+            ("dia", "DiaProcessor"),
+            ("edgetam", "Sam2Processor"),
+            ("emu3", "Emu3Processor"),
+            ("ernie4_5_vl_moe", "Ernie4_5_VLMoeProcessor"),
+            ("evolla", "EvollaProcessor"),
+            ("flava", "FlavaProcessor"),
+            ("florence2", "Florence2Processor"),
+            ("fuyu", "FuyuProcessor"),
+            ("gemma3", "Gemma3Processor"),
+            ("gemma3n", "Gemma3nProcessor"),
+            ("git", "GitProcessor"),
+            ("glm46v", "Glm46VProcessor"),
+            ("glm4v", "Glm4vProcessor"),
+            ("glm4v_moe", "Glm4vProcessor"),
+            ("glm_image", "Glm4vProcessor"),
+            ("glmasr", "GlmAsrProcessor"),
+            ("got_ocr2", "GotOcr2Processor"),
+            ("granite_speech", "GraniteSpeechProcessor"),
+            ("grounding-dino", "GroundingDinoProcessor"),
+            ("groupvit", "CLIPProcessor"),
+            ("higgs_audio_v2", "HiggsAudioV2Processor"),
+            ("hubert", "Wav2Vec2Processor"),
+            ("idefics", "IdeficsProcessor"),
+            ("idefics2", "Idefics2Processor"),
+            ("idefics3", "Idefics3Processor"),
+            ("instructblip", "InstructBlipProcessor"),
+            ("instructblipvideo", "InstructBlipVideoProcessor"),
+            ("internvl", "InternVLProcessor"),
+            ("janus", "JanusProcessor"),
+            ("kosmos-2", "Kosmos2Processor"),
+            ("kosmos-2.5", "Kosmos2_5Processor"),
+            ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
+            ("lasr_ctc", "LasrProcessor"),
+            ("lasr_encoder", "LasrProcessor"),
+            ("layoutlmv2", "LayoutLMv2Processor"),
+            ("layoutlmv3", "LayoutLMv3Processor"),
+            ("layoutxlm", "LayoutXLMProcessor"),
+            ("lfm2_vl", "Lfm2VlProcessor"),
+            ("lighton_ocr", "LightOnOcrProcessor"),
+            ("llama4", "Llama4Processor"),
+            ("llava", "LlavaProcessor"),
+            ("llava_next", "LlavaNextProcessor"),
+            ("llava_next_video", "LlavaNextVideoProcessor"),
+            ("llava_onevision", "LlavaOnevisionProcessor"),
+            ("markuplm", "MarkupLMProcessor"),
+            ("metaclip_2", "CLIPProcessor"),
+            ("mgp-str", "MgpstrProcessor"),
+            ("mistral3", "PixtralProcessor"),
+            ("mllama", "MllamaProcessor"),
+            ("mm-grounding-dino", "GroundingDinoProcessor"),
+            ("modernvbert", "Idefics3Processor"),
+            ("moonshine", "Wav2Vec2Processor"),
+            ("moonshine_streaming", "MoonshineStreamingProcessor"),
+            ("omdet-turbo", "OmDetTurboProcessor"),
+            ("oneformer", "OneFormerProcessor"),
+            ("ovis2", "Ovis2Processor"),
+            ("owlv2", "Owlv2Processor"),
+            ("owlvit", "OwlViTProcessor"),
+            ("paddleocr_vl", "PaddleOCRVLProcessor"),
+            ("paligemma", "PaliGemmaProcessor"),
+            ("perception_lm", "PerceptionLMProcessor"),
+            ("phi4_multimodal", "Phi4MultimodalProcessor"),
+            ("pi0", "PI0Processor"),
+            ("pix2struct", "Pix2StructProcessor"),
+            ("pixtral", "PixtralProcessor"),
+            ("pop2piano", "Pop2PianoProcessor"),
+            ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
+            ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
+            ("qwen2_audio", "Qwen2AudioProcessor"),
+            ("qwen2_vl", "Qwen2VLProcessor"),
+            ("qwen3_5", "Qwen3VLProcessor"),
+            ("qwen3_5_moe", "Qwen3VLProcessor"),
+            ("qwen3_omni_moe", "Qwen3OmniMoeProcessor"),
+            ("qwen3_vl", "Qwen3VLProcessor"),
+            ("qwen3_vl_moe", "Qwen3VLProcessor"),
+            ("sam", "SamProcessor"),
+            ("sam2", "Sam2Processor"),
+            ("sam3", "Sam3Processor"),
+            ("sam_hq", "SamHQProcessor"),
+            ("seamless_m4t", "SeamlessM4TProcessor"),
+            ("sew", "Wav2Vec2Processor"),
+            ("sew-d", "Wav2Vec2Processor"),
+            ("shieldgemma2", "ShieldGemma2Processor"),
+            ("siglip", "SiglipProcessor"),
+            ("siglip2", "Siglip2Processor"),
+            ("smolvlm", "SmolVLMProcessor"),
+            ("speech_to_text", "Speech2TextProcessor"),
+            ("speecht5", "SpeechT5Processor"),
+            ("t5gemma2", "Gemma3Processor"),
+            ("t5gemma2_encoder", "Gemma3Processor"),
+            ("trocr", "TrOCRProcessor"),
+            ("tvp", "TvpProcessor"),
+            ("udop", "UdopProcessor"),
+            ("unispeech", "Wav2Vec2Processor"),
+            ("unispeech-sat", "Wav2Vec2Processor"),
+            ("vibevoice_asr", "VibeVoiceAsrProcessor"),
+            ("video_llava", "VideoLlavaProcessor"),
+            ("vilt", "ViltProcessor"),
+            ("vipllava", "LlavaProcessor"),
+            ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
+            ("voxtral", "VoxtralProcessor"),
+            ("voxtral_realtime", "VoxtralRealtimeProcessor"),
+            ("wav2vec2", "Wav2Vec2Processor"),
+            ("wav2vec2-bert", "Wav2Vec2Processor"),
+            ("wav2vec2-conformer", "Wav2Vec2Processor"),
+            ("wavlm", "Wav2Vec2Processor"),
+            ("whisper", "WhisperProcessor"),
+            ("xclip", "XCLIPProcessor"),
+        ]
+    )
 
 PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES)
 
@@ -165,7 +200,7 @@ def processor_class_from_name(class_name: str):
         if getattr(processor, "__name__", None) == class_name:
             return processor
 
-    # We did not fine the class, but maybe it's because a dep is missing. In that case, the class will be in the main
+    # We did not find the class, but maybe it's because a dep is missing. In that case, the class will be in the main
     # init and we return the proper dummy to get an appropriate error message.
     main_module = importlib.import_module("transformers")
     if hasattr(main_module, class_name):
@@ -213,9 +248,6 @@ class AutoProcessor:
             force_download (`bool`, *optional*, defaults to `False`):
                 Whether or not to force to (re-)download the feature extractor files and override the cached versions
                 if they exist.
-            resume_download:
-                Deprecated and ignored. All downloads are now resumed by default when possible.
-                Will be removed in v5 of Transformers.
             proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
@@ -257,18 +289,6 @@ class AutoProcessor:
         >>> # If processor files are in a directory (e.g. processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # processor = AutoProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
@@ -292,7 +312,7 @@ class AutoProcessor:
         processor_config_file = cached_file(pretrained_model_name_or_path, PROCESSOR_NAME, **cached_file_kwargs)
         if processor_config_file is not None:
             config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
-            processor_class = config_dict.get("processor_class", None)
+            processor_class = config_dict.get("processor_class")
             if "AutoProcessor" in config_dict.get("auto_map", {}):
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
@@ -319,7 +339,6 @@ class AutoProcessor:
                     processor_class = config_dict.get("processor_class", None)
                     if "AutoProcessor" in config_dict.get("auto_map", {}):
                         processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
-
             # Saved as feature extractor
             if preprocessor_config_file is None:
                 preprocessor_config_file = cached_file(
@@ -347,16 +366,24 @@ class AutoProcessor:
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
-            # Otherwise, load config, if it can be loaded.
-            if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
+            # Last resort: try loading the model config to get processor_class.
+            # This handles cases where processor info is only in config.json (not in any
+            # preprocessor/tokenizer config files). AutoConfig.from_pretrained may raise
+            # ValueError if the model_type is unrecognized or the config is invalid -
+            # we catch and ignore this to allow fallback to AutoTokenizer/AutoImageProcessor.
+            try:
+                if not isinstance(config, PreTrainedConfig):
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
 
-            # And check if the config contains the processor class.
-            processor_class = getattr(config, "processor_class", None)
-            if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
-                processor_auto_map = config.auto_map["AutoProcessor"]
+                processor_class = getattr(config, "processor_class", None)
+                if hasattr(config, "auto_map") and "AutoProcessor" in config.auto_map:
+                    processor_auto_map = config.auto_map["AutoProcessor"]
+            except ValueError:
+                # Config loading failed (unrecognized model_type, invalid config, etc.)
+                # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
+                pass
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)
@@ -389,31 +416,20 @@ class AutoProcessor:
         elif type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
-        # tokenizer.
-        try:
-            return AutoTokenizer.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-            )
-        except Exception:
+        # At this stage, there doesn't seem to be a `Processor` class available for this model.
+        # Let's try the commonly available classes
+        for klass in (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor):
             try:
-                return AutoImageProcessor.from_pretrained(
+                return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             except Exception:
-                pass
-
-            try:
-                return AutoFeatureExtractor.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            except Exception:
-                pass
+                continue
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains "
-            "the files of at least one of those processing classes."
+            "tokenizer, an image processor, a video processor or a feature extractor for this model. "
+            "Make sure the repository contains the files of at least one of those processing classes."
         )
 
     @staticmethod
@@ -422,7 +438,7 @@ class AutoProcessor:
         Register a new processor for this class.
 
         Args:
-            config_class ([`PretrainedConfig`]):
+            config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
             processor_class ([`ProcessorMixin`]): The processor to register.
         """
