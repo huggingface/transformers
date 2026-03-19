@@ -248,7 +248,6 @@ class RequestState:
                 self.logprobs.append(logprob)
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
-            self.generated_tokens.pop()
 
         if is_eos or current_len >= self._new_tokens_limit:
             self.status = RequestStatus.FINISHED
@@ -315,7 +314,7 @@ class RequestState:
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
-        the _true_initial_tokens attribute."""
+        the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
         max_new_tokens = None if self.max_new_tokens is None else (self.max_new_tokens - len(self.generated_tokens))
         new_state = RequestState(
             request_id=self.request_id,
