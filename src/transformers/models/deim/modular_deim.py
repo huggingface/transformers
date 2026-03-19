@@ -12,9 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..rt_detr.modeling_rt_detr import (RTDetrConvNormLayer)
-from ..d_fine.modeling_d_fine import DFineRepVggBlock,DFineEncoder,DFineHybridEncoder,DFineConvEncoder, DFineSCDown,DFineCSPRepLayer,DFineRepNCSPELAN4,DFineMultiscaleDeformableAttention,DFineMultiscaleDeformableAttention,DFineGate,DFineDecoderLayer,DFineLQE,DFineMLPPredictionHead,DFineForObjectDetection,DFineMLP,DFinePreTrainedModel,DFineModelOutput,DFineObjectDetectionOutput,DFineFrozenBatchNorm2d,DFineEncoderLayer,DFineDecoderOutput,DFineDecoder,DFineModel,DFineIntegral,DFineDecoder,DFineConvNormLayer
-from ..d_fine.configuration_d_fine import DFineConfig
+from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
+from ..d_fine.modeling_d_fine import (
+    DFineCSPRepLayer,
+    DFineConvEncoder,
+    DFineConvNormLayer,
+    DFineDecoder,
+    DFineDecoderLayer,
+    DFineDecoderOutput,
+    DFineEncoder,
+    DFineEncoderLayer,
+    DFineForObjectDetection,
+    DFineFrozenBatchNorm2d,
+    DFineGate,
+    DFineIntegral,
+    DFineLQE,
+    DFineMLP,
+    DFineMLPPredictionHead,
+    DFineModel,
+    DFineModelOutput,
+    DFineMultiscaleDeformableAttention,
+    DFineObjectDetectionOutput,
+    DFineRepNCSPELAN4,
+    DFineRepVggBlock,
+    DFineSCDown,
+    DFineHybridEncoder,
+)
 from ...configuration_utils import PretrainedConfig
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
@@ -31,7 +54,7 @@ class DeimConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DeimModel`]. It is used to instantiate a deim
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of deim-X-COCO "[sushmanth/DEIM"](https://huggingface.co/sushmanth/DEIM").
+        defaults will yield a similar configuration to that of deim-X-COCO [sushmanth/DEIM](https://huggingface.co/sushmanth/DEIM).
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -536,9 +559,16 @@ class DEIMImageProcessorFast(DetrImageProcessorFast):
     pass
 
 
+DEIMConfig = DeimConfig
 
-
-__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection", "DEIMConfig","DEIMImageProcessor","DEIMImageProcessorFast"]
+__all__ = [
+    "DEIMModel",
+    "DEIMPreTrainedModel",
+    "DEIMForObjectDetection",
+    "DEIMConfig",
+    "DEIMImageProcessor",
+    "DEIMImageProcessorFast",
+]
 
 
 
