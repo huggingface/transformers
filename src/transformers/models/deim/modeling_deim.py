@@ -2190,4 +2190,13 @@ class DEIMHybridEncoder(nn.Module):
         )
 
 
-__all__ = ["DEIMModel", "DEIMPreTrainedModel", "DEIMForObjectDetection"]
+DeimModel = DEIMModel
+DeimForObjectDetection = DEIMForObjectDetection
+
+__all__ = [
+    "DEIMModel",
+    "DEIMPreTrainedModel",
+    "DEIMForObjectDetection",
+    "DeimModel",
+    "DeimForObjectDetection",
+]

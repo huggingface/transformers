@@ -291,7 +291,7 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "DeimForObjectDetection":
+            if model_class.__name__ in ("DeimForObjectDetection", "DEIMForObjectDetection"):
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -325,6 +325,10 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_deim_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deim_object_detection_head_model(*config_and_inputs)
+
+    @unittest.skip(reason="Deim backbone config (HGNetV2) does not use attn_implementation")
+    def test_config_attn_implementation_setter(self):
+        pass
 
     @unittest.skip(reason="Deim doesn't work well with `nn.DataParallel")
     def test_multi_gpu_data_parallel_forward(self):
@@ -401,7 +405,7 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "DeimForObjectDetection":
+            if model_class.__name__ in ("DeimForObjectDetection", "DEIMForObjectDetection"):
                 correct_outlen += 2
 
             self.assertEqual(out_len, correct_outlen)
@@ -446,7 +450,7 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
             else:
-                # Deim should maintin encoder_hidden_states output
+                # Deim should maintain encoder_hidden_states output
                 added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
@@ -574,7 +578,7 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "DeimForObjectDetection":
+            if model_class.__name__ in ("DeimForObjectDetection", "DEIMForObjectDetection"):
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -606,7 +610,7 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "DeimForObjectDetection":
+            if model_class.__name__ in ("DeimForObjectDetection", "DEIMForObjectDetection"):
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -633,8 +637,9 @@ class DeimModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             # Skip the check for the backbone
+            backbone_params = []
             for name, module in model.named_modules():
-                if module.__class__.__name__ == "DeimConvEncoder":
+                if module.__class__.__name__ in ("DeimConvEncoder", "DEIMConvEncoder"):
                     backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
                     break
 

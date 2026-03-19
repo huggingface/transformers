@@ -33,7 +33,7 @@ class DeimConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`DeimModel`]. It is used to instantiate a deim
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of deim-X-COCO "[sushmanth/DEIM"](https://huggingface.co/sushmanth/DEIM").
+    defaults will yield a similar configuration to that of deim-X-COCO [sushmanth/DEIM](https://huggingface.co/sushmanth/DEIM).
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -433,4 +433,6 @@ class DeimConfig(PretrainedConfig):
         )
 
 
-__all__ = ["DEIMConfig"]
+DEIMConfig = DeimConfig
+
+__all__ = ["DeimConfig", "DEIMConfig"]
