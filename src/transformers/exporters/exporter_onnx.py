@@ -16,7 +16,7 @@
 """ONNX exporter.
 
 This module provides the `OnnxExporter` class and helper functions used to
-export `PreTrainedModel` instances to ONNX via Dynamo and `torch.onnx.export`.
+export `PreTrainedModel` instances to ONNX via `torch.onnx.export`.
 
 The export pipeline has four stages, each with its own set of patches/fixes:
 
@@ -35,6 +35,7 @@ The export pipeline has four stages, each with its own set of patches/fixes:
 import copy
 import functools
 import operator
+from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -52,7 +53,7 @@ if is_torch_available():
 
 if is_onnxscript_available():
     import onnx_ir
-    from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
+    from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal, aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
 if TYPE_CHECKING:
@@ -67,10 +68,18 @@ logger = logging.get_logger(__file__)
 
 
 class OnnxExporter(DynamoExporter):
-    """Exporter that converts `PreTrainedModel` instances to ONNX.
+    """Exporter that converts a [`PreTrainedModel`] to an ONNX `ONNXProgram`.
 
-    Orchestrates the four-stage export pipeline: torch patches, FX graph
-    patches, ONNX translation overrides, and ONNX IR patches.
+    Example:
+
+    ```python
+    >>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+
+    >>> exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
+    >>> onnx_program = exporter.export(model, inputs)
+    >>> outputs = onnx_program(**inputs)  # run in-memory
+    >>> OnnxExporter(export_config=OnnxConfig(f="model.onnx")).export(model, inputs)  # save to disk
+    ```
     """
 
     export_config: OnnxConfig
@@ -78,9 +87,14 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
-        with patch_model(model), patch_torch_ops(), patch_onnx_decomposition():
+        with patch_model_outputs(model), patch_torch_ops(), patch_onnx_decomposition():
+            # Run the model once (inside patch_model_outputs so outputs are flat dict[str, Tensor])
+            # to resolve I/O names before torch.export and torch.onnx.export add their own passes.
+            with torch.no_grad():
+                sample_outputs = model(**copy.deepcopy(sample_inputs))
+            inputs_names, outputs_names = get_inputs_outputs_names(sample_inputs, sample_outputs)
+
             exported_program: ExportedProgram = super().export(model, sample_inputs)
-            inputs_names, outputs_names = get_inputs_outputs_names(model, sample_inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
@@ -105,8 +119,13 @@ class OnnxExporter(DynamoExporter):
 
 
 @contextmanager
-def patch_model(model):
-    """Temporarily wrap model.forward to return flat dict[str, Tensor] with duplicated outputs."""
+def patch_model_outputs(model):
+    """Temporarily wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs.
+
+    This is distinct from `patch_model` in `exporter_dynamo` which rewrites
+    the forward signature for `torch.export` arity matching. This wrapper handles
+    ONNX-specific output flattening and tensor deduplication.
+    """
 
     original_forward = model.forward
 
@@ -125,8 +144,8 @@ def patch_model(model):
 def duplicate_leaf_tensors(obj: Any, seen: dict | None = None) -> Any:
     """Clone tensors that appear more than once in an output structure.
 
-    When a model returns the same tensor under two output names (e.g. ``last_hidden_state``
-    and ``hidden_states[0]``), the ONNX optimizer deduplicates the two output nodes and
+    When a model returns the same tensor under two output names (e.g. `last_hidden_state`
+    and `hidden_states[0]`), the ONNX optimizer deduplicates the two output nodes and
     renames one, breaking the expected name mapping. Cloning duplicates gives each output
     leaf a distinct identity so the optimizer has nothing to merge.
     """
@@ -155,12 +174,13 @@ def duplicate_leaf_tensors(obj: Any, seen: dict | None = None) -> Any:
     return obj
 
 
-def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Get input/output names for ONNX export, disambiguating collisions with input./output. prefixes."""
+def get_inputs_outputs_names(inputs: dict[str, Any], outputs: Any) -> tuple[list[str], list[str]]:
+    """Resolve I/O tensor names, disambiguating collisions with input./output. prefixes.
 
-    with torch.no_grad():
-        outputs = model(**copy.deepcopy(inputs))
-
+    Args:
+        inputs: The forward kwargs (already passed to the model).
+        outputs: The model outputs from the same forward call.
+    """
     inputs_names = list(get_leaf_tensors(inputs).keys())
     outputs_names = list(get_leaf_tensors(outputs).keys())
     for name in set(inputs_names).intersection(set(outputs_names)):
@@ -171,7 +191,7 @@ def get_inputs_outputs_names(model: "PreTrainedModel", inputs: dict[str, Any]) -
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
-# Monkey-patches applied during torch.export / Dynamo tracing.
+# Monkey-patches applied during torch.export tracing.
 # Each _patch_* function is a factory: receives the original op and returns the
 # replacement, closing over the original.
 #
@@ -586,11 +606,21 @@ def patch_fx_graph(graph_module: "torch.fx.GraphModule") -> None:
 
 @contextmanager
 def patch_onnx_decomposition():
-    """Wrap the ONNX internal decomposition step so ``patch_fx_graph`` runs after it.
+    """Wrap the ONNX internal decomposition step so `patch_fx_graph` runs after it.
 
-    ``torch.onnx.export`` internally calls ``run_decompositions`` which can introduce
-    new symbolic-guard nodes (e.g. ``operator.le(sym_size, int_oo)``).  These overflow
-    during ONNX translation.  This context manager hooks into that step to clean them up.
+    `torch.onnx.export` internally calls `run_decompositions` with the ONNX
+    decomposition table, which can introduce new symbolic-guard nodes (e.g.
+    `operator.le(sym_size, int_oo)`). These overflow during ONNX translation.
+    This context manager hooks into that step to apply our FX fixes immediately after.
+
+    <Tip warning={true}>
+
+    This hooks `torch.onnx._internal.exporter._core._prepare_exported_program_for_export`,
+    a private PyTorch API. It may break on PyTorch version upgrades. If it does,
+    find the new entry point in `torch/onnx/_internal/exporter/_core.py`
+    where `ExportedProgram.run_decompositions` is called and hook there instead.
+
+    </Tip>
     """
     from torch.onnx._internal.exporter import _core
 
@@ -615,7 +645,12 @@ def patch_onnx_decomposition():
 # _ONNX_TRANSLATION_TABLE.
 
 
-def _aten_index_put(self, indices, values, accumulate=False):
+def _aten_index_put(
+    self: TReal,
+    indices: Sequence[INT64 | BOOL | None],
+    values: TReal,
+    accumulate: bool = False,
+) -> TReal:
     """Bool-mask index_put via cumsum-gather-where; delegates other cases to torchlib."""
     bool_mask = indices[0]
     is_bool = (

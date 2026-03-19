@@ -21,11 +21,11 @@ one exporter (Dynamo, ONNX, ExecuTorch):
 - `get_leaf_tensors`: recursively extract all leaf tensors from nested outputs.
 - `prepare_for_export`: configure model config, attention/experts implementations,
   and patch non-exportable module behaviours before any export.
-- `decompose_prefill_decode`: run ``model.generate()`` and capture the forward kwargs
-  for the prefill and decode steps, returning ``{"prefill": ..., "decode": ...}``.
+- `decompose_prefill_decode`: run `model.generate()` and capture the forward kwargs
+  for the prefill and decode steps.
 - `decompose_encoder_decoder`: capture inputs to every known submodule (vision tower,
   projector, language model, lm_head, encoder, decoder, …) via a single forward pass,
-  returning one ``(name, module, inputs)`` triplet per component for independent export.
+  returning one `(name, module, inputs)` triplet per component for independent export.
 """
 
 from __future__ import annotations
@@ -39,7 +39,11 @@ from contextlib import contextmanager
 from typing import Any
 
 from ..modeling_utils import PreTrainedModel
+from ..utils import logging
 from ..utils.import_utils import is_torch_available
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
@@ -77,7 +81,17 @@ def _iter_leaf_tensors(obj: Any, prefix: str = "", default: str = "output"):
 
 
 def get_leaf_tensors(obj: Any, default: str = "output") -> dict[str, torch.Tensor]:
-    """Recursively retrieves all leaf tensors from a potentially nested structure."""
+    """Recursively retrieve all leaf tensors from a potentially nested structure.
+
+    Args:
+        obj (`Any`):
+            A tensor, dataclass, dict, list, tuple, or any nesting thereof.
+        default (`str`, *optional*, defaults to `"output"`):
+            Key to use when a bare tensor has no natural name.
+
+    Returns:
+        `dict[str, torch.Tensor]`: Flat mapping from dotted path strings to tensors.
+    """
     return dict(_iter_leaf_tensors(obj, default=default))
 
 
@@ -88,14 +102,14 @@ def get_leaf_tensors(obj: Any, default: str = "output") -> dict[str, torch.Tenso
 def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
     """Export-safe replacement for `_update_mamba_mask` / `_update_linear_attn_mask`.
 
-    The original functions return ``None`` in two cases:
-      1. Decode step — ``past_key_values.has_previous_state`` is True, or ``cache_position[0] > 0``
-      2. No padding — ``torch.all(attention_mask == 1)``
+    The original functions return `None` in two cases:
+      1. Decode step — `past_key_values.has_previous_state` is True, or `cache_position[0] > 0`
+      2. No padding — `torch.all(attention_mask == 1)`
 
-    Both cases are problematic for ``torch.export``: case 2 uses ``torch.all`` (data-dependent),
-    and case 1 with ``cache_position`` (falcon_h1) indexes a tensor value.
-    This replacement keeps only the ``has_previous_state`` check (a Python bool, constant at
-    trace time). Models that pass ``cache_position`` instead (falcon_h1) fall through to
+    Both cases are problematic for `torch.export`: case 2 uses `torch.all` (data-dependent),
+    and case 1 with `cache_position` (falcon_h1) indexes a tensor value.
+    This replacement keeps only the `has_previous_state` check (a Python bool, constant at
+    trace time). Models that pass `cache_position` instead (falcon_h1) fall through to
     returning the attention_mask as-is.
     """
     if getattr(past_key_values_or_cache_position, "has_previous_state", False):
@@ -106,13 +120,13 @@ def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=No
 def prepare_for_export(
     model: PreTrainedModel | torch.nn.Module, inputs: dict[str, Any]
 ) -> tuple[PreTrainedModel | torch.nn.Module, dict[str, Any]]:
-    """Configure the model for export. Mutates both ``model`` and ``inputs`` in-place:
+    """Configure the model for export. Mutates both `model` and `inputs` in-place:
 
     - Sets optimal attention/experts implementations.
     - Patches non-exportable module behaviours (mamba masks, classifier casts, …).
-    - Strips label inputs (``labels``, ``future_values``) — loss computation is unsupported.
-    - Strips output flags (``use_cache``, ``return_dict``, …) from inputs and bakes non-None
-      values into ``model.forward`` via ``functools.partial`` so they are constant at trace time.
+    - Strips label inputs (`labels`, `future_values`) — loss computation is unsupported.
+    - Strips output flags (`use_cache`, `return_dict`, …) from inputs and bakes non-`None`
+      values into `model.forward` via `functools.partial` so they are constant at trace time.
     """
     # Strip label inputs — loss computation is not supported during export.
     for label_key in ("labels", "future_values"):
@@ -152,7 +166,11 @@ def prepare_for_export(
         try:
             model.set_attn_implementation("sdpa")
         except Exception as e:
-            print(f"Could not set attention implementation to sdpa for {model} of type {model.config.model_type}: {e}")
+            logger.warning(
+                "Could not set attention implementation to sdpa for %s: %s",
+                model.config.model_type,
+                e,
+            )
 
     for module in model.modules():
         if hasattr(module, "config"):
@@ -199,14 +217,17 @@ _SUBMODULE_NAMES = (
 
 
 def _find_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return ``{attr_name: module}`` for all known submodule names found on the model.
+    """Return `{attr_name: module}` for all known submodule names found on the model.
 
-    Checks ``model`` first, then ``model.model`` (common wrapper pattern).
+    Checks `model` first, then `model.model` (common wrapper pattern).
 
-    ``encoder`` and ``decoder`` are only included when both are present — a bare
-    ``self.encoder`` (e.g. BeitModel, ViT) is an internal component, not a standalone
-    exportable submodule.  VLM names (vision_tower, language_model, …) are always
+    `encoder` and `decoder` are only included when both are present — a bare
+    `self.encoder` (e.g. BeitModel, ViT) is an internal component, not a standalone
+    exportable submodule. VLM names (`vision_tower`, `language_model`, …) are always
     included individually.
+
+    To support a new architecture whose submodule attributes are not in `_SUBMODULE_NAMES`,
+    add the attribute name(s) to that tuple.
     """
     found: dict[str, torch.nn.Module] = {}
     for root in (model, getattr(model, "model", None)):
@@ -222,15 +243,28 @@ def _find_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
     if "decoder" in found and "encoder" not in found:
         del found["decoder"]
 
+    if not found:
+        # Help future contributors diagnose missed architectures.
+        child_names = [name for name, _ in model.named_children()]
+        if child_names:
+            logger.debug(
+                "%s has no recognized decomposition submodules. "
+                "Direct children: %s. "
+                "If this is a multicomponent model (VLM, encoder-decoder), "
+                "add its submodule attribute names to _SUBMODULE_NAMES in exporters/utils.py.",
+                type(model).__name__,
+                child_names,
+            )
+
     return found
 
 
 @contextmanager
 def _capture_forward(module: torch.nn.Module, dest: list, *, capture_once: bool = False):
-    """Append captured forward kwargs to ``dest`` on each call.
+    """Append captured forward kwargs to `dest` on each call.
 
-    Positional args are normalised to kwargs via ``inspect.signature`` so the
-    captured dict can be passed directly as ``kwargs=inputs`` to ``torch.export``.
+    Positional args are normalised to kwargs via `inspect.signature` so the
+    captured dict can be passed directly as `kwargs=inputs` to `torch.export`.
     """
     original = module.forward
 
@@ -261,13 +295,14 @@ def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
 ) -> list[tuple[str, torch.nn.Module, dict]]:
-    """Run ``model.generate()`` for 2 tokens and capture prefill and decode inputs.
+    """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, VLM, …) gets correct inputs without reimplementing the loop.
 
     Returns:
-        ``[("prefill", model, prefill_inputs), ("decode", model, decode_inputs)]``
+        `list[tuple[str, torch.nn.Module, dict]]`:
+        `[("prefill", model, prefill_inputs), ("decode", model, decode_inputs)]`
     """
     captured: list[dict] = []
 
@@ -294,19 +329,19 @@ def decompose_encoder_decoder(
 
     Detects all known submodules by attribute name (vision tower, projector, connector,
     language model, lm_head, encoder, decoder, …) and captures their forward kwargs
-    during one ``model(**inputs)`` call.
+    during one `model(**inputs)` call.
 
-    Each submodule is returned as a separate ``(name, module, inputs)`` triplet for
-    independent export. The token-merge step (e.g. ``masked_scatter`` for VLMs) is
+    Each submodule is returned as a separate `(name, module, inputs)` triplet for
+    independent export. The token-merge step (e.g. `masked_scatter` for VLMs) is
     intentionally left outside the exported graphs — it is the caller's responsibility
-    to assemble ``inputs_embeds`` from the encoder outputs before running the decoder.
+    to assemble `inputs_embeds` from the encoder outputs before running the decoder.
 
     Returns:
-        A list of ``(attr_name, module, inputs)`` triplets, one per detected submodule,
-        in the order they appear in ``_SUBMODULE_NAMES``.
+        `list[tuple[str, torch.nn.Module, dict]]`: One `(attr_name, module, inputs)`
+        triplet per detected submodule, in the order they appear in `_SUBMODULE_NAMES`.
 
     Raises:
-        ValueError: if no known submodules are found.
+        `ValueError`: if no known submodules are found on the model.
     """
     submodules = _find_submodules(model)
     if not submodules:
@@ -341,5 +376,5 @@ def decompose_encoder_decoder(
 
 
 def is_multicomponent(model: PreTrainedModel) -> bool:
-    """Return True if the model has recognisable submodules that should be exported separately."""
+    """Returns `True` if the model has recognisable submodules that should be exported separately."""
     return bool(_find_submodules(model))

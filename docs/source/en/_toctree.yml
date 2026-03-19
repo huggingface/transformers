@@ -95,6 +95,8 @@
       title: Kernels
     - local: perf_torch_compile
       title: torch.compile
+    - local: exporters
+      title: Exporters
     - local: perf_infer_gpu_multi
       title: Tensor parallelism
     - local: expert_parallelism
@@ -427,6 +429,8 @@
       title: Pipelines
     - local: main_classes/processors
       title: Processors
+    - local: main_classes/exporters
+      title: Exporters
     - local: main_classes/quantization
       title: Quantization
     - local: main_classes/tokenizer

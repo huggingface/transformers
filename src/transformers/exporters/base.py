@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Abstract base class for all Transformers exporters."""
+
 import importlib.util
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
@@ -25,13 +27,14 @@ if TYPE_CHECKING:
 
 class HfExporter(ABC):
     """
-    Abstract class of the HuggingFace exporter. Supports exporting HF transformers models using various export formats.
-    This class is used only for transformers.PreTrainedModel.from_pretrained and cannot be easily used outside the scope of that method
-    yet.
+    Abstract base class for all Transformers exporters.
 
-    Attributes:
-        export_config (`transformers.utils.export_config.ExportConfigMixin`):
-            The export configuration used to export the model.
+    Subclass and implement [`~HfExporter.export`] to add a new export backend.
+
+    Args:
+        export_config ([`~transformers.utils.export_config.ExportConfigMixin`]):
+            Backend-specific configuration. The concrete subclass declares the
+            expected type via a class-level annotation.
     """
 
     required_packages: list[str] | None = None
@@ -41,9 +44,8 @@ class HfExporter(ABC):
 
     def validate_environment(self, *args, **kwargs):
         """
-        This method is used to potentially check for potential conflicts with arguments that are
-        passed in `from_pretrained`. You need to define it for all future exporters that are integrated with transformers.
-        If no explicit check are needed, simply return nothing.
+        Check that all packages listed in `required_packages` are installed.
+        Override to add exporter-specific environment checks.
         """
 
         if self.required_packages is not None:
@@ -58,11 +60,17 @@ class HfExporter(ABC):
                 )
 
     @abstractmethod
-    def export(self, model: "PreTrainedModel"):
+    def export(self, model: "PreTrainedModel", sample_inputs: dict):
         """
-        Exports the given model according to the export configuration provided during initialization.
+        Export the model and return the backend-specific program object.
 
         Args:
-            model: The model to be exported.
+            model ([`PreTrainedModel`]):
+                The model to export.
+            sample_inputs (`dict[str, Any]`):
+                Forward kwargs used as concrete example inputs during tracing.
+
+        Returns:
+            Backend-specific export artifact.
         """
         pass

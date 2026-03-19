@@ -37,34 +37,32 @@ logger = logging.get_logger(__file__)
 
 
 class ExecutorchExporter(DynamoExporter):
+    """Exporter that converts a [`PreTrainedModel`] to an ExecuTorch `ExecutorchProgramManager`.
+
+    Example:
+
+    ```python
+    >>> from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+
+    >>> exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack"))
+    >>> et_program = exporter.export(model, inputs)
+    >>> et_program.write_to_file("model.pte")
+    ```
+    """
+
     export_config: ExecutorchConfig
 
     required_packages = ["torch", "executorch"]
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExecutorchProgramManager":
-        """Export a model for ExecuTorch."""
-        if self.export_config.backend == "xnnpack":
-            from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
-
-            model = model.to(device="cpu")
-            partitioner = [XnnpackPartitioner()]
-        elif self.export_config.backend == "cuda":
-            from executorch.backends.cuda.cuda_backend import CudaBackend
-            from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
-
-            model = model.to(device="cuda")
-            model_name = model.__class__.__name__
-            partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model_name)])]
-            if (
-                next(model.parameters()).dtype != torch.bfloat16
-                and model._can_set_attn_implementation()
-                and model._supports_sdpa
-            ):
-                model = model.to(dtype=torch.bfloat16)
-        else:
+        """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
+        prepare = _BACKEND_PREPARE.get(self.export_config.backend)
+        if prepare is None:
             raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
 
-        with patch_torch_ops(model):
+        model, partitioner = prepare(model)
+
+        with patch_torch_ops():
             exported_program: ExportedProgram = super().export(model, sample_inputs)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner
@@ -72,6 +70,48 @@ class ExecutorchExporter(DynamoExporter):
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
 
         return executorch_programs_manager
+
+
+# ── Backend preparation ────────────────────────────────────────────────────────
+# Each _prepare_* function receives the model and returns (model, partitioners).
+# - Move the model to the target device.
+# - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
+# To add a new backend: implement _prepare_<name> and register it in _BACKEND_PREPARE.
+
+
+def _prepare_xnnpack(model: "PreTrainedModel"):
+    """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
+    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+
+    model = model.to(device="cpu")
+    return model, [XnnpackPartitioner()]
+
+
+def _prepare_cuda(model: "PreTrainedModel"):
+    """GPU inference via the ExecuTorch CUDA backend.
+
+    Moves the model to CUDA and, when the model supports it, upcasts to bfloat16 +
+    enables SDPA — both required by the CUDA backend for transformer attention.
+    """
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
+
+    model = model.to(device="cuda")
+    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
+    if (
+        next(model.parameters()).dtype != torch.bfloat16
+        and hasattr(model, "_can_set_attn_implementation")
+        and model._can_set_attn_implementation()
+        and model._supports_sdpa
+    ):
+        model = model.to(dtype=torch.bfloat16)
+    return model, partitioner
+
+
+_BACKEND_PREPARE = {
+    "xnnpack": _prepare_xnnpack,
+    "cuda": _prepare_cuda,
+}
 
 
 # ── Torch patches ──────────────────────────────────────────────────────────────
@@ -199,7 +239,7 @@ _TORCH_PATCH_TABLE = [
 
 
 @contextmanager
-def patch_torch_ops(model: "PreTrainedModel"):
+def patch_torch_ops():
     """Context manager: install torch patches for ExecuTorch export."""
     originals = []
     for obj, attr, factory in _TORCH_PATCH_TABLE:

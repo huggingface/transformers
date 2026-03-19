@@ -15,15 +15,14 @@
 
 """Dynamo exporter.
 
-This module provides the `DynamoExporter` class and helper functions used to
-export `PreTrainedModel` instances to `ExportedProgram` via `torch.export.export`.
-
-Helper sections below the exporter class:
+Helper sections in this file:
 
 1. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    for Cache objects and other custom types so `torch.export` can trace through them.
-2. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` shape
-   inference for all tensor and cache inputs.
+2. **Model signature patch** (`patch_model`): replaces `model.forward` with a flat
+   explicit signature so `torch.export` does not choke on `**kwargs: Unpack[...]`.
+3. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
+   for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
 """
 
 import copy
@@ -55,10 +54,17 @@ logger = logging.get_logger(__file__)
 
 
 class DynamoExporter(HfExporter):
-    """Exporter that converts `PreTrainedModel` instances to `ExportedProgram`.
+    """Exporter that converts a [`PreTrainedModel`] to a `torch.export.ExportedProgram`.
 
-    Registers pytree nodes for custom types (Cache, etc.), infers dynamic
-    shapes when enabled, and delegates to `torch.export.export`.
+    Example:
+
+    ```python
+    >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+
+    >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
+    >>> exported = exporter.export(model, inputs)
+    >>> outputs = exported.module()(**inputs)
+    ```
     """
 
     export_config: DynamoConfig
@@ -75,6 +81,13 @@ class DynamoExporter(HfExporter):
         if self.export_config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
+        # Explicit dynamic_shapes often trigger model-internal guards (e.g. RoPE constraints)
+        # that the symbolic solver can't prove at trace time. Defer them to runtime automatically.
+        prefer_deferred = (
+            self.export_config.prefer_deferred_runtime_asserts_over_guards
+            or self.export_config.dynamic_shapes is not None
+        )
+
         register_cache_pytrees_for_model(model)
         with patch_model(model, sample_inputs):
             exported_program: ExportedProgram = torch.export.export(
@@ -83,7 +96,7 @@ class DynamoExporter(HfExporter):
                 dynamic_shapes=dynamic_shapes,
                 strict=self.export_config.strict,
                 kwargs=copy.deepcopy(sample_inputs),
-                prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
+                prefer_deferred_runtime_asserts_over_guards=prefer_deferred,
             )
 
         return exported_program
@@ -275,10 +288,16 @@ def register_cache_pytrees_for_model(model: "PreTrainedModel"):
 
 @contextmanager
 def patch_model(model: "PreTrainedModel", inputs: dict[str, Any]):
-    """Temporarily replace ``model.forward`` with a flat explicit signature derived from ``inputs``.
+    """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
 
-    Prevents torch.export from expanding ``**kwargs: Unpack[TransformersKwargs]`` into
-    ``combined_args``, which would cause an arity mismatch with ``dynamic_shapes``.
+    `torch.export` infers the exported function signature from `model.forward.__signature__`.
+    Most transformers models use `**kwargs: Unpack[TransformersKwargs]`, which causes
+    `torch.export` to expand the signature into a large `combined_args` bundle that
+    mismatches the `dynamic_shapes` dict. This patch replaces the forward with a
+    minimal signature containing only the keys present in `inputs`.
+
+    Note: this is a *signature* patch only (not an output patch). See
+    `patch_model_outputs` in `exporter_onnx` for the ONNX output-flattening wrapper.
     """
     original_forward = model.forward
 

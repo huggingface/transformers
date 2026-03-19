@@ -25,17 +25,21 @@ logger = logging.get_logger(__name__)
 
 
 class ExportFormat(Enum):
+    """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
+
     EXECUTORCH = "executorch"
     DYNAMO = "dynamo"
     ONNX = "onnx"
-    # TORCHSCRIPT = "torchscript"
 
 
 @dataclass
 class ExportConfigMixin:
     """
-    Mixin class for all export configuration classes. Provides methods for serialization and
-    deserialization from/to dictionary and JSON file.
+    Base class for all export configuration dataclasses.
+
+    Provides `to_dict` / `from_dict` serialisation so configs can be saved and round-tripped
+    without knowing the concrete subclass. The `export_format` field identifies the subclass
+    during deserialisation.
     """
 
     export_format: ExportFormat
@@ -71,17 +75,28 @@ class ExportConfigMixin:
 @dataclass
 class DynamoConfig(ExportConfigMixin):
     """
-    Configuration class for exporting models using TorchDynamo.
+    Configuration class for exporting models via `torch.export`.
 
     Args:
+        dynamic (`bool`, *optional*, defaults to `False`):
+            Whether to export with dynamic (symbolic) shapes. When `True` and
+            `dynamic_shapes` is not set, all tensor dimensions are set to
+            `Dim.AUTO` automatically.
         strict (`bool`, *optional*, defaults to `False`):
-            Whether to enable strict mode during export.
+            Whether to enable strict mode in `torch.export`. Runs the full
+            symbolic trace and catches more errors, but is slower and more
+            likely to fail on complex models.
         dynamic_shapes (`dict[str, Any]`, *optional*):
-            Dynamic shapes for the model inputs.
+            Explicit per-input dynamic shape specifications passed to
+            `torch.export`. Takes precedence over `dynamic`.
+        prefer_deferred_runtime_asserts_over_guards (`bool`, *optional*, defaults to `False`):
+            When `True`, shape guards are emitted as runtime assertions in the
+            exported graph instead of being specialised at trace time. Useful
+            for reducing retracing when shapes vary at runtime.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
-    dynamic: bool | None = None
+    dynamic: bool = False
 
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
@@ -91,25 +106,33 @@ class DynamoConfig(ExportConfigMixin):
 @dataclass
 class OnnxConfig(DynamoConfig):
     """
-    Configuration class for exporting models to ONNX format.
+    Configuration class for exporting models to ONNX via `torch.onnx.export`.
+
+    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`,
+    `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
         f (`str` or `PathLike`, *optional*):
-            The file path where the ONNX model will be saved.
-        dynamic_shapes (`dict[str, Any]`, *optional*):
-            Dynamic shapes for the model inputs.
+            Output path for the `.onnx` file. When `None` (default) the
+            exported model is kept in memory as an `ONNXProgram` and not
+            written to disk.
         opset_version (`int`, *optional*):
-            The ONNX opset version to use for export.
+            ONNX opset version to target. Defaults to the latest opset
+            supported by the installed `onnxscript` version.
         external_data (`bool`, *optional*, defaults to `True`):
-            Whether to store large initializers in external data files.
+            Store large weight tensors in a separate `.onnx_data` sidecar
+            file instead of embedding them in the protobuf. Required for
+            models whose weights exceed the 2 GB protobuf limit.
         optimize (`bool`, *optional*, defaults to `True`):
-            Whether to optimize the ONNX model after export.
+            Run `onnxscript` optimisation passes (constant folding, dead-code
+            elimination, …) on the exported graph. Disable for models that
+            hit upstream `onnxscript` optimiser bugs.
         export_params (`bool`, *optional*, defaults to `True`):
-            Whether to export the model parameters with the ONNX model.
+            Embed model weights in the ONNX graph. Set to `False` to export
+            a weight-free graph (weights must be supplied at runtime).
         keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
-            Whether to keep initializers as inputs in the ONNX graph.
-        do_constant_folding (`bool`, *optional*, defaults to `True`):
-            Whether to apply constant folding optimization during export.
+            Expose weight initializers as explicit graph inputs. Required by
+            some older ONNX runtimes (opset < 9).
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -128,13 +151,15 @@ class ExecutorchConfig(DynamoConfig):
     """
     Configuration class for exporting models to ExecuTorch format.
 
+    Inherits all fields from [`DynamoConfig`] (`dynamic`, `strict`,
+    `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
+
     Args:
-        dynamic_shapes (`dict[str, Any]`, *optional*):
-            Dynamic shapes for the model inputs.
-        strict (`bool`, *optional*, defaults to `False`):
-            Whether to enable strict mode during export.
-        prefer_deferred_runtime_asserts_over_guards (`bool`, *optional*, defaults to `False`):
-            Whether to prefer deferred runtime asserts over guards during export.
+        backend (`str`, *optional*):
+            Target ExecuTorch backend. Supported values:
+
+            - `"xnnpack"` — CPU inference via the XNNPACK library.
+            - `"cuda"` — GPU inference via the ExecuTorch CUDA backend.
     """
 
     export_format: ExportFormat = ExportFormat.EXECUTORCH

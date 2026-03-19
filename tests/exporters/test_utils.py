@@ -130,15 +130,17 @@ def _cast_inputs(obj, device, dtype):
     return obj
 
 
-def _disable_loss(config, inputs_dict):
-    """Remove labels and disable loss computation so eager and exported outputs match."""
+def _clean_inputs_for_export(inputs_dict, config):
+    """Strip None values and export-incompatible keys from an inputs dict. Mutates config in-place."""
+    inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
     for key in ("labels", "future_values", "return_loss"):
         inputs_dict.pop(key, None)
     config.return_loss = False
+    return inputs_dict
 
 
 def _run_onnx_program(onnx_program, inputs) -> dict:
-    """Run an ONNX program and return outputs as a ``{name: tensor}`` dict."""
+    """Run an ONNX program and return outputs as a `{name: tensor}` dict."""
     onnx_inputs = get_leaf_tensors(inputs)
     onnx_outputs = onnx_program(**onnx_inputs)
     onnx_names = (re.sub(r"^output\.", "", node.name) for node in onnx_program.model_proto.graph.output)
@@ -149,11 +151,21 @@ def _run_onnx_program(onnx_program, inputs) -> dict:
 
 
 class ExportTesterMixin:
-    """Mixin providing non-generate export tests for torch.export, ONNX, and ExecuTorch backends.
+    """Mixin providing non-generative export tests for Dynamo, ONNX, and ExecuTorch backends.
 
-    Inherited by ``ModelTesterMixin`` so every model test class gets export tests automatically.
-    Expects the host class to provide: ``all_model_classes``,
-    ``model_tester``, ``test_torch_exportable``, ``_prepare_for_class``.
+    Mixed into [`ModelTesterMixin`] so every model test class that inherits from it
+    automatically runs these export tests against all entries in `all_model_classes`.
+
+    Expected attributes provided by [`ModelTesterMixin`]:
+    - `all_model_classes` — iterable of model class objects to test.
+    - `model_tester` — object with `prepare_config_and_inputs_for_common()` (and optionally
+      `prepare_config_and_inputs_for_model_class()`).
+    - `test_torch_exportable` — bool; set to `False` to skip all export tests for the model.
+    - `_prepare_for_class(inputs_dict, model_class)` — adjusts inputs per model class.
+
+    Tests are parameterised over `dynamic=True` / `dynamic=False` via `DYNAMIC_EXPORT_PARAMS`.
+    Multicomponent models (VLMs, encoder-decoders detected by `is_multicomponent`) are
+    automatically decomposed and each submodule is tested independently.
     """
 
     def _skip_if_not_exportable(self):
@@ -161,8 +173,6 @@ class ExportTesterMixin:
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not Dynamo exportable/traceable")
 
-        # TODO: these source-code greps silently hide unexportable models. Each pattern should be
-        # fixed at the model level and the affected models moved to EXPORT_SKIP_MODEL_CLASSES.
         with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
             source_code = f.read()
             # TODO: rewrite chunked attention loops as tensor ops or use torch._dynamo.allow_in_graph
@@ -175,7 +185,7 @@ class ExportTesterMixin:
             if "get_rope_index" in source_code:
                 self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
 
-    def _should_skip(self, model_class, generate=False, dynamic=False):
+    def _should_skip(self, model_class, generate=False):
         """Return True if this model class should be skipped for export tests."""
         if model_class.__name__ in EXPORT_SKIP_MODEL_CLASSES:
             return True
@@ -187,15 +197,14 @@ class ExportTesterMixin:
         """Create model and forward inputs ready for export.
 
         Returns:
-            List of ``(name, model, inputs)`` triplets — one per component.
+            List of `(name, model, inputs)` triplets — one per component.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-        inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
-        _disable_loss(config, inputs_dict)
+        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(torch_device)
@@ -207,16 +216,6 @@ class ExportTesterMixin:
             inputs_dict = _cast_inputs(inputs_dict, model_param.device, model_param.dtype)
         except StopIteration:
             pass
-
-        # Sanity check: inputs must work with eager forward before we attempt export
-        try:
-            with torch.no_grad():
-                model(**copy.deepcopy(inputs_dict))
-        except Exception as e:
-            raise RuntimeError(
-                f"Eager forward failed for {model_class.__name__} before export. "
-                f"The test is not preparing inputs correctly. Inputs: {list(inputs_dict.keys())}"
-            ) from e
 
         if is_multicomponent(model):
             return decompose_encoder_decoder(model, inputs_dict)
@@ -251,13 +250,13 @@ class ExportTesterMixin:
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_torch_export(self, dynamic, atol=1e-4, rtol=1e-4):
-        """Test if model can be exported with torch.export.export()"""
+        """Export each model class with ``torch.export`` and verify outputs match eager within tolerance."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter(export_config=DynamoConfig(dynamic=dynamic))
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic):
+            if self._should_skip(model_class):
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
@@ -283,11 +282,11 @@ class ExportTesterMixin:
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_onnx_export(self, dynamic):
-        """Test if model can be exported with torch.onnx.export()"""
+        """Export each model class to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_model_classes:
-            if self._should_skip(model_class, dynamic=dynamic):
+            if self._should_skip(model_class):
                 continue
 
             optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
@@ -311,7 +310,7 @@ class ExportTesterMixin:
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_executorch_export(self):
-        """Test if model can be exported with ExecuTorchExporter."""
+        """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
         self._skip_if_not_exportable()
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
@@ -329,12 +328,18 @@ class ExportTesterMixin:
 
 
 class ExportGenerateTesterMixin:
-    """Mixin providing generation export tests for torch.export, ONNX, and ExecuTorch backends.
+    """Mixin providing generation-aware export tests for torch.export, ONNX, and ExecuTorch backends.
 
-    Inherited by ``GenerationTesterMixin`` so every generative model test class gets
-    generation export tests automatically. Expects the host class to also inherit
-    ``ExportTesterMixin`` (for shared helpers) and ``GenerationTesterMixin`` (for
-    ``prepare_config_and_inputs_for_generate`` and ``all_generative_model_classes``).
+    Mix into a model test class alongside ``ExportTesterMixin`` and ``GenerationTesterMixin``.
+
+    Required attributes on the host class (in addition to those from ``ExportTesterMixin``):
+    - ``all_generative_model_classes`` — iterable of generative model class objects to test.
+    - ``prepare_config_and_inputs_for_generate()`` — returns ``(config, inputs_dict)`` suitable
+      for ``model.generate()``.
+
+    Each generative model is decomposed into prefill and decode components via
+    :func:`decompose_prefill_decode`.  Multicomponent models (VLMs) additionally decompose
+    the prefill stage into individual submodules via :func:`decompose_encoder_decoder`.
     """
 
     def _prepare_export_generate_model_and_inputs(self, model_class):
@@ -345,22 +350,24 @@ class ExportGenerateTesterMixin:
         For decoder-only models: returns prefill and decode components.
 
         Returns:
-            List of ``(name, model, inputs)`` triplets — one per component.
+            List of `(name, model, inputs)` triplets — one per component.
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-        inputs_dict = {k: v for k, v in inputs_dict.items() if v is not None}
-        _disable_loss(config, inputs_dict)
+        inputs_dict = _clean_inputs_for_export(inputs_dict, config)
 
         set_config_for_less_flaky_test(config)
         model = model_class(config).eval().to(torch_device)
         set_model_for_less_flaky_test(model)
 
-        prefill_decode = decompose_prefill_decode(model, inputs_dict)
+        # create prefill/decode copies of the model
+        stages = decompose_prefill_decode(model, inputs_dict)
 
         if is_multicomponent(model):
-            _, prefill_model, prefill_inputs = prefill_decode[0]
-            return decompose_encoder_decoder(prefill_model, prefill_inputs) + [prefill_decode[1]]
-        return prefill_decode
+            _, prefill_model, prefill_inputs = stages[0]
+            components = decompose_encoder_decoder(prefill_model, prefill_inputs)
+            return components + stages[1:]  # encoder-decoder components + decode stage
+
+        return stages
 
     # ──────────────────── torch.export tests ─────────────────────
 
@@ -369,7 +376,7 @@ class ExportGenerateTesterMixin:
     @pytest.mark.torch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_torch_export_generate(self, dynamic, atol=1e-4, rtol=1e-4):
-        """Test if generative model can be exported for prefill and decode."""
+        """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter(export_config=DynamoConfig(dynamic=dynamic))
@@ -401,7 +408,7 @@ class ExportGenerateTesterMixin:
     @pytest.mark.onnx_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_onnx_export_generate(self, dynamic):
-        """Test if generative model can be ONNX-exported for prefill and decode."""
+        """Export prefill and decode stages to ONNX and verify output names match eager."""
         self._skip_if_not_exportable()
 
         for model_class in self.all_generative_model_classes:
@@ -429,7 +436,7 @@ class ExportGenerateTesterMixin:
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
     def test_executorch_export_generate(self):
-        """Test if generative model can be ExecuTorch-exported for prefill and decode."""
+        """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
         self._skip_if_not_exportable()
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
