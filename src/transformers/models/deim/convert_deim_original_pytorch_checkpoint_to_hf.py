@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -319,7 +318,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     # Use the mapping to rename keys
     for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
         for key in list(state_dict_keys.keys()):

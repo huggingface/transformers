@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
+from ..auto import CONFIG_MAPPING
 from ..d_fine.modeling_d_fine import (
-    DFineCSPRepLayer,
     DFineConvEncoder,
     DFineConvNormLayer,
+    DFineCSPRepLayer,
     DFineDecoder,
     DFineDecoderLayer,
     DFineDecoderOutput,
@@ -25,6 +27,7 @@ from ..d_fine.modeling_d_fine import (
     DFineForObjectDetection,
     DFineFrozenBatchNorm2d,
     DFineGate,
+    DFineHybridEncoder,
     DFineIntegral,
     DFineLQE,
     DFineMLP,
@@ -33,18 +36,13 @@ from ..d_fine.modeling_d_fine import (
     DFineModelOutput,
     DFineMultiscaleDeformableAttention,
     DFineObjectDetectionOutput,
+    DFinePreTrainedModel,
     DFineRepNCSPELAN4,
     DFineRepVggBlock,
     DFineSCDown,
-    DFineHybridEncoder,
 )
-from ...configuration_utils import PretrainedConfig
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
-
-from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)

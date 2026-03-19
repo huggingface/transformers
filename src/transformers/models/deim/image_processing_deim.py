@@ -23,7 +23,7 @@ import io
 import pathlib
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -121,7 +121,7 @@ def get_image_size_for_max_height_width(
     input_image: np.ndarray,
     max_height: int,
     max_width: int,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
@@ -154,9 +154,9 @@ def get_image_size_for_max_height_width(
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    size: Union[int, tuple[int, int], list[int]],
-    max_size: Optional[int] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    size: int | tuple[int, int] | list[int],
+    max_size: int | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size. If the desired output size
@@ -180,7 +180,7 @@ def get_resize_output_image_size(
     return get_size_with_aspect_ratio(image_size, size, max_size)
 
 
-def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
+def safe_squeeze(arr: np.ndarray, axis: int | None = None) -> np.ndarray:
     """
     Squeezes an array, but only if the axis specified has dim 1.
     """
@@ -215,7 +215,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
 
 
 def get_max_height_width(
-    images: list[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images: list[np.ndarray], input_data_format: str | ChannelDimension | None = None
 ) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -233,7 +233,7 @@ def get_max_height_width(
 
 
 def make_pixel_mask(
-    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: str | ChannelDimension | None = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -290,7 +290,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by D_E_I_M.
@@ -383,9 +383,9 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
     target: dict,
-    masks_path: Union[str, pathlib.Path],
+    masks_path: str | pathlib.Path,
     return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
+    input_data_format: ChannelDimension | str = None,
 ) -> dict:
     """
     Prepare a coco panoptic annotation for D_E_I_M.
@@ -530,18 +530,18 @@ class DEIMImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
+        format: str | AnnotationFormat = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_annotations: Optional[bool] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_annotations: bool | None = None,
         do_pad: bool = True,
-        pad_size: Optional[dict[str, int]] = None,
+        pad_size: dict[str, int] | None = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -616,10 +616,10 @@ class DEIMImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         """
         Prepare an annotation for feeding into D_E_I_M model.
@@ -649,8 +649,8 @@ class DEIMImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -730,8 +730,8 @@ class DEIMImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Rescale the image by the given factor. image = image * rescale_factor.
@@ -808,10 +808,10 @@ class DEIMImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         output_size: tuple[int, int],
-        annotation: Optional[dict[str, Any]] = None,
-        constant_values: Union[float, Iterable[float]] = 0,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        annotation: dict[str, Any] | None = None,
+        constant_values: float | Iterable[float] = 0,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         update_bboxes: bool = True,
     ) -> np.ndarray:
         """
@@ -840,14 +840,14 @@ class DEIMImageProcessor(BaseImageProcessor):
     def pad(
         self,
         images: list[np.ndarray],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        constant_values: Union[float, Iterable[float]] = 0,
+        annotations: AnnotationType | list[AnnotationType] | None = None,
+        constant_values: float | Iterable[float] = 0,
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         update_bboxes: bool = True,
-        pad_size: Optional[dict[str, int]] = None,
+        pad_size: dict[str, int] | None = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -925,24 +925,24 @@ class DEIMImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        annotations: AnnotationType | list[AnnotationType] | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
         resample=None,  # PILImageResampling
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        do_convert_annotations: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        format: Optional[Union[str, AnnotationFormat]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        pad_size: Optional[dict[str, int]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: int | float | None = None,
+        do_normalize: bool | None = None,
+        do_convert_annotations: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        format: str | AnnotationFormat | None = None,
+        return_tensors: TensorType | str | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
+        pad_size: dict[str, int] | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1459,7 +1459,7 @@ class DEIMImageProcessor(BaseImageProcessor):
 
     # inspired by https://github.com/facebookresearch/d_e_i_m/blob/master/models/d_e_i_m.py#L258
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None
     ):
         """
         Converts the raw output of [`DEIMForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -1511,7 +1511,7 @@ class DEIMImageProcessor(BaseImageProcessor):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`DEIMForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -1565,8 +1565,8 @@ class DEIMImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
-        return_coco_annotation: Optional[bool] = False,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
     ) -> list[dict]:
         """
         Converts the output of [`DEIMForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
@@ -1649,8 +1649,8 @@ class DEIMImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[set[int]] = None,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """
         Converts the output of [`DEIMForSegmentation`] into image panoptic segmentation predictions. Only supports

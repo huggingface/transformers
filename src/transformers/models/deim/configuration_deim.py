@@ -24,6 +24,7 @@ from ...utils import (
 )
 from ..auto import CONFIG_MAPPING
 
+
 try:
     # Newer versions of `transformers` expose this helper to validate backbone-related config fields.
     from ...utils.backbone_utils import verify_backbone_config_arguments
