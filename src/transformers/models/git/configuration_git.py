@@ -98,7 +98,7 @@ class GitConfig(PreTrainedConfig):
     use_cache: bool = True
     tie_word_embeddings: bool = False
     bos_token_id: int | None = 101
-    eos_token_id: int | None = 102
+    eos_token_id: int | list[int] | None = 102
     num_image_with_embedding: int | None = None
 
     def __post_init__(self, **kwargs):
