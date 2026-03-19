@@ -75,7 +75,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
         Size of windows.
     """
 
-    model_type = "qwen2_5_vl"
+    model_type = "qwen2_5_vl_image"
     base_config_key = "vision_config"
 
     depth: int = 32
