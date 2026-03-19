@@ -87,6 +87,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: paged_attention
+      title: Paged attention
     - sections:
       - local: kernel_doc/overview
         title: Kernels
