@@ -69,6 +69,12 @@ class Serve:
         enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
         log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "info",
         default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
+        compile: Annotated[
+            bool,
+            typer.Option(
+                help="Enable static cache + torch.compile for faster decode (~2.6x). First request triggers compilation (~30s)."
+            ),
+        ] = False,
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
         ] = False,
@@ -80,7 +86,9 @@ class Serve:
 
         from .serving.chat_completion import ChatCompletionHandler
         from .serving.model_manager import ModelManager
+        from .serving.response import ResponseHandler
         from .serving.server import build_server
+        from .serving.utils import InferenceThread
 
         # Seed
         if default_seed is not None:
@@ -105,13 +113,27 @@ class Serve:
             processor_id=processor,
         )
 
+        # Single persistent thread for all generate() calls — required for
+        # torch.compile + CUDA graphs which use thread-local storage.
+        inference_thread = InferenceThread()
+
         chat_handler = ChatCompletionHandler(
             model_manager=model_manager,
             force_model=force_model,
             force_processor=processor,
+            inference_thread=inference_thread,
+            compile=compile,
         )
 
-        app = build_server(model_manager, chat_handler, enable_cors=enable_cors)
+        response_handler = ResponseHandler(
+            model_manager=model_manager,
+            force_model=force_model,
+            force_processor=processor,
+            inference_thread=inference_thread,
+            compile=compile,
+        )
+
+        app = build_server(model_manager, chat_handler, response_handler=response_handler, enable_cors=enable_cors)
 
         config = uvicorn.Config(app, host=host, port=port, log_level=log_level)
         self.server = uvicorn.Server(config)

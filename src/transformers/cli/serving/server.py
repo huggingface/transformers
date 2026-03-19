@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from ...utils import logging
 from .chat_completion import ChatCompletionHandler
 from .model_manager import ModelManager
+from .response import ResponseHandler
 from .utils import X_REQUEST_ID
 
 
@@ -36,6 +37,7 @@ logger = logging.get_logger(__name__)
 def build_server(
     model_manager: ModelManager,
     chat_handler: ChatCompletionHandler,
+    response_handler: ResponseHandler,
     enable_cors: bool = False,
 ) -> FastAPI:
     """Build and return a configured FastAPI application.
@@ -43,6 +45,7 @@ def build_server(
     Args:
         model_manager: Handles model loading, caching, and cleanup.
         chat_handler: Handles `/v1/chat/completions` requests.
+        response_handler: Handles `/v1/responses` requests.
         enable_cors: If `True`, adds permissive CORS middleware (allow all origins).
 
     Returns:
@@ -82,6 +85,10 @@ def build_server(
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict):
         return chat_handler.handle_request(body, request.state.request_id)
+
+    @app.post("/v1/responses")
+    async def responses(request: Request, body: dict):
+        return response_handler.handle_request(body, request.state.request_id)
 
     @app.get("/v1/models")
     @app.options("/v1/models")
