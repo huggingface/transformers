@@ -442,6 +442,9 @@ class AutoModelTest(unittest.TestCase):
         class NewModelConfigLocal(BertConfig):
             model_type = "new-model"
 
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+
         class NewModel(BertModel):
             config_class = NewModelConfigLocal
 

@@ -94,6 +94,7 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -686,6 +687,37 @@ def require_flash_attn_3(test_case):
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
 
 
+def require_flash_attn_4(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 4.
+
+    These tests are skipped when Flash Attention 4 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_4_available(), "test requires Flash Attention 4")(test_case)
+
+
+def require_all_flash_attn(test_case):
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(
+        all(
+            (
+                flash_attn_available | kernels_available,
+                is_flash_attn_3_available(),
+                is_flash_attn_4_available(),
+            )
+        ),
+        "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
@@ -1108,6 +1140,16 @@ def require_fp8(test_case):
     return unittest.skipUnless(is_accelerate_available() and is_fp8_available(), "test requires fp8 support")(
         test_case
     )
+
+
+def require_cuda_capability_at_least(major, minor):
+    """Decorator to skip tests when CUDA capability is below the given version."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return unittest.skip("CUDA not available")
+    capability = torch.cuda.get_device_capability()
+    return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
 
 
 def require_torch_bf16(test_case):

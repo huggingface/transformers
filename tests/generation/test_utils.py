@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -972,9 +973,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 position_ids = torch.cumsum(model_inputs["attention_mask"], dim=-1) - 1
                 position_ids.masked_fill_(model_inputs["attention_mask"] == 0, 1)
                 model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(model_inputs["input_ids"].shape[1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
             # forward all other inputs, if they are in the signature
             model_kwargs.update({k: v for k, v in model_inputs.items() if k not in model_kwargs and k in signature})
             return model_kwargs
@@ -1765,7 +1763,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             input_args = {
                 "input_ids": input_ids,
-                "cache_position": torch.tensor([9]).to(torch_device),
                 "position_ids": torch.tensor([[0, 1, 2], [0, 1, 2]]).to(torch_device),
             }
             arbitrary_kwargs = {
@@ -1799,6 +1796,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1897,6 +1895,14 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_eager_matches_fa3_generate(self):
         """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_3")
+
+    @pytest.mark.flash_attn_4_test
+    @require_flash_attn_4
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa4_generate(self):
+        """Tests that generate has equivalent outputs with FA4 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_4")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -2008,6 +2014,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2153,6 +2160,22 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(
             attn_implementation="flash_attention_3", fa_kwargs=True
+        )
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_4")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_4", fa_kwargs=True
         )
 
     def _get_custom_4d_mask_test_data(self):
@@ -3813,8 +3836,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]]).to(torch_device)
         attention_mask = torch.tensor([[1, 1, 1], [1, 1, 1]]).to(torch_device)
         dynamic_cache = DynamicCache(config=config)
-        cache_position = torch.arange(input_ids.shape[-1], dtype=torch.long).to(torch_device)
-        position_ids = cache_position[None, ...]
+        position_ids = torch.arange(input_ids.shape[-1], dtype=torch.long).to(torch_device)[None, ...]
 
         # 1. Sanity check: the model's `prepare_inputs_for_generation` comes from `GenerationMixin`
         self.assertTrue("GenerationMixin" in str(model.prepare_inputs_for_generation))
@@ -3832,21 +3854,17 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 4. We never discard data from input ids and expect it to be already slice
         init_input_ids = input_ids[:, :2]
         init_dynamic_cache = model(init_input_ids, past_key_values=dynamic_cache).past_key_values
-        init_cache_position = cache_position[dynamic_cache.get_seq_length() :]
         model_inputs = model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=init_dynamic_cache,
-            cache_position=init_cache_position,
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertListEqual(model_inputs["cache_position"].tolist(), init_cache_position.tolist())
         self.assertEqual(model_inputs["input_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], input_ids.shape[1])
 
-        # 4.1: We do not have to pass prepared `cache_positions` to slice the data!
         # Data is sliced based on input ids length
         model_inputs = model.prepare_inputs_for_generation(
             init_input_ids,
@@ -3855,7 +3873,6 @@ class GenerationIntegrationTests(unittest.TestCase):
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertEqual(model_inputs["cache_position"], None)
         self.assertEqual(model_inputs["input_ids"].shape[-1], init_input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], init_input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], 3)  # attn mask is never sliced, we need PAD mask
@@ -3865,7 +3882,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         static_cache = StaticCache(config=config, max_cache_len=max_cache_len)
         static_cache = model(init_input_ids, past_key_values=static_cache).past_key_values
         model_inputs = model.prepare_inputs_for_generation(
-            init_input_ids, past_key_values=static_cache, attention_mask=attention_mask, cache_position=cache_position
+            init_input_ids,
+            past_key_values=static_cache,
+            attention_mask=attention_mask,
         )
         self.assertTrue("past_key_values" in model_inputs)
         self.assertListEqual(
@@ -4562,7 +4581,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(value, "callable_success")
 
     @pytest.mark.generate
-    def test_generate_custom_cache_position(self):
+    def test_generate_can_restart_from_cache_and_new_tokens_only(self):
         """
         Test that we can continue generating from past key values, returned from a previous `generate` call, without
         the tokens that correspond to the cached part IF the `attention_mask` is the mask for the FULL sequence

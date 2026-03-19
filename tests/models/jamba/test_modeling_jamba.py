@@ -17,6 +17,7 @@ import math
 import tempfile
 import unittest
 
+import huggingface_hub
 import pytest
 
 from transformers import AutoTokenizer, BitsAndBytesConfig, JambaConfig, is_torch_available
@@ -70,9 +71,9 @@ class JambaConfigTester(ConfigTester):
         self._create_attn_config(attn_layer_offset=1, attn_layer_period=4)
         self._create_attn_config(attn_layer_offset=2, attn_layer_period=4)
         self._create_attn_config(attn_layer_offset=3, attn_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_attn_config(attn_layer_offset=4, attn_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_attn_config(attn_layer_offset=5, attn_layer_period=4)
 
     def test_expert_offsets(self):
@@ -80,9 +81,9 @@ class JambaConfigTester(ConfigTester):
         self._create_expert_config(expert_layer_offset=1, expert_layer_period=4)
         self._create_expert_config(expert_layer_offset=2, expert_layer_period=4)
         self._create_expert_config(expert_layer_offset=3, expert_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_expert_config(expert_layer_offset=4, expert_layer_period=4)
-        with self.parent.assertRaises(ValueError):
+        with self.parent.assertRaises(huggingface_hub.errors.StrictDataclassClassValidationError):
             self._create_expert_config(expert_layer_offset=5, expert_layer_period=4)
 
     def test_jamba_offset_properties(self):
@@ -280,9 +281,6 @@ class JambaModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -381,7 +379,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = JambaModelTester(self)
-        self.config_tester = JambaConfigTester(self, config_class=JambaConfig, hidden_size=37)
+        self.config_tester = JambaConfigTester(self, config_class=JambaConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -585,6 +583,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ("cuda", 7): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
                 ("cuda", 8): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
                 ("rocm", 9): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew llam bb",
+                ("xpu", 3): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
             }
         )
         # fmt: on
@@ -609,6 +608,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ("cuda", 7): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
                 ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a story about a woman who was born in the United States",],
                 ("rocm", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
+                ("xpu", 3): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'"]
             }
         )
         # fmt: on

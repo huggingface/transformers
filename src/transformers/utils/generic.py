@@ -240,6 +240,10 @@ def is_flash_attention_requested(
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
@@ -837,7 +841,7 @@ def del_attribute_from_modules(module: nn.Module, key: str):
 def can_return_tuple(func):
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
-    use_return_dict=False is set in the config.
+    return_dict=False is set in the config.
 
     Note:
         output.to_tuple() convert output to tuple skipping all `None` values.

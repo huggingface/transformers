@@ -15,6 +15,7 @@
 
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ....transformers.models.dinov2.modeling_dinov2 import (
@@ -37,6 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
+@strict(accept_kwargs=True)
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -69,54 +71,34 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "dinov2_with_registers"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        use_swiglu_ffn=False,
-        num_register_tokens=4,
-        out_features=None,
-        out_indices=None,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    mlp_ratio: int = 4
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    qkv_bias: bool = True
+    layerscale_value: float = 1.0
+    drop_path_rate: float = 0.0
+    use_swiglu_ffn: bool = False
+    num_register_tokens: int = 4
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    apply_layernorm: bool = True
+    reshape_hidden_states: bool = True
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.num_register_tokens = num_register_tokens
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 class Dinov2WithRegistersPatchEmbeddings(Dinov2PatchEmbeddings):
@@ -222,10 +204,6 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         return embeddings
 
 
-class Dinov2WithRegistersEncoder(Dinov2Encoder):
-    pass
-
-
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
@@ -244,6 +222,10 @@ class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
             init.zeros_(module.register_tokens)
         elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
             init.constant_(module.lambda1, self.config.layerscale_value)
+
+
+class Dinov2WithRegistersEncoder(Dinov2Encoder):
+    pass
 
 
 class Dinov2WithRegistersModel(Dinov2Model):
@@ -306,8 +288,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
         Examples:
@@ -335,11 +316,10 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -359,7 +339,8 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
 
         return BackboneOutput(
             feature_maps=tuple(feature_maps),
-            hidden_states=hidden_states if output_hidden_states else None,
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 

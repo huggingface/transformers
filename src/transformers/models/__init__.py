@@ -203,6 +203,7 @@ if TYPE_CHECKING:
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jina_embeddings_v3 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -250,6 +251,7 @@ if TYPE_CHECKING:
     from .ministral3 import *
     from .mistral import *
     from .mistral3 import *
+    from .mistral4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *
@@ -311,6 +313,8 @@ if TYPE_CHECKING:
     from .phi4_multimodal import *
     from .phimoe import *
     from .phobert import *
+    from .pi0 import *
+    from .pi0_fast import *
     from .pix2struct import *
     from .pixio import *
     from .pixtral import *
@@ -319,6 +323,10 @@ if TYPE_CHECKING:
     from .pop2piano import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_lcnet import *
+    from .pp_lcnet_v3 import *
+    from .pp_ocrv5_mobile_det import *
+    from .pp_ocrv5_server_det import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
