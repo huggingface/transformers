@@ -579,7 +579,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
 
         self.vision_model = AutoModel.from_config(config.vision_config)
 
-        self.multi_modal_projector = nn.Linear(config.vision_hidden_size, config.text_hidden_size)
+        self.projector = nn.Linear(config.vision_output_size, config.text_hidden_size)
 
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
@@ -605,7 +605,6 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -613,15 +612,9 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
+
         """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
-            **kwargs,
-        )
+        return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -629,7 +622,6 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -640,19 +632,9 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            grid_thw=image_grid_thw,
-            merge_sizes=image_merge_sizes,
-            return_dict=True,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        image_embeds = self.projector(last_hidden_state)
-
-        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
-        image_embeds = torch.split(image_embeds, split_sizes.tolist())
-        vision_outputs.pooler_output = image_embeds
+        pixel_values = pixel_values.type(self.vision_model.dtype)
+        vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
 
         return vision_outputs
 
@@ -944,9 +926,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             model_inputs["pixel_values_videos"] = None
 
         return model_inputs
-
-    def _prepare_position_ids_for_generation(self):
-        raise AttributeError("Not needed for HCX")
 
 
 class HCXVisionForSequenceClassification(HCXVisionPreTrainedModel, GenericForSequenceClassification):

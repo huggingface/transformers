@@ -17,14 +17,15 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...modeling_layers import GenericForSequenceClassification
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.modeling_auto import AutoModel
 from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteForCausalLM, GraniteModel
 from ..llama.modeling_llama import LlamaPreTrainedModel
-from ..video_llama_3.modeling_video_llama_3 import VideoLlama3ForConditionalGeneration, VideoLlama3Model
+from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model
 from .configuration_hyperclovax_vision import HCXVisionConfig, HyperClovaXConfig
 
 
@@ -71,14 +72,34 @@ class HCXVisionModel(VideoLlama3Model):
 
         self.vision_model = AutoModel.from_config(config.vision_config)
 
-        self.multi_modal_projector = nn.Linear(config.vision_config.out_hidden_size, config.text_config.hidden_size)
+        self.projector = nn.Linear(config.vision_output_size, config.text_hidden_size)
 
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.vision_model.dtype)
+        vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs.pooler_output = self.projector(vision_outputs.pooler_output)
+
+        return vision_outputs
+
 
 @auto_docstring
-class HCXVisionForConditionalGeneration(VideoLlama3ForConditionalGeneration):
+class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixin):
     accepts_loss_kwargs = False
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
@@ -88,6 +109,44 @@ class HCXVisionForConditionalGeneration(VideoLlama3ForConditionalGeneration):
         self.vocab_size = config.text_config.vocab_size
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -180,6 +239,44 @@ class HCXVisionForConditionalGeneration(VideoLlama3ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if not is_first_iteration and use_cache:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
 
 
 class HCXVisionForSequenceClassification(HCXVisionPreTrainedModel, GenericForSequenceClassification):

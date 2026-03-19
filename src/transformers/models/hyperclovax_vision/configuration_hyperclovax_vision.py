@@ -129,27 +129,24 @@ class HCXVisionConfig(PreTrainedConfig):
         if isinstance(self.vision_config, dict):
             model_type = self.vision_config.get("model_type", "qwen2_5_vl_image")
             # "qwen2_5_vl" refers to the full VL model; we only need the vision encoder
-            if model_type == "qwen2_5_vl":
-                model_type = "qwen2_5_vl_image"
-            vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
+            model_type = "qwen2_5_vl_image" if model_type == "qwen2_5_vl" else model_type
+            self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
         elif self.vision_config is None:
-            vision_config = CONFIG_MAPPING["qwen2_5_vl_image"]()
-        self.vision_config = vision_config
+            self.vision_config = CONFIG_MAPPING["qwen2_5_vl_image"]()
 
         if isinstance(self.text_config, dict):
             model_type = self.text_config.get("model_type", "hyperclovax_text")
             model_type = "hyperclovax_text" if model_type == "hyperclovax" else model_type
-            text_config = CONFIG_MAPPING[model_type](**self.text_config)
+            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
-            text_config = HyperClovaXConfig()
-        self.text_config = text_config
+            self.text_config = HyperClovaXConfig()
 
         self.image_token_id = self.img_start_id
         self.video_token_id = self.video_start_id
 
         self.initializer_range = self.text_config.initializer_range
 
-        self.vision_hidden_size = self.vision_config.hidden_size
+        self.vision_output_size = self.vision_config.out_hidden_size
         self.text_hidden_size = self.text_config.hidden_size
 
         # Accept old hub configs that used model_type="vlm"
