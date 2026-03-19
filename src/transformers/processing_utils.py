@@ -58,7 +58,7 @@ from .utils import (
     list_repo_templates,
     logging,
 )
-from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -1637,7 +1637,16 @@ class ProcessorMixin(PushToHubMixin):
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         chat_template: str | None = None,
-        **kwargs: Unpack[AllKwargsForChatTemplate],
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: bool = False,
+        return_dict: bool = False,
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
     ) -> str:
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
@@ -1687,6 +1696,11 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 pass
 
+        # Users might still be passing processing kwargs in `**kwargs` so we need to filter
+        # out additional kwargs that the template expects via Jinja2 template introspection
+        template_kwargs = _get_template_variables(chat_template)
+        processor_kwargs = processor_kwargs or {k: v for k, v in kwargs.items() if k not in template_kwargs}
+
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
         if hasattr(self, "tokenizer"):
@@ -1696,42 +1710,32 @@ class ProcessorMixin(PushToHubMixin):
                 # Fallback to class name check
                 is_tokenizers_fast = self.tokenizer.__class__.__name__.endswith("Fast")
 
-        if kwargs.get("continue_final_message", False):
-            if kwargs.get("add_generation_prompt", False):
+        if continue_final_message:
+            if add_generation_prompt:
                 raise ValueError(
                     "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
                 )
-            if kwargs.get("return_assistant_tokens_mask", False):
+            if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        if kwargs.get("return_assistant_tokens_mask", False):
+        if return_assistant_tokens_mask:
             if not is_tokenizers_fast:
                 raise ValueError(
                     "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
                     "If the error persists, open an issue to support a Fast tokenizer for your model."
                 )
             else:
-                kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
-
-        # Fill sets of kwargs that should be used by jinja template, filtering out kwargs used in `processor.__call__`
-        # NOTE: we don't only filter but also set the default values here. Without default values, we can remove it
-        template_kwargs = {}
-        for key in AllKwargsForChatTemplate.__annotations__["template_kwargs"].__annotations__:
-            kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__["template_kwargs"]
-            default_value = getattr(kwarg_type_defaults, key, None)
-            value = kwargs.pop(key, default_value)
-            if value is not None and not isinstance(value, dict):
-                template_kwargs[key] = value
-
-        # Pass unprocessed custom kwargs
-        template_kwargs.update(kwargs)
+                processor_kwargs["return_offsets_mapping"] = (
+                    True  # force offset mapping so we can infer token boundaries
+                )
 
         # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        if "sampling_rate" not in template_kwargs:
+        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        if sampling_rate is None:
             if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
-                template_kwargs["sampling_rate"] = self.feature_extractor.sampling_rate
+                sampling_rate = self.feature_extractor.sampling_rate
             else:
-                template_kwargs["sampling_rate"] = 16_000
+                sampling_rate = 16_000
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1758,9 +1762,6 @@ class ProcessorMixin(PushToHubMixin):
                     else:
                         new_content.append(content)
                 message["content"] = new_content
-
-        tokenize = template_kwargs.pop("tokenize", False)
-        return_dict = template_kwargs.pop("return_dict", True)
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1791,29 +1792,31 @@ class ProcessorMixin(PushToHubMixin):
                     videos.extend(video_fnames)
 
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
-                    if not template_kwargs["load_audio_from_video"]:
+                    if not load_audio_from_video:
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     else:
                         for fname in video_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=template_kwargs["sampling_rate"]))
+                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
                 batch_images.append(images)
                 batch_videos.append(videos)
 
-        special_tokens_map = {}
-        if hasattr(self, "tokenizer") and hasattr(self.tokenizer, "special_tokens_map"):
-            special_tokens = self.tokenizer.special_tokens_map
-            # Filter out tokens that conflict with template kwargs
-            special_tokens_map = {k: v for k, v in special_tokens.items() if k not in template_kwargs}
-
+        template_kwargs = {
+            **self.tokenizer.special_tokens_map,
+            **kwargs,
+        }  # kwargs overwrite special tokens if both are present
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
+            tools=tools,
+            documents=documents,
             chat_template=chat_template,
-            **template_kwargs,  # different flags such as `return_assistant_mask`
-            **special_tokens_map,  # tokenizer special tokens are used by some templates
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            continue_final_message=continue_final_message,
+            add_generation_prompt=add_generation_prompt,
+            **template_kwargs,
         )
 
         if not is_batched:
@@ -1828,14 +1831,14 @@ class ProcessorMixin(PushToHubMixin):
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                kwargs["add_special_tokens"] = False
+                processor_kwargs["add_special_tokens"] = False
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
             # sampling should not done for BC.
-            if "do_sample_frames" not in kwargs and (
-                kwargs.get("fps") is not None or kwargs.get("num_frames") is not None
+            if "do_sample_frames" not in processor_kwargs and (
+                processor_kwargs.get("fps") is not None or processor_kwargs.get("num_frames") is not None
             ):
-                kwargs["do_sample_frames"] = True
+                processor_kwargs["do_sample_frames"] = True
 
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
@@ -1844,11 +1847,11 @@ class ProcessorMixin(PushToHubMixin):
                 images=batch_images if images_exist else None,
                 videos=batch_videos if videos_exist else None,
                 audio=batch_audios if batch_audios else None,
-                **kwargs,
+                **processor_kwargs,
             )
 
             if return_dict:
-                if template_kwargs.get("return_assistant_tokens_mask", False):
+                if return_assistant_tokens_mask:
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
@@ -1874,7 +1877,7 @@ class ProcessorMixin(PushToHubMixin):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
-                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors"))
+                    out.convert_to_tensors(tensor_type=processor_kwargs.get("return_tensors"))
                 return out
             else:
                 return out["input_ids"]
