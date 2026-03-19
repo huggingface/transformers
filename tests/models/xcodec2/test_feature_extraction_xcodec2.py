@@ -59,7 +59,6 @@ class Xcodec2FeatureExtractionTester:
         min_seq_length=400,
         max_seq_length=2000,
         feature_size=80,  # number of mel bins
-        n_channels=1,
         sampling_rate=16000,
         spec_hop_length=160,
         hop_length=320,
@@ -72,7 +71,6 @@ class Xcodec2FeatureExtractionTester:
         self.hop_length = hop_length
         self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
         self.feature_size = feature_size
-        self.n_channels = n_channels
         self.sampling_rate = sampling_rate
 
     # Ignore copy
@@ -82,7 +80,6 @@ class Xcodec2FeatureExtractionTester:
             "sampling_rate": self.sampling_rate,
             "hop_length": self.hop_length,
             "spec_hop_length": self.spec_hop_length,
-            "n_channels": self.n_channels,
             "padding_value": 0.0,
         }
 
@@ -125,9 +122,8 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         sampling_rate = self.feat_extract_tester.sampling_rate
         encoded_sequences_1 = feat_extract(torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np")
         encoded_sequences_2 = feat_extract(np_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np")
-        # -- use torch for mel features
         encoded_sequences_3 = feat_extract(
-            torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", use_torch=True, device="cpu"
+            torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", device="cpu"
         )
         self.assertTrue(np.allclose(encoded_sequences_1.audio, encoded_sequences_2.audio, atol=TOL))
         self.assertTrue(
@@ -140,7 +136,7 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # Test using GPU
         if torch.cuda.is_available():
             encoded_sequences_3 = feat_extract(
-                torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", use_torch=True, device="cuda"
+                torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np", device="cuda"
             )
             self.assertTrue(np.allclose(encoded_sequences_1.audio, encoded_sequences_3.audio, atol=TOL))
             self.assertTrue(
@@ -159,7 +155,6 @@ class Xcodec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             sampling_rate=sampling_rate,
             padding=True,
             return_tensors="np",
-            use_torch=True,
             device="cpu",
         )
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1.audio, encoded_sequences_2.audio):

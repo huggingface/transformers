@@ -3170,7 +3170,7 @@ class DownSample1d(nn.Module):
         return out
 
 
-class TorchActivation1d(nn.Module):
+class AntiAliasedActivation1d(nn.Module):
     def __init__(
         self,
         activation,
@@ -3264,7 +3264,7 @@ class AMPBlock(torch.nn.Module):
         self.num_layers = len(self.convs1) + len(self.convs2)  # total number of conv layers
 
         self.activations = nn.ModuleList(
-            [TorchActivation1d(activation=SnakeBeta(channels)) for _ in range(self.num_layers)]
+            [AntiAliasedActivation1d(activation=SnakeBeta(channels)) for _ in range(self.num_layers)]
         )
 
     def _get_padding(self, kernel_size, dilation=1):
@@ -3324,7 +3324,7 @@ class Qwen2_5OmniToken2WavBigVGANModel(Qwen2_5OmniPreTrainedModel):
             ]
         )
 
-        self.activation_post = TorchActivation1d(
+        self.activation_post = AntiAliasedActivation1d(
             activation=SnakeBeta(config.upsample_initial_channel // (2**self.num_upsample_layers))
         )
         self.conv_post = nn.Conv1d(

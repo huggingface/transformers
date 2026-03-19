@@ -504,7 +504,7 @@ class DownSample1d(nn.Module):
         return out
 
 
-class TorchActivation1d(nn.Module):
+class AntiAliasedActivation1d(nn.Module):
     def __init__(
         self,
         activation,
@@ -536,9 +536,9 @@ class Xcodec2ResidualUnit(nn.Module):
     def __init__(self, dimension, dilation):
         super().__init__()
         pad = ((7 - 1) * dilation) // 2
-        self.snake1 = TorchActivation1d(activation=SnakeBeta(dimension))
+        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
         self.conv1 = nn.Conv1d(dimension, dimension, kernel_size=7, dilation=dilation, padding=pad)
-        self.snake2 = TorchActivation1d(activation=SnakeBeta(dimension))
+        self.snake2 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
         self.conv2 = nn.Conv1d(dimension, dimension, kernel_size=1)
 
     def forward(self, hidden_state):
@@ -573,7 +573,7 @@ class Xcodec2EncoderBlock(nn.Module):
         self.res_unit1 = Xcodec2ResidualUnit(dimension // 2, dilation=1)
         self.res_unit2 = Xcodec2ResidualUnit(dimension // 2, dilation=3)
         self.res_unit3 = Xcodec2ResidualUnit(dimension // 2, dilation=9)
-        self.snake1 = TorchActivation1d(activation=SnakeBeta(dimension // 2))
+        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension // 2))
         self.conv1 = nn.Conv1d(
             dimension // 2, dimension, kernel_size=2 * stride, stride=stride, padding=math.ceil(stride / 2)
         )
@@ -604,7 +604,7 @@ class Xcodec2Encoder(nn.Module):
 
         self.block = nn.ModuleList(self.block)
         d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
-        self.snake1 = TorchActivation1d(activation=SnakeBeta(d_model))
+        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(d_model))
         self.conv2 = nn.Conv1d(d_model, config.hidden_size, kernel_size=3, padding=1)
 
     def forward(self, hidden_state):

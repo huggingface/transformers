@@ -36,9 +36,9 @@ from ..auto import AutoModel
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
+    AntiAliasedActivation1d,
     DownSample1d,
     SnakeBeta,
-    TorchActivation1d,
     UpSample1d,
     kaiser_sinc_filter1d,
 )
@@ -135,29 +135,29 @@ class SnakeBeta(SnakeBeta):
     pass
 
 
-class TorchActivation1d(TorchActivation1d):
+class AntiAliasedActivation1d(AntiAliasedActivation1d):
     pass
 
 
 class Xcodec2ResidualUnit(DacResidualUnit):
     def __init__(self, dimension, dilation):
         super().__init__(dimension, dilation)
-        self.snake1 = TorchActivation1d(activation=SnakeBeta(dimension))
-        self.snake2 = TorchActivation1d(activation=SnakeBeta(dimension))
+        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
+        self.snake2 = AntiAliasedActivation1d(activation=SnakeBeta(dimension))
 
 
 class Xcodec2EncoderBlock(DacEncoderBlock):
     def __init__(self, config: Xcodec2Config, stride: int = 1, stride_index: int = 1):
         super().__init__(config, stride, stride_index)
         dimension = config.encoder_hidden_size * 2**stride_index
-        self.snake1 = TorchActivation1d(activation=SnakeBeta(dimension // 2))
+        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(dimension // 2))
 
 
 class Xcodec2Encoder(DacEncoder):
     def __init__(self, config: Xcodec2Config):
         super().__init__(config)
         d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
-        self.snake1 = TorchActivation1d(activation=SnakeBeta(d_model))
+        self.snake1 = AntiAliasedActivation1d(activation=SnakeBeta(d_model))
 
 
 class Xcodec2ResNetBlock(nn.Module):

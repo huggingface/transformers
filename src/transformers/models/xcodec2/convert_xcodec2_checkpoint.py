@@ -215,12 +215,8 @@ def convert_checkpoint(
     feature_extractor = Xcodec2FeatureExtractor(
         feature_size=semantic_fe.feature_size,
         sampling_rate=semantic_fe.sampling_rate,
-        num_mel_bins=semantic_fe.num_mel_bins,
         padding_value=semantic_fe.padding_value,
-        stride=semantic_fe.stride,
-        n_channels=dac_fe.feature_size,
         hop_length=dac_fe.hop_length,
-        pre_padding_value=dac_fe.padding_value,
     )
 
     if pytorch_dump_folder_path is not None:
@@ -235,9 +231,9 @@ def convert_checkpoint(
 
 """
 While there is training code on GitHub: https://github.com/zhenye234/X-Codec-2.0
-Modeling code on the Hub is used by xcodec2 (pip) package: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
+The modeling code on the Hub is used by the xcodec2 (pip) package: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
 
-Given their example usage: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
+Moreover given their example usage: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py
 It seems best to use the config and weights from the Hub.
 
 Conversion example usage:
