@@ -54,12 +54,31 @@ class UVDocModelTester:
         num_channels=3,
         num_stages=6,
         is_training=False,
+        num_filter=8,
+        kernel_size=5,
+        block_stride_values=(1, 2, 2),
+        feature_map_multipliers=(1, 2, 4),
+        block_counts_per_stage=(3, 4, 6),
+        dilation_values=((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6)),
+        padding_mode="reflect",
     ):
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
         self.num_stages = num_stages
+        self.num_filter = num_filter
+        self.kernel_size = kernel_size
+        self.block_stride_values = block_stride_values
+        self.feature_map_multipliers = feature_map_multipliers
+        self.block_counts_per_stage = block_counts_per_stage
+        self.dilation_values = dilation_values
+        self.num_hidden_layers = len(dilation_values)
+        self.padding_mode = padding_mode
+        # For test_hidden_states_output: UVDoc outputs spatial hidden states (B, C, H, W)
+        # with shape[-2:] = (8, 8) for image_size=128
+        self.seq_length = 8
+        self.hidden_size = 8
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -73,22 +92,16 @@ class UVDocModelTester:
         return config, pixel_values
 
     def get_config(self) -> UVDocConfig:
-        dilation_values = [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
-
-        self.dilation_values = dilation_values
-
-        config = UVDocConfig(
-            num_filter=8,
-            in_channels=3,
-            kernel_size=5,
-            block_stride_values=[1, 2, 2],
-            feature_map_multipliers=[1, 2, 4],
-            block_counts_per_stage=[3, 4, 6],
-            dilation_values=dilation_values,
-            padding_mode="reflect",
+        return UVDocConfig(
+            num_filter=self.num_filter,
+            in_channels=self.num_channels,
+            kernel_size=self.kernel_size,
+            block_stride_values=list(self.block_stride_values),
+            feature_map_multipliers=list(self.feature_map_multipliers),
+            block_counts_per_stage=list(self.block_counts_per_stage),
+            dilation_values=[list(d) for d in self.dilation_values],
+            padding_mode=self.padding_mode,
         )
-
-        return config
 
     def create_and_check_uvdoc_document_rectification(self, config, pixel_values):
         model = UVDocModel(config=config)
@@ -128,14 +141,6 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_uvdoc_document_rectification(*config_and_inputs)
 
-    @unittest.skip(reason="UVDoc does not support input and output embeddings")
-    def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="UVDoc does not support hidden_states")
-    def test_hidden_states_output(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -168,8 +173,16 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @unittest.skip(reason="UVDoc does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
     @unittest.skip(reason="UVDoc does not support training")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Large number of hidden layers but small spatial dimensions")
+    def test_num_layers_is_small(self):
         pass
 
 
@@ -180,7 +193,8 @@ class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
-        self.image_processor = UVDocImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+        self.image_processor = UVDocImageProcessorFast() if is_vision_available() else None
+        self.image_processor.save_pretrained("uvdoc_image_processor")
         self.image = Image.open(
             requests.get(
                 "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True

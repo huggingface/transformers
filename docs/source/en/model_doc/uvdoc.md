@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-02-06 and added to Hugging Face Transformers on 2026-03-16.*
+*This model was released on 2023-02-06 and added to Hugging Face Transformers on 2026-03-19.*
 
 # UVDoc
 
@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 **UVDoc** The main purpose of text image correction is to carry out geometric transformation on the image to correct the document distortion, inclination, perspective deformation and other problems in the image.
 
-## Model Architecture 
+## Model Architecture
 The main purpose of text image correction is to carry out geometric transformation on the image to correct the document distortion, inclination, perspective deformation and other problems in the image.
 
 
@@ -33,7 +33,7 @@ The main purpose of text image correction is to carry out geometric transformati
 
 ### Single input inference
 
-The example below demonstrates how to classify image with UVDoc using the [`AutoModel`].
+The example below demonstrates how to rectify a document image with UVDoc using the [`AutoImageProcessor`] and [`UVDocModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -55,7 +55,7 @@ image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/padd
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-result = image_processor.post_process_document_rectification(outputs.last_hidden_state)
+result = image_processor.post_process_document_rectification(outputs.last_hidden_state, inputs["original_images"])
 print(result)
 ```
 
@@ -64,7 +64,7 @@ print(result)
 
 ### Batched inference
 
-Here is how you can do it with UVDoc using the [`AutoModel`]:
+Here is how to perform batched document rectification with UVDoc:
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -76,7 +76,7 @@ from transformers import AutoImageProcessor, UVDocModel
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
 model = UVDocModel.from_pretrained(
-    model_path
+    model_path,
     device_map="auto",
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
@@ -86,7 +86,7 @@ image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/padd
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-result = image_processor.post_process_document_rectification(outputs.last_hidden_state)
+result = image_processor.post_process_document_rectification(outputs.last_hidden_state, inputs["original_images"])
 print(result)
 ```
 

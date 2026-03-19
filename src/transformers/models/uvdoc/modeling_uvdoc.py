@@ -342,9 +342,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
         out_point_positions2D = self.out_point_positions2D(bridge)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=out_point_positions2D,
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=out_point_positions2D)
 
 
 __all__ = ["UVDocModel", "UVDocPreTrainedModel"]

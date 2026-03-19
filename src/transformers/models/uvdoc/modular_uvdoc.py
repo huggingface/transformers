@@ -25,10 +25,10 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import SizeDict
+from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import TensorType
 from ...utils.output_capturing import capture_outputs
@@ -44,65 +44,44 @@ class UVDocConfig(PreTrainedConfig):
         Number of input channels. Defaults to 3 for RGB images; set to 1 for grayscale images.
     kernel_size (`int`, *optional*, defaults to 5):
         Kernel size for convolutional layers in the backbone network.
-    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
+    block_stride_values (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(1, 2, 2)`):
         Strides for downsampling operations in the backbone network.
-    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
+    feature_map_multipliers (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(1, 2, 4)`):
         Scaling factors for feature map dimensions in multi-scale feature fusion modules.
-    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6]`):
+    block_counts_per_stage (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
         Number of residual blocks in each stage of the model backbone.
-    dilation_values (`List[List[int]]`, *optional*, defaults to `None`):
-        Dilation rates for dilated convolutional layers in bridge modules. Each inner list contains dilation rates
-        for a single bridge block.
+    dilation_values (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+        Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
+        rates for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     """
 
     model_type = "uvdoc"
 
-    def __init__(
-        self,
-        num_filter: int = 32,
-        in_channels: int = 3,
-        kernel_size: int = 5,
-        block_stride_values: list | None = None,
-        feature_map_multipliers: list | None = None,
-        block_counts_per_stage: list | None = None,
-        dilation_values: list | None = None,
-        padding_mode: str = "reflect",
-        **kwargs,
-    ):
-        self.num_filter = num_filter
-        self.in_channels = in_channels
-        self.kernel_size = kernel_size
-        self.block_stride_values = block_stride_values if block_stride_values is not None else [1, 2, 2]
-        self.feature_map_multipliers = feature_map_multipliers if feature_map_multipliers is not None else [1, 2, 4]
-        self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
-        self.dilation_values = (
-            dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
-        )
-        self.padding_mode = padding_mode
-
-        super().__init__(**kwargs)
-
-
-class UVDocImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    upsample_size (`List[int]`, *optional*, defaults to `[712, 488]`):
-        Target spatial size (width, height) of the upsampled output image.
-    upsample_mode (`str`, *optional*, defaults to `"bilinear"`):
-        Interpolation mode for upsampling layers. Supported modes are `"bilinear"`, `"nearest"`, and `"bicubic"`.
-    """
-
-    upsample_size: list
-    upsample_mode: str
+    num_filter: int = 32
+    in_channels: int = 3
+    kernel_size: int = 5
+    block_stride_values: list[int] | tuple[int, ...] = (1, 2, 2)
+    feature_map_multipliers: list[int] | tuple[int, ...] = (1, 2, 4)
+    block_counts_per_stage: list[int] | tuple[int, ...] = (3, 4, 6)
+    dilation_values: list[list[int]] | tuple[tuple[int, ...], ...] = (
+        (1,),
+        (2,),
+        (5,),
+        (8, 3, 2),
+        (12, 7, 4),
+        (18, 12, 6),
+    )
+    padding_mode: str = "reflect"
 
 
 @auto_docstring
 class UVDocImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
-    upsample_size = [712, 488]
-    upsample_mode = "bilinear"
-    valid_kwargs = UVDocImageProcessorKwargs
+    do_resize = True
+    size = {"height": 712, "width": 488}
+    resample = PILImageResampling.BILINEAR
 
     def _preprocess(
         self,
@@ -115,21 +94,11 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        upsample_size: list[float] | None,
-        upsample_mode: str,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
-        resized_images_grouped = {}
-        for shape, stacked_images in grouped_images.items():
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
-            resized_images_grouped[shape] = stacked_images
-        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
-        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
@@ -141,24 +110,19 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
         rescale_and_normalize_images = reorder_images(processed_images_grouped, grouped_images_index)
 
+        original_images = rescale_and_normalize_images.copy()
+
         grouped_images, grouped_images_index = group_images_by_shape(
             rescale_and_normalize_images, disable_grouping=disable_grouping
         )
         interpolated_images_grouped = {}
-        original_images = []
-
         # Upsample images and extract originals for post-processing
         for shape, stacked_images in grouped_images.items():
-            # Store original images before upsampling for later use
-            original_images.append(stacked_images[0])
-
-            # Interpolate to target size
-            stacked_images = F.interpolate(
-                stacked_images,
-                size=(upsample_size[0], upsample_size[1]),
-                mode=upsample_mode,
-                align_corners=True,
-            )
+            # Interpolate to target size (use interpolate with align_corners=True to match original implementation)
+            if do_resize:
+                stacked_images = F.interpolate(
+                    stacked_images, size=(size.height, size.width), mode=interpolation.value, align_corners=True
+                )
             interpolated_images_grouped[shape] = stacked_images
 
         pixel_values = reorder_images(interpolated_images_grouped, grouped_images_index)
@@ -166,12 +130,13 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(
             data={"pixel_values": pixel_values, "original_images": original_images},
             tensor_type=return_tensors,
+            skip_tensor_conversion=["original_images"],
         )
 
     def post_process_document_rectification(
         self,
         prediction: torch.Tensor,
-        original_images: torch.Tensor,
+        original_images: list[torch.Tensor],
         scale: float = 255.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
@@ -179,7 +144,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
 
         Args:
             prediction: Predicted 2D Bezier mesh coordinates, shape (B, 2, H, W)
-            original_images: Original input images, shape (B, C, H, W)
+            original_images: List of original input tensors, each of shape (C, H_i, W_i). Images may have different sizes.
             scale: Scaling factor for output images (default: 255.0)
 
         Returns:
@@ -187,36 +152,38 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                 - "images": Rectified image tensor of shape (H, W, 3) with dtype torch.uint8
                           and BGR channel order (suitable for OpenCV visualization)
         """
-        # Get original image dimensions
-        original_height, original_width = original_images.shape[2:]
+        image_list = list(original_images)
 
-        # Upsample predicted mesh to original image size
-        upsampled_mesh = F.interpolate(
-            prediction,
-            size=(original_height, original_width),
-            mode=self.upsample_mode,
-            align_corners=True,
-        )
-
-        # Permute mesh for grid_sample: (B, H, W, 2)
-        rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
-
-        # Apply spatial transformation to rectify the document
-        rectified_images = F.grid_sample(original_images, rearranged_mesh, align_corners=True)
-
-        # Convert to uint8 for visualization
-        scale = torch.tensor(float(scale), device=prediction.device)
+        scale_t = torch.tensor(float(scale), device=prediction.device)
         results = []
 
-        for image in rectified_images:
-            # Handle tuple format if present
-            image = image[0] if isinstance(image, tuple) else image
+        for i, orig_img in enumerate(image_list):
+            # Ensure (1, C, H, W) for grid_sample
+            if orig_img.ndim == 3:
+                orig_img = orig_img.unsqueeze(0)
+            orig_img = orig_img.to(prediction.device)
+            original_height, original_width = orig_img.shape[2:]
+
+            # Upsample predicted mesh for this image to its original size
+            pred_i = prediction[i : i + 1]
+            upsampled_mesh = F.interpolate(
+                pred_i,
+                size=(original_height, original_width),
+                mode="bilinear",
+                align_corners=True,
+            )
+
+            # Permute mesh for grid_sample: (1, H, W, 2)
+            rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
+
+            # Apply spatial transformation to rectify the document
+            rectified = F.grid_sample(orig_img, rearranged_mesh, align_corners=True)
 
             # Remove batch dimension and rearrange channels: (H, W, C)
-            image = image.squeeze().permute(1, 2, 0)
+            image = rectified.squeeze(0).permute(1, 2, 0)
 
             # Scale and convert to uint8 with BGR channel
-            image = image * scale
+            image = image * scale_t
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
             results.append({"images": image})
@@ -535,9 +502,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
         out_point_positions2D = self.out_point_positions2D(bridge)
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=out_point_positions2D,
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=out_point_positions2D)
 
 
 __all__ = [

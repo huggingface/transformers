@@ -34,45 +34,36 @@ class UVDocConfig(PreTrainedConfig):
         Number of input channels. Defaults to 3 for RGB images; set to 1 for grayscale images.
     kernel_size (`int`, *optional*, defaults to 5):
         Kernel size for convolutional layers in the backbone network.
-    block_stride_values (`List[int]`, *optional*, defaults to `[1, 2, 2]`):
+    block_stride_values (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(1, 2, 2)`):
         Strides for downsampling operations in the backbone network.
-    feature_map_multipliers (`List[int]`, *optional*, defaults to `[1, 2, 4]`):
+    feature_map_multipliers (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(1, 2, 4)`):
         Scaling factors for feature map dimensions in multi-scale feature fusion modules.
-    block_counts_per_stage (`List[int]`, *optional*, defaults to `[3, 4, 6]`):
+    block_counts_per_stage (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
         Number of residual blocks in each stage of the model backbone.
-    dilation_values (`List[List[int]]`, *optional*, defaults to `None`):
-        Dilation rates for dilated convolutional layers in bridge modules. Each inner list contains dilation rates
-        for a single bridge block.
+    dilation_values (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+        Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
+        rates for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
         Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     """
 
     model_type = "uvdoc"
 
-    def __init__(
-        self,
-        num_filter: int = 32,
-        in_channels: int = 3,
-        kernel_size: int = 5,
-        block_stride_values: list | None = None,
-        feature_map_multipliers: list | None = None,
-        block_counts_per_stage: list | None = None,
-        dilation_values: list | None = None,
-        padding_mode: str = "reflect",
-        **kwargs,
-    ):
-        self.num_filter = num_filter
-        self.in_channels = in_channels
-        self.kernel_size = kernel_size
-        self.block_stride_values = block_stride_values if block_stride_values is not None else [1, 2, 2]
-        self.feature_map_multipliers = feature_map_multipliers if feature_map_multipliers is not None else [1, 2, 4]
-        self.block_counts_per_stage = block_counts_per_stage if block_counts_per_stage is not None else [3, 4, 6]
-        self.dilation_values = (
-            dilation_values if dilation_values is not None else [[1], [2], [5], [8, 3, 2], [12, 7, 4], [18, 12, 6]]
-        )
-        self.padding_mode = padding_mode
-
-        super().__init__(**kwargs)
+    num_filter: int = 32
+    in_channels: int = 3
+    kernel_size: int = 5
+    block_stride_values: list[int] | tuple[int, ...] = (1, 2, 2)
+    feature_map_multipliers: list[int] | tuple[int, ...] = (1, 2, 4)
+    block_counts_per_stage: list[int] | tuple[int, ...] = (3, 4, 6)
+    dilation_values: list[list[int]] | tuple[tuple[int, ...], ...] = (
+        (1,),
+        (2,),
+        (5,),
+        (8, 3, 2),
+        (12, 7, 4),
+        (18, 12, 6),
+    )
+    padding_mode: str = "reflect"
 
 
 __all__ = ["UVDocConfig"]
