@@ -34,7 +34,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DPTImageProcessor
+    from transformers import DPTImageProcessorPil
 
 
 class DPTModelTester:
@@ -212,7 +212,7 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation_dinov2(self):
-        image_processor = DPTImageProcessor.from_pretrained("facebook/dpt-dinov2-small-kitti")
+        image_processor = DPTImageProcessorPil.from_pretrained("facebook/dpt-dinov2-small-kitti")
         model = DPTForDepthEstimation.from_pretrained("facebook/dpt-dinov2-small-kitti").to(torch_device)
 
         image = prepare_img()
@@ -238,7 +238,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_depth_estimation_beit(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-beit-base-384")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-beit-base-384")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-beit-base-384").to(torch_device)
 
         image = prepare_img()
@@ -272,7 +272,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_depth_estimation_swinv2(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-swinv2-tiny-256")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-swinv2-tiny-256")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-swinv2-tiny-256").to(torch_device)
 
         image = prepare_img()

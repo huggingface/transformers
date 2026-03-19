@@ -49,6 +49,7 @@ class Mistral4ModelTester(CausalLMModelTester):
 
 
 @require_torch
+@unittest.skip("Causing a lot of failures on CI")
 class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]

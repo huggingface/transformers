@@ -2028,15 +2028,6 @@ class ModelArgs:
         "shape": None,
     }
 
-    cache_position = {
-        "description": """
-    Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-    this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-    the complete sequence length.
-    """,
-        "shape": "of shape `(sequence_length)`",
-    }
-
     hidden_states = {
         "description": """ input to the layer of shape `(batch, seq_len, embed_dim)""",
         "shape": None,
@@ -2510,10 +2501,6 @@ class ClassDocstring:
     The {model_name} Model for causal language modeling.
     """
 
-    ImageProcessorFast = r"""
-    Constructs a fast {model_name} image processor.
-    """
-
     Backbone = r"""
     The {model_name} backbone.
     """
@@ -2857,6 +2844,8 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
+        if isinstance(value, dict) and placeholder == "image_processor_class":
+            value = value.get("torchvision", value.get("pil", None))
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring

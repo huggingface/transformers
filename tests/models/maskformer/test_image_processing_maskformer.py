@@ -20,7 +20,7 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -29,12 +29,8 @@ if is_torch_available():
     import torch
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
         from transformers.models.maskformer.image_processing_maskformer import binary_mask_to_rle
         from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
-
-        if is_torchvision_available():
-            from transformers import MaskFormerImageProcessorFast
 
 if is_vision_available():
     from PIL import Image
@@ -163,11 +159,6 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = MaskFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
-    fast_image_processing_class = (
-        MaskFormerImageProcessorFast if (is_vision_available() and is_torchvision_available()) else None
-    )
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = MaskFormerImageProcessingTester(self)
@@ -177,7 +168,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -219,7 +210,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             for size_divisor in size_divisors:
                 image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
                 image_processing = image_processing_class(**image_processor_dict)
@@ -232,7 +223,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     def test_call_with_segmentation_maps(self):
         def common(is_instance_map=False, segmentation_type=None):
-            for image_processing_class in self.image_processor_list:
+            for image_processing_class in self.image_processing_classes.values():
                 inputs = self.comm_get_image_processing_inputs(
                     image_processing_class=image_processing_class,
                     with_segmentation_maps=True,
@@ -289,7 +280,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
             # prepare the images and annotations
@@ -333,7 +324,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         )
 
         # create a image processor
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
             # prepare the images and annotations
@@ -391,7 +382,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
         # create a image processor
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(ignore_index=0, do_resize=False)
 
             # prepare the images and annotations
@@ -433,7 +424,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertEqual(rle[1], 45)
 
     def test_post_process_semantic_segmentation(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             feature_extractor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
             outputs = self.image_processor_tester.get_fake_maskformer_outputs()
 
@@ -454,7 +445,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
             outputs = self.image_processor_tester.get_fake_maskformer_outputs()
             segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
@@ -484,7 +475,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 )
 
     def test_post_process_panoptic_segmentation(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(num_labels=self.image_processor_tester.num_classes)
             outputs = self.image_processor_tester.get_fake_maskformer_outputs()
             segmentation = image_processing.post_process_panoptic_segmentation(outputs, threshold=0)
@@ -499,8 +490,8 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 )
 
     def test_post_process_label_fusing(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(num_labels=self.image_processor_tester.num_classes)
             outputs = self.image_processor_tester.get_fake_maskformer_outputs()
 
             segmentation = image_processor.post_process_panoptic_segmentation(
@@ -526,34 +517,37 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 num_segments_fused = max(el["id"] for el in el_fused)
                 self.assertEqual(num_segments_fused, expected_num_segments)
 
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        """Test equivalence across backends including segmentation maps."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image, dummy_map = prepare_semantic_single_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
 
-        image_encoding_slow = image_processor_slow(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-        image_encoding_fast = image_processor_fast(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(image_encoding_slow.pixel_values, image_encoding_fast.pixel_values)
-        for mask_label_slow, mask_label_fast in zip(image_encoding_slow.mask_labels, image_encoding_fast.mask_labels):
-            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
-        for class_label_slow, class_label_fast in zip(
-            image_encoding_slow.class_labels, image_encoding_fast.class_labels
-        ):
-            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_mask_labels = encodings[reference_backend].mask_labels
+        reference_class_labels = encodings[reference_backend].class_labels
+
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            for mask_label_ref, mask_label_other in zip(reference_mask_labels, encodings[backend_name].mask_labels):
+                self._assert_tensors_equivalence(mask_label_ref, mask_label_other)
+            for class_label_ref, class_label_other in zip(
+                reference_class_labels, encodings[backend_name].class_labels
+            ):
+                self._assert_tensors_equivalence(class_label_ref.float(), class_label_other.float())
 
     def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        """Test batched equivalence across backends including segmentation maps."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
@@ -562,13 +556,22 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         dummy_images, dummy_maps = prepare_semantic_batch_inputs()
 
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
 
-        encoding_slow = image_processor_slow(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        for mask_label_slow, mask_label_fast in zip(encoding_slow.mask_labels, encoding_fast.mask_labels):
-            self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
-        for class_label_slow, class_label_fast in zip(encoding_slow.class_labels, encoding_fast.class_labels):
-            self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_mask_labels = encodings[reference_backend].mask_labels
+        reference_class_labels = encodings[reference_backend].class_labels
+
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            for mask_label_ref, mask_label_other in zip(reference_mask_labels, encodings[backend_name].mask_labels):
+                self._assert_tensors_equivalence(mask_label_ref, mask_label_other)
+            for class_label_ref, class_label_other in zip(
+                reference_class_labels, encodings[backend_name].class_labels
+            ):
+                self._assert_tensors_equivalence(class_label_ref.float(), class_label_other.float())

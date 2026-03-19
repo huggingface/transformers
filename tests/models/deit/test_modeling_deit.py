@@ -54,7 +54,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DeiTImageProcessor
+    from transformers import DeiTImageProcessorPil
 
 
 class DeiTModelTester:
@@ -382,7 +382,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            DeiTImageProcessorPil.from_pretrained("facebook/deit-base-distilled-patch16-224")
             if is_vision_available()
             else None
         )
