@@ -25,7 +25,7 @@ import time
 import unittest
 from unittest.mock import MagicMock
 
-from transformers.testing_utils import require_openai, slow
+from transformers.testing_utils import require_openai
 from transformers.utils.import_utils import is_openai_available, is_vision_available
 
 
@@ -284,8 +284,6 @@ class TestValidation(unittest.TestCase):
         return ChatCompletionHandler(model_manager=MagicMock())
 
     def test_valid_request_passes(self):
-        from fastapi import HTTPException
-
         handler = self._make_handler()
         # Should not raise
         handler._validate_request({"model": "x", "messages": [{"role": "user", "content": "hi"}], "stream": True})
@@ -383,30 +381,32 @@ class TestChunkSSE(unittest.TestCase):
         sse = handler._build_chunk_sse(request_id="req1", content="hi", model="m")
         self.assertTrue(sse.startswith("data: "))
         self.assertTrue(sse.endswith("\n\n"))
-        parsed = json.loads(sse[len("data: "):].strip())
+        parsed = json.loads(sse[len("data: ") :].strip())
         self.assertEqual(parsed["choices"][0]["delta"]["content"], "hi")
 
     def test_build_chunk_sse_role(self):
         handler = self._make_handler()
         sse = handler._build_chunk_sse(request_id="req1", role="assistant", model="m")
-        parsed = json.loads(sse[len("data: "):].strip())
+        parsed = json.loads(sse[len("data: ") :].strip())
         self.assertEqual(parsed["choices"][0]["delta"]["role"], "assistant")
         self.assertNotIn("content", parsed["choices"][0]["delta"])
 
     def test_build_chunk_sse_finish_reason(self):
         handler = self._make_handler()
         sse = handler._build_chunk_sse(request_id="req1", finish_reason="stop", model="m")
-        parsed = json.loads(sse[len("data: "):].strip())
+        parsed = json.loads(sse[len("data: ") :].strip())
         self.assertEqual(parsed["choices"][0]["finish_reason"], "stop")
 
     def test_chunk_to_sse_string_passthrough(self):
-        handler = self._make_handler()
-        result = handler._chunk_to_sse("data: already formatted\n\n")
+        from transformers.cli.serving.utils import BaseHandler
+
+        result = BaseHandler.chunk_to_sse("data: already formatted\n\n")
         self.assertEqual(result, "data: already formatted\n\n")
 
     def test_chunk_to_sse_wraps_plain_string(self):
-        handler = self._make_handler()
-        result = handler._chunk_to_sse("hello")
+        from transformers.cli.serving.utils import BaseHandler
+
+        result = BaseHandler.chunk_to_sse("hello")
         self.assertEqual(result, "data: hello\n\n")
 
 
@@ -421,6 +421,7 @@ class TestAppRoutes(unittest.TestCase):
     def setUpClass(cls):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
         from transformers.cli.serving.model_manager import ModelManager
+        from transformers.cli.serving.response import ResponseHandler
         from transformers.cli.serving.server import build_server
 
         cls.model_manager = MagicMock(spec=ModelManager)
@@ -428,7 +429,8 @@ class TestAppRoutes(unittest.TestCase):
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
-        cls.app = build_server(cls.model_manager, cls.chat_handler)
+        cls.response_handler = MagicMock(spec=ResponseHandler)
+        cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler)
 
     def _run(self, coro):
         return asyncio.get_event_loop().run_until_complete(coro)
@@ -560,3 +562,289 @@ class TestChatCompletion(unittest.TestCase):
         resp_b = self.client.chat.completions.create(model=model_b, messages=prompt)
         self.assertIn(model_b, resp_b.model)
         self.assertIsNotNone(resp_b.choices[0].message.content)
+
+    def test_non_streaming_usage(self):
+        resp = self.client.chat.completions.create(
+            model=self.MODEL, messages=[{"role": "user", "content": "Say hello"}]
+        )
+        self.assertIsNotNone(resp.usage)
+        self.assertGreater(resp.usage.prompt_tokens, 0)
+        self.assertGreater(resp.usage.completion_tokens, 0)
+        self.assertEqual(resp.usage.total_tokens, resp.usage.prompt_tokens + resp.usage.completion_tokens)
+
+    def test_streaming_usage(self):
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL, messages=[{"role": "user", "content": "Say hello"}], stream=True,
+            )
+        )
+        # Last chunk should have usage
+        last = chunks[-1]
+        self.assertIsNotNone(last.usage)
+        self.assertGreater(last.usage.prompt_tokens, 0)
+        self.assertGreater(last.usage.completion_tokens, 0)
+        self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+
+
+# ---------------------------------------------------------------------------
+# 8. Unit tests — Response handler
+# ---------------------------------------------------------------------------
+
+
+@require_openai
+class TestResponseInputConversion(unittest.TestCase):
+    def _make_handler(self):
+        from transformers.cli.serving.response import ResponseHandler
+
+        return ResponseHandler(model_manager=MagicMock())
+
+    def test_string_input(self):
+        handler = self._make_handler()
+        msgs = handler._input_to_messages({"input": "Hello"})
+        self.assertEqual(msgs, [{"role": "user", "content": "Hello"}])
+
+    def test_string_input_with_instructions(self):
+        handler = self._make_handler()
+        msgs = handler._input_to_messages({"input": "Hello", "instructions": "Be brief"})
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0], {"role": "system", "content": "Be brief"})
+        self.assertEqual(msgs[1], {"role": "user", "content": "Hello"})
+
+    def test_list_input(self):
+        handler = self._make_handler()
+        msgs = handler._input_to_messages(
+            {"input": [{"role": "user", "content": "A"}, {"role": "assistant", "content": "B"}]}
+        )
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0]["content"], "A")
+
+    def test_list_input_with_instructions_prepends_system(self):
+        handler = self._make_handler()
+        msgs = handler._input_to_messages({"input": [{"role": "user", "content": "Hi"}], "instructions": "Be helpful"})
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0]["role"], "system")
+        self.assertEqual(msgs[0]["content"], "Be helpful")
+
+    def test_list_input_with_instructions_replaces_existing_system(self):
+        handler = self._make_handler()
+        msgs = handler._input_to_messages(
+            {"input": [{"role": "system", "content": "Old"}, {"role": "user", "content": "Hi"}], "instructions": "New"}
+        )
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0]["content"], "New")
+
+    def test_dict_input(self):
+        handler = self._make_handler()
+        msgs = handler._input_to_messages({"input": {"role": "user", "content": "Test"}})
+        self.assertEqual(msgs, [{"role": "user", "content": "Test"}])
+
+
+@require_openai
+class TestResponseValidation(unittest.TestCase):
+    def _make_handler(self):
+        from transformers.cli.serving.response import ResponseHandler
+
+        return ResponseHandler(model_manager=MagicMock())
+
+    def test_unsupported_fields_rejected(self):
+        from fastapi import HTTPException
+
+        handler = self._make_handler()
+        with self.assertRaises(HTTPException) as ctx:
+            handler._validate_request({"model": "x", "input": "hi", "previous_response_id": "abc"})
+        self.assertEqual(ctx.exception.status_code, 422)
+
+    def test_valid_request_passes(self):
+        handler = self._make_handler()
+        # Should not raise
+        handler._validate_request({"model": "x", "input": "hi"})
+
+
+@require_openai
+class TestResponseGenerationConfig(unittest.TestCase):
+    def _make_handler(self):
+        from transformers.cli.serving.response import ResponseHandler
+
+        return ResponseHandler(model_manager=MagicMock())
+
+    def test_max_output_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({"max_output_tokens": 42}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 42)
+
+    def test_default_bumps_short_max_new_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({}, GenerationConfig(max_new_tokens=20))
+        self.assertEqual(result.max_new_tokens, 1024)
+
+
+@require_openai
+class TestResponseUsage(unittest.TestCase):
+    def test_make_usage(self):
+        from transformers.cli.serving.response import _make_usage
+
+        usage = _make_usage(input_tokens=100, output_tokens=50)
+        self.assertEqual(usage.input_tokens, 100)
+        self.assertEqual(usage.output_tokens, 50)
+        self.assertEqual(usage.total_tokens, 150)
+        self.assertEqual(usage.input_tokens_details.cached_tokens, 0)
+        self.assertEqual(usage.output_tokens_details.reasoning_tokens, 0)
+
+    def test_usage_in_completed_response(self):
+        """Usage should serialize correctly inside a Response."""
+        from openai.types.responses import Response
+
+        from transformers.cli.serving.response import _make_usage
+
+        usage = _make_usage(10, 5)
+        response = Response(
+            id="resp_test",
+            created_at=0,
+            status="completed",
+            model="test",
+            output=[],
+            object="response",
+            tools=[],
+            parallel_tool_calls=False,
+            tool_choice="auto",
+            usage=usage,
+        )
+        dumped = response.model_dump(exclude_none=True)
+        self.assertEqual(dumped["usage"]["input_tokens"], 10)
+        self.assertEqual(dumped["usage"]["output_tokens"], 5)
+        self.assertEqual(dumped["usage"]["total_tokens"], 15)
+
+
+@require_openai
+class TestResponseSSEFormat(unittest.TestCase):
+    def test_sse_format(self):
+        from openai.types.responses import Response, ResponseCreatedEvent
+
+        from transformers.cli.serving.utils import BaseHandler
+
+        event = ResponseCreatedEvent(
+            type="response.created",
+            sequence_number=0,
+            response=Response(
+                id="resp_test",
+                created_at=0,
+                status="queued",
+                model="test",
+                text={"format": {"type": "text"}},
+                object="response",
+                tools=[],
+                output=[],
+                parallel_tool_calls=False,
+                tool_choice="auto",
+            ),
+        )
+        result = BaseHandler.chunk_to_sse(event)
+        self.assertTrue(result.startswith("data: "))
+        self.assertTrue(result.endswith("\n\n"))
+        parsed = json.loads(result[len("data: ") :].strip())
+        self.assertEqual(parsed["type"], "response.created")
+        self.assertEqual(parsed["response"]["status"], "queued")
+
+
+
+# ---------------------------------------------------------------------------
+# 9. Integration tests — Responses API (need GPU + model)
+# ---------------------------------------------------------------------------
+
+
+@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
+@require_openai
+class TestResponsesIntegration(unittest.TestCase):
+    """Integration tests for /v1/responses with a real model."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+    PORT = 8878
+
+    @classmethod
+    def setUpClass(cls):
+        from transformers.cli.serve_refactored import Serve
+
+        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        import requests
+
+        for _ in range(30):
+            try:
+                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+
+        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def test_streaming(self):
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="Say hello",
+                stream=True,
+                max_output_tokens=1,
+            )
+        )
+        # At least 8 events: created, in_progress, output_item_added, content_part_added,
+        # delta(s), text_done, content_part_done, output_item_done, completed
+        self.assertGreaterEqual(len(events), 8)
+
+        # Start markers (fixed order)
+        self.assertEqual(events[0].type, "response.created")
+        self.assertEqual(events[1].type, "response.in_progress")
+        self.assertEqual(events[2].type, "response.output_item.added")
+        self.assertEqual(events[3].type, "response.content_part.added")
+
+        # At least one delta
+        self.assertTrue(any(e.type == "response.output_text.delta" for e in events[4:-4]))
+
+        # Closing markers (fixed order from the end)
+        self.assertEqual(events[-4].type, "response.output_text.done")
+        self.assertEqual(events[-3].type, "response.content_part.done")
+        self.assertEqual(events[-2].type, "response.output_item.done")
+        self.assertEqual(events[-1].type, "response.completed")
+
+    def test_non_streaming(self):
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="Say hello",
+            stream=False,
+        )
+        self.assertEqual(resp.status, "completed")
+        self.assertTrue(len(resp.output) > 0)
+        self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
+    def test_non_streaming_usage(self):
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="Say hello",
+            stream=False,
+        )
+        self.assertIsNotNone(resp.usage)
+        self.assertGreater(resp.usage.input_tokens, 0)
+        self.assertGreater(resp.usage.output_tokens, 0)
+        self.assertEqual(resp.usage.total_tokens, resp.usage.input_tokens + resp.usage.output_tokens)
+
+    def test_streaming_usage(self):
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="Say hello",
+                stream=True,
+                max_output_tokens=5,
+            )
+        )
+        completed = events[-1]
+        self.assertEqual(completed.type, "response.completed")
+        usage = completed.response.usage
+        self.assertIsNotNone(usage)
+        self.assertGreater(usage.input_tokens, 0)
+        self.assertGreater(usage.output_tokens, 0)
+        self.assertEqual(usage.total_tokens, usage.input_tokens + usage.output_tokens)
