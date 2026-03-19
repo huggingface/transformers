@@ -79,43 +79,71 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def get_rope_index(self):
+        raise AttributeError("Not needed for HCX")
+
+    def get_vision_position_ids(self):
+        raise AttributeError("Not needed for HCX")
+
+    def compute_3d_position_ids(self):
+        raise AttributeError("Not needed for HCX")
+
     @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor`):
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
         """
-        video_outputs = self.vision_model(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        projected = self.multi_modal_projector(video_outputs.pooler_output)
-        video_outputs.pooler_output = projected
-        return video_outputs
+        return self.get_image_features(
+            pixel_values=pixel_values_videos,
+            image_grid_thw=video_grid_thw,
+            image_merge_sizes=video_merge_sizes,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor,
+        image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
         """
-        image_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        projected = self.multi_modal_projector(image_outputs.pooler_output)
-        image_outputs.pooler_output = projected
-        return image_outputs
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            grid_thw=image_grid_thw,
+            merge_sizes=image_merge_sizes,
+            return_dict=True,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_embeds = self.projector(last_hidden_state)
+
+        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        image_embeds = torch.split(image_embeds, split_sizes.tolist())
+        vision_outputs.pooler_output = image_embeds
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -395,6 +423,9 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             model_inputs["pixel_values_videos"] = None
 
         return model_inputs
+
+    def _prepare_position_ids_for_generation(self):
+        raise AttributeError("Not needed for HCX")
 
 
 class HCXVisionForSequenceClassification(HCXVisionPreTrainedModel, GenericForSequenceClassification):
