@@ -28,33 +28,83 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class UVDocConfig(PreTrainedConfig):
     r"""
-    num_filter (`int`, *optional*, defaults to 32):
-        Number of convolutional filters in the initial convolutional layers.
-    in_channels (`int`, *optional*, defaults to 3):
-        Number of input channels. Defaults to 3 for RGB images; set to 1 for grayscale images.
-    kernel_size (`int`, *optional*, defaults to 5):
-        Kernel size for convolutional layers in the backbone network.
-    block_stride_values (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(1, 2, 2)`):
-        Strides for downsampling operations in the backbone network.
-    feature_map_multipliers (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(1, 2, 4)`):
-        Scaling factors for feature map dimensions in multi-scale feature fusion modules.
-    block_counts_per_stage (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
-        Number of residual blocks in each stage of the model backbone.
-    dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
-        Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
-        rates for a single bridge block.
-    padding_mode (`str`, *optional*, defaults to `"reflect"`):
-        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
+    This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate
+    a UVDoc model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the UVDoc
+    [PaddlePaddle/UVDoc_safetensors](https://huggingface.co/PaddlePaddle/UVDoc_safetensors) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels. Defaults to 3 for RGB images; set to 1 for grayscale images.
+        kernel_size (`int`, *optional*, defaults to 5):
+            Kernel size for convolutional layers in the backbone network.
+        stage_layer_num (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
+            Number of layers in each ResNet stage.
+        resnet_head (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((3, 32, 2,),(32, 32, 2,))`):
+            Configuration for the ResNet head layers in format [out_channels, kernel_size, stride].
+        resnet_down (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((32, 32, 1,),(32, 64, 2,),(64, 128, 2,))`):
+            Configuration for the ResNet downsampling layers in format [in_channels, out_channels, stride].
+        bridge_connector (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(128, 128, 1)`:
+            Configuration for the bridge connector in format [in_channels, out_channels, kernel_size].
+        out_point_positions2D (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((128, 32, 1,),(32, 2, 1,))`):
+            Configuration for the output point positions 2D layer in format [in_channels, out_channels, kernel_size].
+        dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+            Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
+            rates for a single bridge block.
+        padding_mode (`str`, *optional*, defaults to `"reflect"`):
+            Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     """
 
     model_type = "uvdoc"
 
-    num_filter: int = 32
-    in_channels: int = 3
+    bridge_in_channels = 128
     kernel_size: int = 5
-    block_stride_values: list[int] | tuple[int, ...] = (1, 2, 2)
-    feature_map_multipliers: list[int] | tuple[int, ...] = (1, 2, 4)
-    block_counts_per_stage: list[int] | tuple[int, ...] = (3, 4, 6)
+    stage_layer_num: list[int] | tuple[int, ...] = (3, 4, 6)
+    resnet_head: list[list[int]] | tuple[tuple[int, ...], ...] = (
+        (
+            3,
+            32,
+            2,
+        ),
+        (
+            32,
+            32,
+            2,
+        ),
+    )
+    resnet_down: list[list[int]] | tuple[tuple[int, ...], ...] = (
+        (
+            32,
+            32,
+            1,
+        ),
+        (
+            32,
+            64,
+            2,
+        ),
+        (
+            64,
+            128,
+            2,
+        ),
+    )
+    bridge_connector: list[int] | tuple[int, ...] = (128, 128, 1)
+    out_point_positions2D: list[list[int]] | tuple[tuple[int, ...], ...] = (
+        (
+            128,
+            32,
+            1,
+        ),
+        (
+            32,
+            2,
+            1,
+        ),
+    )
     dilation_values: list[list[int]] | tuple[tuple[int, ...], ...] = (
         (1,),
         (2,),
