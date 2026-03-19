@@ -406,6 +406,18 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
    Markdown files with your favorite editor. You can also preview the docs on GitHub when you open a pull request.
 
+   If you're adding or editing runnable examples in Markdown docs, mark Python fences with `runnable` or
+   `runnable:<label>` and run them locally with `pytest`:
+
+   ```bash
+   pytest -q docs/source/en/my_page.md
+   pytest -q docs/source/en/
+   ```
+
+   For the full runnable syntax, including continuation blocks, `# pytest-decorator:`, and
+   `# doc-builder: hide`, see the
+   [doc-builder runnable code blocks guide](https://github.com/huggingface/doc-builder/blob/main/docs/runnable-code-blocks.md).
+
    Once you're happy with your changes, add the changed files with `git add` and
    record your changes locally with `git commit`:
 
