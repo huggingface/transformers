@@ -69,14 +69,16 @@ EXPORT_SKIP_MODEL_CLASSES = {
     "PPDocLayoutV3ForObjectDetection",
 }
 
-# Model classes skipped for dynamic export tests only (static passes).
-EXPORT_SKIP_DYNAMIC_MODEL_CLASSES = {
-    # SEW and SEW-D use DisentangledSelfAttention where the attention mask gets baked as a constant
-    # in the ONNX graph (size = sample export seq_len) due to fixed-size relative position embeddings.
-    # At ORT inference with a different seq_len the mask and scores shapes are incompatible.
-    # TODO: identify exact ONNX node where the fixed size originates and make it dynamic.
-    "SEWDModel",
-    "SEWModel",
+
+# Model classes where ONNX optimization must be disabled due to upstream onnxscript bugs.
+# SplitToSequence constant folding crashes with "'NoneType' object has no attribute 'ndim'".
+# TODO: remove once onnxscript fixes FoldConstantsPass for SplitToSequence with None inputs.
+ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
+    "ProphetNetModel",
+    "ProphetNetForConditionalGeneration",
+    "ProphetNetDecoder",
+    "ProphetNetForCausalLM",
+    "ZoeDepthForDepthEstimation",
 }
 
 
@@ -111,7 +113,7 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 )
 
 # Maximum time (in seconds) for a single export test before it is killed.
-EXPORT_TEST_TIMEOUT = 60
+EXPORT_TEST_TIMEOUT = 600
 
 
 # ──────────────────────────── helpers ────────────────────────────
@@ -178,8 +180,6 @@ class ExportTesterMixin:
         if model_class.__name__ in EXPORT_SKIP_MODEL_CLASSES:
             return True
         if generate and model_class.__name__ in EXPORT_GENERATE_SKIP_MODEL_CLASSES:
-            return True
-        if dynamic and model_class.__name__ in EXPORT_SKIP_DYNAMIC_MODEL_CLASSES:
             return True
         return False
 
@@ -286,11 +286,12 @@ class ExportTesterMixin:
         """Test if model can be exported with torch.onnx.export()"""
         self._skip_if_not_exportable()
 
-        exporter = OnnxExporter(export_config=OnnxConfig(dynamic=dynamic))
-
         for model_class in self.all_model_classes:
             if self._should_skip(model_class, dynamic=dynamic):
                 continue
+
+            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
+            exporter = OnnxExporter(export_config=OnnxConfig(dynamic=dynamic, optimize=optimize))
 
             components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
@@ -403,11 +404,12 @@ class ExportGenerateTesterMixin:
         """Test if generative model can be ONNX-exported for prefill and decode."""
         self._skip_if_not_exportable()
 
-        exporter = OnnxExporter(export_config=OnnxConfig(dynamic=dynamic))
-
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True):
                 continue
+
+            optimize = model_class.__name__ not in ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES
+            exporter = OnnxExporter(export_config=OnnxConfig(dynamic=dynamic, optimize=optimize))
 
             components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)

@@ -78,7 +78,7 @@ class OnnxExporter(DynamoExporter):
     required_packages = ["torch", "onnx", "onnxscript"]
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
-        with patch_model(model), patch_torch_ops():
+        with patch_model(model), patch_torch_ops(), patch_onnx_decomposition():
             exported_program: ExportedProgram = super().export(model, sample_inputs)
             inputs_names, outputs_names = get_inputs_outputs_names(model, sample_inputs)
             patch_fx_graph(exported_program.graph_module)
@@ -106,7 +106,7 @@ class OnnxExporter(DynamoExporter):
 
 @contextmanager
 def patch_model(model):
-    """Temporarily wrap model.forward to return flat dict[str, Tensor] with deduped outputs."""
+    """Temporarily wrap model.forward to return flat dict[str, Tensor] with duplicated outputs."""
 
     original_forward = model.forward
 
@@ -416,19 +416,31 @@ _COMPARISON_OPS = frozenset({operator.le, operator.lt, operator.ge, operator.gt,
 
 
 def _fix_dead_comparison(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
-    """Erase dead comparison nodes (operator.le/lt/ge/gt/eq/ne with no users).
+    """Erase or constant-fold comparison nodes involving symbolic infinities.
 
-    torch.export emits symbolic-dim guards like ``%le_3 = operator.le(sym_size, int_oo)``
-    that are always-true and have no users, but PyTorch's DCE does not eliminate them
-    because they are Python callables rather than aten ops.  Left in the graph, the ONNX
-    translator tries to lower ``int_oo`` (≈4.7e21) to a C long and overflows.
+    torch.export emits guards like ``%le_3 = operator.le(sym_size, int_oo)`` where
+    ``int_oo`` is a sympy ``IntInfinity`` object.  The ONNX translator tries to lower it
+    to a C long and overflows.  Two cases handled:
+
+    * No users → erase the node outright (PyTorch DCE skips Python callables).
+    * Any arg is a non-FX-Node constant (e.g. ``int_oo``) → evaluate the comparison at
+      graph-construction time, replace all uses with the Python bool result, and erase.
     """
     if node.target not in _COMPARISON_OPS:
         return False
-    if len(node.users) > 0:
-        return False
-    gm.graph.erase_node(node)
-    return True
+    if len(node.users) == 0:
+        gm.graph.erase_node(node)
+        return True
+    # Check if any arg is a compile-time constant (not a graph Node).
+    if any(not isinstance(a, torch.fx.Node) for a in node.args):
+        try:
+            result = node.target(*node.args)
+        except Exception:
+            return False
+        node.replace_all_uses_with(result)
+        gm.graph.erase_node(node)
+        return True
+    return False
 
 
 def _fix_alias(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
@@ -525,6 +537,25 @@ def _fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     return True
 
 
+def _fix_remainder_scalar(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+    """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
+
+    After decomposition the second operand of ``aten.remainder.Scalar`` can be a graph
+    node (SymbolicTensor) rather than a Python scalar.  The ONNX torchlib translation for
+    ``remainder.Scalar`` calls ``int()`` on it and crashes.  Rewriting to
+    ``remainder.Tensor`` uses the two-tensor ONNX translation which handles this correctly.
+    """
+    if node.target is not torch.ops.aten.remainder.Scalar:
+        return False
+    if len(node.args) < 2 or not isinstance(node.args[1], torch.fx.Node):
+        return False
+    with gm.graph.inserting_before(node):
+        new = gm.graph.call_function(torch.ops.aten.remainder.Tensor, args=node.args)
+    node.replace_all_uses_with(new)
+    gm.graph.erase_node(node)
+    return True
+
+
 _FX_NODE_FIXES = [
     _fix_alias,
     _fix_assertion,
@@ -532,6 +563,7 @@ _FX_NODE_FIXES = [
     _fix_detach_inplace,
     _fix_fill_diagonal_inplace,
     _fix_index_put_inplace,
+    _fix_remainder_scalar,
     _fix_sort_stable,
     _fix_triu_inplace,
 ]
@@ -550,6 +582,30 @@ def patch_fx_graph(graph_module: "torch.fx.GraphModule") -> None:
                     break
         gm.graph.eliminate_dead_code()
         gm.recompile()
+
+
+@contextmanager
+def patch_onnx_decomposition():
+    """Wrap the ONNX internal decomposition step so ``patch_fx_graph`` runs after it.
+
+    ``torch.onnx.export`` internally calls ``run_decompositions`` which can introduce
+    new symbolic-guard nodes (e.g. ``operator.le(sym_size, int_oo)``).  These overflow
+    during ONNX translation.  This context manager hooks into that step to clean them up.
+    """
+    from torch.onnx._internal.exporter import _core
+
+    original = _core._prepare_exported_program_for_export
+
+    def _prepare_and_patch(ep, *, registry):
+        result = original(ep, registry=registry)
+        patch_fx_graph(result.graph_module)
+        return result
+
+    _core._prepare_exported_program_for_export = _prepare_and_patch
+    try:
+        yield
+    finally:
+        _core._prepare_exported_program_for_export = original
 
 
 # ── Stage 3: Custom ONNX translations ─────────────────────────────────────────
