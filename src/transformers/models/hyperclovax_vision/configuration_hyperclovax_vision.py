@@ -17,7 +17,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...models.auto import CONFIG_MAPPING, AutoConfig
-from ...models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ...utils import auto_docstring
 from ..granite.configuration_granite import GraniteConfig
 
@@ -59,7 +58,7 @@ class HyperClovaXConfig(GraniteConfig):
     ```
     """
 
-    model_type = "hyperclovax"
+    model_type = "hyperclovax_text"
 
     rope_theta: float | int = 10000.0
     rope_scaling: dict | None = None
@@ -95,7 +94,7 @@ class HCXVisionConfig(PreTrainedConfig):
             [`HyperClovaXConfig`].
         vision_config (`dict` or config, *optional*):
             Configuration for the vision encoder.  Defaults to
-            [`HCXVisionVisionConfig`].
+            [`Qwen2_5_VLVisionConfig`].
         img_start_id (`int`, *optional*, defaults to 128060):
             Token ID used as a placeholder for image patches in the input
             sequence.
@@ -117,8 +116,8 @@ class HCXVisionConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "hyperclovax_vision"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    model_type = "hyperclovax"
+    sub_configs = {"text_config": HyperClovaXConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -134,11 +133,12 @@ class HCXVisionConfig(PreTrainedConfig):
                 model_type = "qwen2_5_vl_image"
             vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
         elif self.vision_config is None:
-            vision_config = Qwen2_5_VLVisionConfig()
+            vision_config = CONFIG_MAPPING["qwen2_5_vl_image"]()
         self.vision_config = vision_config
 
         if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "hyperclovax")
+            model_type = self.text_config.get("model_type", "hyperclovax_text")
+            model_type = "hyperclovax_text" if model_type == "hyperclovax" else model_type
             text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
             text_config = HyperClovaXConfig()
@@ -151,7 +151,7 @@ class HCXVisionConfig(PreTrainedConfig):
 
         # Accept old hub configs that used model_type="vlm"
         if kwargs.get("model_type") == "vlm":
-            kwargs["model_type"] = "hyperclovax_vision"
+            kwargs["model_type"] = "hyperclovax"
 
         super().__post_init__(**kwargs)
 

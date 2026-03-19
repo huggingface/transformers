@@ -350,7 +350,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_v2",
     "deepseek_v3",
     "fuyu",
-    "hyperclovax_vlm",
+    "hyperclovax",
     "internlm2",
     "janus",
     "jamba",

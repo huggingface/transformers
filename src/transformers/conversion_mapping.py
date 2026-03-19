@@ -410,11 +410,11 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "hyperclovax": [
+        "hyperclovax_text": [
             WeightRenaming(source_patterns=r"model.language_model.model", target_patterns="model"),
             WeightRenaming(source_patterns=r"model.language_model.lm_head", target_patterns="lm_head"),
         ],
-        "hyperclovax_vision": [
+        "hyperclovax": [
             WeightRenaming("mm_projector", "multi_modal_projector"),
             WeightRenaming("language_model.model", "language_model"),
             WeightRenaming("language_model.lm_head", "lm_head"),
@@ -537,7 +537,7 @@ VLMS = [
     "fuyu",
     "gotocr2",
     "gemma3",
-    "hyperclovax_vision",
+    "hyperclovax",
     "internvl",
     "llava",  # all llava prefixed models fall under this check
     "mistral3",
