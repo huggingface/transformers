@@ -29,7 +29,6 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         # TODO: new processor on hub
         tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
-        # tokenizer = tokenizer_class.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table")
         return tokenizer
 
     def test_ocr_queries(self):
