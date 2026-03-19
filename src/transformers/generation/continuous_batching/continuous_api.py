@@ -143,22 +143,17 @@ class ContinuousBatchProcessor:
             is_flash_attn=is_flash_attention_requested(config=config),
             decode_fast_path_available=self.cache.max_blocks_per_request > 0,
         )
+        varlen_config, decode_config = self.cb_config.varlen_compile_config, self.cb_config.decode_compile_config
 
         # Compile the varlen path if config provided
         self._compiled_varlen = None
-        if self.cb_config.varlen_compile_config is not None:
-            self._compiled_varlen = torch.compile(
-                self._forward_process_and_sample,
-                **self.cb_config.varlen_compile_config.to_dict()
-            )
+        if varlen_config is not None:
+            self._compiled_varlen = torch.compile(self._forward_process_and_sample, **varlen_config.to_dict())
 
         # Compile the decode path if config provided
         self._compiled_decode = None
-        if self.cb_config.decode_compile_config is not None:
-            self._compiled_decode = torch.compile(
-                self._forward_process_and_sample,
-                **self.cb_config.decode_compile_config.to_dict()
-            )
+        if decode_config is not None:
+            self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
 
         # Padding is turned on when either cuda graphs or compile is used
         self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
