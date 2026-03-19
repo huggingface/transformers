@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
 @strict(accept_kwargs=True)
 class MaskFormerDetrConfig(DetrConfig):
-    pass
+    model_type = "detr"
 
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")

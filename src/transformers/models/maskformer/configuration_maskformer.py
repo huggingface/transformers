@@ -56,7 +56,7 @@ class MaskFormerDetrConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "mask_former_detr"
+    model_type = "detr"
     sub_configs = {"backbone_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
