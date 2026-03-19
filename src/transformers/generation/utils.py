@@ -577,14 +577,18 @@ class GenerationMixin(ContinuousMixin):
         if encoder_attention_mask is not None:
             model_inputs["attention_mask"] = encoder_attention_mask
 
-        # 5. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
+        # 5. Forward ALL kwargs that are uninitialized, e.g. `use_cache` (except a few exceptions)
+        kwargs_to_avoid_forwarding = ("labels", "next_sequence_length")
         for key, value in kwargs.items():
-            if key not in model_inputs:
+            if key not in model_inputs and key not in kwargs_to_avoid_forwarding:
                 model_inputs[key] = value
 
-        # 6. Remove unexpected `generate` inputs (TODO @joao: fix trainer and examples)
-        model_inputs.pop("labels", None)
-        model_inputs.pop("next_sequence_length", None)  # if the method is overriden, usually it becomes a kwarg
+        # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
+        # between `forward`s
+        if self.is_remote_code():
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
+            model_inputs["cache_position"] = cache_position
 
         return model_inputs
 
