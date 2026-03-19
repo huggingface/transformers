@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
+    "paligemma": "llava",
     "aya_vision": "llava",
     "fuyu": "llava",
     "got_ocr2": "llava",
@@ -86,11 +87,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
-        "paligemma": [
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"vision_tower", target_patterns="model.vision_tower"),
-            WeightRenaming(source_patterns=r"multi_modal_projector", target_patterns="model.multi_modal_projector"),
-            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+        "colpali": [
+            WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
@@ -160,9 +158,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
-            WeightRenaming(r"^embed_tokens\.", "text_model.embed_tokens."),
-            WeightRenaming(r"^norm\.", "text_model.norm."),
-            WeightRenaming(r"^layers.", "text_model.layers."),
+            WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", "text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", "text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder)(?<!decoder)(?<!text_model)\.layers.", "text_model.layers."),
         ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
@@ -518,27 +516,6 @@ def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightC
     return None
 
 
-def add_prefix_to_conversion(conversions: list[WeightConverter | WeightRenaming], prefix: str):
-    def add_prefix(pattern: str) -> str:
-        if pattern.startswith("^"):
-            pattern = rf"^{prefix}\.{pattern[1:]}"
-        else:
-            pattern = rf"{prefix}\.{pattern}"
-        return pattern
-
-    new_conversions = []
-    for conversion in conversions:
-        # We need to add the current prefix from submodule so that patterns match
-        conversion_kwargs = {
-            "source_patterns": [add_prefix(source) for source in conversion.source_patterns],
-            "target_patterns": [add_prefix(target) for target in conversion.target_patterns],
-        }
-        if hasattr(conversion, "operations"):
-            conversion_kwargs["operations"] = conversion.operations
-        new_conversions.append(conversion.__class__(**conversion_kwargs))
-    return new_conversions
-
-
 def get_model_conversion_mapping(
     model: PreTrainedModel,
     key_mapping: dict[str, str] | None = None,
@@ -568,7 +545,7 @@ def get_model_conversion_mapping(
         seen_model_types.add(model.config.model_type)
 
     # Recurse over submodules and collect all conversions
-    for name, submodule in model.named_modules():
+    for submodule in model.modules():
         if (
             submodule is not model
             and isinstance(submodule, PreTrainedModel)
@@ -577,8 +554,7 @@ def get_model_conversion_mapping(
         ):
             conversions = extract_weight_conversions_for_model(submodule)
             if conversions is not None:
-                new_conversions = add_prefix_to_conversion(conversions, prefix=name)
-                weight_conversions.extend(new_conversions)
+                weight_conversions.extend(conversions)
                 seen_model_types.add(submodule.config.model_type)
 
     if add_legacy:
