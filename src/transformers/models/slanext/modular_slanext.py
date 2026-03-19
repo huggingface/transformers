@@ -16,7 +16,6 @@
 import math
 from typing import Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -308,79 +307,66 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
     valid_kwargs = ImagesKwargs
     model_input_names = ["pixel_values"]
 
-    def _resize(self, image: torch.Tensor, size: SizeDict) -> torch.Tensor:
-        device = image.device
-        channels, height, width = image.shape
+    def _resize(
+        self,
+        image: torch.Tensor,
+        size: SizeDict,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
+    ) -> torch.Tensor:
+        batch_size, channels, height, width = image.shape
+        image = image.view(batch_size * channels, height, width)
 
-        # --- target size: long-edge scale (same as _resize_single_image) ---
+        device = image.device
+
         scale = max(size.height, size.width) / max(height, width)
         target_height = round(height * scale)
         target_width = round(width * scale)
 
-        BITS = 11
-        SCALE = 1 << BITS  # 2048
-
-        # --- X coordinate tables ---
-        dx = torch.arange(target_width, dtype=torch.float32, device=device)
-        fx = (dx + 0.5) * (float(width) / float(target_width)) - 0.5
-        sx = fx.floor().to(torch.int32)
-        fx_frac = fx - sx.float()
-
-        # boundary handling (mirrors cv2)
-        fx_frac = torch.where(sx < 0, torch.zeros_like(fx_frac), fx_frac)
-        sx = torch.where(sx < 0, torch.zeros_like(sx), sx)
-        fx_frac = torch.where(sx >= width - 1, torch.ones_like(fx_frac), fx_frac)
-        sx = torch.where(sx >= width - 1, torch.full_like(sx, width - 2), sx)
-
+        target_x = torch.arange(target_width, dtype=torch.float32, device=device)
+        src_x = (target_x + 0.5) * (float(width) / float(target_width)) - 0.5
+        src_x_floor = src_x.floor().to(torch.int32)
+        src_x_frac = src_x - src_x_floor.float()
+        # boundary handling
+        src_x_frac = torch.where(src_x_floor < 0, torch.zeros_like(src_x_frac), src_x_frac)
+        src_x_floor = torch.where(src_x_floor < 0, torch.zeros_like(src_x_floor), src_x_floor)
+        src_x_frac = torch.where(src_x_floor >= width - 1, torch.ones_like(src_x_frac), src_x_frac)
+        src_x_floor = torch.where(src_x_floor >= width - 1, torch.full_like(src_x_floor, width - 2), src_x_floor)
         # fixed-point weights
-        ax = (fx_frac * SCALE + 0.5).floor().to(torch.int32)  # round-to-nearest
-        ax_inv = SCALE - ax  # (target_w,)
-
+        weight_x_r = (src_x_frac * 2048 + 0.5).floor().to(torch.int32)  # round-to-nearest
+        weight_x_l = 2048 - weight_x_r  # (target_w,)
         # --- Y coordinate tables ---
-        dy = torch.arange(target_height, dtype=torch.float32, device=device)
-        fy = (dy + 0.5) * (float(height) / float(target_height)) - 0.5
-        sy = fy.floor().to(torch.int32)
-        fy_frac = fy - sy.float()
+        target_y = torch.arange(target_height, dtype=torch.float32, device=device)
+        src_y = (target_y + 0.5) * (float(height) / float(target_height)) - 0.5
+        src_y_floor = src_y.floor().to(torch.int32)
+        src_y_frac = src_y - src_y_floor.float()
+        src_y_frac = torch.where(src_y_floor < 0, torch.zeros_like(src_y_frac), src_y_frac)
+        src_y_floor = torch.where(src_y_floor < 0, torch.zeros_like(src_y_floor), src_y_floor)
+        src_y_frac = torch.where(src_y_floor >= height - 1, torch.ones_like(src_y_frac), src_y_frac)
+        src_y_floor = torch.where(src_y_floor >= height - 1, torch.full_like(src_y_floor, height - 2), src_y_floor)
+        weight_y_b = (src_y_frac * 2048 + 0.5).floor().to(torch.int32)
+        weight_y_t = 2048 - weight_y_b  # (target_h,)
 
-        fy_frac = torch.where(sy < 0, torch.zeros_like(fy_frac), fy_frac)
-        sy = torch.where(sy < 0, torch.zeros_like(sy), sy)
-        fy_frac = torch.where(sy >= height - 1, torch.ones_like(fy_frac), fy_frac)
-        sy = torch.where(sy >= height - 1, torch.full_like(sy, height - 2), sy)
-
-        ay = (fy_frac * SCALE + 0.5).floor().to(torch.int32)
-        ay_inv = SCALE - ay  # (target_h,)
-
-        # --- gather pixel values as int32 in uint8 domain ---
-        # image: (C, H, W) float — convert to uint8 int32 for faithful cv2 arithmetic
         img_u8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
         img_i32 = img_u8.to(torch.int32)  # (C, H, W)
-
-        sx_l = sx.long()  # (target_w,)
-        sx_r = (sx + 1).long()  # (target_w,)  safe: sx <= width-2
-        sy_t = sy.long()  # (target_h,)
-        sy_b = (sy + 1).long()  # (target_h,)
-
+        x_left = src_x_floor.long()   # (target_w,)
+        x_right = (src_x_floor + 1).long()  # (target_w,)  safe: src_x_floor <= width-2
+        y_top = src_y_floor.long()    # (target_h,)
+        y_bottom = (src_y_floor + 1).long()  # (target_h,)
         # gather 4 neighbours: (C, target_h, target_w)
-        p00 = img_i32[:, sy_t[:, None], sx_l[None, :]]
-        p10 = img_i32[:, sy_t[:, None], sx_r[None, :]]
-        p01 = img_i32[:, sy_b[:, None], sx_l[None, :]]
-        p11 = img_i32[:, sy_b[:, None], sx_r[None, :]]
-
+        p00 = img_i32[:, y_top[:, None], x_left[None, :]]
+        p10 = img_i32[:, y_top[:, None], x_right[None, :]]
+        p01 = img_i32[:, y_bottom[:, None], x_left[None, :]]
+        p11 = img_i32[:, y_bottom[:, None], x_right[None, :]]
         # fixed-point bilinear: weights broadcast over (C, target_h, target_w)
-        ay_ = ay.view(1, target_height, 1)
-        ay_inv_ = ay_inv.view(1, target_height, 1)
-        ax_ = ax.view(1, 1, target_width)
-        ax_inv_ = ax_inv.view(1, 1, target_width)
+        weight_y_b_ = weight_y_b.view(1, target_height, 1)
+        weight_y_t_ = weight_y_t.view(1, target_height, 1)
+        weight_x_r_ = weight_x_r.view(1, 1, target_width)
+        weight_x_l_ = weight_x_l.view(1, 1, target_width)
+        val = weight_y_t_ * (weight_x_l_ * p00 + weight_x_r_ * p10) + weight_y_b_ * (weight_x_l_ * p01 + weight_x_r_ * p11)
+        val = (val + (1 << 21)) >> 22
+        result = val.clamp(0, 255).to(torch.uint8)  # (B*C, target_h, target_w)
 
-        val = ay_inv_ * (ax_inv_ * p00 + ax_ * p10) + ay_ * (ax_inv_ * p01 + ax_ * p11)
-
-        # right-shift 22 bits with round-half-up (add 2^21 before shift)
-        shift = BITS * 2  # 22
-        val = (val + (1 << (shift - 1))) >> shift
-
-        # clamp and cast back to uint8, then to original dtype/device
-        result = val.clamp(0, 255).to(torch.uint8)  # (C, target_h, target_w)
-        return result.to(dtype=image.dtype)
+        return result.view(batch_size, channels, target_height, target_width).to(dtype=image.dtype)
 
     def _preprocess(
         self,
@@ -401,8 +387,14 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        if do_resize:
-            resized_images = [self._resize(img, size) for img in images]
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self._resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
@@ -460,8 +452,8 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
         self.dict = {char: i for i, char in enumerate(dict_character)}
         self.character = dict_character
         self.td_token = ["<td>", "<td", "<td></td>"]
-        self.bos_id = np.array(self.dict["sos"])
-        self.eos_id = np.array(self.dict["eos"])
+        self.bos_id = self.dict["sos"]
+        self.eos_id = self.dict["eos"]
 
     def post_process_table_recognition(self, outputs):
         """
