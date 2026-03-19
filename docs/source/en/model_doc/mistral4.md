@@ -15,37 +15,44 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-16-02 and added to Hugging Face Transformers on 2026-16-02.*
+*This model was released on 2026-03-16 and added to Hugging Face Transformers on 2026-03-16.*
 
 # Mistral4 
 
 ## Overview
 
-A balanced model in the Mistral MOE family, Mistral Small 4 is a powerful, efficient language model with vision capabilities.
+Mistral 4 is a powerful hybrid model with the capability of acting as both a general instruction model and a reasoning model. It unifies the capabilities of three different model families - Instruct, Reasoning ( previous called Magistral ), and Devstral - into a single, unified model.
 
-This model is the instruct and reasoning post-trained version, fine-tuned for instruction tasks, making it ideal for chat and instruction based use cases as well as tasks that require deeper thinking. Mistral Small 4 was also 
+[Mistral-Small-4](https://huggingface.co/mistralai/Mistral-Small-4-119B-2603) consists of the following architectural choices:
 
-The Mistral 4 family is designed for edge deployment, capable of running on a wide range of hardware.
+- MoE: 128 experts and 4 active.
+- 119B with 6.5B activated parameters per token.
+- 256k Context Length.
+- Multimodal Input: Accepts both text and image input, with text output.
+- Instruct and Reasoning functionalities with Function Calls
+    - Reasoning Effort configurable by request.
 
-Key features:
+Mistral 4 offers the following capabilities:
 
-- Vision: Enables the model to analyze images and provide insights based on visual content, in addition to text.
-- Multilingual: Supports dozens of languages, including English, French, Spanish, German, Italian, Portuguese, Dutch, Chinese, Japanese, Korean, Arabic.
-- System Prompt: Maintains strong adherence and support for system prompts.
-- Agentic: Offers best-in-class agentic capabilities with native function calling and JSON outputting.
-- Apache 2.0 License: Open-source license allowing usage and modification for both commercial and non-commercial purposes.
-- Large Context Window: Supports up to a 1M context window but the recommended setting is to keep the context up to 256k.
+- **Reasoning Mode**: Switch between a fast instant reply mode, and a reasoning thinking mode, boosting performance with test time compute when requested.
+- **Vision**: Enables the model to analyze images and provide insights based on visual content, in addition to text.
+- **Multilingual**: Supports dozens of languages, including English, French, Spanish, German, Italian, Portuguese, Dutch, Chinese, Japanese, Korean, Arabic.
+- **System Prompt**: Maintains strong adherence and support for system prompts.
+- **Agentic**: Offers best-in-class agentic capabilities with native function calling and JSON outputting.
+- **Speed-Optimized**: Delivers best-in-class performance and speed.
+- **Apache 2.0 License**: Open-source license allowing usage and modification for both commercial and non-commercial purposes.
+- **Large Context Window**: Supports a 256k context window.
 
 ## Usage examples
 
 ```py
 import torch
-from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
+from transformers import AutoProcessor, Mistral3ForConditionalGeneration
 
 
 model_id = "mistralai/Mistral-Small-4-119B-2603"
 
-tokenizer = MistralCommonBackend.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id)
 model = Mistral3ForConditionalGeneration.from_pretrained(
     model_id, device_map="auto"
 )
@@ -65,19 +72,16 @@ messages = [
     },
 ]
 
-tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
-
-tokenized["input_ids"] = tokenized["input_ids"].to(device="cuda")
-tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device="cuda")
-image_sizes = [tokenized["pixel_values"].shape[-2:]]
+inputs = processor.apply_chat_template(messages, return_tensors="pt", tokenize=True, return_dict=True, reasoning_effort="high")
+inputs = inputs.to(model.device)
 
 output = model.generate(
-    **tokenized,
-    image_sizes=image_sizes,
+    **inputs,
     max_new_tokens=512,
 )[0]
 
-decoded_output = tokenizer.decode(output[len(tokenized["input_ids"][0]):])
+# Setting `skip_special_tokens=False` to visualize reasoning trace between [THINK] [/THINK] tags.
+decoded_output = processor.decode(output[len(inputs["input_ids"][0]):], skip_special_tokens=False) 
 print(decoded_output)
 ```
 
@@ -106,7 +110,3 @@ print(decoded_output)
 ## Mistral4ForTokenClassification
 
 [[autodoc]] Mistral4ForTokenClassification
-
-## Mistral4ForQuestionAnswering
-
-[[autodoc]] Mistral4ForQuestionAnswering

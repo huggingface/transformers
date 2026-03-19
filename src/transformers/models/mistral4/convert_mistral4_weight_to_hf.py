@@ -54,21 +54,9 @@ class FP8RescaleMergeAndConcatenate(ConversionOps):
     r"""FP8-aware gate+up expert fusion with per-expert scale rescaling.
 
     Takes per-expert gate (w1) and up (w3) weight tensors together with their
-    FP8 ``weight_scale_inv`` values, rescales both to a common scale per expert
-    (the max of the two), concatenates gate+up along ``dim=0``, and stacks
+    FP8 `weight_scale_inv` values, rescales both to a common scale per expert
+    (the max of the two), concatenates gate+up along `dim=0`, and stacks
     across experts along a new leading dimension.
-
-    Expected ``input_dict`` keys::
-
-        "w1.weight":        list of per-expert gate weight tensors
-        "w3.weight":        list of per-expert up weight tensors
-        "w1.qscale_weight": list of per-expert gate scale_inv tensors
-        "w3.qscale_weight": list of per-expert up scale_inv tensors
-
-    Produced output keys::
-
-        "gate_up_proj":           fused weight  (n_experts, 2*intermediate, hidden)
-        "gate_up_proj_scale_inv": fused scale   (n_experts, 1, 1)
     """
 
     @torch.no_grad()
@@ -105,7 +93,7 @@ class FP8RescaleMergeAndConcatenate(ConversionOps):
 
 
 def _get_text_renamings(prefix: str) -> list[WeightRenaming]:
-    r"""Build ``WeightRenaming`` list for text-model keys."""
+    r"""Build `WeightRenaming` list for text-model keys."""
     return [
         WeightRenaming("^output", "lm_head"),
         WeightRenaming("^norm", f"{prefix}.norm"),
@@ -130,7 +118,7 @@ def _get_text_renamings(prefix: str) -> list[WeightRenaming]:
 
 
 def _get_vision_renamings() -> list[WeightRenaming]:
-    r"""Build ``WeightRenaming`` list for vision-model keys."""
+    r"""Build `WeightRenaming` list for vision-model keys."""
     return [
         WeightRenaming("^vision_encoder", "model.vision_tower"),
         WeightRenaming(r"^vision_language_adapter\.w_in", "model.multi_modal_projector.linear_1"),
@@ -160,7 +148,7 @@ def _rename_key(
     text_renamings: list[WeightRenaming],
     vision_renamings: list[WeightRenaming],
 ) -> str:
-    r"""Apply the appropriate ``WeightRenaming`` chain to *key*."""
+    r"""Apply the appropriate `WeightRenaming` chain to *key*."""
     renamings = vision_renamings if _is_vision_key(key) else text_renamings
     for renaming in renamings:
         key, _ = renaming.rename_source_key(key)
@@ -178,7 +166,7 @@ def _rescale_fp8(
 
 
 def _descale_fp8_to_bf16(tensor: torch.Tensor, scale_inv: torch.Tensor) -> torch.Tensor:
-    r"""Descale an FP8 tensor back to BF16 using its ``weight_scale_inv``."""
+    r"""Descale an FP8 tensor back to BF16 using its `weight_scale_inv`."""
     return (tensor.to(torch.bfloat16) * scale_inv.to(torch.bfloat16)).to(torch.bfloat16)
 
 
@@ -216,16 +204,7 @@ def _fuse_experts_for_layer(
     base: str,
     output_fp8: bool,
 ) -> dict[str, torch.Tensor]:
-    r"""Fuse per-expert weights for a single layer.
-
-    When *output_fp8* is ``True``, uses :class:`FP8RescaleMergeAndConcatenate`
-    to rescale gate/up weights to a common FP8 scale before concatenation and
-    emits the fused scale tensors alongside the weights.
-
-    When *output_fp8* is ``False``, descales FP8 weights to BF16 (if the source
-    is FP8) and uses :class:`MergeModulelist` + :class:`Concatenate` for the
-    standard fuse-and-stack pipeline.
-    """
+    r"""Fuse per-expert weights for a single layer"""
     merge_op = MergeModulelist(dim=0)
 
     w1 = grouped[(layer_idx, "w1", "weight")]
@@ -303,16 +282,7 @@ def fuse_experts(
     has_vision: bool,
     output_fp8: bool,
 ) -> dict[str, torch.Tensor]:
-    r"""Fuse per-expert weights across all layers.
-
-    Args:
-        expert_weights: Mapping from ``(layer_idx, expert_idx, param_type, suffix)``
-            to tensor.
-        n_experts: Number of routed experts.
-        has_vision: Whether the model is a VLM.
-        output_fp8: If ``True``, keep FP8 format with rescaled scales.
-            If ``False``, descale to BF16.
-    """
+    r"""Fuse per-expert weights across all layers."""
     prefix = "model.language_model" if has_vision else "model"
 
     grouped: dict[tuple, dict[int, torch.Tensor]] = defaultdict(dict)
@@ -357,20 +327,7 @@ def convert_state_dict(
     is_fp8_source: bool = False,
     output_bf16: bool = False,
 ) -> tuple[dict[str, torch.Tensor], dict[tuple, torch.Tensor]]:
-    r"""Rename and optionally descale one shard of the original state dict.
-
-    Args:
-        original_state_dict: Weights from a single safetensors shard.
-        text_renamings: ``WeightRenaming`` list for text keys.
-        vision_renamings: ``WeightRenaming`` list for vision keys.
-        total_keys_seen: Accumulator for duplicate detection across shards.
-        vision_config: Vision config for RoPE permutation (``None`` for text-only).
-        is_fp8_source: Whether the source checkpoint uses FP8 quantization.
-        output_bf16: If ``True`` and source is FP8, descale weights to BF16.
-
-    Returns:
-        Tuple of (renamed state dict, expert weights dict).
-    """
+    r"""Rename and optionally descale one shard of the original state dict."""
     new_dict: dict[str, torch.Tensor] = {}
     expert_weights: dict[tuple, torch.Tensor] = {}
 
@@ -413,14 +370,7 @@ def convert_config(
     is_vision: bool = True,
     output_fp8: bool = True,
 ) -> Mistral3Config | Mistral4Config:
-    r"""Convert original Mistral ``params.json`` to a HF config object.
-
-    Args:
-        original_config: Parsed ``params.json`` dict (will be mutated).
-        max_position_embeddings: Fallback value when not in config.
-        is_vision: Whether the model includes a vision encoder.
-        output_fp8: Whether to include FP8 ``quantization_config``.
-    """
+    r"""Convert original Mistral `params.json` to a HF config object."""
     original_vision_config = original_config.pop("vision_encoder", None)
     assert is_vision == (original_vision_config is not None)
 
@@ -528,17 +478,7 @@ def convert_and_write_model(
     max_position_embeddings: int,
     output_format: str,
 ) -> Mistral3Config | Mistral4Config:
-    r"""Convert weights and write the HF model to *output_dir*.
-
-    Args:
-        input_dir: Directory with ``params.json`` and ``*.safetensors``.
-        output_dir: Output directory for the HF model.
-        max_position_embeddings: Fallback ``max_position_embeddings``.
-        output_format: ``"fp8"`` to keep FP8 quantization, ``"bf16"`` to descale.
-
-    Returns:
-        The converted HF config object.
-    """
+    r"""Convert weights and write the HF model to output_dir."""
     params = _read_json(input_dir / "params.json")
     is_vision = params.get("vision_encoder") is not None
     is_fp8_source = params.get("quantization", {}).get("qformat_weight") == "fp8_e4m3"
