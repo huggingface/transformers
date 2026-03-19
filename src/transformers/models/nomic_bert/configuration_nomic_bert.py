@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -34,7 +35,6 @@ class NomicBertConfig(PreTrainedConfig):
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
-    num_key_value_heads: int | None = None
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
     hidden_dropout_prob: float = 0.1
@@ -50,17 +50,14 @@ class NomicBertConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     max_position_embeddings: int = 2048
     head_dim: int | None = None
+    is_decoder = AttributeError()
+    add_cross_attention = AttributeError()
+    use_cache = AttributeError()
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-
-        self.is_decoder = False
-        self.add_cross_attention = False
-        self.use_cache = False
 
 
 __all__ = ["NomicBertConfig"]

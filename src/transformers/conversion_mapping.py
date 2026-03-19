@@ -426,7 +426,7 @@ def _build_checkpoint_conversion_mapping():
             # Encoder Layers Renaming
             WeightRenaming(
                 r"encoder.layers.(\d+).attn.out_proj.weight",
-                r"layers.\1.attention.o_proj.weight",
+                r"layers.\1.self_attn.o_proj.weight",
             ),
             WeightRenaming(
                 r"encoder.layers.(\d+).mlp.fc11.weight",
@@ -449,12 +449,13 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns=["attn.Wqkv.weight"],
                 target_patterns=[
-                    "attention.q_proj.weight",
-                    "attention.k_proj.weight",
-                    "attention.v_proj.weight",
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
                 ],
                 operations=[Chunk(dim=0)],
             ),
+        ],
         "jina_embeddings_v3": [
             WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
             WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
