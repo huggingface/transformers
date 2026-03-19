@@ -30,7 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -572,10 +572,11 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        video_output = self.vision_model(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
-        projected = self.multi_modal_projector(video_output.last_hidden_state)
-        video_output.pooler_output = projected
-        return video_output
+        video_output: BaseModelOutputWithPooling = self.vision_model(
+            pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs
+        )
+        projected = self.multi_modal_projector(video_output.pooler_output)
+        return projected
 
     @can_return_tuple
     @auto_docstring
@@ -591,10 +592,11 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        image_output = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        projected = self.multi_modal_projector(image_output.last_hidden_state)
-        image_output.pooler_output = projected
-        return image_output
+        image_output: BaseModelOutputWithPooling = self.vision_model(
+            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
+        )
+        projected = self.multi_modal_projector(image_output.pooler_output)
+        return projected
 
     def get_placeholder_mask(
         self,

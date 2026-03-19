@@ -19,16 +19,11 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForSequenceClassification
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..auto.modeling_auto import AutoModel
-from ..granite.modeling_granite import (
-    GraniteAttention,
-    GraniteDecoderLayer,
-    GraniteForCausalLM,
-    GraniteModel,
-)
+from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteForCausalLM, GraniteModel
 from ..llama.modeling_llama import LlamaPreTrainedModel
 from .configuration_hyperclovax_vision import HCXVisionConfig, HyperClovaXConfig
 
@@ -98,10 +93,11 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        video_output = self.vision_model(pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs)
-        projected = self.multi_modal_projector(video_output.last_hidden_state)
-        video_output.pooler_output = projected
-        return video_output
+        video_output: BaseModelOutputWithPooling = self.vision_model(
+            pixel_values_videos, grid_thw=video_grid_thw, return_dict=True, **kwargs
+        )
+        projected = self.multi_modal_projector(video_output.pooler_output)
+        return projected
 
     @can_return_tuple
     @auto_docstring
@@ -117,10 +113,11 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        image_output = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        projected = self.multi_modal_projector(image_output.last_hidden_state)
-        image_output.pooler_output = projected
-        return image_output
+        image_output: BaseModelOutputWithPooling = self.vision_model(
+            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
+        )
+        projected = self.multi_modal_projector(image_output.pooler_output)
+        return projected
 
     def get_placeholder_mask(
         self,

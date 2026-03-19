@@ -22,7 +22,7 @@ class HCXVisionV2ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class HCXVisionV2Processor(ProcessorMixin):
-    image_processor_class = "Qwen2VLImageProcessor"
+    image_processor_class = ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")
     video_processor_class = "Qwen2VLVideoProcessor"
     tokenizer_class = (
         "GPT2Tokenizer",
@@ -65,7 +65,7 @@ class HCXVisionV2Processor(ProcessorMixin):
                 )
             return self.tokenizer.apply_chat_template(conversation, chat_template=template, **kwargs)
 
-        return super().conversation(conversation, chat_template=chat_template, **kwargs)
+        return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
 
     @auto_docstring
     def __call__(
