@@ -136,11 +136,10 @@ tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token
 model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="sequential")
 inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
-def decode_one_tokens(model, cur_token, input_pos, cache_position, past_key_values):
+def decode_one_tokens(model, cur_token, input_pos, past_key_values):
     logits = model(
         cur_token,
         position_ids=input_pos,
-        cache_position=cache_position,
         past_key_values=past_key_values,
         return_dict=False,
         use_cache=True
@@ -160,25 +159,25 @@ with torch.no_grad():
     past_key_values = StaticCache(
         config=model.config, max_cache_len=4096
     )
-    cache_position = torch.arange(seq_length, device=torch_device)
+    positions = torch.arange(seq_length, device=torch_device)
     generated_ids = torch.zeros(
         batch_size, seq_length + NUM_TOKENS_TO_GENERATE + 1, dtype=torch.int, device=torch_device
     )
-    generated_ids[:, cache_position] = inputs["input_ids"].to(torch_device).to(torch.int)
+    generated_ids[:, positions] = inputs["input_ids"].to(torch_device).to(torch.int)
 
     logits = model(
-        **inputs, cache_position=cache_position, past_key_values=past_key_values,return_dict=False, use_cache=True
+        **inputs, past_key_values=past_key_values,return_dict=False, use_cache=True
     )[0]
     next_token = torch.argmax(logits[:, -1], dim=-1)[:, None]
     generated_ids[:, seq_length] = next_token[:, 0]
 
     decode_one_tokens = torch.compile(decode_one_tokens, mode="reduce-overhead", fullgraph=True)
-    cache_position = torch.tensor([seq_length + 1], device=torch_device)
+    positions = torch.tensor([seq_length + 1], device=torch_device)
     for _ in range(1, NUM_TOKENS_TO_GENERATE):
         with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False, enable_math=True):
-            next_token = decode_one_tokens(model, next_token.clone(), None, cache_position, past_key_values)
-            generated_ids[:, cache_position] = next_token.int()
-        cache_position += 1
+            next_token = decode_one_tokens(model, next_token.clone(), None, past_key_values)
+            generated_ids[:, positions] = next_token.int()
+        positions += 1
 
 text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 text
