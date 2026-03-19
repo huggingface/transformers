@@ -40,6 +40,7 @@ from ...utils import (
     torch_int,
 )
 
+
 try:
     # Newer versions expose `load_backbone` at the top level.
     from ...backbone_utils import load_backbone
