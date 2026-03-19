@@ -331,44 +331,26 @@ def fp8_deepgemm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    """FP8 expert forward using DeepGEMM's m_grouped_fp8_gemm_nt_contiguous kernel.
-
-    Uses a contiguous flat layout where all expert segments are packed into a single
-    (total_m, dim) tensor, with each expert's segment padded to 128-row alignment
-    (required by DeepGEMM's TMA). A `grouped_layout` vector maps each row to its
-    expert ID (-1 for padding rows the kernel should skip).
-
-    The flow is:
-      1. Sort tokens by expert, compute per-expert counts and B-aligned offsets
-      2. Quantize activations to FP8, scatter into the padded contiguous layout
-      3. Gate+Up GEMM (all experts in one kernel launch)
-      4. Activation (in-place on contiguous tensor — padding rows are zero, harmless)
-      5. Quantize intermediates to FP8 (no scatter needed — already contiguous)
-      6. Down GEMM (reuses the same grouped_layout)
-      7. Gather valid rows, apply routing weights, restore original token order
-    """
     assert self.block_size[0] == self.block_size[1] == 128, (
         f"DeepGEMM requires block_size=(128, 128), got {self.block_size}"
     )
 
-    B = self.block_size[1]  # 128 — TMA alignment requirement
+    B = self.block_size[1]  # TMA alignment
     dg = _get_deepgemm_kernel()
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    # Reshape for easier indexing
     # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
     S = expert_ids.size(0)
 
-    # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    # Sort by expert for contiguous grouped processing
+    # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
     inv_perm[perm] = torch.arange(S, device=device)
@@ -377,69 +359,57 @@ def fp8_deepgemm_experts_forward(
     sample_weights_g = sample_weights[perm]
     selected_hidden_states_g = selected_hidden_states[perm]
 
-    # Compute per-expert token counts.
-    # histc instead of bincount avoids cuda-graph issues;
-    # CPU requires float input, CUDA requires int input (deterministic mode).
+    # Compute per-expert token counts and B-aligned offsets for contiguous layout
     tokens_per_expert = torch.histc(expert_ids_g.int(), bins=self.num_experts, min=0, max=self.num_experts - 1)
-
-    # Compute row-within-expert for each sorted token via exclusive cumsum (CUDA-graph safe, no .roll())
     sorted_offsets = torch.zeros(self.num_experts, device=device, dtype=torch.long)
     sorted_offsets[1:] = tokens_per_expert.long().cumsum(0)[:-1]
     row_in_sorted = torch.arange(S, device=device) - sorted_offsets[expert_ids_g]
 
-    # Build contiguous layout: each expert's segment is padded to B-alignment (128 rows).
-    # This is required by DeepGEMM's TMA descriptor which loads 128-row tiles.
-    # row_map[i] = position of sorted token i in the flat (total_m,) padded layout.
-    aligned_tpe = ((tokens_per_expert.long() + B - 1) // B) * B  # (E,) — per-expert aligned sizes
+    # Pad each expert's segment to B rows (TMA loads 128-row tiles)
+    aligned_tpe = ((tokens_per_expert.long() + B - 1) // B) * B
     expert_start = torch.zeros(self.num_experts, device=device, dtype=torch.long)
     expert_start[1:] = aligned_tpe.cumsum(0)[:-1]
-    row_map = expert_start[expert_ids_g] + row_in_sorted  # (S,) — maps sorted tokens to padded positions
+    row_map = expert_start[expert_ids_g] + row_in_sorted  # (S,)
 
-    # Compute total_m — the flat padded layout size.
-    # Tracing/CUDA-graph path: deterministic upper bound (no .item() GPU→CPU sync).
-    # Normal path: exact value from the actual token distribution.
-    if is_tracing():
-        total_m = S + min(S, self.num_experts) * (B - 1)
-    else:
-        total_m = int(aligned_tpe.sum().item())
+    # Total padded layout size (upper bound when tracing to avoid GPU→CPU sync)
+    total_m = S + min(S, self.num_experts) * (B - 1) if is_tracing() else int(aligned_tpe.sum().item())
 
-    # grouped_layout: (total_m,) int32 — tells the kernel which expert each row belongs to.
-    # Padding rows are marked -1 (kernel skips them).
+    # grouped_layout[i] = expert_id for row i, -1 for padding rows
     grouped_layout = torch.full((total_m,), -1, device=device, dtype=torch.int32)
     grouped_layout[row_map] = expert_ids_g.int()
 
-    # Quantize activations per-token to FP8 with per-128-block scale factors.
-    # Scale convention: sf = max_abs / 448.0 — same format as weight_scale_inv.
+    # Quantize activations to FP8 and scatter into padded contiguous layout
     selected_hidden_states_g, act_scales = dg.per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
-
-    # Scatter FP8 data + scales into the padded contiguous layout (total_m, *)
     a_fp8 = torch.zeros(total_m, hidden_dim, device=device, dtype=selected_hidden_states_g.dtype)
     a_fp8[row_map] = selected_hidden_states_g
     sf_a = torch.zeros(total_m, act_scales.shape[1], device=device, dtype=torch.float32)
     sf_a[row_map] = act_scales
 
-    # --- Gate+Up projection: all experts in one fused kernel launch ---
+    # --- Up projection per expert (DeepGEMM grouped contiguous) ---
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
     proj_out = torch.zeros(total_m, w_up.shape[1], device=device, dtype=torch.bfloat16)
     dg.m_grouped_fp8_gemm_nt_contiguous((a_fp8, sf_a), (w_up, ws_up), proj_out, grouped_layout)
+    # (total_m, 2 * intermediate_dim)
 
-    # Apply in-place on contiguous tensor; padding rows are zero so activation is a no-op.
+    # Apply gating or activation
     if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
         proj_out = self._apply_gate(proj_out)  # (total_m, intermediate_dim)
     else:
+        # for non-gated experts we just apply the activation function
         proj_out = self.act_fn(proj_out)  # (total_m, intermediate_dim)
 
-    # Quantize intermediates to FP8.
+    # Quantize intermediates to FP8
     proj_fp8, proj_scales = dg.per_token_cast_to_fp8(proj_out, use_ue8m0=False)
 
-    # --- Down projection: reuses the same grouped_layout ---
+    # --- Down projection per expert (DeepGEMM grouped contiguous) ---
     proj_out = torch.zeros(total_m, hidden_dim, device=device, dtype=torch.bfloat16)
     dg.m_grouped_fp8_gemm_nt_contiguous(
         (proj_fp8, proj_scales), (self.down_proj, self.down_proj_scale_inv), proj_out, grouped_layout
-    )
+    )  # (total_m, hidden_dim)
 
-    # Gather valid rows from padded layout, apply routing weights
+    # Apply routing weights
     weighted_out = proj_out[row_map] * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
