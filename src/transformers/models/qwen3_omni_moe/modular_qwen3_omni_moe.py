@@ -1764,9 +1764,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values,
-            attention_mask,
-            inputs_embeds,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
