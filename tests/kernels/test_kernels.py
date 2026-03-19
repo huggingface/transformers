@@ -430,11 +430,15 @@ class TestAttentionKernelRegistration(TestCasePlus):
                 ALL_MASK_ATTENTION_FUNCTIONS[attn_impl],
                 ALL_MASK_ATTENTION_FUNCTIONS["flash_attention_2"],
             )
+            # Cleanup registration to avoid leaking functions across tests
             try:
                 ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
+            try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
             except Exception as e:
-                print(f"Could not clean up registrations: {e}")
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
     def test_kernel_mask_function_custom(self):
         """Kernels with MASK_FUNCTION attribute should use the declared mask type."""
@@ -447,11 +451,15 @@ class TestAttentionKernelRegistration(TestCasePlus):
                 ALL_MASK_ATTENTION_FUNCTIONS[attn_impl],
                 ALL_MASK_ATTENTION_FUNCTIONS["sdpa"],
             )
+            # Cleanup registration to avoid leaking functions across tests
             try:
                 ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
+            try:
                 ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
             except Exception as e:
-                print(f"Could not clean up registrations: {e}")
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
 
 
 @require_kernels
