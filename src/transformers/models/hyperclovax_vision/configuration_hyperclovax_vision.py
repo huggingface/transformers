@@ -1,4 +1,4 @@
-# Copyright 2025 NAVER Corp. and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 NAVER Corp. and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,97 +13,46 @@
 # limitations under the License.
 """HyperClovaX model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...models.auto import CONFIG_MAPPING, AutoConfig
 from ...models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
-from ...utils import logging
+from ...utils import auto_docstring
+from ..granite.configuration_granite import GraniteConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-class HyperClovaXConfig(PretrainedConfig):
+@auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+@strict(accept_kwargs=True)
+class HyperClovaXConfig(GraniteConfig):
     r"""
-    This is the configuration class to store the configuration of a [`HyperClovaXTextModel`]
-    and [`HyperClovaXForCausalLM`]. It is used to instantiate a HyperClovaX language model
-    according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the
-    HyperClovaX-SEED-32B text backbone.
-    e.g. [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B)
+    HyperClovaX language model configuration.  Extends [`GraniteConfig`] with
+    MuP post-norm support and backward-compatible RoPE fields.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the
-    model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
+    ``rope_theta`` / ``rope_scaling`` are accepted for compatibility with
+    existing hub checkpoints that store RoPE settings in the legacy Llama-style
+    flat format.  They are converted to the ``rope_parameters`` dict expected
+    by [`GraniteRotaryEmbedding`] during ``__post_init__``.
 
     Args:
-            vocab_size (`int`, *optional*, defaults to 32000):
-                Vocabulary size of the model. Defines the number of different tokens that can be represented by
-                `input_ids`.
-            hidden_size (`int`, *optional*, defaults to 4096):
-                Dimension of the hidden representations.
-            intermediate_size (`int`, *optional*, defaults to 11008):
-                Dimension of the MLP feed-forward representations.
-            num_hidden_layers (`int`, *optional*, defaults to 32):
-                Number of hidden layers in the Transformer decoder.
-            num_attention_heads (`int`, *optional*, defaults to 32):
-                Number of attention heads for each attention layer in the Transformer decoder.
-            num_key_value_heads (`int | None`, *optional*):
-                Number of key-value heads used for Grouped Query Attention (GQA). If `None`, defaults to
-                `num_attention_heads` (standard multi-head attention).
-            hidden_act (`str`, *optional*, defaults to `"silu"`):
-                The non-linear activation function applied in the MLP layers.
-            max_position_embeddings (`int`, *optional*, defaults to 2048):
-                The maximum sequence length that this model can be used with.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                Standard deviation of the truncated normal distribution used to initialise all weight matrices.
-            rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-                Epsilon value added to the denominator of RMSNorm layers for numerical stability.
-            use_cache (`bool`, *optional*, defaults to `True`):
-                Whether the model should cache past key-value states to speed up decoding. Disable during training.
-            pad_token_id (`int | None`, *optional*):
-                Token ID used for padding sequences to equal length in a batch.
-            bos_token_id (`int`, *optional*, defaults to 1):
-                Token ID representing the beginning of a sequence.
-            eos_token_id (`int`, *optional*, defaults to 2):
-                Token ID representing the end of a sequence.
-            pretraining_tp (`int`, *optional*, defaults to 1):
-                Tensor parallelism degree used during pretraining. Values greater than 1 activate Megatron-style
-                tensor parallel linear layers for reproducibility.
-            tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-                Whether to tie the input token embedding weights to the output projection (lm_head) weights.
-            rope_theta (`float`, *optional*, defaults to 10000.0):
-                Base period of the Rotary Position Embedding (RoPE).
-            rope_scaling (`dict | None`, *optional*):
-                Dictionary containing RoPE scaling configuration. Supports keys `"rope_type"` (e.g. `"linear"`,
-                `"dynamic"`, `"yarn"`) and scaling-specific hyperparameters. If `None`, no scaling is applied.
-            attention_bias (`bool`, *optional*, defaults to `False`):
-                Whether to include a learnable bias term in the query, key, value, and output projection layers.
-            attention_dropout (`float`, *optional*, defaults to 0.0):
-                Dropout probability applied to attention weights.
-            head_dim (`int | None`, *optional*):
-                Dimension of each attention head. Defaults to `hidden_size // num_attention_heads`.
-            embedding_multiplier (`float`, *optional*, defaults to 1.0):
-                Scalar multiplier applied to the token embeddings. Used for Maximal Update Parametrisation (MuP)
-                to keep activation scale stable across model widths.
-            logits_scaling (`float`, *optional*, defaults to 1.0):
-                Scalar multiplier applied to the final logits before softmax. Used for MuP.
-            attention_multiplier (`float`, *optional*, defaults to 1.0):
-                Scalar multiplier applied to the attention scores (QK dot-products). Used for MuP.
-            residual_multiplier (`float`, *optional*, defaults to 1.0):
-                Scalar multiplier applied to each residual branch output before addition. Used for MuP.
-            use_post_norm (`bool`, *optional*, defaults to `False`):
-                Whether to apply an additional layer normalisation after each sub-layer output (dual-norm /
-                post-norm). When `False`, only standard pre-norm is used.
-
-    Example:
-
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            Base period of the Rotary Position Embedding (RoPE).  Converted to
+            ``rope_parameters["rope_theta"]`` when ``rope_parameters`` is not
+            set explicitly.
+        rope_scaling (`dict`, *optional*):
+            Legacy RoPE scaling dict (Llama style).  Keys are merged into
+            ``rope_parameters`` when ``rope_parameters`` is not set explicitly.
+        head_dim (`int`, *optional*):
+            Dimension of each attention head.  Defaults to
+            ``hidden_size // num_attention_heads``.
     ```python
-    >>> from transformers import HyperClovaXConfig, HyperClovaXTextModel
+    >>> from transformers import HyperClovaXConfig, HyperClovaXModel
 
     >>> # Initializing a HyperClovaX configuration
     >>> configuration = HyperClovaXConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = HyperClovaXTextModel(configuration)
+    >>> model = HyperClovaXModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -111,133 +60,54 @@ class HyperClovaXConfig(PretrainedConfig):
     """
 
     model_type = "hyperclovax"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int = 32000,
-        hidden_size: int = 4096,
-        intermediate_size: int = 11008,
-        num_hidden_layers: int = 32,
-        num_attention_heads: int = 32,
-        num_key_value_heads: int | None = None,
-        head_dim: int | None = None,
-        hidden_act: str = "silu",
-        max_position_embeddings: int = 2048,
-        # Rotary positional embedding
-        rope_theta: float = 10000.0,
-        rope_scaling: dict | None = None,
-        initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-6,
-        use_cache: bool = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int = 1,
-        eos_token_id: int = 2,
-        attention_bias: bool = False,
-        attention_dropout: float = 0.0,
-        attention_multiplier: float = 1.0,
-        # MuP parameters
-        embedding_multiplier: float = 1.0,
-        logits_scaling: float = 1.0,
-        residual_multiplier: float = 1.0,
-        # Post-norm (dual-norm)
-        use_post_norm: bool = False,
-        tie_word_embeddings: bool = False,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    rope_theta: float | int = 10000.0
+    rope_scaling: dict | None = None
+    head_dim: int | None = None
 
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
+    def __post_init__(self, **kwargs):
+        self.rope_theta = float(self.rope_theta)
+        # Convert legacy flat rope_theta / rope_scaling to rope_parameters dict
+        # so that GraniteRotaryEmbedding can consume it.
+        if self.rope_parameters is None:
+            rope_params: dict = {"rope_type": "default", "rope_theta": self.rope_theta}
+            if self.rope_scaling is not None:
+                rope_params.update(self.rope_scaling)
+            self.rope_parameters = rope_params
 
-        # Rotary positional embedding params
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-
-        # If num_key_value_heads is not provided, default to num_attention_heads (standard MHA)
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-
-        # If head_dim is not provided, default to hidden_size // num_attention_heads
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
 
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.attention_multiplier = attention_multiplier
-        # MuP
-        self.embedding_multiplier = embedding_multiplier
-        self.logits_scaling = logits_scaling
-        self.residual_multiplier = residual_multiplier
-        # Post-norm flag
-        self.use_post_norm = use_post_norm
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
-class HCXVisionConfig(PretrainedConfig):
+@auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+@strict(accept_kwargs=True)
+class HCXVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a
-    [`HCXVisionForConditionalGeneration`]. It is used to instantiate a HyperClovaX Vision
-    model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of
-    HyperCLOVAX-SEED-Think-32B.
-    e.g. [naver-hyperclovax/HyperCLOVAX-SEED-Think-32B](https://huggingface.co/naver-hyperclovax/HyperCLOVAX-SEED-Think-32B)
-
-    Combines a [`HyperClovaXConfig`] text backbone with a [`Qwen2_5_VLVisionConfig`] vision
-    encoder and a configurable multimodal projector.
-
-    The `sub_configs` mechanism automatically deserialises nested `text_config` and
-    `vision_config` dicts when loading from a JSON config file, so a minimal hub
-    `config.json` (with only `model_type`, `text_config`, and `vision_config` keys)
-    is sufficient.
-
-    Hub `config.json` compatibility notes:
-
-    - `model_type` must be `"hyperclovax_vision"` (was `"vlm"` in the old trust_remote_code version).
-    - `architectures` must reference the new class names (e.g. `["HCXVisionForConditionalGeneration"]`).
-    - `text_config.model_type` should remain `"hyperclovax"` — unchanged.
-    - `vision_config.model_type` can be either `"qwen2_5_vl"` (old value in the original hub
-      config) or `"qwen2_5_vl_visual"` — both are accepted.
-    - Deprecated path arguments (`text_model_name_or_path`, etc.) are silently ignored with a
-      `FutureWarning`.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the
-    model outputs. Read the documentation from [`PreTrainedConfig`] for more information.
+    Configuration for [`HCXVisionForConditionalGeneration`].  Combines a
+    [`HyperClovaXConfig`] text backbone with a vision encoder config and a
+    single-linear multimodal projector.
 
     Args:
         text_config (`dict` or [`HyperClovaXConfig`], *optional*):
-            Configuration for the text (LLM) component. Defaults to a standard [`HyperClovaXConfig`].
-        vision_config (`dict` or [`Qwen2_5_VLVisionConfig`], *optional*):
-            Configuration for the vision encoder component (Qwen2.5-VL ViT).
+            Configuration for the LLM backbone.  Defaults to
+            [`HyperClovaXConfig`].
+        vision_config (`dict` or config, *optional*):
+            Configuration for the vision encoder.  Defaults to
+            [`HCXVisionVisionConfig`].
         img_start_id (`int`, *optional*, defaults to 128060):
-            Token ID used as a placeholder for image content in the input token sequence.
-            Each image position in the text should contain this token ID. Also accessible as
-            `image_token_id` for compatibility with generation helpers.
+            Token ID used as a placeholder for image patches in the input
+            sequence.
         video_start_id (`int`, *optional*, defaults to 128061):
-            Token ID used as a placeholder for video content in the input token sequence.
-            Also accessible as `video_token_id`.
-
-    Example:
+            Token ID used as a placeholder for video patches in the input
+            sequence.
 
     ```python
-    >>> from transformers import HyperClovaXVisionConfig, HCXVisionForConditionalGeneration
+    >>> from transformers import HCXVisionConfig, HCXVisionForConditionalGeneration
 
     >>> # Initializing a HyperClovaX Vision configuration with defaults
-    >>> configuration = HyperClovaXVisionConfig()
+    >>> configuration = HCXVisionConfig()
 
     >>> # Initializing a model from the configuration
     >>> model = HCXVisionForConditionalGeneration(configuration)
@@ -248,47 +118,42 @@ class HCXVisionConfig(PretrainedConfig):
     """
 
     model_type = "hyperclovax_vision"
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"text_config": AutoConfig, "vision_config": Qwen2_5_VLVisionConfig}
 
-    def __init__(
-        self,
-        text_config: AutoConfig | dict | None = None,
-        vision_config: AutoConfig | dict | None = None,
-        img_start_id: int = 128060,
-        video_start_id: int = 128061,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "hyperclovax")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = HyperClovaXConfig()
-        self.text_config = text_config
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    img_start_id: int = 128060
+    video_start_id: int = 128061
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "qwen2_5_vl")
-            if vision_config["model_type"] == "qwen2_5_vl":
-                vision_config = Qwen2_5_VLVisionConfig(**vision_config)
-            else:
-                vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            model_type = self.vision_config.get("model_type", "qwen2_5_vl_image")
+            # "qwen2_5_vl" refers to the full VL model; we only need the vision encoder
+            if model_type == "qwen2_5_vl":
+                model_type = "qwen2_5_vl_image"
+            vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
+        elif self.vision_config is None:
             vision_config = Qwen2_5_VLVisionConfig()
         self.vision_config = vision_config
 
-        # Placeholder token IDs
-        self.img_start_id = img_start_id
-        self.image_token_id = img_start_id
-        self.video_start_id = video_start_id
-        self.video_token_id = video_start_id
+        if isinstance(self.text_config, dict):
+            model_type = self.text_config.get("model_type", "hyperclovax")
+            text_config = CONFIG_MAPPING[model_type](**self.text_config)
+        elif self.text_config is None:
+            text_config = HyperClovaXConfig()
+        self.text_config = text_config
 
-        # Expose initializer_range at top level for _init_weights
+        self.image_token_id = self.img_start_id
+        self.video_token_id = self.video_start_id
+
         self.initializer_range = self.text_config.initializer_range
 
+        # Accept old hub configs that used model_type="vlm"
         if kwargs.get("model_type") == "vlm":
             kwargs["model_type"] = "hyperclovax_vision"
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["HyperClovaXConfig", "HCXVisionConfig"]
