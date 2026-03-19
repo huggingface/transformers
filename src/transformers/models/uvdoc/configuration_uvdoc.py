@@ -40,7 +40,7 @@ class UVDocConfig(PreTrainedConfig):
         Scaling factors for feature map dimensions in multi-scale feature fusion modules.
     block_counts_per_stage (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
         Number of residual blocks in each stage of the model backbone.
-    dilation_values (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+    dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
         Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
         rates for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):

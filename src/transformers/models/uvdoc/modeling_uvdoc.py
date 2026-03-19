@@ -21,6 +21,7 @@
 
 import torch
 import torch.nn as nn
+from torch import Tensor
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention
@@ -48,7 +49,7 @@ class UVDocConvLayer(nn.Module):
     ):
         super().__init__()
 
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels,
             out_channels,
             bias=bias,
@@ -58,13 +59,13 @@ class UVDocConvLayer(nn.Module):
             padding_mode=padding_mode,
             dilation=dilation,
         )
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.act_fn(hidden_state)
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
         return hidden_state
 
 
@@ -123,16 +124,16 @@ class UVDocResidualBlockWithDilation(nn.Module):
 
         self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        residual = hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
         if self.conv_down is not None:
-            residual = self.conv_down(hidden_state)
-        hidden_state = self.conv_start(hidden_state)
-        hidden_state = self.conv_final(hidden_state)
-        hidden_state += residual
+            residual = self.conv_down(hidden_states)
+        hidden_states = self.conv_start(hidden_states)
+        hidden_states = self.conv_final(hidden_states)
+        hidden_states = hidden_states + residual
 
-        hidden_state = self.act_fn(hidden_state)
-        return hidden_state
+        hidden_states = self.act_fn(hidden_states)
+        return hidden_states
 
 
 class UVDocResNetStage(nn.Module):
@@ -158,13 +159,13 @@ class UVDocResNetStage(nn.Module):
             )
             self.layers.append(layer)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
-class UVDocResNetStraight(nn.Module):
+class UVDocResNet(nn.Module):
     """ResNet backbone with multiple stages for feature extraction."""
 
     def __init__(self, config):
@@ -185,10 +186,10 @@ class UVDocResNetStraight(nn.Module):
             self.stages.append(stage)
             self.in_channels = config.num_filter * feature_map
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for stage in self.stages:
-            hidden_state = stage(hidden_state)
-        return hidden_state
+            hidden_states = stage(hidden_states)
+        return hidden_states
 
 
 class UVDocResNetHead(nn.Module):
@@ -218,27 +219,27 @@ class UVDocResNetHead(nn.Module):
             padding=kernel_size // 2,
         )
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv_down(hidden_state)
-        hidden_state = self.conv_up(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_down(hidden_states)
+        hidden_states = self.conv_up(hidden_states)
+        return hidden_states
 
 
 class UVDocBridgeBlock(nn.Module):
     """Bridge module with dilated convolutions for long-range dependencies."""
 
-    def __init__(self, config, dilation_value):
+    def __init__(self, config, dilation_values):
         super().__init__()
         in_channels = config.num_filter * config.feature_map_multipliers[2]
 
         self.blocks = nn.ModuleList([])
-        for dilation in dilation_value:
+        for dilation in dilation_values:
             self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for block in self.blocks:
-            hidden_state = block(hidden_state)
-        return hidden_state
+            hidden_states = block(hidden_states)
+        return hidden_states
 
 
 class UVDocPointPositions2D(nn.Module):
@@ -266,10 +267,10 @@ class UVDocPointPositions2D(nn.Module):
             padding_mode=config.padding_mode,
         )
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv_down(hidden_state)
-        hidden_state = self.conv_up(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_down(hidden_states)
+        hidden_states = self.conv_up(hidden_states)
+        return hidden_states
 
 
 @auto_docstring
@@ -302,7 +303,7 @@ class UVDocModel(UVDocPreTrainedModel):
         super().__init__(config)
 
         self.resnet_head = UVDocResNetHead(config)
-        self.resnet_down = UVDocResNetStraight(config)
+        self.resnet_down = UVDocResNet(config)
 
         self.bridge = nn.ModuleList([])
         for dilation_value in config.dilation_values:
@@ -310,7 +311,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.num_bridge_layers = len(self.bridge)
 
-        self.bridge_concat = UVDocConvLayer(
+        self.bridgeconnector = UVDocConvLayer(
             in_channels=config.num_filter * config.feature_map_multipliers[2] * self.num_bridge_layers,
             out_channels=config.num_filter * config.feature_map_multipliers[2],
             kernel_size=1,
@@ -329,8 +330,8 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        hidden_state = self.resnet_head(pixel_values)
-        resnet_down = self.resnet_down(hidden_state)
+        hidden_states = self.resnet_head(pixel_values)
+        resnet_down = self.resnet_down(hidden_states)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:
@@ -338,7 +339,7 @@ class UVDocModel(UVDocPreTrainedModel):
             bridge_outputs.append(bridge_output)
 
         bridge_concat = torch.cat(bridge_outputs, dim=1)
-        bridge = self.bridge_concat(bridge_concat)
+        bridge = self.bridgeconnector(bridge_concat)
 
         out_point_positions2D = self.out_point_positions2D(bridge)
 

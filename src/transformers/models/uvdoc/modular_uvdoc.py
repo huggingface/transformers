@@ -25,13 +25,15 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import SizeDict
+from ...image_utils import SizeDict, PILImageResampling
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, requires_backends
 from ...utils.generic import TensorType
 from ...utils.output_capturing import capture_outputs
+
+from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
@@ -50,7 +52,7 @@ class UVDocConfig(PreTrainedConfig):
         Scaling factors for feature map dimensions in multi-scale feature fusion modules.
     block_counts_per_stage (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
         Number of residual blocks in each stage of the model backbone.
-    dilation_values (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+    dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
         Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
         rates for a single bridge block.
     padding_mode (`str`, *optional*, defaults to `"reflect"`):
@@ -98,6 +100,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        requires_backends(self, "torch")
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -152,21 +155,21 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                 - "images": Rectified image tensor of shape (H, W, 3) with dtype torch.uint8
                           and BGR channel order (suitable for OpenCV visualization)
         """
+        requires_backends(self, "torch")
         image_list = list(original_images)
-        scale_t = torch.tensor(float(scale), device=prediction.device)
+        scale = torch.tensor(float(scale), device=prediction.device)
         results = []
 
-        for i, orig_img in enumerate(image_list):
+        for i, original_image in enumerate(image_list):
             # Ensure (1, C, H, W) for grid_sample
-            if orig_img.ndim == 3:
-                orig_img = orig_img.unsqueeze(0)
-            orig_img = orig_img.to(prediction.device)
-            original_height, original_width = orig_img.shape[2:]
+            if original_image.ndim == 3:
+                original_image = original_image.unsqueeze(0)
+            original_image = original_image.to(prediction.device)
+            original_height, original_width = original_image.shape[2:]
 
             # Upsample predicted mesh for this image to its original size
-            pred_i = prediction[i : i + 1]
             upsampled_mesh = F.interpolate(
-                pred_i,
+                prediction[i : i + 1],
                 size=(original_height, original_width),
                 mode="bilinear",
                 align_corners=True,
@@ -175,13 +178,13 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
 
             # Apply spatial transformation to rectify the document
-            rectified = F.grid_sample(orig_img, rearranged_mesh, align_corners=True)
+            rectified = F.grid_sample(original_image, rearranged_mesh, align_corners=True)
 
             # Remove batch dimension and rearrange channels: (H, W, C)
             image = rectified.squeeze(0).permute(1, 2, 0)
 
             # Scale and convert to uint8 with BGR channel
-            image = image * scale_t
+            image = image * scale
 
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
@@ -190,7 +193,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         return results
 
 
-class UVDocConvLayer(nn.Module):
+class UVDocConvLayer(PPLCNetConvLayer):
     """Convolutional layer with batch normalization and activation."""
 
     def __init__(
@@ -207,7 +210,7 @@ class UVDocConvLayer(nn.Module):
     ):
         super().__init__()
 
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels,
             out_channels,
             bias=bias,
@@ -217,14 +220,6 @@ class UVDocConvLayer(nn.Module):
             padding_mode=padding_mode,
             dilation=dilation,
         )
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv(hidden_state)
-        hidden_state = self.norm(hidden_state)
-        hidden_state = self.act_fn(hidden_state)
-        return hidden_state
 
 
 class UVDocResidualBlockWithDilation(nn.Module):
@@ -282,16 +277,16 @@ class UVDocResidualBlockWithDilation(nn.Module):
 
         self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        residual = hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
         if self.conv_down is not None:
-            residual = self.conv_down(hidden_state)
-        hidden_state = self.conv_start(hidden_state)
-        hidden_state = self.conv_final(hidden_state)
-        hidden_state += residual
+            residual = self.conv_down(hidden_states)
+        hidden_states = self.conv_start(hidden_states)
+        hidden_states = self.conv_final(hidden_states)
+        hidden_states = hidden_states + residual
 
-        hidden_state = self.act_fn(hidden_state)
-        return hidden_state
+        hidden_states = self.act_fn(hidden_states)
+        return hidden_states
 
 
 class UVDocResNetStage(nn.Module):
@@ -317,13 +312,13 @@ class UVDocResNetStage(nn.Module):
             )
             self.layers.append(layer)
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
+            hidden_states = layer(hidden_states)
+        return hidden_states
 
 
-class UVDocResNetStraight(nn.Module):
+class UVDocResNet(nn.Module):
     """ResNet backbone with multiple stages for feature extraction."""
 
     def __init__(self, config):
@@ -344,10 +339,10 @@ class UVDocResNetStraight(nn.Module):
             self.stages.append(stage)
             self.in_channels = config.num_filter * feature_map
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for stage in self.stages:
-            hidden_state = stage(hidden_state)
-        return hidden_state
+            hidden_states = stage(hidden_states)
+        return hidden_states
 
 
 class UVDocResNetHead(nn.Module):
@@ -377,27 +372,27 @@ class UVDocResNetHead(nn.Module):
             padding=kernel_size // 2,
         )
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv_down(hidden_state)
-        hidden_state = self.conv_up(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_down(hidden_states)
+        hidden_states = self.conv_up(hidden_states)
+        return hidden_states
 
 
 class UVDocBridgeBlock(nn.Module):
     """Bridge module with dilated convolutions for long-range dependencies."""
 
-    def __init__(self, config, dilation_value):
+    def __init__(self, config, dilation_values):
         super().__init__()
         in_channels = config.num_filter * config.feature_map_multipliers[2]
 
         self.blocks = nn.ModuleList([])
-        for dilation in dilation_value:
+        for dilation in dilation_values:
             self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for block in self.blocks:
-            hidden_state = block(hidden_state)
-        return hidden_state
+            hidden_states = block(hidden_states)
+        return hidden_states
 
 
 class UVDocPointPositions2D(nn.Module):
@@ -425,10 +420,10 @@ class UVDocPointPositions2D(nn.Module):
             padding_mode=config.padding_mode,
         )
 
-    def forward(self, hidden_state):
-        hidden_state = self.conv_down(hidden_state)
-        hidden_state = self.conv_up(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_down(hidden_states)
+        hidden_states = self.conv_up(hidden_states)
+        return hidden_states
 
 
 @auto_docstring
@@ -457,11 +452,12 @@ class UVDocPreTrainedModel(PreTrainedModel):
     """
 )
 class UVDocModel(UVDocPreTrainedModel):
+
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
         self.resnet_head = UVDocResNetHead(config)
-        self.resnet_down = UVDocResNetStraight(config)
+        self.resnet_down = UVDocResNet(config)
 
         self.bridge = nn.ModuleList([])
         for dilation_value in config.dilation_values:
@@ -469,7 +465,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
         self.num_bridge_layers = len(self.bridge)
 
-        self.bridge_concat = UVDocConvLayer(
+        self.bridgeconnector = UVDocConvLayer(
             in_channels=config.num_filter * config.feature_map_multipliers[2] * self.num_bridge_layers,
             out_channels=config.num_filter * config.feature_map_multipliers[2],
             kernel_size=1,
@@ -488,8 +484,8 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        hidden_state = self.resnet_head(pixel_values)
-        resnet_down = self.resnet_down(hidden_state)
+        hidden_states = self.resnet_head(pixel_values)
+        resnet_down = self.resnet_down(hidden_states)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:
@@ -497,7 +493,7 @@ class UVDocModel(UVDocPreTrainedModel):
             bridge_outputs.append(bridge_output)
 
         bridge_concat = torch.cat(bridge_outputs, dim=1)
-        bridge = self.bridge_concat(bridge_concat)
+        bridge = self.bridgeconnector(bridge_concat)
 
         out_point_positions2D = self.out_point_positions2D(bridge)
 

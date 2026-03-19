@@ -27,8 +27,8 @@ import torchvision.transforms.v2.functional as tvF
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import SizeDict
-from ...utils import auto_docstring
+from ...image_utils import PILImageResampling, SizeDict
+from ...utils import auto_docstring, requires_backends
 from ...utils.generic import TensorType
 
 
@@ -54,6 +54,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        requires_backends(self, "torch")
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -108,21 +109,21 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
                 - "images": Rectified image tensor of shape (H, W, 3) with dtype torch.uint8
                           and BGR channel order (suitable for OpenCV visualization)
         """
+        requires_backends(self, "torch")
         image_list = list(original_images)
-        scale_t = torch.tensor(float(scale), device=prediction.device)
+        scale = torch.tensor(float(scale), device=prediction.device)
         results = []
 
-        for i, orig_img in enumerate(image_list):
+        for i, original_image in enumerate(image_list):
             # Ensure (1, C, H, W) for grid_sample
-            if orig_img.ndim == 3:
-                orig_img = orig_img.unsqueeze(0)
-            orig_img = orig_img.to(prediction.device)
-            original_height, original_width = orig_img.shape[2:]
+            if original_image.ndim == 3:
+                original_image = original_image.unsqueeze(0)
+            original_image = original_image.to(prediction.device)
+            original_height, original_width = original_image.shape[2:]
 
             # Upsample predicted mesh for this image to its original size
-            pred_i = prediction[i : i + 1]
             upsampled_mesh = F.interpolate(
-                pred_i,
+                prediction[i : i + 1],
                 size=(original_height, original_width),
                 mode="bilinear",
                 align_corners=True,
@@ -131,13 +132,13 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             rearranged_mesh = upsampled_mesh.permute(0, 2, 3, 1)
 
             # Apply spatial transformation to rectify the document
-            rectified = F.grid_sample(orig_img, rearranged_mesh, align_corners=True)
+            rectified = F.grid_sample(original_image, rearranged_mesh, align_corners=True)
 
             # Remove batch dimension and rearrange channels: (H, W, C)
             image = rectified.squeeze(0).permute(1, 2, 0)
 
             # Scale and convert to uint8 with BGR channel
-            image = image * scale_t
+            image = image * scale
 
             image = image.flip(dims=[-1]).to(dtype=torch.uint8, non_blocking=True, copy=False)
 
