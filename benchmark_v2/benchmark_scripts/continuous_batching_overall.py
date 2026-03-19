@@ -6,7 +6,7 @@ from tabulate import tabulate
 
 
 SCRIPT_LOCATION = (Path(__file__).parent.parent.parent / "examples/pytorch/continuous_batching.py").as_posix()
-COMMON_ARGS = "--log-level WARNING --seed 0".split()
+COMMON_ARGS = "--log-level WARNING --seed 0 --force-max-length".split()
 ERROR_OUTPUT = {"time_seconds": "X", "num_tokens": "X", "throughput_tok_per_sec": "ERROR"}
 
 

@@ -202,7 +202,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     prompt_encoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
-    initializer_range: int = 0.02
+    initializer_range: float = 0.02
     num_maskmem: int = 7
     sigmoid_scale_for_mem_enc: float = 20.0
     sigmoid_bias_for_mem_enc: float = -10.0
@@ -329,7 +329,7 @@ class Sam3TrackerVideoSegmentationOutput(Sam2VideoSegmentationOutput):
 
 
 class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    pass
+    base_model_prefix = "tracker_model"
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):

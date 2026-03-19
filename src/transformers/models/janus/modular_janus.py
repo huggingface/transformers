@@ -1081,8 +1081,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
-        model_kwargs = self._get_initial_cache_position(seq_len, device, model_kwargs)
-
         if model_kwargs.get("past_key_values", None) is None:
             # Prepare cache if not provided.
             model_kwargs["past_key_values"] = self._prepare_static_cache(
@@ -1115,7 +1113,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
-            model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
                 **model_inputs,
@@ -1123,7 +1120,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 output_hidden_states=output_hidden_states,
             )
 
-            # Update model_kwargs like cache_position for next generation.
+            # Update model_kwargs like attention_mask for next generation.
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 
