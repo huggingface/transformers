@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import BaseModelOutput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
 from ..d_fine.modeling_d_fine import (
@@ -50,333 +51,144 @@ from ..llama.modeling_llama import LlamaRMSNorm
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Intellindust/DEIMv2_HGNetv2_N_COCO")
+@strict(accept_kwargs=True)
 class Deimv2Config(DFineConfig):
     """
-    This is the configuration class to store the configuration of a [`Deimv2Model`]. It is used to instantiate a
-    DEIMv2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of DEIMv2-HGNetv2-N-COCO
-    [Intellindust/DEIMv2_HGNetv2_N_COCO](https://huggingface.co/Intellindust/DEIMv2_HGNetv2_N_COCO).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
-            The configuration of the backbone model. For HGNetV2 variants, use `HGNetV2Config`.
-            For DINOv3 variants, use `DINOv3ViTConfig`.
-        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
-            Whether to freeze the batch normalization layers in the backbone.
-        encoder_hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension of the layers in hybrid encoder.
-        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
-            Multi level features input for encoder.
-        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
-            Strides used in each feature map.
-        encoder_layers (`int`, *optional*, defaults to 1):
-            Total of layers to be used by the encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
-        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the general layer.
-        eval_size (`tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
-            into account the stride.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
-        hidden_expansion (`float`, *optional*, defaults to 1.0):
-            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers exclude hybrid encoder.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries.
-        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-            Multi level features dimension for decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of input feature levels.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_denoising (`int`, *optional*, defaults to 100):
-            The total number of denoising tasks or queries to be used for contrastive denoising.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale or magnitude of noise to be added to the bounding boxes.
-        learn_initial_query (`bool`, *optional*, defaults to `False`):
-            Indicates whether the initial query embeddings for the decoder should be learned during training.
-        anchor_image_size (`tuple[int, int]`, *optional*):
-            Height and width of the input image used during evaluation to generate the bounding box anchors.
-        with_box_refine (`bool`, *optional*, defaults to `True`):
-            Whether to apply iterative bounding box refinement.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the architecture has an encoder decoder structure.
-        matcher_alpha (`float`, *optional*, defaults to 0.25):
-            Parameter alpha used by the Hungarian Matcher.
-        matcher_gamma (`float`, *optional*, defaults to 2.0):
-            Parameter gamma used by the Hungarian Matcher.
-        matcher_class_cost (`float`, *optional*, defaults to 2.0):
-            The relative weight of the class loss used by the Hungarian Matcher.
-        matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
-            The relative weight of the bounding box loss used by the Hungarian Matcher.
-        matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-            The relative weight of the giou loss of used by the Hungarian Matcher.
-        use_focal_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if focal loss should be used.
-        auxiliary_loss (`bool`, *optional*, defaults to `True`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        focal_loss_alpha (`float`, *optional*, defaults to 0.75):
-            Parameter alpha used to compute the focal loss.
-        focal_loss_gamma (`float`, *optional*, defaults to 2.0):
-            Parameter gamma used to compute the focal loss.
-        weight_loss_vfl (`float`, *optional*, defaults to 1.0):
-            Relative weight of the varifocal loss in the object detection loss.
-        weight_loss_bbox (`float`, *optional*, defaults to 5.0):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        weight_loss_giou (`float`, *optional*, defaults to 2.0):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        weight_loss_fgl (`float`, *optional*, defaults to 0.15):
-            Relative weight of the fine-grained localization loss in the object detection loss.
-        weight_loss_ddf (`float`, *optional*, defaults to 1.5):
-            Relative weight of the decoupled distillation focal loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.0001):
-            Relative classification weight of the 'no-object' class in the object detection loss.
-        eval_idx (`int`, *optional*, defaults to -1):
-            Index of the decoder layer to use for evaluation.
-        layer_scale (`float`, *optional*, defaults to `1.0`):
-            Scaling factor for the hidden dimension in later decoder layers.
-        max_num_bins (`int`, *optional*, defaults to 32):
-            Maximum number of bins for the distribution-guided bounding box refinement.
-        reg_scale (`float`, *optional*, defaults to 4.0):
-            Scale factor for the regression distribution.
-        depth_mult (`float`, *optional*, defaults to 1.0):
-            Multiplier for the number of blocks in RepNCSPELAN5 layers.
-        top_prob_values (`int`, *optional*, defaults to 4):
-            Number of top probability values to consider from each corner's distribution.
-        lqe_hidden_dim (`int`, *optional*, defaults to 64):
-            Hidden dimension size for the Location Quality Estimator (LQE) network.
-        lqe_layers (`int`, *optional*, defaults to 2):
-            Number of layers in the Location Quality Estimator MLP.
-        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
-            Offset scale used in deformable attention.
-        decoder_method (`str`, *optional*, defaults to `"default"`):
-            The method to use for the decoder: `"default"` or `"discrete"`.
-        up (`float`, *optional*, defaults to 0.5):
-            Controls the upper bounds of the Weighting Function.
-        weight_loss_mal (`float`, *optional*, defaults to 1.0):
-            Relative weight of the matching auxiliary loss in the object detection loss.
-        use_dense_o2o (`bool`, *optional*, defaults to `True`):
-            Whether to use dense one-to-one matching across decoder layers.
-        mal_alpha (`float`, *optional*):
-            Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
-        encoder_fuse_op (`str`, *optional*, defaults to `"sum"`):
-            Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-Fine's `"cat"`.
-        sta_inplanes (`int`, *optional*, defaults to 16):
-            Number of input planes for the STA convolutional stem.
-        encoder_type (`str`, *optional*, defaults to `"hybrid"`):
-            Type of encoder to use. `"hybrid"` uses the full HybridEncoder with AIFI, FPN, and PAN.
-            `"lite"` uses the lightweight LiteEncoder with GAP fusion for smaller variants (Atto, Femto, Pico).
-        use_gateway (`bool`, *optional*, defaults to `True`):
-            Whether to use the gateway mechanism (cross-attention gating) in decoder layers. When `False`,
-            uses RMSNorm on the encoder attention output instead.
-        share_bbox_head (`bool`, *optional*, defaults to `False`):
-            Whether to share the bounding box prediction head across all decoder layers.
-        encoder_has_trailing_conv (`bool`, *optional*, defaults to `True`):
-            Whether the encoder's CSP blocks include a trailing 3x3 convolution after the bottleneck path.
-            `True` for RepNCSPELAN4 (used by HGNetV2 N and LiteEncoder variants).
-            `False` for RepNCSPELAN5 (used by DINOv3 variants).
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler.
+    eval_size (`list[int]` or `tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal loss should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
+    eval_idx (`int`, *optional*, defaults to -1):
+        Index of the decoder layer to use for evaluation.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers.
+    feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
+        Strides used in each feature map.
+    encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
+        Indexes of the projected layers to be used in the encoder.
+    positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+        The temperature parameter used to create the positional encodings.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+        feed-forward modules.
+    hidden_expansion (`float`, *optional*, defaults to 1.0):
+        Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of input feature levels.
+    decoder_n_points (`int`, *optional*, defaults to 4):
+        The number of sampled keys in each feature level for each attention head in the decoder.
+    num_denoising (`int`, *optional*, defaults to 100):
+        The total number of denoising tasks or queries to be used for contrastive denoising.
+    label_noise_ratio (`float`, *optional*, defaults to 0.5):
+        The fraction of denoising labels to which random noise should be added.
+    box_noise_scale (`float`, *optional*, defaults to 1.0):
+        Scale or magnitude of noise to be added to the bounding boxes.
+    learn_initial_query (`bool`, *optional*, defaults to `False`):
+        Indicates whether the initial query embeddings for the decoder should be learned during training.
+    anchor_image_size (`tuple[int, int]`, *optional*):
+        Height and width of the input image used during evaluation to generate the bounding box anchors.
+    with_box_refine (`bool`, *optional*, defaults to `True`):
+        Whether to apply iterative bounding box refinement.
+    matcher_alpha (`float`, *optional*, defaults to 0.25):
+        Parameter alpha used by the Hungarian Matcher.
+    matcher_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used by the Hungarian Matcher.
+    matcher_class_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the class loss used by the Hungarian Matcher.
+    matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
+        The relative weight of the bounding box loss used by the Hungarian Matcher.
+    matcher_giou_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the giou loss of used by the Hungarian Matcher.
+    weight_loss_vfl (`float`, *optional*, defaults to 1.0):
+        Relative weight of the varifocal loss in the object detection loss.
+    weight_loss_bbox (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 bounding box loss in the object detection loss.
+    weight_loss_giou (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss in the object detection loss.
+    weight_loss_fgl (`float`, *optional*, defaults to 0.15):
+        Relative weight of the fine-grained localization loss in the object detection loss.
+    weight_loss_ddf (`float`, *optional*, defaults to 1.5):
+        Relative weight of the decoupled distillation focal loss in the object detection loss.
+    eos_coefficient (`float`, *optional*, defaults to 0.0001):
+        Relative classification weight of the 'no-object' class in the object detection loss.
+    layer_scale (`float`, *optional*, defaults to `1.0`):
+        Scaling factor for the hidden dimension in later decoder layers.
+    max_num_bins (`int`, *optional*, defaults to 32):
+        Maximum number of bins for the distribution-guided bounding box refinement.
+    reg_scale (`float`, *optional*, defaults to 4.0):
+        Scale factor for the regression distribution.
+    depth_mult (`float`, *optional*, defaults to 1.0):
+        Multiplier for the number of blocks in RepNCSPELAN5 layers.
+    top_prob_values (`int`, *optional*, defaults to 4):
+        Number of top probability values to consider from each corner's distribution.
+    lqe_hidden_dim (`int`, *optional*, defaults to 64):
+        Hidden dimension size for the Location Quality Estimator (LQE) network.
+    lqe_layers (`int`, *optional*, defaults to 2):
+        Number of layers in the Location Quality Estimator MLP.
+    decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+        Offset scale used in deformable attention.
+    decoder_method (`str`, *optional*, defaults to `"default"`):
+        The method to use for the decoder: `"default"` or `"discrete"`.
+    up (`float`, *optional*, defaults to 0.5):
+        Controls the upper bounds of the Weighting Function.
+    weight_loss_mal (`float`, *optional*, defaults to 1.0):
+        Relative weight of the matching auxiliary loss in the object detection loss.
+    use_dense_o2o (`bool`, *optional*, defaults to `True`):
+        Whether to use dense one-to-one matching across decoder layers.
+    mal_alpha (`float`, *optional*):
+        Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
+    encoder_fuse_op (`str`, *optional*, defaults to `"sum"`):
+        Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-Fine's `"cat"`.
+    sta_inplanes (`int`, *optional*, defaults to 16):
+        Number of input planes for the STA convolutional stem.
+    encoder_type (`str`, *optional*, defaults to `"hybrid"`):
+        Type of encoder to use. `"hybrid"` uses the full HybridEncoder with AIFI, FPN, and PAN.
+        `"lite"` uses the lightweight LiteEncoder with GAP fusion for smaller variants (Atto, Femto, Pico).
+    use_gateway (`bool`, *optional*, defaults to `True`):
+        Whether to use the gateway mechanism (cross-attention gating) in decoder layers. When `False`,
+        uses RMSNorm on the encoder attention output instead.
+    share_bbox_head (`bool`, *optional*, defaults to `False`):
+        Whether to share the bounding box prediction head across all decoder layers.
+    encoder_has_trailing_conv (`bool`, *optional*, defaults to `True`):
+        Whether the encoder's CSP blocks include a trailing 3x3 convolution after the bottleneck path.
+        `True` for RepNCSPELAN4 (used by HGNetV2 N and LiteEncoder variants).
+        `False` for RepNCSPELAN5 (used by DINOv3 variants).
     """
 
     model_type = "deimv2"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        initializer_range=0.01,
-        initializer_bias_prior_prob=None,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        backbone_config=None,
-        freeze_backbone_batch_norms=True,
-        encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        hidden_expansion=1.0,
-        d_model=256,
-        num_queries=300,
-        decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=100,
-        label_noise_ratio=0.5,
-        box_noise_scale=1.0,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        with_box_refine=True,
-        is_encoder_decoder=True,
-        matcher_alpha=0.25,
-        matcher_gamma=2.0,
-        matcher_class_cost=2.0,
-        matcher_bbox_cost=5.0,
-        matcher_giou_cost=2.0,
-        use_focal_loss=True,
-        auxiliary_loss=True,
-        focal_loss_alpha=0.75,
-        focal_loss_gamma=2.0,
-        weight_loss_vfl=1.0,
-        weight_loss_bbox=5.0,
-        weight_loss_giou=2.0,
-        weight_loss_fgl=0.15,
-        weight_loss_ddf=1.5,
-        eos_coefficient=1e-4,
-        eval_idx=-1,
-        layer_scale=1,
-        max_num_bins=32,
-        reg_scale=4.0,
-        depth_mult=1.0,
-        top_prob_values=4,
-        lqe_hidden_dim=64,
-        lqe_layers=2,
-        decoder_offset_scale=0.5,
-        decoder_method="default",
-        up=0.5,
-        weight_loss_mal=1.0,
-        use_dense_o2o=True,
-        mal_alpha=None,
-        encoder_fuse_op="sum",
-        sta_inplanes=16,
-        encoder_type="hybrid",
-        use_gateway=True,
-        share_bbox_head=False,
-        encoder_has_trailing_conv=True,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.weight_loss_mal = weight_loss_mal
-        self.use_dense_o2o = use_dense_o2o
-        self.mal_alpha = mal_alpha
-        self.encoder_fuse_op = encoder_fuse_op
-        self.sta_inplanes = sta_inplanes
-        self.encoder_type = encoder_type
-        self.use_gateway = use_gateway
-        self.share_bbox_head = share_bbox_head
-        self.encoder_has_trailing_conv = encoder_has_trailing_conv
-        super().__init__(
-            initializer_range=initializer_range,
-            initializer_bias_prior_prob=initializer_bias_prior_prob,
-            layer_norm_eps=layer_norm_eps,
-            batch_norm_eps=batch_norm_eps,
-            backbone_config=backbone_config,
-            freeze_backbone_batch_norms=freeze_backbone_batch_norms,
-            encoder_hidden_dim=encoder_hidden_dim,
-            encoder_in_channels=encoder_in_channels,
-            feat_strides=feat_strides,
-            encoder_layers=encoder_layers,
-            encoder_ffn_dim=encoder_ffn_dim,
-            encoder_attention_heads=encoder_attention_heads,
-            dropout=dropout,
-            activation_dropout=activation_dropout,
-            encode_proj_layers=encode_proj_layers,
-            positional_encoding_temperature=positional_encoding_temperature,
-            encoder_activation_function=encoder_activation_function,
-            activation_function=activation_function,
-            eval_size=eval_size,
-            normalize_before=normalize_before,
-            hidden_expansion=hidden_expansion,
-            d_model=d_model,
-            num_queries=num_queries,
-            decoder_in_channels=decoder_in_channels,
-            decoder_ffn_dim=decoder_ffn_dim,
-            num_feature_levels=num_feature_levels,
-            decoder_n_points=decoder_n_points,
-            decoder_layers=decoder_layers,
-            decoder_attention_heads=decoder_attention_heads,
-            decoder_activation_function=decoder_activation_function,
-            attention_dropout=attention_dropout,
-            num_denoising=num_denoising,
-            label_noise_ratio=label_noise_ratio,
-            box_noise_scale=box_noise_scale,
-            learn_initial_query=learn_initial_query,
-            anchor_image_size=anchor_image_size,
-            with_box_refine=with_box_refine,
-            is_encoder_decoder=is_encoder_decoder,
-            matcher_alpha=matcher_alpha,
-            matcher_gamma=matcher_gamma,
-            matcher_class_cost=matcher_class_cost,
-            matcher_bbox_cost=matcher_bbox_cost,
-            matcher_giou_cost=matcher_giou_cost,
-            use_focal_loss=use_focal_loss,
-            auxiliary_loss=auxiliary_loss,
-            focal_loss_alpha=focal_loss_alpha,
-            focal_loss_gamma=focal_loss_gamma,
-            weight_loss_vfl=weight_loss_vfl,
-            weight_loss_bbox=weight_loss_bbox,
-            weight_loss_giou=weight_loss_giou,
-            weight_loss_fgl=weight_loss_fgl,
-            weight_loss_ddf=weight_loss_ddf,
-            eos_coefficient=eos_coefficient,
-            eval_idx=eval_idx,
-            layer_scale=layer_scale,
-            max_num_bins=max_num_bins,
-            reg_scale=reg_scale,
-            depth_mult=depth_mult,
-            top_prob_values=top_prob_values,
-            lqe_hidden_dim=lqe_hidden_dim,
-            lqe_layers=lqe_layers,
-            decoder_offset_scale=decoder_offset_scale,
-            decoder_method=decoder_method,
-            up=up,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+    eval_size: list[int] | tuple[int, int] | None = None
+    weight_loss_mal: float = 1.0
+    use_dense_o2o: bool = True
+    mal_alpha: float | None = None
+    encoder_fuse_op: str = "sum"
+    sta_inplanes: int = 16
+    encoder_type: str = "hybrid"
+    use_gateway: bool = True
+    share_bbox_head: bool = False
+    encoder_has_trailing_conv: bool = True
 
 
 class Deimv2DecoderOutput(DFineDecoderOutput):
@@ -394,12 +206,14 @@ class Deimv2RMSNorm(LlamaRMSNorm):
 class Deimv2SwiGLUFFN(nn.Module):
     def __init__(self, in_features: int, hidden_features: int, out_features: int):
         super().__init__()
-        self.gate_proj = nn.Linear(in_features, hidden_features)
-        self.up_proj = nn.Linear(in_features, hidden_features)
-        self.down_proj = nn.Linear(hidden_features, out_features)
+        self.weights_in = nn.Linear(in_features, 2 * hidden_features)
+        self.weights_out = nn.Linear(hidden_features, out_features)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        hidden_states = self.weights_in(hidden_states)
+        x1, x2 = hidden_states.chunk(2, dim=-1)
+        hidden = F.silu(x1) * x2
+        return self.weights_out(hidden)
 
 
 class Deimv2Gate(DFineGate):
@@ -520,10 +334,10 @@ class Deimv2SpatialTuningAdapter(nn.Module):
 class Deimv2GAPFusion(nn.Module):
     def __init__(self, config: Deimv2Config, channels: int):
         super().__init__()
-        self.cv = Deimv2ConvNormLayer(config, channels, channels, 1, 1, activation=config.activation_function)
+        self.conv_norm = Deimv2ConvNormLayer(config, channels, channels, 1, 1, activation=config.activation_function)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return self.cv(hidden_state + F.adaptive_avg_pool2d(hidden_state, 1))
+        return self.conv_norm(hidden_state + F.adaptive_avg_pool2d(hidden_state, 1))
 
 
 class Deimv2LiteEncoder(nn.Module):
@@ -716,22 +530,16 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
         return hidden_states
 
 
-class Deimv2MLPPredictionHead(DFineMLP):
-    pass
-
-
 class Deimv2PreTrainedModel(DFinePreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
         if isinstance(module, Deimv2SwiGLUFFN):
-            init.xavier_uniform_(module.gate_proj.weight)
-            init.constant_(module.gate_proj.bias, 0)
-            init.xavier_uniform_(module.up_proj.weight)
-            init.constant_(module.up_proj.bias, 0)
-            init.xavier_uniform_(module.down_proj.weight)
-            init.constant_(module.down_proj.bias, 0)
+            init.xavier_uniform_(module.weights_in.weight)
+            init.constant_(module.weights_in.bias, 0)
+            init.xavier_uniform_(module.weights_out.weight)
+            init.constant_(module.weights_out.bias, 0)
 
         if isinstance(module, Deimv2RMSNorm):
             init.ones_(module.weight)
@@ -845,9 +653,9 @@ class Deimv2Model(DFineModel):
 
         is_dinov3 = getattr(config.backbone_config, "model_type", None) == "dinov3_vit"
         if is_dinov3:
-            self.backbone = Deimv2DINOv3ConvEncoder(config)
+            self.conv_encoder = Deimv2DINOv3ConvEncoder(config)
         else:
-            self.backbone = Deimv2ConvEncoder(config)
+            self.conv_encoder = Deimv2ConvEncoder(config)
 
         if config.encoder_type == "lite":
             self.encoder = Deimv2LiteEncoder(config)
@@ -912,7 +720,8 @@ class Deimv2Model(DFineModel):
             if pixel_mask is None:
                 pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-            proj_feats = self.backbone(pixel_values)
+            # TODO: pass pixel_mask to backbone once DINOv3 supports it
+            proj_feats = self.conv_encoder(pixel_values)
         else:
             batch_size = inputs_embeds.shape[0]
             device = inputs_embeds.device

@@ -1,5 +1,4 @@
-# coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,10 +18,12 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
 from transformers import (
+    AutoImageProcessor,
     Deimv2Config,
     DINOv3ViTConfig,
     HGNetV2Config,
@@ -32,6 +33,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
+    require_vision,
     slow,
     torch_device,
 )
@@ -54,6 +56,10 @@ from ...test_modeling_common import (
     floats_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+
+
+# TODO: Replace with the official Transformers ckpt once uploaded.
+CHECKPOINT = "harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers"
 
 
 class Deimv2ModelTester:
@@ -288,6 +294,7 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
+    test_resize_embeddings = False
 
     test_missing_keys = False
 
@@ -344,18 +351,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Deimv2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Deimv2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="Deimv2 does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
         pass
 
     @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
@@ -571,9 +566,9 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         self.model_tester.num_labels,
                     )
                     self.assertEqual(outputs.logits.shape, expected_shape)
-                    self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                    self.assertEqual(len(model.model.conv_encoder.intermediate_channel_sizes), 3)
                 else:
-                    self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+                    self.assertEqual(len(model.conv_encoder.intermediate_channel_sizes), 3)
 
                 self.assertTrue(outputs)
 
@@ -873,10 +868,16 @@ class Deimv2LiteEncoderModelTester:
 
 
 @require_torch
-class Deimv2LiteEncoderModelTest(ModelTesterMixin, unittest.TestCase):
+class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Deimv2Model, Deimv2ForObjectDetection) if is_torch_available() else ()
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = (
+        {"image-feature-extraction": Deimv2Model, "object-detection": Deimv2ForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
+    test_resize_embeddings = False
+    has_attentions = False
 
     test_missing_keys = False
 
@@ -935,34 +936,12 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Deimv2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="Deimv2 does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
-
     @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
     def test_load_save_without_tied_weights(self):
         pass
 
-    @unittest.skip(reason="LiteEncoder has no AIFI layers, so no encoder attentions are produced")
-    def test_attention_outputs(self):
-        pass
-
     @unittest.skip(reason="LiteEncoder has no encoder attentions for gradient retention check")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="LiteEncoder expects exactly 1 backbone feature map (single scale), but test_backbone_selection hardcodes 3-output backbones (out_indices=[2,3,4])"
-    )
-    def test_backbone_selection(self):
         pass
 
     def test_hidden_states_output(self):
@@ -1239,6 +1218,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else {}
     )
     is_encoder_decoder = True
+    test_resize_embeddings = False
 
     test_missing_keys = False
 
@@ -1297,42 +1277,8 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Deimv2 does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="Deimv2 does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
-
     @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
     def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(reason="DINOv3 backbone does not support timm/HF backbone selection")
-    def test_backbone_selection(self):
-        pass
-
-    @unittest.skip(
-        reason="DINOv3 backbone with RoPE and LayerScale produces numerical differences beyond tolerance during offloading"
-    )
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        reason="DINOv3 backbone with RoPE and LayerScale produces numerical differences beyond tolerance during offloading"
-    )
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(
-        reason="DINOv3 backbone with RoPE and LayerScale produces numerical differences beyond tolerance during offloading"
-    )
-    def test_disk_offload_safetensors(self):
         pass
 
     @unittest.skip(reason="DINOv3 backbone with RoPE and dynamic interpolation causes torch.compile inductor overflow")
@@ -1645,3 +1591,57 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
+
+
+@require_torch
+@require_vision
+@slow
+class Deimv2ModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained(CHECKPOINT, use_fast=False) if is_vision_available() else None
+
+    def test_inference_object_detection_head(self):
+        model = Deimv2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [[-4.0907, -6.9117, -5.4756], [-5.5819, -5.9783, -6.4277], [-6.1450, -6.8475, -6.8653]]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [[0.1886, 0.1663, 0.2880], [0.0661, 0.1804, 0.9302], [0.2510, 0.2141, 0.9108]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)
+
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+
+        expected_scores = torch.tensor([0.7631, 0.2989, 0.2504, 0.2459], device=torch_device)
+        expected_labels = [65, 65, 15, 59]
+        expected_slice_boxes = torch.tensor(
+            [
+                [4.0577e01, 6.7796e01, 1.7578e02, 1.1168e02],
+                [4.8434e01, 7.5436e01, 2.1149e02, 9.1387e01],
+                [1.1113e01, 7.2270e01, 6.1295e02, 4.0068e02],
+                [2.2998e01, -9.0475e01, 7.0761e02, 3.7892e02],
+            ],
+            device=torch_device,
+        )
+
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4)
+        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes[:4], atol=1e-3, rtol=1e-4)

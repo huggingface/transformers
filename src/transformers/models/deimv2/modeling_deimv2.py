@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deimv2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -162,12 +162,14 @@ class Deimv2RMSNorm(nn.Module):
 class Deimv2SwiGLUFFN(nn.Module):
     def __init__(self, in_features: int, hidden_features: int, out_features: int):
         super().__init__()
-        self.gate_proj = nn.Linear(in_features, hidden_features)
-        self.up_proj = nn.Linear(in_features, hidden_features)
-        self.down_proj = nn.Linear(hidden_features, out_features)
+        self.weights_in = nn.Linear(in_features, 2 * hidden_features)
+        self.weights_out = nn.Linear(hidden_features, out_features)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        hidden_states = self.weights_in(hidden_states)
+        x1, x2 = hidden_states.chunk(2, dim=-1)
+        hidden = F.silu(x1) * x2
+        return self.weights_out(hidden)
 
 
 class Deimv2Gate(nn.Module):
@@ -781,10 +783,10 @@ class Deimv2SpatialTuningAdapter(nn.Module):
 class Deimv2GAPFusion(nn.Module):
     def __init__(self, config: Deimv2Config, channels: int):
         super().__init__()
-        self.cv = Deimv2ConvNormLayer(config, channels, channels, 1, 1, activation=config.activation_function)
+        self.conv_norm = Deimv2ConvNormLayer(config, channels, channels, 1, 1, activation=config.activation_function)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return self.cv(hidden_state + F.adaptive_avg_pool2d(hidden_state, 1))
+        return self.conv_norm(hidden_state + F.adaptive_avg_pool2d(hidden_state, 1))
 
 
 class Deimv2LiteEncoder(nn.Module):
@@ -1121,22 +1123,6 @@ class Deimv2DecoderLayer(nn.Module):
         return hidden_states
 
 
-class Deimv2MLPPredictionHead(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str = "relu"):
-        super().__init__()
-        self.num_layers = num_layers
-        hidden_dims = [hidden_dim] * (num_layers - 1)
-        input_dims = [input_dim] + hidden_dims
-        output_dims = hidden_dims + [output_dim]
-        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-        self.act = ACT2CLS[act]()
-
-    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
-        for i, layer in enumerate(self.layers):
-            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
-        return stat_features
-
-
 @auto_docstring
 class Deimv2PreTrainedModel(PreTrainedModel):
     config: Deimv2Config
@@ -1225,12 +1211,10 @@ class Deimv2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.denoising_class_embed.weight)
 
         if isinstance(module, Deimv2SwiGLUFFN):
-            init.xavier_uniform_(module.gate_proj.weight)
-            init.constant_(module.gate_proj.bias, 0)
-            init.xavier_uniform_(module.up_proj.weight)
-            init.constant_(module.up_proj.bias, 0)
-            init.xavier_uniform_(module.down_proj.weight)
-            init.constant_(module.down_proj.bias, 0)
+            init.xavier_uniform_(module.weights_in.weight)
+            init.constant_(module.weights_in.bias, 0)
+            init.xavier_uniform_(module.weights_out.weight)
+            init.constant_(module.weights_out.bias, 0)
 
         if isinstance(module, Deimv2RMSNorm):
             init.ones_(module.weight)
@@ -1681,9 +1665,9 @@ class Deimv2Model(Deimv2PreTrainedModel):
 
         is_dinov3 = getattr(config.backbone_config, "model_type", None) == "dinov3_vit"
         if is_dinov3:
-            self.backbone = Deimv2DINOv3ConvEncoder(config)
+            self.conv_encoder = Deimv2DINOv3ConvEncoder(config)
         else:
-            self.backbone = Deimv2ConvEncoder(config)
+            self.conv_encoder = Deimv2ConvEncoder(config)
 
         if config.encoder_type == "lite":
             self.encoder = Deimv2LiteEncoder(config)
@@ -1818,7 +1802,8 @@ class Deimv2Model(Deimv2PreTrainedModel):
             if pixel_mask is None:
                 pixel_mask = torch.ones(((batch_size, height, width)), device=device)
 
-            proj_feats = self.backbone(pixel_values)
+            # TODO: pass pixel_mask to backbone once DINOv3 supports it
+            proj_feats = self.conv_encoder(pixel_values)
         else:
             batch_size = inputs_embeds.shape[0]
             device = inputs_embeds.device

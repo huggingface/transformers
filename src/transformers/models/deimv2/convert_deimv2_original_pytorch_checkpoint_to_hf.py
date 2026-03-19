@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team.
+# Copyright 2026 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -80,8 +80,8 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
         config.encoder_in_channels = encoder_cfg["in_channels"]
         config.feat_strides = encoder_cfg.get("feat_strides", [16])
         config.activation_function = encoder_cfg.get("act", "silu")
-        config.depth_mult = encoder_cfg.get("depth_mult", 1.0)
-        config.hidden_expansion = encoder_cfg.get("expansion", 1.0)
+        config.depth_mult = float(encoder_cfg.get("depth_mult", 1.0))
+        config.hidden_expansion = float(encoder_cfg.get("expansion", 1.0))
         config.encoder_fuse_op = "sum"
         config.encoder_ffn_dim = 1024
         config.encoder_attention_heads = 8
@@ -94,8 +94,8 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
         config.encoder_in_channels = encoder_cfg["in_channels"]
         config.feat_strides = encoder_cfg.get("feat_strides", [8, 16, 32])
         config.activation_function = encoder_cfg.get("act", "silu")
-        config.depth_mult = encoder_cfg.get("depth_mult", 1.0)
-        config.hidden_expansion = encoder_cfg.get("expansion", 1.0)
+        config.depth_mult = float(encoder_cfg.get("depth_mult", 1.0))
+        config.hidden_expansion = float(encoder_cfg.get("expansion", 1.0))
         config.encoder_fuse_op = encoder_cfg.get("fuse_op", "sum")
         config.encoder_ffn_dim = encoder_cfg.get("dim_feedforward", 1024)
         config.encoder_attention_heads = encoder_cfg.get("nhead", 8)
@@ -111,14 +111,14 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
     config.decoder_n_points = decoder_cfg["num_points"]
     config.num_queries = decoder_cfg["num_queries"]
     config.num_denoising = decoder_cfg.get("num_denoising", 100)
-    config.label_noise_ratio = decoder_cfg.get("label_noise_ratio", 0.5)
-    config.box_noise_scale = decoder_cfg.get("box_noise_scale", 1.0)
+    config.label_noise_ratio = float(decoder_cfg.get("label_noise_ratio", 0.5))
+    config.box_noise_scale = float(decoder_cfg.get("box_noise_scale", 1.0))
     config.max_num_bins = decoder_cfg.get("reg_max", 32)
-    config.reg_scale = decoder_cfg.get("reg_scale", 4.0)
+    config.reg_scale = float(decoder_cfg.get("reg_scale", 4.0))
     config.eval_idx = decoder_cfg.get("eval_idx", -1)
     config.layer_scale = decoder_cfg.get("layer_scale", 1)
     config.decoder_in_channels = decoder_cfg["feat_channels"]
-    config.eval_size = tuple(decoder_cfg["eval_spatial_size"]) if "eval_spatial_size" in decoder_cfg else None
+    config.eval_size = list(decoder_cfg["eval_spatial_size"]) if "eval_spatial_size" in decoder_cfg else None
     config.decoder_activation_function = decoder_cfg.get("activation", "silu")
     config.share_bbox_head = decoder_cfg.get("share_bbox_head", False)
     config.use_gateway = decoder_cfg.get("use_gateway", True)
@@ -264,39 +264,40 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
     else:
         raise ValueError(f"Unknown backbone in config: {list(orig_config.keys())}")
 
+    config.head_dim = config.d_model // config.decoder_attention_heads
     return config
 
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Backbone stem mappings
-    r"backbone\.stem\.(stem\w+)\.conv\.weight": r"model.backbone.model.embedder.\1.convolution.weight",
+    r"backbone\.stem\.(stem\w+)\.conv\.weight": r"model.conv_encoder.model.embedder.\1.convolution.weight",
     # Stem normalization
-    r"backbone\.stem\.(stem\w+)\.bn\.(weight|bias|running_mean|running_var)": r"model.backbone.model.embedder.\1.normalization.\2",
+    r"backbone\.stem\.(stem\w+)\.bn\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.model.embedder.\1.normalization.\2",
     # Stem lab parameters
-    r"backbone\.stem\.(stem\w+)\.lab\.(scale|bias)": r"model.backbone.model.embedder.\1.lab.\2",
+    r"backbone\.stem\.(stem\w+)\.lab\.(scale|bias)": r"model.conv_encoder.model.embedder.\1.lab.\2",
     # Backbone stages mappings
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv\.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.convolution.weight",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.bn\.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.normalization.\4",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.lab\.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.lab.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv\.weight": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.convolution.weight",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.bn\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.normalization.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.lab\.(scale|bias)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.lab.\4",
     # Conv1/Conv2 layers
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv1\.conv\.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.convolution.weight",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv1\.bn\.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.normalization.\4",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv1\.lab\.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.lab.\4",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv2\.conv\.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.convolution.weight",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv2\.bn\.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.normalization.\4",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv2\.lab\.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.lab.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv1\.conv\.weight": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.convolution.weight",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv1\.bn\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.normalization.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv1\.lab\.(scale|bias)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.lab.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv2\.conv\.weight": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.convolution.weight",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv2\.bn\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.normalization.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.layers\.(\d+)\.conv2\.lab\.(scale|bias)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.lab.\4",
     # Backbone stages aggregation
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.aggregation\.(\d+)\.conv\.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.\3.convolution.weight",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.aggregation\.(\d+)\.bn\.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.\3.normalization.\4",
-    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.aggregation\.(\d+)\.lab\.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.\3.lab.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.aggregation\.(\d+)\.conv\.weight": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.aggregation.\3.convolution.weight",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.aggregation\.(\d+)\.bn\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.aggregation.\3.normalization.\4",
+    r"backbone\.stages\.(\d+)\.blocks\.(\d+)\.aggregation\.(\d+)\.lab\.(scale|bias)": r"model.conv_encoder.model.encoder.stages.\1.blocks.\2.aggregation.\3.lab.\4",
     # Downsample
-    r"backbone\.stages\.(\d+)\.downsample\.conv\.weight": r"model.backbone.model.encoder.stages.\1.downsample.convolution.weight",
-    r"backbone\.stages\.(\d+)\.downsample\.bn\.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.downsample.normalization.\2",
-    r"backbone\.stages\.(\d+)\.downsample\.lab\.(scale|bias)": r"model.backbone.model.encoder.stages.\1.downsample.lab.\2",
+    r"backbone\.stages\.(\d+)\.downsample\.conv\.weight": r"model.conv_encoder.model.encoder.stages.\1.downsample.convolution.weight",
+    r"backbone\.stages\.(\d+)\.downsample\.bn\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.model.encoder.stages.\1.downsample.normalization.\2",
+    r"backbone\.stages\.(\d+)\.downsample\.lab\.(scale|bias)": r"model.conv_encoder.model.encoder.stages.\1.downsample.lab.\2",
     # Encoder mappings
     # Input projections
-    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.backbone.encoder_input_proj.\1.0.weight",
-    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.backbone.encoder_input_proj.\1.1.\2",
+    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.conv_encoder.encoder_input_proj.\1.0.weight",
+    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.encoder_input_proj.\1.1.\2",
     # AIFI transformer encoder layers
     r"encoder\.encoder\.(\d+)\.layers\.0\.self_attn\.out_proj\.(weight|bias)": r"model.encoder.aifi.\1.layers.0.self_attn.o_proj.\2",
     r"encoder\.encoder\.(\d+)\.layers\.0\.linear1\.(weight|bias)": r"model.encoder.aifi.\1.layers.0.mlp.layers.0.\2",
@@ -369,8 +370,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"decoder\.decoder\.layers\.(\d+)\.cross_attn\.num_points_scale": r"model.decoder.layers.\1.encoder_attn.num_points_scale",
     r"decoder\.decoder\.layers\.(\d+)\.norm1\.scale": r"model.decoder.layers.\1.self_attn_layer_norm.weight",
     r"decoder\.decoder\.layers\.(\d+)\.norm3\.scale": r"model.decoder.layers.\1.final_layer_norm.weight",
-    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w12\.(weight|bias)": r"model.decoder.layers.\1.mlp.w12.\2",
-    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w3\.(weight|bias)": r"model.decoder.layers.\1.mlp.w3.\2",
+    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w12\.(weight|bias)": r"model.decoder.layers.\1.mlp.weights_in.\2",
+    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w3\.(weight|bias)": r"model.decoder.layers.\1.mlp.weights_out.\2",
     r"decoder\.decoder\.layers\.(\d+)\.gateway\.gate\.(weight|bias)": r"model.decoder.layers.\1.gateway.gate.\2",
     r"decoder\.decoder\.layers\.(\d+)\.gateway\.norm\.scale": r"model.decoder.layers.\1.gateway.norm.weight",
     # LQE layers
@@ -400,8 +401,8 @@ LITE_ENCODER_KEY_MAPPING = {
     r"encoder\.down_sample(\d+)\.1\.weight": r"model.encoder.down_sample\1.1.weight",
     r"encoder\.down_sample(\d+)\.2\.(weight|bias|running_mean|running_var)": r"model.encoder.down_sample\1.2.\2",
     # GAP_Fusion
-    r"encoder\.bi_fusion\.cv\.conv\.weight": r"model.encoder.bi_fusion.cv.conv.weight",
-    r"encoder\.bi_fusion\.cv\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.bi_fusion.cv.norm.\1",
+    r"encoder\.bi_fusion\.cv\.conv\.weight": r"model.encoder.bi_fusion.conv_norm.conv.weight",
+    r"encoder\.bi_fusion\.cv\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.bi_fusion.conv_norm.norm.\1",
     # FPN block (RepNCSPELAN4)
     r"encoder\.fpn_block\.cv1\.conv\.weight": r"model.encoder.fpn_block.conv1.conv.weight",
     r"encoder\.fpn_block\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.conv1.norm.\1",
@@ -452,51 +453,40 @@ DECODER_NO_GATEWAY_KEY_MAPPING = {
 
 DINOV3_KEY_MAPPING = {
     # ViT embeddings
-    r"backbone\.dinov3\.patch_embed\.proj\.(weight|bias)": r"model.backbone.backbone.embeddings.patch_embeddings.\1",
-    r"backbone\.dinov3\.cls_token": r"model.backbone.backbone.embeddings.cls_token",
-    r"backbone\.dinov3\.storage_tokens": r"model.backbone.backbone.embeddings.register_tokens",
-    r"backbone\.dinov3\.mask_token": r"model.backbone.backbone.embeddings.mask_token",
+    r"backbone\.dinov3\.patch_embed\.proj\.(weight|bias)": r"model.conv_encoder.backbone.embeddings.patch_embeddings.\1",
+    r"backbone\.dinov3\.cls_token": r"model.conv_encoder.backbone.embeddings.cls_token",
+    r"backbone\.dinov3\.storage_tokens": r"model.conv_encoder.backbone.embeddings.register_tokens",
+    r"backbone\.dinov3\.mask_token": r"model.conv_encoder.backbone.embeddings.mask_token",
     # ViT blocks
-    r"backbone\.dinov3\.blocks\.(\d+)\.norm1\.(weight|bias)": r"model.backbone.backbone.layer.\1.norm1.\2",
-    r"backbone\.dinov3\.blocks\.(\d+)\.norm2\.(weight|bias)": r"model.backbone.backbone.layer.\1.norm2.\2",
-    r"backbone\.dinov3\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)": r"model.backbone.backbone.layer.\1.attention.qkv.\2",
-    r"backbone\.dinov3\.blocks\.(\d+)\.attn\.proj\.(weight|bias)": r"model.backbone.backbone.layer.\1.attention.o_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.norm1\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.norm1.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.norm2\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.norm2.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.attention.qkv.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.attn\.proj\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.attention.o_proj.\2",
     # Standard MLP (S/M/L)
-    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.fc1\.(weight|bias)": r"model.backbone.backbone.layer.\1.mlp.up_proj.\2",
-    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.fc2\.(weight|bias)": r"model.backbone.backbone.layer.\1.mlp.down_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.fc1\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.mlp.up_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.fc2\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.mlp.down_proj.\2",
     # SwiGLU MLP (X only)
-    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w1\.(weight|bias)": r"model.backbone.backbone.layer.\1.mlp.gate_proj.\2",
-    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w2\.(weight|bias)": r"model.backbone.backbone.layer.\1.mlp.up_proj.\2",
-    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w3\.(weight|bias)": r"model.backbone.backbone.layer.\1.mlp.down_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w1\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.mlp.gate_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w2\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.mlp.up_proj.\2",
+    r"backbone\.dinov3\.blocks\.(\d+)\.mlp\.w3\.(weight|bias)": r"model.conv_encoder.backbone.model.layer.\1.mlp.down_proj.\2",
     # LayerScale (L/X only)
-    r"backbone\.dinov3\.blocks\.(\d+)\.ls1\.gamma": r"model.backbone.backbone.layer.\1.layer_scale1.lambda1",
-    r"backbone\.dinov3\.blocks\.(\d+)\.ls2\.gamma": r"model.backbone.backbone.layer.\1.layer_scale2.lambda1",
+    r"backbone\.dinov3\.blocks\.(\d+)\.ls1\.gamma": r"model.conv_encoder.backbone.model.layer.\1.layer_scale1.lambda1",
+    r"backbone\.dinov3\.blocks\.(\d+)\.ls2\.gamma": r"model.conv_encoder.backbone.model.layer.\1.layer_scale2.lambda1",
     # Norm (L/X only)
-    r"backbone\.dinov3\.norm\.(weight|bias)": r"model.backbone.backbone.norm.\1",
+    r"backbone\.dinov3\.norm\.(weight|bias)": r"model.conv_encoder.backbone.norm.\1",
     # STA adapter
-    r"backbone\.sta\.stem\.0\.(weight|bias)": r"model.backbone.sta.stem.0.\1",
-    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.backbone.sta.stem.1.\1",
-    r"backbone\.sta\.conv2\.0\.(weight)": r"model.backbone.sta.conv2.0.\1",
-    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.backbone.sta.conv2.1.\1",
-    r"backbone\.sta\.conv3\.1\.(weight)": r"model.backbone.sta.conv3.1.\1",
-    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.backbone.sta.conv3.2.\1",
-    r"backbone\.sta\.conv4\.1\.(weight)": r"model.backbone.sta.conv4.1.\1",
-    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.backbone.sta.conv4.2.\1",
+    r"backbone\.sta\.stem\.0\.(weight|bias)": r"model.conv_encoder.sta.stem.0.\1",
+    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.stem.1.\1",
+    r"backbone\.sta\.conv2\.0\.(weight)": r"model.conv_encoder.sta.conv2.0.\1",
+    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv2.1.\1",
+    r"backbone\.sta\.conv3\.1\.(weight)": r"model.conv_encoder.sta.conv3.1.\1",
+    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv3.2.\1",
+    r"backbone\.sta\.conv4\.1\.(weight)": r"model.conv_encoder.sta.conv4.1.\1",
+    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv4.2.\1",
     # Projection convs/norms
-    r"backbone\.convs\.(\d+)\.weight": r"model.backbone.convs.\1.weight",
-    r"backbone\.norms\.(\d+)\.(weight|bias|running_mean|running_var)": r"model.backbone.norms.\1.\2",
+    r"backbone\.convs\.(\d+)\.weight": r"model.conv_encoder.convs.\1.weight",
+    r"backbone\.norms\.(\d+)\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.norms.\1.\2",
 }
-
-
-def split_swiglu_weights(state_dict):
-    for key in list(state_dict.keys()):
-        if ".mlp.w12." in key:
-            w12 = state_dict.pop(key)
-            gate, up = w12.chunk(2, dim=0)
-            state_dict[key.replace(".w12.", ".gate_proj.")] = gate
-            state_dict[key.replace(".w12.", ".up_proj.")] = up
-        elif ".mlp.w3." in key:
-            state_dict[key.replace(".w3.", ".down_proj.")] = state_dict.pop(key)
 
 
 def convert_old_keys_to_new_keys(state_dict, config=None):
@@ -590,7 +580,7 @@ def strip_dinov3_model_prefix(state_dict):
 
 def read_in_q_k_v_vit(state_dict, config):
     has_key_bias = getattr(config.backbone_config, "key_bias", True)
-    prefix = "model.backbone.backbone"
+    prefix = "model.conv_encoder.backbone.model"
     for i in range(config.backbone_config.num_hidden_layers):
         qkv_key = f"{prefix}.layer.{i}.attention.qkv.weight"
         if qkv_key in state_dict:
@@ -655,11 +645,9 @@ def convert_deimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
 
     state_dict = convert_old_keys_to_new_keys(state_dict, config)
 
-    split_swiglu_weights(state_dict)
-
     if is_dinov3:
         read_in_q_k_v_vit(state_dict, config)
-        mask_key = "model.backbone.backbone.embeddings.mask_token"
+        mask_key = "model.conv_encoder.backbone.embeddings.mask_token"
         if mask_key in state_dict and state_dict[mask_key].dim() == 2:
             state_dict[mask_key] = state_dict[mask_key].unsqueeze(1)
 
