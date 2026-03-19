@@ -35,20 +35,20 @@ jobs:
             We appreciate your contribution and apologize if this is a false positive!
 
           # -- Account & profile checks --
-          # Catches brand-new spam accounts (Matt's top signal)
+          # Catches brand-new spam accounts
           min-account-age: 30
           detect-spam-usernames: true
           min-profile-completeness: 3
 
           # -- PR description checks --
-          # Agents tend to delete the PR template (Pete's signal)
+          # Agents tend to delete the PR template
           require-pr-template: true
           strict-pr-template-sections: "What does this PR do?,Before submitting,Who can review?"
-          # Overly verbose AI descriptions (Matt's signal)
+          # Overly verbose AI descriptions
           max-description-length: 2500
 
           # -- Code checks --
-          # AI agents over-comment simple fixes (Matt's signal)
+          # AI agents over-comment simple fixes
           max-added-comments: 10
 
           # -- Disabled checks (keep minimal) --
