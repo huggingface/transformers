@@ -1070,12 +1070,7 @@ def spectrogram_torch(
     device: str = "cpu",
     dtype: str = "float32",
 ):
-    """
-    PyTorch version of spectrogram_batch().
-
-    For spectrogram computation, tensors are promoted to `torch.float64` for better precision,
-    and returned according to `dtype`.
-    """
+    """PyTorch version of spectrogram_batch()."""
 
     window_length = len(window)
     if fft_length is None:
