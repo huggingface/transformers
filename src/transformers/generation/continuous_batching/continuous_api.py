@@ -348,7 +348,7 @@ class ContinuousBatchProcessor:
                     state.status = RequestStatus.DECODING
 
                 token = new_tokens[current_logits_index]
-                logprob = logprobs[current_logits_index] if self.return_logprobs else None
+                logprob = logprobs[current_logits_index] if logprobs is not None else None
                 current_logits_index += 1
 
                 # Update the request and stop if it is complete
@@ -528,7 +528,7 @@ class ContinuousBatchProcessor:
         # Apply softmax if we are sampling or if we are generating log probabilities
         if self.do_sample or self.return_logprobs:
             probs = nn.functional.softmax(probs[0], dim=-1)  # shape [seq_len, vocab_size]
-        # Otherwise just remove the bastch size dimension, which is always 1
+        # Otherwise just remove the batch size dimension, which is always 1
         else:
             probs = probs.squeeze(0)  # shape [seq_len, vocab_size]
 
@@ -540,7 +540,8 @@ class ContinuousBatchProcessor:
 
         # Maybe retrieve log probabilities
         if self.return_logprobs:
-            logprobs = probs.gather(dim=1, index=next_tokens).squeeze(-1).log()  # shape [seq_len]
+            per_token_probs = probs.gather(dim=1, index=next_tokens).squeeze(-1)
+            logprobs = per_token_probs.float().log()  # shape [seq_len]
         # And always remove the extra dimension for the gather
         next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
 
@@ -554,8 +555,9 @@ class ContinuousBatchProcessor:
         if self.return_logprobs:
             # Shuffle the logprobs the same way as the next tokens
             logprobs = logprobs[indices]
-            # In order to match the dtype of the output ids, we convert them to fp32 and cast them as int32
-            output_ids[1, :tokens].copy_(logprobs.float().view(dtype=torch.int32))
+            # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
+            # underlying data. It's just a trick to use the same storage for both tensors.
+            output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
 
 
 # Manager Class (User Interface)

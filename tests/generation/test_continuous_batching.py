@@ -683,7 +683,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             # Compute log_probs from regular generate scores
             expected_logprobs = []
             generated_tokens = generate_outputs.sequences[i, num_input_tokens:].tolist()
-            for step, (score, token) in enumerate(zip(generate_outputs.scores, generated_tokens)):
+            for score, token in zip(generate_outputs.scores, generated_tokens):
                 probs = torch.nn.functional.softmax(score[i], dim=-1)
                 expected_logprobs.append(probs[token].log().item())
 

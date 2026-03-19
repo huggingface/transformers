@@ -96,7 +96,7 @@ class ContinuousBatchingIOs:
         device: torch.device,
         model_dtype: torch.dtype,
         max_graphs: int,
-        log_prob_generation: bool,
+        return_logprobs: bool,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
@@ -104,7 +104,7 @@ class ContinuousBatchingIOs:
         - device: The device to allocate tensors on. If the device is CPU, then the memory is pinned.
         - model_dtype: The data type for model computations.
         - max_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
-        - log_prob_generation: Whether to generate log probabilities along with the token IDs.
+        - return_logprobs: Whether to return log probabilities along with the token IDs.
         """
         # Memoize attributes
         self.cache = cache
@@ -112,7 +112,7 @@ class ContinuousBatchingIOs:
         self.config = config
         self.model_dtype = model_dtype
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
-        self.log_prob_generation = log_prob_generation
+        self.return_logprobs = return_logprobs
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
         self.max_kv_read = 0  # number of KV tokens read from cache (maxed across all groups). Can be padded.
@@ -139,7 +139,7 @@ class ContinuousBatchingIOs:
           `logits_indices`, `cumulative_seqlens_k`, `carry_over_ids`.
         - `attention_mask`: Optional attention masks (only for eager/SDPA implementations)
         - `write_index` and `read_index` storage: Cache indexing tensors for each attention group
-        - `output_ids`: Storage for generated token IDs and maybe log probabilities if log_prob_generation is True
+        - `output_ids`: Storage for generated token IDs and maybe log probabilities if return_logprobs is True
         """
         num_groups = self.cache.num_groups
         max_batch_tokens = self.cache.max_batch_tokens
@@ -170,7 +170,7 @@ class ContinuousBatchingIOs:
             self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
 
         # Output tensor and scalars
-        num_output_rows = 2 if self.log_prob_generation else 1
+        num_output_rows = 2 if self.return_logprobs else 1
         self.output_ids = torch.empty(
             (num_output_rows, max_batch_tokens + 1), dtype=torch.int32, device=self.device, pin_memory=pin_memory
         )
@@ -295,15 +295,15 @@ class ContinuousBatchingIOs:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
 
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float]]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         requests_in_batch = self.requests_in_batch
         new_tokens = self.output_ids[0, : len(self.requests_in_batch)].tolist()
         # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
-        if self.log_prob_generation:
+        if self.return_logprobs:
             logprobs = self.output_ids[1, : len(self.requests_in_batch)].view(dtype=torch.float32).tolist()
         # Otherwise, we can return an empty list because they wont be used
         else:
-            logprobs = []
+            logprobs = None
         return requests_in_batch, new_tokens, logprobs
 
     @traced
@@ -518,11 +518,13 @@ class HostDeviceIOPair:
         device: torch.device,
         model_dtype: torch.dtype,
         max_graphs: int,
-        log_prob_generation: bool,
+        return_logprobs: bool,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
-        self.host_io = ContinuousBatchingIOs(cache, config, torch.device("cpu"), model_dtype, max_graphs, log_prob_generation)
-        self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs, log_prob_generation)
+        self.host_io = ContinuousBatchingIOs(
+            cache, config, torch.device("cpu"), model_dtype, max_graphs, return_logprobs
+        )
+        self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs, return_logprobs)
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
         self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
@@ -590,14 +592,14 @@ class ContinuousBatchingAsyncIOs:
         device: torch.device,
         model_dtype: torch.dtype,
         max_graphs: int,
-        log_prob_generation: bool,
+        return_logprobs: bool,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
         if not torch.cuda.is_available():
             raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
-        self.io_pairs = [HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, log_prob_generation) for _ in range(2)]
+        self.io_pairs = [HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, return_logprobs) for _ in range(2)]
         # CUDA streams
         self.h2d_stream = torch.cuda.Stream(device=device)
         self.d2h_stream = torch.cuda.Stream(device=device)
@@ -713,7 +715,7 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float]]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()

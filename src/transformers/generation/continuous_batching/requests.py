@@ -224,14 +224,8 @@ class RequestState:
     # TODO: this logic seems one token off, check it out
     @traced
     def update_and_check_completion(self, token_id: int, logprob: float | None) -> bool:
-        """Update the request with a newly generated token and check for completion.
-
-        Args:
-            token_id: The token ID to add to the output sequence
-
-        Returns:
-            bool: True if the request is now complete, False otherwise
-        """
+        """Update the request with a newly generated token (and optional log probability of the token) and check for
+        completion. Returns True if the request is now complete, False otherwise."""
         # Only update if we're in decoding state # TODO: seems useless (always true) -- remove this
         if self.status != RequestStatus.DECODING:
             return False
