@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .image_processing_nougat import *
-    from .image_processing_nougat_fast import *
+    from .image_processing_pil_nougat import *
     from .processing_nougat import *
     from .tokenization_nougat import *
 else:

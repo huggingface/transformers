@@ -37,7 +37,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SegformerImageProcessor
+    from transformers import SegformerImageProcessorPil
 
 
 class SegformerConfigTester(ConfigTester):
@@ -355,7 +355,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_segmentation_ade(self):
         # only resize + normalize
-        image_processor = SegformerImageProcessor(
+        image_processor = SegformerImageProcessorPil(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
         model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512").to(
@@ -392,7 +392,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_segmentation_city(self):
         # only resize + normalize
-        image_processor = SegformerImageProcessor(
+        image_processor = SegformerImageProcessorPil(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
         model = SegformerForSemanticSegmentation.from_pretrained(
@@ -432,7 +432,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_post_processing_semantic_segmentation(self):
         # only resize + normalize
-        image_processor = SegformerImageProcessor(
+        image_processor = SegformerImageProcessorPil(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
         model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512").to(

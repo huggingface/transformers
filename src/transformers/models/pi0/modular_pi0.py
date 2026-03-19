@@ -36,14 +36,14 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
-from ..siglip.image_processing_siglip_fast import SiglipImageProcessorFast
+from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-class PI0ImageProcessorFast(SiglipImageProcessorFast):
+class PI0ImageProcessor(SiglipImageProcessor):
     size = {"max_height": 224, "max_width": 224}
     pad_size = {"height": 224, "width": 224}
     do_pad = True
@@ -645,4 +645,5 @@ __all__ = [
     "PI0Model",
     "PI0ForConditionalGeneration",
     "PI0Processor",
+    "PI0ImageProcessor",
 ]

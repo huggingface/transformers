@@ -14,21 +14,20 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Union
 
+import numpy as np
 import torch
 import torchvision.transforms.v2.functional as tvF
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
-from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
+from transformers.models.beit.image_processing_beit import BeitImageProcessor
+from transformers.models.beit.image_processing_pil_beit import BeitImageProcessorPil
 
 from ...activations import ACT2FN
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -46,10 +45,9 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..vit.modeling_vit import eager_attention_forward
 from .configuration_segformer import SegformerConfig
-from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
-class SegformerImageProcessorFast(BeitImageProcessorFast):
+class SegformerImageProcessor(BeitImageProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -68,19 +66,20 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
         segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[SegformerImageProcessorKwargs],
+        **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess image-like inputs.
-        """
+        """Handle extra inputs beyond images."""
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
         images_kwargs = kwargs.copy()
         images_kwargs["do_reduce_labels"] = False
-        batch_feature = self._preprocess(images, **images_kwargs)
+        data = {}
+        data["pixel_values"] = self._preprocess(images, **images_kwargs)
 
+        # Prepare segmentation maps if provided
         if segmentation_maps is not None:
             processed_segmentation_maps = self._prepare_image_like_inputs(
                 images=segmentation_maps,
@@ -94,22 +93,28 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
+                    # Nearest resample is used for segmentation maps instead of BILINEAR.
+                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
-            ).pixel_values
-            batch_feature["labels"] = processed_segmentation_maps.squeeze(1).to(torch.int64)
+            )
 
-        return batch_feature
+            # Convert to int64 and squeeze channel dimension
+            processed_segmentation_maps = [
+                processed_segmentation_map.squeeze(0).to(torch.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
+            data["labels"] = processed_segmentation_maps
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -118,7 +123,6 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
         image_mean: float | list[float],
         image_std: float | list[float],
         disable_grouping: bool,
-        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:  # Return type can be list if return_tensors=None
         if do_reduce_labels:
@@ -130,7 +134,7 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
             resized_images_grouped = {}
             for shape, stacked_images in grouped_images.items():
-                resized_stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+                resized_stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
                 resized_images_grouped[shape] = resized_stacked_images
             resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -147,9 +151,99 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
-        # Stack images into a single tensor if return_tensors is set
+        return processed_images
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+class SegformerImageProcessorPil(BeitImageProcessorPil):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    size = {"height": 512, "width": 512}
+    do_resize = True
+    do_rescale = True
+    rescale_factor = 1 / 255
+    do_normalize = True
+    do_reduce_labels = False
+    do_center_crop = None
+    crop_size = None
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        segmentation_maps: ImageInput | None,
+        do_convert_rgb: bool,
+        input_data_format: ChannelDimension,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Handle extra inputs beyond images."""
+        images = self._prepare_image_like_inputs(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
+        )
+        images_kwargs = kwargs.copy()
+        images_kwargs["do_reduce_labels"] = False
+        data = {}
+        data["pixel_values"] = self._preprocess(images, **images_kwargs)
+
+        # Prepare segmentation maps if provided
+        if segmentation_maps is not None:
+            processed_segmentation_maps = self._prepare_image_like_inputs(
+                images=segmentation_maps,
+                expected_ndims=2,
+                do_convert_rgb=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+
+            segmentation_maps_kwargs = kwargs.copy()
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    # Nearest resample is used for segmentation maps instead of BILINEAR.
+                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
+                }
+            )
+            processed_segmentation_maps = self._preprocess(
+                images=processed_segmentation_maps, **segmentation_maps_kwargs
+            )
+
+            # Convert to int64 and squeeze channel dimension
+            processed_segmentation_maps = [
+                processed_segmentation_map.squeeze(0).astype(np.int64)
+                for processed_segmentation_map in processed_segmentation_maps
+            ]
+            data["labels"] = processed_segmentation_maps
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def _preprocess(
+        self,
+        images: list["np.ndarray"],
+        do_reduce_labels: bool,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_resize: bool,
+        do_rescale: bool,
+        do_normalize: bool,
+        size: SizeDict,
+        rescale_factor: float,
+        image_mean: float | list[float],
+        image_std: float | list[float],
+        **kwargs,
+    ) -> list["np.ndarray"]:
+        """Custom preprocessing for Segformer."""
+        processed_images = []
+        for image in images:
+            if do_reduce_labels:
+                image = self.reduce_label(image)
+            if do_resize:
+                image = self.resize(image, size, resample)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
+
+        return processed_images
 
 
 @auto_docstring
@@ -690,7 +784,8 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
 
 
 __all__ = [
-    "SegformerImageProcessorFast",
+    "SegformerImageProcessor",
+    "SegformerImageProcessorPil",
     "SegformerDecodeHead",
     "SegformerForImageClassification",
     "SegformerForSemanticSegmentation",

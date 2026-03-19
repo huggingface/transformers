@@ -24,7 +24,6 @@ from typing import Annotated, Any
 import typer
 
 from ..utils import is_libcst_available
-from .add_fast_image_processor import add_fast_image_processor
 
 
 # We protect this import to avoid requiring it for all `transformers` CLI commands - however it is actually
@@ -100,7 +99,6 @@ def add_new_model_like(
         new_lowercase_name,
         new_model_paper_name,
         filenames_to_add,
-        create_fast_image_processor,
     ) = get_user_input()
 
     _add_new_model_like_internal(
@@ -109,7 +107,6 @@ def add_new_model_like(
         new_lowercase_name=new_lowercase_name,
         new_model_paper_name=new_model_paper_name,
         filenames_to_add=filenames_to_add,
-        create_fast_image_processor=create_fast_image_processor,
     )
 
 
@@ -150,9 +147,7 @@ class ModelInfos:
         else:
             self.tokenizer_class, self.fast_tokenizer_class = None, None
 
-        self.image_processor_class, self.fast_image_processor_class = IMAGE_PROCESSOR_MAPPING_NAMES.get(
-            self.lowercase_name, (None, None)
-        )
+        self.image_processor_classes = IMAGE_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.video_processor_class = VIDEO_PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.feature_extractor_class = FEATURE_EXTRACTOR_MAPPING_NAMES.get(self.lowercase_name, None)
         self.processor_class = PROCESSOR_MAPPING_NAMES.get(self.lowercase_name, None)
@@ -518,7 +513,6 @@ def _add_new_model_like_internal(
     new_lowercase_name: str,
     new_model_paper_name: str,
     filenames_to_add: list[tuple[str, bool]],
-    create_fast_image_processor: bool,
 ):
     """
     Creates a new model module like a given model of the Transformers library.
@@ -535,8 +529,6 @@ def _add_new_model_like_internal(
         filenames_to_add (`list[tuple[str, bool]]`):
             A list of tuples of all potential filenames to add for a new model, along a boolean flag describing if we
             should add this file or not. For example, [(`modeling_xxx.px`, True), (`configuration_xxx.py`, True), (`tokenization_xxx.py`, False),...]
-        create_fast_image_processor (`bool`):
-            If it makes sense, whether to add a fast processor as well, even if the old model does not have one.
     """
     # As the import was protected, raise if not present (as it's actually a hard dependency for this command)
     if not is_libcst_available():
@@ -586,10 +578,6 @@ def _add_new_model_like_internal(
     with open(repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w") as f:
         f.write(doc_file)
     insert_model_in_doc_toc(repo_path, old_lowercase_name, new_lowercase_name, new_model_paper_name)
-
-    # 8. Add additional fast image processor if necessary
-    if create_fast_image_processor:
-        add_fast_image_processor(model_name=new_lowercase_name)
 
     # 9. Run linters
     model_init_file = repo_path / "src" / "transformers" / "models" / "__init__.py"
@@ -713,7 +701,6 @@ def get_user_input():
     add_tokenizer = False
     add_fast_tokenizer = False
     add_image_processor = False
-    add_fast_image_processor = False
     add_video_processor = False
     add_feature_extractor = False
     add_processor = False
@@ -729,15 +716,9 @@ def get_user_input():
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
-    if old_model_infos.image_processor_class is not None:
+    if old_model_infos.image_processor_classes is not None:
         add_image_processor = get_user_field(
             f"Do you want to create a new image processor? If `no`, it will use the same as {old_model_type} (y/n)?",
-            convert_to=convert_to_bool,
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
-        )
-    if old_model_infos.fast_image_processor_class is not None:
-        add_fast_image_processor = get_user_field(
-            f"Do you want to create a new fast image processor? If `no`, it will use the same as {old_model_type} (y/n)?",
             convert_to=convert_to_bool,
             fallback_message="Please answer yes/no, y/n, true/false or 1/0. ",
         )
@@ -768,20 +749,9 @@ def get_user_input():
         (f"tokenization_{old_lowercase_name}.py", add_tokenizer),
         (f"tokenization_{old_lowercase_name}_fast.py", add_fast_tokenizer),
         (f"image_processing_{old_lowercase_name}.py", add_image_processor),
-        (f"image_processing_{old_lowercase_name}_fast.py", add_fast_image_processor),
         (f"video_processing_{old_lowercase_name}.py", add_video_processor),
         (f"feature_extraction_{old_lowercase_name}.py", add_feature_extractor),
         (f"processing_{old_lowercase_name}.py", add_processor),
     )
 
-    create_fast_image_processor = False
-    if add_image_processor and not add_fast_image_processor:
-        create_fast_image_processor = get_user_field(
-            "A fast image processor can be created from the slow one, but modifications might be needed. "
-            "Should we add a fast image processor class for this model (recommended) (y/n)? ",
-            convert_to=convert_to_bool,
-            default_value="y",
-            fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
-        )
-
-    return old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add, create_fast_image_processor
+    return old_model_infos, new_lowercase_name, new_model_paper_name, filenames_to_add
