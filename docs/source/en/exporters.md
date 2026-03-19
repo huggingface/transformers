@@ -140,14 +140,14 @@ runtime without retracing.
 <hfoption id="ONNX">
 
 ```python
->>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
->>> exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
->>> onnx_program = exporter.export(model, inputs)
+exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
+onnx_program = exporter.export(model, inputs)
 
->>> # works with any sequence length
->>> onnx_program(**dict(tokenizer("Hi", return_tensors="pt")))
->>> onnx_program(**dict(tokenizer("A much longer input sequence.", return_tensors="pt")))
+# works with any sequence length
+onnx_program(**dict(tokenizer("Hi", return_tensors="pt")))
+onnx_program(**dict(tokenizer("A much longer input sequence.", return_tensors="pt")))
 ```
 
 </hfoption>
@@ -177,16 +177,16 @@ This is passed directly to `torch.export.export` — see the
 <hfoption id="ONNX">
 
 ```python
->>> import torch
->>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+import torch
+from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
->>> batch = torch.export.Dim("batch", min=1, max=32)
->>> seq = torch.export.Dim("seq", min=1, max=2048)
+batch = torch.export.Dim("batch", min=1, max=32)
+seq = torch.export.Dim("seq", min=1, max=2048)
 
->>> exporter = OnnxExporter(export_config=OnnxConfig(
-...     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
-... ))
->>> onnx_program = exporter.export(model, inputs)
+exporter = OnnxExporter(export_config=OnnxConfig(
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
+))
+onnx_program = exporter.export(model, inputs)
 ```
 
 </hfoption>
@@ -221,20 +221,19 @@ into individual submodules — each exported as an independent graph.
 <hfoption id="ONNX">
 
 ```python
->>> from transformers import AutoModelForVision2Seq, AutoProcessor
->>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
->>> from transformers.exporters.utils import decompose_encoder_decoder, is_multicomponent
+from transformers import AutoModelForVision2Seq, AutoProcessor
+from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters.utils import decompose_encoder_decoder, is_multicomponent
 
->>> model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
->>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 
->>> components = decompose_encoder_decoder(model, inputs) if is_multicomponent(model) else [("model", model, inputs)]
->>> # components = [("vision_model", vit, vit_inputs), ("language_model", llm, llm_inputs), ...]
+components = decompose_encoder_decoder(model, inputs) if is_multicomponent(model) else [("model", model, inputs)]
+# components = [("vision_model", vit, vit_inputs), ("language_model", llm, llm_inputs), ...]
 
->>> exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
->>> for name, submodel, subinputs in components:
-...     onnx_program = exporter.export(submodel, subinputs)
-...     onnx_program.save(f"{name}.onnx")
+exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
+for name, submodel, subinputs in components:
+    onnx_program = exporter.export(submodel, subinputs)
 ```
 
 </hfoption>
@@ -245,6 +244,15 @@ submodule receives, so the exported graphs have correct signatures without any m
 
 Supported submodule attribute names are listed in [`~transformers.exporters.utils._SUBMODULE_NAMES`].
 If a new architecture uses a different attribute name, add it to that tuple.
+
+<Tip warning={true}>
+
+The exported components are **independent graphs**, not a turnkey inference pipeline.
+The caller is responsible for running each encoder, fusing the multimodal embeddings, projecting
+them into the language model's input space, and orchestrating the generation loop.
+We are actively working to reduce the amount of glue required between components.
+
+</Tip>
 
 ## Generative models (prefill / decode)
 
@@ -276,21 +284,20 @@ For autoregressive generation, the model's `forward` has different shapes at the
 <hfoption id="ONNX">
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
->>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
->>> from transformers.exporters.utils import decompose_prefill_decode
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters.utils import decompose_prefill_decode
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
->>> inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
->>> stages = decompose_prefill_decode(model, inputs)
->>> # stages = [("prefill", model_copy, prefill_inputs), ("decode", model_copy, decode_inputs)]
+stages = decompose_prefill_decode(model, inputs)
+# stages = [("prefill", model_copy, prefill_inputs), ("decode", model_copy, decode_inputs)]
 
->>> exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
->>> for name, stage_model, stage_inputs in stages:
-...     onnx_program = exporter.export(stage_model, stage_inputs)
-...     onnx_program.save(f"{name}.onnx")
+exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
+for name, stage_model, stage_inputs in stages:
+    onnx_program = exporter.export(stage_model, stage_inputs)
 ```
 
 </hfoption>
@@ -321,19 +328,18 @@ stage into its submodules and keep the decode stage as a single graph.
 <hfoption id="ONNX">
 
 ```python
->>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
->>> from transformers.exporters.utils import decompose_encoder_decoder, decompose_prefill_decode, is_multicomponent
+from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+from transformers.exporters.utils import decompose_encoder_decoder, decompose_prefill_decode, is_multicomponent
 
->>> stages = decompose_prefill_decode(model, inputs)
->>> _, prefill_model, prefill_inputs = stages[0]
+stages = decompose_prefill_decode(model, inputs)
+_, prefill_model, prefill_inputs = stages[0]
 
->>> components = decompose_encoder_decoder(prefill_model, prefill_inputs) if is_multicomponent(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
->>> components += stages[1:]  # add the decode stage
+components = decompose_encoder_decoder(prefill_model, prefill_inputs) if is_multicomponent(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
+components += stages[1:]  # add the decode stage
 
->>> exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
->>> for name, submodel, subinputs in components:
-...     onnx_program = exporter.export(submodel, subinputs)
-...     onnx_program.save(f"{name}.onnx")
+exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
+for name, submodel, subinputs in components:
+    onnx_program = exporter.export(submodel, subinputs)
 ```
 
 </hfoption>
