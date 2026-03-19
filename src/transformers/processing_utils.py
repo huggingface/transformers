@@ -701,7 +701,15 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this processor instance.
         """
-        output = copy.deepcopy(self.__dict__)
+        try:
+            output = copy.deepcopy(self.__dict__)
+        except Exception:
+            output = {}
+            for k, v in self.__dict__.items():
+                try:
+                    output[k] = copy.deepcopy(v)
+                except Exception:
+                    pass
 
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
