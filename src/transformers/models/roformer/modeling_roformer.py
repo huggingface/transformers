@@ -142,7 +142,7 @@ class RoFormerSelfAttention(nn.Module):
         encoder_hidden_states=None,
         past_key_values=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -197,10 +197,7 @@ class RoFormerSelfAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_layer, value_layer = curr_past_key_values.update(
-                    key_layer, value_layer, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -285,7 +282,7 @@ class RoFormerAttention(nn.Module):
         encoder_hidden_states=None,
         past_key_values=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -294,7 +291,6 @@ class RoFormerAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -356,7 +352,7 @@ class RoFormerLayer(GradientCheckpointingLayer):
         encoder_attention_mask=None,
         past_key_values=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
@@ -364,7 +360,6 @@ class RoFormerLayer(GradientCheckpointingLayer):
             sinusoidal_pos=sinusoidal_pos,
             output_attentions=output_attentions,
             past_key_values=past_key_values,
-            cache_position=cache_position,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -383,7 +378,6 @@ class RoFormerLayer(GradientCheckpointingLayer):
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -420,7 +414,7 @@ class RoFormerEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        cache_position=None,
+        **kwargs,
     ):
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -450,7 +444,6 @@ class RoFormerEncoder(nn.Module):
                 encoder_attention_mask,
                 past_key_values,
                 output_attentions,
-                cache_position,
             )
 
             hidden_states = layer_outputs[0]
@@ -690,14 +683,13 @@ class RoFormerModel(RoFormerPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPastAndCrossAttentions | tuple[torch.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -762,7 +754,6 @@ class RoFormerModel(RoFormerPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         sequence_output = encoder_outputs[0]
 
@@ -828,7 +819,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
             input_ids,
@@ -907,7 +898,6 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> CausalLMOutputWithCrossAttentions | tuple[torch.Tensor]:
@@ -933,7 +923,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
             input_ids,
@@ -947,7 +937,6 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = outputs[0]
@@ -1029,7 +1018,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
             input_ids,
@@ -1128,7 +1117,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1204,7 +1193,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
             input_ids,
@@ -1266,7 +1255,7 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.roformer(
             input_ids,

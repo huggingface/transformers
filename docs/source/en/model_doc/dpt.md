@@ -74,9 +74,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DPTImageProcessor
     - preprocess
 
-## DPTImageProcessorFast
+## DPTImageProcessorPil
 
-[[autodoc]] DPTImageProcessorFast
+[[autodoc]] DPTImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_depth_estimation

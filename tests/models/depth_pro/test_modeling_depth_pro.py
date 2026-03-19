@@ -214,7 +214,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = DepthProModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -311,7 +311,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
         model_path = "apple/DepthPro-hf"
         image_processor = DepthProImageProcessor.from_pretrained(model_path)
-        model = DepthProForDepthEstimation.from_pretrained(model_path).to(torch_device)
+        model = DepthProForDepthEstimation.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         config = model.config
 
         image = prepare_img()

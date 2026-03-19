@@ -13,21 +13,12 @@
 # limitations under the License.
 import argparse
 import os
-import warnings
 
 import torch
 
 from transformers import GemmaConfig, GemmaForCausalLM, GemmaTokenizer
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
-
-try:
-    from transformers import GemmaTokenizerFast
-except ImportError as e:
-    warnings.warn(e)
-    warnings.warn(
-        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
-    )
-    GemmaTokenizerFast = None
 
 """
 Sample usage:
@@ -126,9 +117,14 @@ def write_model(save_path, input_base_path, config, push_to_hub=False, dtype=tor
 
 def write_tokenizer(input_tokenizer_path, save_path, push_to_hub=False):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
-    print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
-    tokenizer = tokenizer_class(input_tokenizer_path)
+    print(f"Saving a GemmaTokenizer to {save_path}.")
+    sentencepiece_extractor = SentencePieceExtractor(input_tokenizer_path)
+    vocab, _, merges = sentencepiece_extractor.extract()
+    tokenizer = GemmaTokenizer(
+        vocab=vocab,
+        merges=merges,
+        padding_side="left",
+    )
     if push_to_hub:
         tokenizer.push_to_hub(save_path)
     else:

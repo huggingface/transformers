@@ -35,7 +35,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ZoeDepthImageProcessor
+    from transformers import ZoeDepthImageProcessorPil
 
 
 class ZoeDepthModelTester:
@@ -148,7 +148,7 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
+            self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=32, common_properties=[]
         )
 
     def test_config(self):
@@ -223,7 +223,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
     }  # (pad, flip)
 
     def test_inference_depth_estimation(self):
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu")
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained("Intel/zoedepth-nyu")
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu").to(torch_device)
 
         image = prepare_img()
@@ -245,7 +245,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_depth_estimation_multiple_heads(self):
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained("Intel/zoedepth-nyu-kitti")
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         image = prepare_img()
@@ -318,28 +318,36 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
 
     def test_post_processing_depth_estimation_post_processing_nopad_noflip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=False)
 
     def test_inference_depth_estimation_post_processing_nopad_flip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=True)
 
     def test_inference_depth_estimation_post_processing_pad_noflip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=False)
 
     def test_inference_depth_estimation_post_processing_pad_flip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=True)

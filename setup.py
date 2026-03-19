@@ -78,7 +78,6 @@ _deps = [
     "codecarbon>=2.8.1",
     "datasets>=2.15.0",  # We need either this pin or pyarrow<21.0.0
     "deepspeed>=0.9.3",
-    "diffusers",
     "dill<0.3.5",
     "evaluate>=0.4.6",
     "faiss-cpu",
@@ -87,15 +86,14 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=1.3.0,<2.0",
-    "importlib_metadata",
+    "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
     "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
-    "mistral-common[image]>=1.8.8",
+    "mistral-common[image]>=1.10.0",
     "nltk<=3.8.1",
     "num2words",
     "numpy>=1.17",
@@ -121,11 +119,12 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.10.0",
-    "regex!=2019.12.17",
+    "regex>=2025.10.22",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
+    "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
     # `Trainer` tests (see references to `run_translation.py`).
@@ -150,7 +149,7 @@ _deps = [
     "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
-    "typer-slim",
+    "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
@@ -182,12 +181,11 @@ if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty")
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-if PYTHON_MINOR_VERSION < 14:
-    extras["mistral-common"] = deps_list("mistral-common[image]")
+extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["sklearn"] = deps_list("scikit-learn")
 extras["accelerate"] = deps_list("accelerate")
@@ -239,8 +237,7 @@ extras["testing"] = (
     + extras["sentencepiece"]
     + extras["serving"]
 )
-if PYTHON_MINOR_VERSION < 14:
-    extras["testing"] += extras["mistral-common"]
+extras["testing"] += extras["mistral-common"]
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 extras["all"] = (
@@ -255,8 +252,7 @@ extras["all"] = (
     + extras["chat_template"]
     + extras["num2words"]
 )
-if PYTHON_MINOR_VERSION < 14:
-    extras["all"] += extras["mistral-common"]
+extras["all"] += extras["mistral-common"]
 
 extras["dev"] = extras["all"] + extras["testing"] + extras["ja"] + extras["sklearn"]
 
@@ -268,7 +264,7 @@ install_requires = [
     deps["pyyaml"],  # used for the model cards metadata
     deps["regex"],  # for OpenAI GPT
     deps["tokenizers"],
-    deps["typer-slim"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
+    deps["typer"],  # CLI utilities. In practice, already a dependency of huggingface_hub but we use it as well
     deps["safetensors"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
@@ -324,7 +320,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.2.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.3.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

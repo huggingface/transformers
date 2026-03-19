@@ -22,12 +22,13 @@ from typing import Any, Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import Parameter
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import RopeParameters
@@ -42,8 +43,9 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.hub import cached_file
+from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -64,37 +66,16 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerVision`]. It is used to instantiate a
-    Qwen2.5-VL vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2.5-VL
-    architecture.
-
-    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        depth (`int`, *optional*, defaults to 32):
-            Number of layers (depth) in the model.
-        hidden_size (`int`, *optional*, defaults to 3584):
-            The size of the hidden layers.
-        hidden_act (`str`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function used in the model. Supported options include `"quick_gelu"` and others as applicable.
-        mlp_ratio (`float`, *optional*, defaults to 4):
-            The ratio used to determine the size of the MLP (Multi-Layer Perceptron) hidden layer.
-        num_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer.
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input channels.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size of the patches extracted from the input.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The size used for patches along the temporal dimension.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    window_size (`int`, *optional*, defaults to 11):
+        Size of windows.
 
     Example:
 
@@ -113,85 +94,19 @@ class Qwen2_5OmniVisionEncoderConfig(Qwen2_5_VLVisionConfig):
 
     model_type = "qwen2_5_omni_vision_encoder"
 
-    def __init__(
-        self,
-        depth=32,
-        hidden_size=3584,
-        hidden_act="silu",
-        intermediate_size=3420,
-        num_heads=16,
-        in_channels=3,
-        patch_size=14,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        window_size=112,
-        out_hidden_size=3584,
-        fullatt_block_indexes=[7, 15, 23, 31],
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(
-            depth,
-            hidden_size,
-            hidden_act,
-            intermediate_size,
-            num_heads,
-            in_channels,
-            patch_size,
-            spatial_merge_size,
-            temporal_patch_size,
-            window_size,
-            out_hidden_size,
-            fullatt_block_indexes,
-            initializer_range=initializer_range,
-            **kwargs,
-        )
-        del self.tokens_per_second
+    tokens_per_second = AttributeError()
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniAudioEncoder`]. It is used to instantiate a
-    Qwen2.5-Omni-Thinker audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Qwen2-Audio
-    architecture.
-
-    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Number of mel features used per input features. Should correspond to the value used in the
-            `Qwen2_5OmniProcessor` class.
-        encoder_layers (`int`, *optional*, defaults to 32):
-            Number of encoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 20):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
-        d_model (`int`, *optional*, defaults to 1280):
-            Dimensionality of the layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        max_source_positions (`int`, *optional*, defaults to 1500):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        n_window (`int`, *optional*, defaults to 100):
-            The chunk for conv and flash attn in AudioEncoder.
-        output_dim (`int`, *optional*, defaults to 3584):
-            The output dimension of AudioEncoder.
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+    n_window (`int`, *optional*, defaults to 100):
+        The chunk for conv and flash attn in AudioEncoder.
+    output_dim (`int`, *optional*, defaults to 3584):
+        The output dimension of AudioEncoder.
 
     Example:
 
@@ -210,100 +125,18 @@ class Qwen2_5OmniAudioEncoderConfig(Qwen2AudioEncoderConfig):
 
     model_type = "qwen2_5_omni_audio_encoder"
 
-    def __init__(
-        self,
-        num_mel_bins=128,
-        encoder_layers=32,
-        encoder_attention_heads=20,
-        encoder_ffn_dim=5120,
-        d_model=1280,
-        dropout=0,
-        attention_dropout=0,
-        activation_function="gelu",
-        activation_dropout=0,
-        scale_embedding=False,
-        initializer_range=0.02,
-        max_source_positions=1500,
-        n_window=100,
-        output_dim=3584,
-        **kwargs,
-    ):
-        super().__init__(
-            num_mel_bins,
-            encoder_layers,
-            encoder_attention_heads,
-            encoder_ffn_dim,
-            d_model,
-            dropout,
-            attention_dropout,
-            activation_function,
-            activation_dropout,
-            scale_embedding,
-            initializer_range,
-            max_source_positions,
-            **kwargs,
-        )
-        self.n_window = n_window
-        self.output_dim = output_dim
-        del self.encoder_layerdrop
+    n_window: int = 100
+    output_dim: int = 3584
+    encoder_layerdrop = AttributeError()
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
-    Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
-
-    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
-            Vocabulary size of the QwenOmni model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen2VLModel`]
-        hidden_size (`int`, *optional*, defaults to 3584):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 18944):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 28):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 32768):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-            additional layer afterwards will use SWA (Sliding Window Attention).
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    max_window_layers (`int`, *optional*, defaults to 28):
+        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+        additional layer afterwards will use SWA (Sliding Window Attention).
 
     Example:
 
@@ -345,56 +178,35 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 152064,
-        hidden_size: int | None = 3584,
-        intermediate_size: int | None = 18944,
-        num_hidden_layers: int | None = 28,
-        num_attention_heads: int | None = 28,
-        num_key_value_heads: int | None = 4,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        use_sliding_window: bool | None = False,
-        sliding_window: int | None = 32768,
-        max_window_layers: int | None = 28,
-        layer_types: list[str] | None = None,
-        attention_dropout: float | None = 0.0,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = max_window_layers
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+    vocab_size: int = 152064
+    hidden_size: int = 3584
+    intermediate_size: int = 18944
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 28
+    num_key_value_heads: int | None = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    use_sliding_window: bool = False
+    sliding_window: int | None = 32768
+    max_window_layers: int = 28
+    layer_types: list[str] | None = None
+    attention_dropout: float | int = 0.0
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    tie_word_embeddings: bool = True
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-
-        self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -402,53 +214,24 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-        super().__init__(
-            ignore_keys_at_rope_validation={"mrope_section"},
-            **kwargs,
-        )
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniThinkerForConditionalGeneration`]. It is used to instantiate an
-    Qwen2.5-Omni-Thinker model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
-
-    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        audio_config (`dict`,  *optional*):
-            The config dictionary of the audio backbone.
-        vision_config (`dict`, *optional*):
-            The config dictionary of the vision backbone.
-        text_config (`dict`, *optional*):
-            The config dictionary of the text backbone.
-        audio_token_index (`int`, *optional*, defaults to 151646):
-            The audio token index to encode the audio prompt.
-        image_token_index (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
-        video_token_index (`int`, *optional*, defaults to 151656):
-            The video token index to encode the video prompt.
-        position_id_per_seconds (`int`, *optional*, defaults to 25):
-            The increment of position id per second.
-        seconds_per_chunk (`int`, *optional*, defaults to 2):
-            The duration in seconds of the chunk of audio and video data.
-        audio_start_token_id (`int`, *optional*, defaults to 151647):
-            The audio start token index to encode the audio prompt.
-        audio_end_token_id (`int`, *optional*, defaults to 151648):
-            The audio end token index to encode the audio prompt.
-        user_token_id (`int, *optional*, defaults to 872):
-            The user token index to encode the user token.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    position_id_per_seconds (`int`, *optional*, defaults to 25):
+        The increment of position id per second.
+    seconds_per_chunk (`int`, *optional*, defaults to 2):
+        The duration in seconds of the chunk of audio and video data.
+    audio_start_token_id (`int`, *optional*, defaults to 151647):
+        The audio start token index to encode the audio prompt.
+    audio_end_token_id (`int`, *optional*, defaults to 151648):
+        The audio end token index to encode the audio prompt.
+    user_token_id (`int, *optional*, defaults to 872):
+        The user token index to encode the user token.
 
     Example:
 
@@ -486,154 +269,68 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         "text_config": Qwen2_5OmniTextConfig,
     }
 
-    def __init__(
-        self,
-        audio_config=None,
-        vision_config=None,
-        text_config=None,
-        audio_token_index=151646,
-        image_token_index=151655,
-        video_token_index=151656,
-        position_id_per_seconds=25,
-        seconds_per_chunk=2,
-        audio_start_token_id=151647,
-        audio_end_token_id=151648,
-        user_token_id=872,
-        initializer_range=0.02,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        self.audio_token_index = audio_token_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.user_token_id = user_token_id
-        self.position_id_per_seconds = position_id_per_seconds
-        self.seconds_per_chunk = seconds_per_chunk
-        self.audio_start_token_id = audio_start_token_id
-        self.audio_end_token_id = audio_end_token_id
-        self.initializer_range = initializer_range
-        self.tie_word_embeddings = tie_word_embeddings
+    audio_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    audio_token_index: int = 151646
+    image_token_index: int = 151655
+    video_token_index: int = 151656
+    position_id_per_seconds: int = 25
+    seconds_per_chunk: int = 2
+    audio_start_token_id: int = 151647
+    audio_end_token_id: int = 151648
+    user_token_id: int = 872
+    initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
-        if isinstance(vision_config, dict):
-            vision_config = Qwen2_5OmniVisionEncoderConfig(**vision_config)
-        elif vision_config is None:
-            vision_config = Qwen2_5OmniVisionEncoderConfig()
-        self.vision_config = vision_config
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Qwen2_5OmniVisionEncoderConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = Qwen2_5OmniVisionEncoderConfig()
 
-        if isinstance(audio_config, dict):
-            audio_config = Qwen2_5OmniAudioEncoderConfig(**audio_config)
-        elif audio_config is None:
-            audio_config = Qwen2_5OmniAudioEncoderConfig()
-        self.audio_config = audio_config
+        if isinstance(self.audio_config, dict):
+            self.audio_config = Qwen2_5OmniAudioEncoderConfig(**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = Qwen2_5OmniAudioEncoderConfig()
 
-        if isinstance(text_config, dict):
-            text_config = Qwen2_5OmniTextConfig(**text_config)
-        elif text_config is None:
-            text_config = Qwen2_5OmniTextConfig()
-        self.text_config = text_config
+        if isinstance(self.text_config, dict):
+            self.text_config = Qwen2_5OmniTextConfig(**self.text_config)
+        elif self.text_config is None:
+            self.text_config = Qwen2_5OmniTextConfig()
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniTalkerForConditionalGeneration`]. It is used to instantiate an
-    Qwen2.5-Omni-Talker model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Qwen2.5-Omni-Thinker.
-
-    e.g. [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        audio_token_index (`int`, *optional*, defaults to 151646):
-            The audio token index to encode the audio prompt.
-        image_token_index (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
-        video_token_index (`int`, *optional*, defaults to 151656):
-            The video token index to encode the video prompt.
-        vocab_size (`int`, *optional*, defaults to 8448):
-            Vocabulary size of the QwenOmni model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen2VLModel`]
-        tts_text_start_token_id (`int`, *optional*, defaults to 151860):
-            The tts text start token index to encode the start of tts text.
-        tts_text_end_token_id (`int`, *optional*, defaults to 151861):
-            The tts text end token index to encode the end of tts text.
-        tts_text_pad_token_id (`int`, *optional*, defaults to 151859):
-            The tts text pad token index to encode the pad of tts text.
-        tts_codec_start_token_id (`int`, *optional*, defaults to 8293):
-            The tts codec start token index to encode the start of tts codec.
-        tts_codec_end_token_id (`int`, *optional*, defaults to 8294):
-            The tts codec end token index to encode the end of tts codec.
-        tts_codec_pad_token_id (`int`, *optional*, defaults to 8292):
-            The tts codec pad token index to encode the pad of tts codec.
-        tts_codec_mask_token_id (`int`, *optional*, defaults to 8296):
-            The tts codec mask token index to encode the mask of tts codec.
-        vision_start_token_id (`int`, *optional*, defaults to 151652):
-            The tts vision start token index to encode the start of vision.
-        vision_end_token_id (`int`, *optional*, defaults to 151653):
-            The tts vision end token index to encode the end of vision.
-        embedding_size (`int`, *optional*, defaults to 3584):
-            Dimension of the embedding representations.
-        hidden_size (`int`, *optional*, defaults to 3584):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 18944):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 28):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 28):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 4):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        head_dim (`int`, *optional*, defaults to 128):
-            The dimension of each attention head.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 32768):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-            additional layer afterwards will use SWA (Sliding Window Attention).
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        position_id_per_seconds (`int`, *optional*, defaults to 25):
-            The increment of position id per second.
-        seconds_per_chunk (`int`, *optional*, defaults to 2):
-            The duration in seconds of the chunk of audio and video data.
-        audio_start_token_id (`int`, *optional*, defaults to 151647):
-            The audio start token index to encode the audio prompt.
-        audio_end_token_id (`int`, *optional*, defaults to 151648):
-            The audio end token index to encode the audio prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
-
+    tts_text_start_token_id (`int`, *optional*, defaults to 151860):
+        The tts text start token index to encode the start of tts text.
+    tts_text_end_token_id (`int`, *optional*, defaults to 151861):
+        The tts text end token index to encode the end of tts text.
+    tts_text_pad_token_id (`int`, *optional*, defaults to 151859):
+        The tts text pad token index to encode the pad of tts text.
+    tts_codec_start_token_id (`int`, *optional*, defaults to 8293):
+        The tts codec start token index to encode the start of tts codec.
+    tts_codec_end_token_id (`int`, *optional*, defaults to 8294):
+        The tts codec end token index to encode the end of tts codec.
+    tts_codec_pad_token_id (`int`, *optional*, defaults to 8292):
+        The tts codec pad token index to encode the pad of tts codec.
+    tts_codec_mask_token_id (`int`, *optional*, defaults to 8296):
+        The tts codec mask token index to encode the mask of tts codec.
+    max_window_layers (`int`, *optional*, defaults to 28):
+        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+        additional layer afterwards will use SWA (Sliding Window Attention).
+    position_id_per_seconds (`int`, *optional*, defaults to 25):
+        The increment of position id per second.
+    seconds_per_chunk (`int`, *optional*, defaults to 2):
+        The duration in seconds of the chunk of audio and video data.
+    audio_start_token_id (`int`, *optional*, defaults to 151647):
+        The audio start token index to encode the audio prompt.
+    audio_end_token_id (`int`, *optional*, defaults to 151648):
+        The audio end token index to encode the audio prompt.
 
     Example:
 
@@ -663,97 +360,53 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
         "audio_token_id": "audio_token_index",
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        audio_token_index=151646,
-        image_token_index=151655,
-        video_token_index=151656,
-        vocab_size=8448,
-        tts_text_start_token_id=151860,
-        tts_text_end_token_id=151861,
-        tts_text_pad_token_id=151859,
-        tts_codec_start_token_id=8293,
-        tts_codec_end_token_id=8294,
-        tts_codec_pad_token_id=8292,
-        tts_codec_mask_token_id=8296,
-        vision_start_token_id=151652,
-        vision_end_token_id=151653,
-        embedding_size=3584,
-        hidden_size=3584,
-        intermediate_size=18944,
-        num_hidden_layers=28,
-        num_attention_heads=28,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        rms_norm_eps=1e-06,
-        head_dim=128,
-        use_cache=True,
-        tie_word_embeddings=False,
-        use_sliding_window=False,
-        sliding_window=32768,
-        max_window_layers=28,
-        attention_dropout=0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        position_id_per_seconds=25,
-        seconds_per_chunk=2,
-        audio_start_token_id=151647,
-        audio_end_token_id=151648,
-        initializer_range=0.02,
-        spatial_merge_size=2,
-        layer_types=None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.audio_token_index = audio_token_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
+    audio_token_index: int = 151646
+    image_token_index: int = 151655
+    video_token_index: int = 151656
+    vocab_size: int = 8448
+    tts_text_start_token_id: int = 151860
+    tts_text_end_token_id: int = 151861
+    tts_text_pad_token_id: int = 151859
+    tts_codec_start_token_id: int = 8293
+    tts_codec_end_token_id: int = 8294
+    tts_codec_pad_token_id: int = 8292
+    tts_codec_mask_token_id: int = 8296
+    vision_start_token_id: int = 151652
+    vision_end_token_id: int = 151653
+    embedding_size: int = 3584
+    hidden_size: int = 3584
+    intermediate_size: int = 18944
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 28
+    num_key_value_heads: int = 4
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    rms_norm_eps: float = 1e-06
+    head_dim: int = 128
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    use_sliding_window: bool = False
+    sliding_window: int | None = 32768
+    max_window_layers: int = 28
+    attention_dropout: float | int = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    position_id_per_seconds: int = 25
+    seconds_per_chunk: int = 2
+    audio_start_token_id: int = 151647
+    audio_end_token_id: int = 151648
+    initializer_range: float = 0.02
+    spatial_merge_size: int = 2
+    layer_types: list[str] | None = None
+    pad_token_id: int | None = None
 
-        self.tts_text_start_token_id = tts_text_start_token_id
-        self.tts_text_end_token_id = tts_text_end_token_id
-        self.tts_text_pad_token_id = tts_text_pad_token_id
-        self.tts_codec_start_token_id = tts_codec_start_token_id
-        self.tts_codec_end_token_id = tts_codec_end_token_id
-        self.tts_codec_pad_token_id = tts_codec_pad_token_id
+    def __post_init__(self, **kwargs):
+        self.sliding_window = self.sliding_window if self.use_sliding_window else None
 
-        self.tts_codec_mask_token_id = tts_codec_mask_token_id
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-
-        self.vocab_size = vocab_size
-        self.head_dim = head_dim
-        self.embedding_size = embedding_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = max_window_layers
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.position_id_per_seconds = position_id_per_seconds  # zf
-        self.seconds_per_chunk = seconds_per_chunk  # zf
-        self.audio_start_token_id = audio_start_token_id  # zf
-        self.audio_end_token_id = audio_end_token_id  # zf
-        self.pad_token_id = pad_token_id
-
-        self.initializer_range = initializer_range
-        self.spatial_merge_size = spatial_merge_size
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention"
@@ -761,167 +414,112 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavDiT used in the Qwen2.5-Omni-Token2Wav model.
-    It defines the architecture of the DiT model, which is used for generating mel-spectrograms from tokens.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            The dimension of the model.
-        num_hidden_layers (`int`, *optional*, defaults to 22):
-            The number of transformer blocks in the DiT model.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            The number of attention heads in each transformer block.
-        ff_mult (`int`, *optional*, defaults to 2):
-            The multiplier for the feedforward layer in each transformer block.
-        emb_dim (`int`, *optional*, defaults to 512):
-            The dimension of the embedding layer.
-        head_dim (`int`, *optional*, defaults to 64):
-            The dimension of each attention head.
-        repeats (`int`, *optional*, defaults to 2):
-            The number of times the codec embeddings are repeated.
-        num_embeds (`int`, *optional*, defaults to 8193):
-            The number of unique embeddings in the codec.
-        mel_dim (`int`, *optional*, defaults to 80):
-            The dimension of the mel-spectrogram.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the transformer blocks.
-
-        enc_emb_dim (`int`, *optional*, defaults to 192):
-            The dimension of the pre-trained speaker embedding.
-        enc_dim (`int`, *optional*, defaults to 128):
-            The dimension of the encoder output.
-        enc_channels (`list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
-            A list of output channels for each TDNN/SERes2Net layer in the encoder.
-        enc_kernel_sizes (`list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
-            A list of kernel sizes for each layer in the encoder.
-        enc_dilations (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
-            A list of dilations for each layer in the encoder.
-        enc_attention_channels (`int`, *optional*, defaults to 64):
-            The number of attention channels in the SqueezeExcitationBlock.
-        enc_res2net_scale (`int`, *optional*, defaults to 2):
-            The scale of the Res2Net block in the encoder.
-        enc_se_channels (`int`, *optional*, defaults to 64):
-            The number of output channels after squeeze in the SqueezeExcitationBlock.
+    ff_mult (`int`, *optional*, defaults to 2):
+        The multiplier for the feedforward layer in each transformer block.
+    emb_dim (`int`, *optional*, defaults to 512):
+        The dimension of the embedding layer.
+    repeats (`int`, *optional*, defaults to 2):
+        The number of times the codec embeddings are repeated.
+    num_embeds (`int`, *optional*, defaults to 8193):
+        The number of unique embeddings in the codec.
+    mel_dim (`int`, *optional*, defaults to 80):
+        The dimension of the mel-spectrogram.
+    enc_emb_dim (`int`, *optional*, defaults to 192):
+        The dimension of the pre-trained speaker embedding.
+    enc_dim (`int`, *optional*, defaults to 128):
+        The dimension of the encoder output.
+    enc_channels (`list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
+        A list of output channels for each TDNN/SERes2Net layer in the encoder.
+    enc_kernel_sizes (`list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
+        A list of kernel sizes for each layer in the encoder.
+    enc_dilations (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
+        A list of dilations for each layer in the encoder.
+    enc_attention_channels (`int`, *optional*, defaults to 64):
+        The number of attention channels in the SqueezeExcitationBlock.
+    enc_res2net_scale (`int`, *optional*, defaults to 2):
+        The scale of the Res2Net block in the encoder.
+    enc_se_channels (`int`, *optional*, defaults to 64):
+        The number of output channels after squeeze in the SqueezeExcitationBlock.
+    block_size (`int`, *optional*, defaults to 64):
+        Number of tokens (frames) in each processing block.
+    look_ahead_layers (`list[int]`, *optional*, defaults to `[10]`):
+        Number of transformer layers that are permitted to attend to future blocks
+    look_backward_layers (`list[int]`, *optional*, defaults to `[0, 20]`):
+        Number of transformer layers that attend to past blocks beyond the current block boundary
     """
 
     model_type = "qwen2_5_omni_dit"
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        num_hidden_layers=22,
-        num_attention_heads=16,
-        ff_mult=2,
-        emb_dim=512,
-        head_dim=64,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        max_position_embeddings=32768,
-        block_size=24,
-        look_ahead_layers=[10],
-        look_backward_layers=[0, 20],
-        repeats=2,
-        num_embeds=8193,
-        mel_dim=80,
-        dropout=0.1,
-        enc_emb_dim=192,
-        enc_dim=128,
-        enc_channels=[256, 256, 256, 256, 768],
-        enc_kernel_sizes=[5, 3, 3, 3, 1],
-        enc_dilations=[1, 2, 3, 4, 1],
-        enc_attention_channels=64,
-        enc_res2net_scale=2,
-        enc_se_channels=64,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.ff_mult = ff_mult
-        self.emb_dim = emb_dim
-        self.head_dim = head_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.block_size = block_size
-        self.look_ahead_layers = look_ahead_layers
-        self.look_backward_layers = look_backward_layers
-        self.repeats = repeats
-        self.num_embeds = num_embeds
-        self.mel_dim = mel_dim
-        self.dropout = dropout
-        self.enc_emb_dim = enc_emb_dim
-        self.enc_dim = enc_dim
-        self.enc_channels = enc_channels
-        self.enc_kernel_sizes = enc_kernel_sizes
-        self.enc_dilations = enc_dilations
-        self.enc_attention_channels = enc_attention_channels
-        self.enc_res2net_scale = enc_res2net_scale
-        self.enc_se_channels = enc_se_channels
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+    hidden_size: int = 1024
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 16
+    ff_mult: int = 2
+    emb_dim: int = 512
+    head_dim: int = 64
+    rope_parameters: RopeParameters | dict | None = None
+    max_position_embeddings: int = 32768
+    block_size: int = 24
+    look_ahead_layers: list[int] | tuple[int, ...] = (10,)
+    look_backward_layers: list[int] | tuple[int, ...] = (0, 20)
+    repeats: int = 2
+    num_embeds: int = 8193
+    mel_dim: int = 80
+    dropout: float | int = 0.1
+    enc_emb_dim: int = 192
+    enc_dim: int = 128
+    enc_channels: list[int] | tuple[int, ...] = (256, 256, 256, 256, 768)
+    enc_kernel_sizes: list[int] | tuple[int, ...] = (5, 3, 3, 3, 1)
+    enc_dilations: list[int] | tuple[int, ...] = (1, 2, 3, 4, 1)
+    enc_attention_channels: int = 64
+    enc_res2net_scale: int = 2
+    enc_se_channels: int = 64
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of the Qwen2_5OmniToken2WavBigVGAN module used in the Qwen2.5-Omni-Token2Wav model.
-    It defines the architecture of the BigVGAN model, which is used for converting mel-spectrograms to waveforms.
-
-    Args:
-        mel_dim (`int`, *optional*, defaults to 80):
-            The dimension of the mel-spectrogram.
-        upsample_initial_channel (`int`, *optional*, defaults to 1536):
-            The number of channels in the initial upsampling layer.
-        resblock_kernel_sizes (`list[int]`, *optional*, defaults to `[3, 7, 11]`):
-            A list of kernel sizes for each residual block.
-        resblock_dilation_sizes (`list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
-            A list of dilation sizes for each residual block.
-        upsample_rates (`list[int]`, *optional*, defaults to `[5, 3, 2, 2, 2, 2]`):
-            A list of upsampling rates for each upsampling layer.
-        upsample_kernel_sizes (`list[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
-            A list of kernel sizes for each upsampling layer.
+    mel_dim (`int`, *optional*, defaults to 80):
+        The dimension of the mel-spectrogram.
+    upsample_initial_channel (`int`, *optional*, defaults to 1536):
+        The number of channels in the initial upsampling layer.
+    resblock_kernel_sizes (`list[int]`, *optional*, defaults to `[3, 7, 11]`):
+        A list of kernel sizes for each residual block.
+    resblock_dilation_sizes (`list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        A list of dilation sizes for each residual block.
+    upsample_rates (`list[int]`, *optional*, defaults to `[5, 3, 2, 2, 2, 2]`):
+        A list of upsampling rates for each upsampling layer.
+    upsample_kernel_sizes (`list[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
+        A list of kernel sizes for each upsampling layer.
     """
 
     model_type = "qwen2_5_omni_bigvgan"
 
-    def __init__(
-        self,
-        mel_dim=80,
-        upsample_initial_channel=1536,
-        resblock_kernel_sizes=[3, 7, 11],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-        upsample_rates=[5, 3, 2, 2, 2, 2],
-        upsample_kernel_sizes=[11, 7, 4, 4, 4, 4],
-        **kwargs,
-    ):
-        self.mel_dim = mel_dim
-        self.upsample_initial_channel = upsample_initial_channel
-        self.resblock_kernel_sizes = resblock_kernel_sizes
-        self.resblock_dilation_sizes = resblock_dilation_sizes
-        self.upsample_rates = upsample_rates
-        self.upsample_kernel_sizes = upsample_kernel_sizes
-        super().__init__(**kwargs)
+    mel_dim: int = 80
+    upsample_initial_channel: int = 1536
+    resblock_kernel_sizes: list[int] | tuple[int, ...] = (3, 7, 11)
+    resblock_dilation_sizes: list | tuple = ((1, 3, 5), (1, 3, 5), (1, 3, 5))
+    upsample_rates: list[int] | tuple[int, ...] = (5, 3, 2, 2, 2, 2)
+    upsample_kernel_sizes: list[int] | tuple[int, ...] = (11, 7, 4, 4, 4, 4)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniToken2WavModel`].
-    It is used to instantiate the Qwen2.5-Omni-Token2Wav model which combines a Diffusion Transformer (DiT) for mel-spectrogram generation with a BigVGAN model for waveform synthesis. The configuration contains sub-configurations for both components.
+    dit_config ([`DiT_Args`], *optional*):
+        Configuration class for the Diffusion Transformer (DiT) module responsible for generating mel-spectrograms.
+    bigvgan_config ([`BigVGAN_Args`], *optional*):
+        Configuration class for the BigVGAN module responsible for converting mel-spectrograms to waveforms.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        dit_config ([`DiT_Args`], *optional*):
-            Configuration class for the Diffusion Transformer (DiT) module responsible for generating mel-spectrograms.
-        bigvgan_config ([`BigVGAN_Args`], *optional*):
-            Configuration class for the BigVGAN module responsible for converting mel-spectrograms to waveforms.
     Example:
 
     ```python
@@ -958,32 +556,31 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
         "bigvgan_config": Qwen2_5OmniBigVGANConfig,
     }
 
-    def __init__(self, dit_config=None, bigvgan_config=None, **kwargs):
-        if dit_config is None:
-            dit_config = {}
-        if bigvgan_config is None:
-            bigvgan_config = {}
-        self.dit_config = Qwen2_5OmniDiTConfig(**dit_config)
-        self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**bigvgan_config)
-        super().__init__(**kwargs)
+    dit_config: dict | PreTrainedConfig | None = None
+    bigvgan_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.dit_config is None:
+            self.dit_config = Qwen2_5OmniDiTConfig()
+        elif isinstance(self.dit_config, dict):
+            self.dit_config = Qwen2_5OmniDiTConfig(**self.dit_config)
+
+        if self.bigvgan_config is None:
+            self.bigvgan_config = Qwen2_5OmniBigVGANConfig()
+        elif isinstance(self.bigvgan_config, dict):
+            self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**self.bigvgan_config)
+
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@strict(accept_kwargs=True)
 class Qwen2_5OmniConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`Qwen2_5OmniForConditionalGeneration`]. It is used to instantiate a Qwen2.5Omni
-    model according to the specified sub-models configurations, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    [Qwen/Qwen2.5-Omni-7B](https://huggingface.co/Qwen/Qwen2.5-Omni-7B) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
-        talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
-        token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
-        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
+    thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
+    talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
+    token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
+    enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
 
     Example:
 
@@ -1022,32 +619,31 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
         "token2wav_config": Qwen2_5OmniToken2WavConfig,
     }
 
-    def __init__(
-        self,
-        thinker_config=None,
-        talker_config=None,
-        token2wav_config=None,
-        enable_audio_output: bool = True,
-        **kwargs,
-    ):
-        if thinker_config is None:
-            thinker_config = {}
+    thinker_config: dict | PreTrainedConfig | None = None
+    talker_config: dict | PreTrainedConfig | None = None
+    token2wav_config: dict | PreTrainedConfig | None = None
+    enable_audio_output: bool = True
+
+    def __post_init__(self, **kwargs):
+        if self.thinker_config is None:
+            self.thinker_config = Qwen2_5OmniThinkerConfig()
             logger.info("thinker_config is None. Initializing thinker model with default values")
+        elif isinstance(self.thinker_config, dict):
+            self.thinker_config = Qwen2_5OmniThinkerConfig(**self.thinker_config)
 
-        if talker_config is None:
-            talker_config = {}
+        if self.talker_config is None:
+            self.talker_config = Qwen2_5OmniTalkerConfig()
             logger.info("talker_config is None. Initializing talker model with default values")
+        elif isinstance(self.talker_config, dict):
+            self.talker_config = Qwen2_5OmniTalkerConfig(**self.talker_config)
 
-        if token2wav_config is None:
-            token2wav_config = {}
+        if self.token2wav_config is None:
+            self.token2wav_config = Qwen2_5OmniToken2WavConfig()
             logger.info("token2wav_config is None. Initializing token2wav model with default values")
+        elif isinstance(self.token2wav_config, dict):
+            self.token2wav_config = Qwen2_5OmniToken2WavConfig(**self.token2wav_config)
 
-        self.thinker_config = Qwen2_5OmniThinkerConfig(**thinker_config)
-        self.talker_config = Qwen2_5OmniTalkerConfig(**talker_config)
-        self.token2wav_config = Qwen2_5OmniToken2WavConfig(**token2wav_config)
-        self.enable_audio_output = enable_audio_output
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """
@@ -1089,61 +685,6 @@ class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
     input_modalities = ("image", "video", "audio", "text")
-
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        self,
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        min_dtype: float,
-        cache_position: torch.Tensor,
-        batch_size: int,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            device (`torch.device`):
-                The device to place the 4D attention mask on.
-            min_dtype (`float`):
-                The minimum value representable with the dtype `dtype`.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
 
     def get_llm_pos_ids_for_vision(
         self,
@@ -1728,7 +1269,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
         return attention_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(self, input_features, feature_lens=None, aftercnn_lens=None, **kwargs: Unpack[TransformersKwargs]):
         r"""
@@ -1966,7 +1508,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
@@ -2233,6 +1776,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2251,11 +1795,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         rope_deltas: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         use_audio_in_video: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
@@ -2314,12 +1854,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
         >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
             # 1. Extract the input embeddings
@@ -2387,10 +1921,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            return_dict=True,
             **kwargs,
         )
 
@@ -2402,10 +1933,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
             )
-
-        if not return_dict:
-            output = (logits,) + outputs
-            return (loss,) + output if loss is not None else output
 
         return Qwen2_5OmniThinkerCausalLMOutputWithPast(
             loss=loss,
@@ -2422,7 +1949,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -2441,7 +1967,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             pixel_values=pixel_values,
@@ -2549,6 +2074,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2560,16 +2086,12 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         inputs_embeds: torch.FloatTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         input_text_ids: torch.LongTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         use_audio_in_video: bool | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | Qwen2_5OmniTalkerCausalLMOutputWithPast:
         r"""
@@ -2612,12 +2134,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Generate the caption in English: Glass is breaking."
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None and position_ids is None:
             past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
@@ -2671,9 +2187,8 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             past_key_values=past_key_values,
             inputs_embeds=talker_lm_input,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -2682,26 +2197,15 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
         loss = None
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
         return Qwen2_5OmniTalkerCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=hidden_states,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
             thinker_reply_part=thinker_reply_part,
         )
-
-    def _get_initial_cache_position(self, seq_length, device, model_kwargs):
-        # Talker needs to calculate cache_position with input_ids, so pop inputs_embeds temporarily
-        inputs_embeds = model_kwargs.pop("inputs_embeds")
-        model_kwargs = super()._get_initial_cache_position(seq_length, device, model_kwargs)
-        model_kwargs["inputs_embeds"] = inputs_embeds
-        return model_kwargs
 
     # prepare inputs for talker lm generation
     def prepare_inputs_for_generation(
@@ -2712,7 +2216,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         attention_mask=None,
         inputs_embeds=None,
         thinker_reply_part=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -2728,10 +2231,9 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values,
-            attention_mask,
-            inputs_embeds,
-            cache_position,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             thinker_reply_part=thinker_reply_part,
             input_text_ids=input_text_ids,

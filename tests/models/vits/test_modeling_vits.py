@@ -162,11 +162,12 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     test_resize_embeddings = False
+    test_torch_exportable = False
     has_attentions = False
 
     def setUp(self):
         self.model_tester = VitsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

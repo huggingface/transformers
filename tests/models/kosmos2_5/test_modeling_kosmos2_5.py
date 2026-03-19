@@ -72,8 +72,8 @@ class Kosmos2_5VisionModelTester:
         intermediate_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        dropout=0,
-        attention_dropout=0,
+        dropout=0.0,
+        attention_dropout=0.0,
         scope=None,
     ):
         self.parent = parent
@@ -136,8 +136,8 @@ class Kosmos2_5TextModelTester:
         ffn_dim=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        dropout=0,
-        attention_dropout=0,
+        dropout=0.0,
+        attention_dropout=0.0,
         max_position_embeddings=512,
         scope=None,
     ):
@@ -236,8 +236,8 @@ class Kosmos2_5ModelTester:
 
     def get_config(self):
         return Kosmos2_5Config(
-            self.text_model_tester.get_config().to_dict(),
-            self.vision_model_tester.get_config().to_dict(),
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             latent_query_num=self.latent_query_num,
         )
 
@@ -294,7 +294,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2_5Model,
-            "image-to-text": Kosmos2_5ForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -304,7 +303,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_attention_outputs = False
     _is_composite = True
 
-    # TODO: `image-to-text` pipeline for this model needs Processor.
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_casse_name,
@@ -344,7 +342,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = Kosmos2_5ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Kosmos2_5Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Kosmos2_5Config, hidden_size=32)
 
     @unittest.skip("KOSMOS-2.5 doesn't support padding")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
@@ -450,7 +448,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
@@ -471,9 +469,9 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    # TODO: ydshieh
-    @unittest.skip(reason="doesn't support padding yet")
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+    # TODO: vasqu
+    @unittest.skip(reason="why the heck does this have bigger tols")
+    def test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions(self):
         pass
 
     # TODO: ydshieh

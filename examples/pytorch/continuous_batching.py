@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+from copy import deepcopy
 from itertools import cycle
 
 import datasets
@@ -24,7 +25,7 @@ import torch
 from torch.profiler import ProfilerActivity, profile
 from tqdm import tqdm
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, CompileConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig
 from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
 
@@ -34,7 +35,7 @@ def generate_without_cb(
 ) -> dict[str, str]:
     # Setup model and tokenizer
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, attn_implementation=attn_impl)
-    model = model.cuda().eval()
+    model = model.cuda().eval()  # type: ignore
     if sliding_window > 0 and getattr(model.config, "sliding_window", None) is not None:
         model.config.sliding_window = sliding_window
     tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -46,7 +47,7 @@ def generate_without_cb(
         attention_mask = torch.ones_like(input_ids)
         outputs = model.generate(input_ids, attention_mask=attention_mask, generation_config=generation_config)
         generated_tokens = outputs[0][input_ids.shape[1] :]
-        decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)
+        decoded_outputs[key] = tokenizer.decode(generated_tokens, skip_special_tokens=False)  # type: ignore
     return decoded_outputs
 
 
@@ -86,6 +87,7 @@ def batch_generate(
     model: AutoModelForCausalLM,
     simple_batch_inputs: list,
     generation_config: GenerationConfig,
+    cb_config: ContinuousBatchingConfig,
     tokenizer: AutoTokenizer,
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
     output_file: str | None = None,
@@ -98,6 +100,7 @@ def batch_generate(
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
+        continuous_batching_config=cb_config,
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -115,7 +118,7 @@ def batch_generate(
         # Try to decode the output
         try:
             output_text = tokenizer.decode(batch_outputs[request].generated_tokens, skip_special_tokens=False)
-            token_count += len(batch_outputs[request].generated_tokens[1:])
+            token_count += len(batch_outputs[request].generated_tokens)
             data[-1]["cb_outputs"] = output_text
         except Exception as e:
             print(f"Decoding failed for request {request}: {e}")
@@ -143,8 +146,12 @@ def batch_generate(
         print("--- Finished CB Generation Example ---\n")
         print(f"CB generation took: {gen_time:.2f} seconds for {token_count} tokens. {tok_per_sec:.2f}tok/s")
     stats = {
-        "num_blocks": generation_config.num_blocks,
-        "max_batch_tokens": generation_config.max_batch_tokens,
+        "num_blocks": cb_config.num_blocks,
+        "max_batch_tokens": cb_config.max_batch_tokens,
+        "max_blocks_per_request": cb_config.max_blocks_per_request,
+        "use_cuda_graph": cb_config.use_cuda_graph,
+        "use_async_batching": cb_config.use_async_batching,
+        "use_default_compile_configs": cb_config.use_default_compile_configs,
         "gen_time": gen_time,
         "token_count": token_count,
         "tok_per_sec": tok_per_sec,
@@ -164,6 +171,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Continuous batching parameters
+    parser.add_argument("--block-size", "-bs", type=int, default=256, help="Block size")
     parser.add_argument("--num-blocks", "-n", type=int, default=None)
     parser.add_argument("--max-batch-tokens", "-b", type=int, default=None)
 
@@ -175,6 +183,12 @@ if __name__ == "__main__":
     parser.add_argument("--matmul-precision", "-mp", type=str, default="high")  # set to "none" to disable
     parser.add_argument("--cuda-graph", "-cg", help="Use cuda graphs", type=str, default=None)
     parser.add_argument("--compile", action="store_true", help="Compile the model using torch.compile")
+    parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, help="Use asynchronous batching")
+    parser.add_argument(
+        "--block-table", "-bt", type=int, default=0, help="Block table size, ie. number of blocks / request"
+    )
+
+    # Generation parameters
     parser.add_argument("--do-sample", action="store_true", help="Activate sampling")
     parser.add_argument("--num-return-sequences", type=int, default=1, help="Number of return sequences")
 
@@ -290,24 +304,22 @@ if __name__ == "__main__":
     # Prepare generation config
     generation_cfg = GenerationConfig(
         max_new_tokens=args.max_new_tokens,
-        use_cuda_graph=use_cuda_graph,
         eos_token_id=tokenizer.pad_token_id if args.force_max_length else tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=do_sample,
         temperature=0.8,
         top_p=0.9,
-        num_blocks=args.num_blocks,
-        max_batch_tokens=args.max_batch_tokens,
         num_return_sequences=args.num_return_sequences,
     )
-
-    # Add a compile config if requested
-    if args.compile:
-        generation_cfg.compile_config = CompileConfig(
-            fullgraph=True,
-            mode="max-autotune-no-cudagraphs",
-            dynamic=True,  # FIXME: if we warmup all graphs, this is not needed anymore
-        )
+    cb_config = ContinuousBatchingConfig(
+        block_size=args.block_size,
+        num_blocks=args.num_blocks,
+        max_batch_tokens=args.max_batch_tokens,
+        max_blocks_per_request=args.block_table,
+        use_cuda_graph=use_cuda_graph,
+        use_async_batching=args.use_async,
+        use_default_compile_configs=args.compile,
+    )
 
     # If we need to compare, we need to generate the reference outputs
     if args.compare:
@@ -321,16 +333,17 @@ if __name__ == "__main__":
     if args.output_file is None:
         os.makedirs("runs/cb", exist_ok=True)
         attn = args.attn.replace("|", "_").replace("/", "_")
-        args.output_file = (
-            f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
-        )
+        args.output_file = f"runs/cb/{attn}_{args.samples}_{args.cuda_graph}.json"
 
     # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
     if logger.level > logging.DEBUG:
+        gen_cfg = deepcopy(generation_cfg)
+        gen_cfg.max_new_tokens = min(gen_cfg.max_new_tokens, args.block_size + 1)
         batch_generate(
             model,
-            batched_inputs[: min(5, args.samples)],
-            generation_cfg,
+            batched_inputs,
+            gen_cfg,
+            cb_config,
             tokenizer,
             displayed_samples=-1,
         )
@@ -345,6 +358,7 @@ if __name__ == "__main__":
             model,
             batched_inputs,
             generation_cfg,
+            cb_config,
             tokenizer,
             displayed_samples=args.displayed,
             output_file=args.output_file,

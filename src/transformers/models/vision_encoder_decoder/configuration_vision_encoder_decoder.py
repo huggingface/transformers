@@ -13,31 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
+@strict(accept_kwargs=True)
 class VisionEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    [`VisionEncoderDecoderConfig`] is the configuration class to store the configuration of a
-    [`VisionEncoderDecoderModel`]. It is used to instantiate a Vision-Encoder-Text-Decoder model according to the
-    specified arguments, defining the encoder and decoder configs.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the encoder config.
-                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
+    kwargs (*optional*):
+        Dictionary of keyword arguments. Notably:
+            - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
+              the encoder config.
+            - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
+              the decoder config.
 
     Examples:
 
@@ -72,8 +68,9 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    is_encoder_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
                 f"A configuration of type {self.model_type} cannot be instantiated because "
@@ -87,7 +84,7 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
-        self.is_encoder_decoder = True
+        super().__post_init__(**kwargs)
 
     @classmethod
     def from_encoder_decoder_configs(

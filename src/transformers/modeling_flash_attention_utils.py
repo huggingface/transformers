@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import inspect
 import os
 from collections.abc import Callable
@@ -23,11 +24,14 @@ import torch.nn.functional as F
 from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_flash_attn_greater_or_equal_2_10,
+    is_flash_attn_4_available,
+    is_torch_cuda_available,
+    is_torch_mlu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
+from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -35,10 +39,8 @@ logger = logging.get_logger(__name__)
 
 # TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
-    if is_flash_attn_3_available():
+    if is_flash_attn_2_available() or is_flash_attn_3_available() or is_flash_attn_4_available():
         return False
-    if is_flash_attn_2_available():
-        return not is_flash_attn_greater_or_equal_2_10()
 
     from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
 
@@ -48,17 +50,69 @@ def flash_attn_supports_top_left_mask():
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
     return (
-        is_flash_attn_3_available()
+        is_flash_attn_4_available()
+        or is_flash_attn_3_available()
         or is_flash_attn_2_available()
         or is_torch_npu_available()
         or is_torch_xpu_available()
     )
 
 
+# Mapping from flash attention implementations to their kernel fallback repositories
+FLASH_ATTN_KERNEL_FALLBACK = {
+    "flash_attention_2": "kernels-community/flash-attn2",
+    "flash_attention_3": "kernels-community/vllm-flash-attn3",
+}
+
+
+# Meta information on each mainline FA compatibility:
+#   1. The import structure and availability
+#   2. Device support (with custom ones that use other workarounds, e.g. kernels)
+#   3. Supported major cuda devices, e.g. Hopper, Blackwell. Mostly found in the newest FA versions
+FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
+    2: {
+        "flash_attn_version": 2,
+        "general_availability_check": is_flash_attn_2_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
+        and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "supported_devices": (
+            (is_torch_cuda_available, "cuda"),
+            (is_torch_mlu_available, "mlu"),
+            (is_torch_npu_available, "npu"),
+            (is_torch_xpu_available, "xpu"),
+        ),
+        "custom_supported_devices": (
+            (is_torch_npu_available, "Detect using FlashAttention2 on Ascend NPU."),
+            (
+                is_torch_xpu_available,
+                f"Detect using FlashAttention2 (via kernel `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}`) on XPU.",
+            ),
+        ),
+    },
+    3: {
+        "flash_attn_version": 3,
+        "general_availability_check": is_flash_attn_3_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
+        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
+        "supported_devices": ((is_torch_cuda_available, "cuda"),),
+        "cuda_min_major_version": 8,  # Ampere
+    },
+    4: {
+        "flash_attn_version": 4,
+        "general_availability_check": is_flash_attn_4_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn") is not None
+        and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]],
+        "supported_devices": ((is_torch_cuda_available, "cuda"),),
+        "cuda_min_major_version": 9,  # Hopper
+    },
+}
+
+
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
 _loaded_implementation = None
 _flash_fn = None
 _flash_varlen_fn = None
+_flash_with_kvcache_fn = None
 _pad_fn = None
 _unpad_fn = None
 
@@ -69,9 +123,13 @@ _hf_api_to_flash_mapping = {
     "dropout": "dropout_p",
     "sliding_window": "window_size",
 }
+# alternative names within the different flash attention APIs, e.g. for attention sinks
+_flash_api_alternative_names = {"s_aux": "learnable_sink"}
 
 
-def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None = None):
+def _lazy_imports(
+    implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
+):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -84,33 +142,46 @@ def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None
     """
     is_fa2 = is_flash_attn_2_available()
     is_fa3 = is_flash_attn_3_available()
+    is_fa4 = is_flash_attn_4_available()
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
     is_paged = implementation.startswith("paged|")
     implementation = implementation.split("|")[1] if is_paged else implementation
 
-    if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
-        from flash_attn import flash_attn_func, flash_attn_varlen_func
+    if (implementation == "flash_attention_2" and is_fa2) or (
+        implementation is None and is_fa2 and not is_fa3 and not is_fa4
+    ):
+        from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
         from flash_attn.bert_padding import pad_input, unpad_input
     elif is_torch_npu_available():
         # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
         # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+        from .integrations.npu_flash_attention import npu_flash_attn_with_kvcache as flash_attn_with_kvcache
     else:
-        if implementation == "flash_attention_3" or (implementation is None and is_fa3):
-            from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
+        if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
+            from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+        elif implementation == "flash_attention_4" or (implementation is None and is_fa4):
+            from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
+
+            flash_attn_with_kvcache = None  # not supported yet
         # Kernels fallback
         else:
             from .integrations.hub_kernels import load_and_register_attn_kernel
 
+            # Map standard attention names to hub kernel repos
+            kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
             # We want to explicitly register the name with `paged|` if found
-            kernel_implementation = f"paged|{implementation}" if is_paged else implementation
-            kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper)
+            kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
+            kernel = load_and_register_attn_kernel(
+                kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
+            )
 
             flash_attn_func = getattr(kernel, "flash_attn_func", None)
             flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
+            flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
             if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
@@ -119,11 +190,17 @@ def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None
             if flash_attn_func is None:
                 logger.warning(
                     f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-                    "it can only be used with continous batching and does not support the full functionality for "
+                    "it can only be used with continuous batching and does not support the full functionality for "
                     "the base transformers generation methods."
                 )
+            if flash_attn_with_kvcache is None:
+                logger.warning(
+                    f"The loaded flash attention implementation at `{implementation}` does not support block tables, so"
+                    " the full performances of continuous batching will not be achieved, only the varlen path will be "
+                    "used."
+                )
 
-    return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
+    return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
 
 
 def _lazy_define_process_function(flash_function):
@@ -144,10 +221,15 @@ def _lazy_define_process_function(flash_function):
         fa_param = _hf_api_to_flash_mapping.get(param, param)
         supports_mapping[fa_param] = fa_param in flash_parameters
 
+        if (fa_alternative_name := _flash_api_alternative_names.get(param, param)) != fa_param:
+            supports_mapping[fa_alternative_name] = fa_alternative_name in flash_parameters
+
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: str | None, attention_wrapper: Callable | None = None):
+def lazy_import_flash_attention(
+    implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
+):
     """
     Lazily import flash attention and return the respective functions + flags.
 
@@ -158,26 +240,28 @@ def lazy_import_flash_attention(implementation: str | None, attention_wrapper: C
     if implementation is None and _loaded_implementation is None:
         raise ValueError("Could not find any flash attn implementation based on your environment.")
 
-    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn, _process_flash_kwargs_fn
+    global _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn, _process_flash_kwargs_fn
     if implementation is not None and _loaded_implementation != implementation:
         _loaded_implementation = implementation
 
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation, attention_wrapper)
+        _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
+            implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
+        )
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
-    return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
+    return (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
 
 
-def lazy_import_paged_flash_attention(implementation: str | None):
+def lazy_import_paged_flash_attention(implementation: str | None, allow_all_kernels: bool = False):
     """
     Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
     """
     from .integrations.flash_paged import paged_attention_forward
 
-    (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(
-        implementation, attention_wrapper=paged_attention_forward
+    (_, flash_attn_varlen_func, flash_attn_with_kvcache_fn, _, _), _ = lazy_import_flash_attention(
+        implementation, attention_wrapper=paged_attention_forward, allow_all_kernels=allow_all_kernels
     )
-    return flash_attn_varlen_func
+    return flash_attn_varlen_func, flash_attn_with_kvcache_fn
 
 
 def _index_first_axis(tensor, indices):
@@ -212,7 +296,7 @@ def _unpad_input(hidden_states, attention_mask, unused_mask=None):
     seqlens_in_batch = all_masks.sum(dim=-1, dtype=torch.int32)
     used_seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(all_masks.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    max_seqlen_in_batch = seqlens_in_batch.max()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
     return (
@@ -261,9 +345,7 @@ def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.T
     """
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    # NOTE: Similar to the `.item()` in prepare_fa2_from_position_ids, with torch compile,
-    # this might cause a graph break
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    max_seqlen_in_batch = seqlens_in_batch.max()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     return (
         indices,
@@ -384,12 +466,6 @@ def prepare_fa_kwargs_from_position_ids(position_ids):
     # We should use cu_seq_lens instead of position_ids to get the max length since position_ids is not always increasing
     # for some models (e.g. qwen2-vl).
     max_length_q = cu_seq_lens_q.diff().max()
-    # NOTE: With torch compile, this will cause a graph break if you don't set
-    # `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1` in the environment or call
-    # `torch._dynamo.config.capture_scalar_outputs = True` before doing the forward pass.
-    # This is a limitation of flash attention API, as the function `flash_attn_varlen_func`
-    # requires `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
-    max_length_q = max_length_q.item()
     max_length_k = max_length_q
 
     return (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k)
@@ -499,6 +575,8 @@ def _process_flash_attention_kwargs(
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
+    max_seqlen_q: int | torch.IntTensor | None = None,
+    max_seqlen_k: int | torch.IntTensor | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -529,6 +607,10 @@ def _process_flash_attention_kwargs(
             Determines if the deterministic option introduced in flash_attn>=2.4.1 is enabled.
         s_aux (`torch.Tensor`, *optional*):
             Attention sink auxiliary that adds a `bias` to the attention calculation via an additional head.
+        max_seqlen_q (`Union[int, torch.IntTensor]`, *optional*):
+            The maximum sequence length in the query tensor during a varlen forward.
+        max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
+            The maximum sequence length in the key/value tensor during a varlen forward.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -556,9 +638,31 @@ def _process_flash_attention_kwargs(
     if supports_mapping["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
-    # Only within kernel implementation atm
-    if supports_mapping["s_aux"] and s_aux is not None:
-        flash_kwargs["s_aux"] = s_aux
+    if ((legacy_sink_param := supports_mapping["s_aux"]) or supports_mapping["learnable_sink"]) and s_aux is not None:
+        if legacy_sink_param:
+            flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
+        else:
+            flash_kwargs["learnable_sink"] = s_aux  # FA4
+
+    # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
+    # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
+    #
+    # You can either set
+    #   - Env: `TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1`
+    #   - Before compiling: `torch._dynamo.config.capture_scalar_outputs = True`
+    # to allow torch compile to handle scalar outputs in those cases.
+    same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
+    if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
+        if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
+            max_seqlen_q = max_seqlen_q.item()
+        flash_kwargs["max_seqlen_q"] = max_seqlen_q
+
+    if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
+        if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
+            max_seqlen_k = flash_kwargs["max_seqlen_q"]
+        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
+            max_seqlen_k = max_seqlen_k.item()
+        flash_kwargs["max_seqlen_k"] = max_seqlen_k
 
     return flash_kwargs
 
@@ -604,7 +708,7 @@ def _flash_attention_forward(
         attn_implementation (`str`, *optional*):
             The attention implementation to use. If None, will default to the one based on the environment.
     """
-    (flash_fn, flash_varlen_fn, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
+    (flash_fn, flash_varlen_fn, _, pad_fn, unpad_fn), process_flash_kwargs_fn = lazy_import_flash_attention(
         attn_implementation
     )
 
@@ -614,7 +718,8 @@ def _flash_attention_forward(
     )
 
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
-    flash_kwargs = process_flash_kwargs_fn(
+    flash_kwargs = partial(
+        process_flash_kwargs_fn,
         query_length=query_length,
         key_length=key_states.size(1),
         is_causal=is_causal,
@@ -656,9 +761,7 @@ def _flash_attention_forward(
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
-            **flash_kwargs,
+            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
         )
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
@@ -687,9 +790,7 @@ def _flash_attention_forward(
             v,
             cu_seqlens_q=cu_seq_lens_q,
             cu_seqlens_k=cu_seq_lens_k,
-            max_seqlen_q=max_length_q,
-            max_seqlen_k=max_length_k,
-            **flash_kwargs,
+            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
         )
         if isinstance(out, tuple):
             out = out[0]
@@ -698,7 +799,7 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs)
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
         if isinstance(out, tuple):
             out = out[0]
 

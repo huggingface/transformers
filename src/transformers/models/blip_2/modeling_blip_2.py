@@ -47,8 +47,8 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
@@ -500,7 +500,8 @@ class Blip2VisionModel(Blip2PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -876,6 +877,8 @@ class Blip2TextEmbeddings(nn.Module):
     """
 )
 class Blip2QFormerModel(Blip2PreTrainedModel):
+    config: Blip2QFormerConfig
+
     _supports_attention_backend = False  # adds position on attn weights before last matmul
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -953,7 +956,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -2032,7 +2036,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         44.7% that image 0 is 'a photo of a dog'
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

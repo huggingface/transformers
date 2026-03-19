@@ -177,5 +177,6 @@ tags
 .cursor/
 test-results/
 
-qwen3-asr-0.6b/
-qwen3-asr-hf/
+# AI agent local setup artifacts
+/.agents/skills
+/.claude/skills

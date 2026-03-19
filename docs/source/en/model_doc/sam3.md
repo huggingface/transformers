@@ -418,9 +418,9 @@ SAM3 uses the following label conventions:
 [[autodoc]] Sam3Processor
     - __call__
 
-## Sam3ImageProcessorFast
+## Sam3ImageProcessor
 
-[[autodoc]] Sam3ImageProcessorFast
+[[autodoc]] Sam3ImageProcessor
     - preprocess
 
 ## Sam3ViTModel
