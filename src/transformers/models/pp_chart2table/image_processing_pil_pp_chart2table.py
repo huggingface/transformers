@@ -20,7 +20,6 @@
 
 from ...image_processing_backends import PilBackend
 from ...utils import auto_docstring
-from .image_processing_pp_chart2table import PPChart2TableImageProcessorKwargs
 
 
 @auto_docstring
@@ -29,12 +28,9 @@ class PPChart2TableImageProcessorPil(PilBackend):
     image_mean = [0.48145466, 0.4578275, 0.40821073]
     image_std = [0.26862954, 0.26130258, 0.27577711]
     size = {"height": 1024, "width": 1024}
-    patch_size = 16
-    num_patches = 16
     do_resize = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = PPChart2TableImageProcessorKwargs
 
 
 __all__ = ["PPChart2TableImageProcessorPil"]

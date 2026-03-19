@@ -19,24 +19,7 @@
 # limitations under the License.
 
 from ...image_processing_backends import TorchvisionBackend
-from ...processing_utils import ImagesKwargs
 from ...utils import auto_docstring
-
-
-class PPChart2TableImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    patch_size (`int`, *optional*, defaults to `16`):
-        The size (in pixels) of each square patch that the image is divided into before being fed into the
-        vision encoder.
-
-    num_patches (`int`, *optional*, defaults to `16`):
-        Number of patches used to represent the image in the input sequence. This parameter is included in
-        the chat template's user message to inform the language model about the image structure. The model
-        uses this information to understand how the image tokens correspond to the visual input.
-    """
-
-    patch_size: int
-    num_patches: int
 
 
 @auto_docstring
@@ -45,12 +28,9 @@ class PPChart2TableImageProcessor(TorchvisionBackend):
     image_mean = [0.48145466, 0.4578275, 0.40821073]
     image_std = [0.26862954, 0.26130258, 0.27577711]
     size = {"height": 1024, "width": 1024}
-    patch_size = 16
-    num_patches = 16
     do_resize = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = PPChart2TableImageProcessorKwargs
 
 
 __all__ = ["PPChart2TableImageProcessor"]
