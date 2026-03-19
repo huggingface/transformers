@@ -27,7 +27,8 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
+        tokenizer = tokenizer_class.from_pretrained("/workspace/model_weight_torch/PP-Chart2Table")
+        # tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
         return tokenizer
 
     @unittest.skip("PPChart2TableProcessor pop the image processor output 'num_patches'")
@@ -37,7 +38,7 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_ocr_queries(self):
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()
-        conversation = [{"role": "system", "content": []}, {"role": "user", "content": []}]
+        conversation = [{"role": "user", "content": []}]
         inputs = processor.apply_chat_template(
             conversation,
             tokenize=False,

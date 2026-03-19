@@ -25,13 +25,10 @@ from transformers.testing_utils import cleanup, require_torch, require_vision, s
 class PPChart2TableIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-Chart2Table_safetensors"
+        # model_path = "/workspace/model_weight_torch/PP-Chart2Table"
         self.model = AutoModelForImageTextToText.from_pretrained(model_path).to(torch_device)
         self.processor = AutoProcessor.from_pretrained(model_path)
         self.conversation = [
-            {
-                "role": "system",
-                "content": [],
-            },
             {
                 "role": "user",
                 "content": [

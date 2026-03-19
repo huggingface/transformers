@@ -46,10 +46,6 @@ pipe = pipeline("image-text-to-text", model="PaddlePaddle/PP-Chart2Table_safeten
 # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
 conversation = [
     {
-        "role": "system",
-        "content": [],
-    },
-    {
         "role": "user",
         "content": [
             {
@@ -82,10 +78,6 @@ processor = AutoProcessor.from_pretrained(model_path)
 
 # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
 conversation = [
-    {
-        "role": "system",
-        "content": [],
-    },
     {
         "role": "user",
         "content": [
@@ -131,10 +123,6 @@ pipe = pipeline("image-text-to-text", model="PaddlePaddle/PP-Chart2Table_safeten
 # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
 conversation = [
     {
-        "role": "system",
-        "content": [],
-    },
-    {
         "role": "user",
         "content": [
             {
@@ -167,10 +155,6 @@ processor = AutoProcessor.from_pretrained(model_path)
 
 # PPChart2TableProcessor uses hardcoded "Chart to table" instruction internally via chat template
 conversation = [
-    {
-        "role": "system",
-        "content": [],
-    },
     {
         "role": "user",
         "content": [

@@ -80,7 +80,6 @@ class PPChart2TableImageProcessorFast(BaseImageProcessorFast):
 
 @auto_docstring
 class PPChart2TableProcessor(ProcessorMixin):
-    model_input_names = ["input_ids", "pixel_values"]
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -91,26 +90,10 @@ class PPChart2TableProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            ProcessingKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
 
-        if images is None:
-            raise ValueError("At least one of `images` must be provided")
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-
-        # Prepare input ids for batch
-        if text is None:
-            raise ValueError("At least one of `text` must be provided")
-
-        if not isinstance(text, list):
-            text = [text]
-
-        input_ids = self.tokenizer(text, **output_kwargs["text_kwargs"]).input_ids
-
-        return BatchFeature(data={"input_ids": input_ids, **image_inputs})
+        if text is None or images is None:
+            raise ValueError("Both `images` and `text` must be provided")
+        return super().__call__(images=images, text=text, **kwargs)
 
 
 __all__ = [
