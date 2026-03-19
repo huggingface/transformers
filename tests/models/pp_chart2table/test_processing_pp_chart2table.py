@@ -27,12 +27,10 @@ class PPChart2TableProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        # TODO: new processor on hub
         tokenizer = tokenizer_class.from_pretrained("PaddlePaddle/PP-Chart2Table_safetensors")
         return tokenizer
 
     def test_ocr_queries(self):
-        # TODO: fixme
         processor = self.get_processor()
         image_input = self.prepare_image_inputs()
         conversation = [{"role": "user", "content": []}]
