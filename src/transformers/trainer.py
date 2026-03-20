@@ -1556,7 +1556,11 @@ class Trainer:
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
         # DeepSpeed: clear stale inference engine refs left by evaluate()/predict()
         # so that _wrap_model() and accelerator.prepare() can create a training engine.
-        if self.is_deepspeed_enabled and self.model_wrapped is not self.model:
+        if (
+            self.is_deepspeed_enabled
+            and self.accelerator.deepspeed_engine_wrapped is None
+            and self.model_wrapped is not self.model
+        ):
             self.model_wrapped = self.model
             self.deepspeed = None
 
