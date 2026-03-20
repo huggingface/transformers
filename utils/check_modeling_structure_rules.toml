@@ -178,7 +178,7 @@ class FooConfig(PreTrainedConfig):
 
 [rules.TRF011]
 description = "forward() must not access non-nn.Module attributes on submodules (breaks pipeline parallelism with Identity replacement)."
-default_enabled = false
+default_enabled = true
 allowlist_models = []
 
 [rules.TRF011.explanation]
