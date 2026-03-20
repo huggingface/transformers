@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
@@ -143,10 +143,11 @@ class UVDocConfig(PreTrainedConfig):
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
 
     def __post_init__(self, **kwargs):
-        if self.backbone_config is None:
-            self.backbone_config = UVDocBackboneConfig()
-        elif isinstance(self.backbone_config, dict):
-            self.backbone_config = UVDocBackboneConfig(**self.backbone_config)
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config( 
+            backbone_config=self.backbone_config, 
+            default_config_type="uvdoc_backbone", 
+            **kwargs, 
+        )
         super().__post_init__(**kwargs)
 
 
@@ -363,7 +364,7 @@ class UVDocResNetStage(nn.Module):
         stages = config.resnet_configs[stage_index]
         self.layers = nn.ModuleList([])
         for in_channels, out_channels, dilation, downsample in stages:
-            layer = UVDocResidualBlock(
+            layers.append(UVDocResidualBlock(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 stride=2 if downsample else 1,
@@ -371,8 +372,7 @@ class UVDocResNetStage(nn.Module):
                 dilation=dilation,
                 downsample=downsample,
                 kernel_size=config.kernel_size,
-            )
-            self.layers.append(layer)
+            ))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:

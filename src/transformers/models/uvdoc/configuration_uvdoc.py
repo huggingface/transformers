@@ -23,7 +23,7 @@ from collections.abc import Sequence
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import BackboneConfigMixin
+from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
@@ -132,10 +132,11 @@ class UVDocConfig(PreTrainedConfig):
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
 
     def __post_init__(self, **kwargs):
-        if self.backbone_config is None:
-            self.backbone_config = UVDocBackboneConfig()
-        elif isinstance(self.backbone_config, dict):
-            self.backbone_config = UVDocBackboneConfig(**self.backbone_config)
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
+            default_config_type="uvdoc_backbone",
+            **kwargs,
+        )
         super().__post_init__(**kwargs)
 
 

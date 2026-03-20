@@ -143,16 +143,17 @@ class UVDocResNetStage(nn.Module):
         stages = config.resnet_configs[stage_index]
         self.layers = nn.ModuleList([])
         for in_channels, out_channels, dilation, downsample in stages:
-            layer = UVDocResidualBlock(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                stride=2 if downsample else 1,
-                padding=dilation * 2,
-                dilation=dilation,
-                downsample=downsample,
-                kernel_size=config.kernel_size,
+            layers.append(
+                UVDocResidualBlock(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    stride=2 if downsample else 1,
+                    padding=dilation * 2,
+                    dilation=dilation,
+                    downsample=downsample,
+                    kernel_size=config.kernel_size,
+                )
             )
-            self.layers.append(layer)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
