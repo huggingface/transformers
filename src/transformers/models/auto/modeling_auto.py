@@ -790,7 +790,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("resnet", "ResNetModel"),
         ("segformer", "SegformerModel"),
         ("siglip_vision_model", "SiglipVisionModel"),
-        ("slanext", "SLANeXtForTableRecognition"),
+        ("slanext", "SLANeXtBackbone"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
