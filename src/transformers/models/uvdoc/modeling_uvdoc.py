@@ -143,7 +143,7 @@ class UVDocResNetStage(nn.Module):
         stages = config.resnet_configs[stage_index]
         self.layers = nn.ModuleList([])
         for in_channels, out_channels, dilation, downsample in stages:
-            layers.append(
+            self.layers.append(
                 UVDocResidualBlock(
                     in_channels=in_channels,
                     out_channels=out_channels,

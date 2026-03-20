@@ -45,6 +45,8 @@ class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         Each inner sequence corresponds to a single bridge block, and the outer sequence groups blocks by bridge stage.
     """
 
+    model_type = "uvdoc_backbone"
+
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
 

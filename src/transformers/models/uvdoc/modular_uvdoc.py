@@ -21,7 +21,12 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states, consolidate_backbone_kwargs_to_config
+from ...backbone_utils import (
+    BackboneConfigMixin,
+    BackboneMixin,
+    consolidate_backbone_kwargs_to_config,
+    filter_output_hidden_states,
+)
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
@@ -55,6 +60,7 @@ class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         Configuration for the bridge module stages in format [in_channels, dilation_value].
         Each inner sequence corresponds to a single bridge block, and the outer sequence groups blocks by bridge stage.
     """
+    model_type = "uvdoc_backbone"
 
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
@@ -143,10 +149,10 @@ class UVDocConfig(PreTrainedConfig):
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config( 
-            backbone_config=self.backbone_config, 
-            default_config_type="uvdoc_backbone", 
-            **kwargs, 
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
+            default_config_type="uvdoc_backbone",
+            **kwargs,
         )
         super().__post_init__(**kwargs)
 
@@ -364,7 +370,7 @@ class UVDocResNetStage(nn.Module):
         stages = config.resnet_configs[stage_index]
         self.layers = nn.ModuleList([])
         for in_channels, out_channels, dilation, downsample in stages:
-            layers.append(UVDocResidualBlock(
+            self.layers.append(UVDocResidualBlock(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 stride=2 if downsample else 1,
