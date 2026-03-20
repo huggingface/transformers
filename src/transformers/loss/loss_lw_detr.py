@@ -128,13 +128,14 @@ class LwDetrImageLoss(nn.Module):
         prob = source_logits.sigmoid()
         # init positive weights and negative weights
         pos_weights = torch.zeros_like(source_logits)
-        neg_weights = prob**gamma
+        neg_weights = prob.pow(gamma).to(source_logits.dtype)
 
         pos_ind = list(idx)
         pos_ind.append(target_classes_o)
+        pos_ind = tuple(pos_ind)
 
         t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
-        t = torch.clamp(t, 0.01).detach()
+        t = torch.clamp(t, 0.01).detach().to(source_logits.dtype)
 
         pos_weights[pos_ind] = t
         neg_weights[pos_ind] = 1 - t
