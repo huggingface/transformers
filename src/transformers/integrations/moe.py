@@ -354,9 +354,6 @@ def grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Get current hidden states for selected samples
-    selected_hidden_states = hidden_states[token_idx]
-
     # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
@@ -364,7 +361,7 @@ def grouped_mm_experts_forward(
 
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
-    selected_hidden_states_g = selected_hidden_states[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues

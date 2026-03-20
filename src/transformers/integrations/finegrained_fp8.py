@@ -263,8 +263,6 @@ def fp8_grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    selected_hidden_states = hidden_states[token_idx]
-
     # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
@@ -272,7 +270,7 @@ def fp8_grouped_mm_experts_forward(
 
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
-    selected_hidden_states_g = selected_hidden_states[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Compute offsets for grouped processing.
     # histc instead of bincount avoids cuda-graph issues;
@@ -280,6 +278,8 @@ def fp8_grouped_mm_experts_forward(
     histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+
+    allow_sync = not is_tracing()
 
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = kernel.w8a8_fp8_matmul_grouped(
@@ -289,6 +289,7 @@ def fp8_grouped_mm_experts_forward(
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
+        allow_sync=allow_sync,
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating or activation
@@ -307,6 +308,7 @@ def fp8_grouped_mm_experts_forward(
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
+        allow_sync=allow_sync,
     )  # (S, hidden_dim)
 
     # Apply routing weights
@@ -388,8 +390,6 @@ def fp8_deepgemm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    selected_hidden_states = hidden_states[token_idx]
-
     # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
@@ -397,7 +397,7 @@ def fp8_deepgemm_experts_forward(
 
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
-    selected_hidden_states_g = selected_hidden_states[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Build TMA-aligned contiguous layout for DeepGEMM
     row_map, grouped_layout, total_m = _build_contiguous_layout(expert_ids_g, self.num_experts, _deepgemm_m_alignment)
