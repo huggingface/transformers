@@ -119,6 +119,12 @@ class GraniteSpeechConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "granite")
+            # Convert int to float for fields that expect float type (strict dataclass validation)
+            # Fixes #44877: embedding_multiplier and similar multiplier fields
+            float_fields = ["embedding_multiplier", "logits_scaling", "residual_multiplier", "attention_multiplier"]
+            for field in float_fields:
+                if field in self.text_config and isinstance(self.text_config[field], int):
+                    self.text_config[field] = float(self.text_config[field])
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["granite"]()
