@@ -1673,6 +1673,8 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
+        processor_kwargs = processor_kwargs or {}
+
         if chat_template is None:
             if isinstance(self.chat_template, dict) and "default" in self.chat_template:
                 chat_template = self.chat_template["default"]
@@ -1699,7 +1701,12 @@ class ProcessorMixin(PushToHubMixin):
         # Users might still be passing processing kwargs in `**kwargs` so we need to filter
         # out additional kwargs that the template expects via Jinja2 template introspection
         template_kwargs = _get_template_variables(chat_template)
-        processor_kwargs = processor_kwargs or {k: v for k, v in kwargs.items() if k not in template_kwargs}
+        processor_kwargs_from_kwargs = {k: v for k, v in kwargs.items() if k not in template_kwargs}
+        if processor_kwargs_from_kwargs:
+            logger.warning(
+                "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
+            )
+            processor_kwargs = processor_kwargs_from_kwargs
 
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
