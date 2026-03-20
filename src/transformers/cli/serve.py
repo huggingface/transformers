@@ -487,7 +487,7 @@ def set_tqdm_class(callback, mid):
     return ProgressTqdm
 
 
-class _ToolCallParser:
+class ToolState:
     """Stateful parser that detects and structures tool calls from streamed tokens.
 
     Call `feed(token)` for each streamed token; it returns a list of `ChoiceDeltaToolCall` objects to emit
@@ -1692,7 +1692,7 @@ class Serve:
 
         try:
             thread.start()
-            tool_parser = _ToolCallParser(tool_model_family) if tool_model_family is not None else None
+            tool_parser = ToolState(tool_model_family) if tool_model_family is not None else None
 
             # Emit the assistant role to start the stream
             yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
