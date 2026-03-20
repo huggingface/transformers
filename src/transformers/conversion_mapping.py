@@ -410,7 +410,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "hyperclovax_text": [
+        "hyperclovax": [
             WeightRenaming(source_patterns=r"model.language_model.model", target_patterns="model"),
             WeightRenaming(source_patterns=r"model.language_model.lm_head", target_patterns="lm_head"),
         ],

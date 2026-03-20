@@ -500,8 +500,8 @@ class HyperClovaXForCausalLM(HyperClovaXPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, HyperClovaXForCausalLM
 
-        >>> model = HyperClovaXForCausalLM.from_pretrained("meta-hyperclovax_text/HyperClovaX-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-hyperclovax_text/HyperClovaX-2-7b-hf")
+        >>> model = HyperClovaXForCausalLM.from_pretrained("meta-hyperclovax/HyperClovaX-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-hyperclovax/HyperClovaX-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -572,7 +572,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -596,7 +596,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -687,7 +687,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, None).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes=None).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -695,7 +695,9 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, None).pooler_output
+            video_embeds = self.get_video_features(
+                pixel_values_videos, video_grid_thw, video_merge_sizes=None
+            ).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds

@@ -58,7 +58,7 @@ class HyperClovaXConfig(GraniteConfig):
     ```
     """
 
-    model_type = "hyperclovax_text"
+    model_type = "hyperclovax"
 
     rope_theta: float | int = 10000.0
     rope_scaling: dict | None = None
@@ -116,7 +116,7 @@ class HCXVisionConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "hyperclovax"
+    model_type = "hyperclovax_vlm"
     sub_configs = {"text_config": HyperClovaXConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -135,8 +135,7 @@ class HCXVisionConfig(PreTrainedConfig):
             self.vision_config = CONFIG_MAPPING["qwen2_5_vl_image"]()
 
         if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "hyperclovax_text")
-            model_type = "hyperclovax_text" if model_type == "hyperclovax" else model_type
+            model_type = self.text_config.get("model_type", "hyperclovax")
             self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
             self.text_config = HyperClovaXConfig()
@@ -150,8 +149,8 @@ class HCXVisionConfig(PreTrainedConfig):
         self.text_hidden_size = self.text_config.hidden_size
 
         # Accept old hub configs that used model_type="vlm"
-        if kwargs.get("model_type") == "vlm":
-            kwargs["model_type"] = "hyperclovax"
+        # if kwargs.get("model_type") == "vlm":
+        #     kwargs["model_type"] = "hyperclovax"
 
         super().__post_init__(**kwargs)
 
