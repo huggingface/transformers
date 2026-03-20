@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention, ModelOutput
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -540,8 +540,10 @@ class SLANeXtBackbone(nn.Module):
         vision_output = self.vision_tower(hidden_states, **kwargs)
         hidden_states = self.post_conv(vision_output.last_hidden_state)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states, hidden_states=vision_output.hidden_states
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=vision_output.hidden_states,
+            attentions=vision_output.attentions,
         )
 
 
@@ -593,7 +595,7 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
 
 @dataclass
 @auto_docstring
-class SLANeXtForTableRecognitionOutput(BaseModelOutputWithNoAttention):
+class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Hidden-states of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
@@ -622,12 +624,13 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
         backbone_outputs = self.backbone(pixel_values)
         head_outputs = self.head(backbone_outputs.last_hidden_state)
         return SLANeXtForTableRecognitionOutput(
             last_hidden_state=head_outputs.last_hidden_state,
             hidden_states=backbone_outputs.hidden_states,
+            attentions=backbone_outputs.attentions,
             head_hidden_states=head_outputs.hidden_states,
             head_attentions=head_outputs.attentions,
         )

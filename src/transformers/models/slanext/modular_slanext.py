@@ -31,7 +31,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -213,7 +213,11 @@ class SLANeXtBackbone(nn.Module):
         vision_output = self.vision_tower(hidden_states, **kwargs)
         hidden_states = self.post_conv(vision_output.last_hidden_state)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=vision_output.hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=vision_output.hidden_states,
+            attentions=vision_output.attentions,
+        )
 
 
 class SLANeXtSLAHead(SLANeXtPreTrainedModel):
@@ -255,14 +259,16 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
             structure_ids_list.append(predicted_chars)
             if torch.stack(structure_ids_list, dim=1).eq(self.config.out_channels - 1).any(-1).all():
                 break
-        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1, dtype=torch.float32).to(hidden_states.dtype)
+        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1, dtype=torch.float32).to(
+            hidden_states.dtype
+        )
 
         return BaseModelOutput(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
 @dataclass
 @auto_docstring
-class SLANeXtForTableRecognitionOutput(BaseModelOutputWithNoAttention):
+class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Hidden-states of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
@@ -291,12 +297,13 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
         backbone_outputs = self.backbone(pixel_values)
         head_outputs = self.head(backbone_outputs.last_hidden_state)
         return SLANeXtForTableRecognitionOutput(
             last_hidden_state=head_outputs.last_hidden_state,
             hidden_states=backbone_outputs.hidden_states,
+            attentions=backbone_outputs.attentions,
             head_hidden_states=head_outputs.hidden_states,
             head_attentions=head_outputs.attentions,
         )
@@ -479,7 +486,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         `<table>` tags to form a complete HTML table structure.
 
         Args:
-            outputs ([`BaseModelOutputWithNoAttention`]):
+            outputs ([`SLANeXtForTableRecognitionOutput`]):
                 Raw outputs from the SLANeXt model. The `last_hidden_state` field contains the predicted probability
                 distributions over the structure vocabulary at each decoding step, with shape
                 `(batch_size, max_text_length, num_classes)`.

@@ -211,7 +211,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         `<table>` tags to form a complete HTML table structure.
 
         Args:
-            outputs ([`BaseModelOutputWithNoAttention`]):
+            outputs ([`SLANeXtForTableRecognitionOutput`]):
                 Raw outputs from the SLANeXt model. The `last_hidden_state` field contains the predicted probability
                 distributions over the structure vocabulary at each decoding step, with shape
                 `(batch_size, max_text_length, num_classes)`.

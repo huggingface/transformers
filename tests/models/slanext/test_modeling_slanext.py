@@ -94,8 +94,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (SLANeXtForTableRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
-    # Special attentions (in the head module) of a combined attention x rnn cell that can vary based on predictions (early exits)
-    has_attentions = False
+    has_attentions = True  # vision attentions
     test_resize_embeddings = False
     test_torch_exportable = False
 
@@ -135,9 +134,10 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SLANeXt does not support attention")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
+    # TODO: check
+    #@unittest.skip(reason="SLANeXt does not support attention")
+    #def test_retain_grad_hidden_states_attentions(self):
+    #    pass
 
     @unittest.skip(reason="SLANeXt does not support train")
     def test_problem_types(self):
