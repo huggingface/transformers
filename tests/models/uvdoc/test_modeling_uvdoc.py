@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import (
     UVDocConfig,
+    UVDocBackbone,
     UVDocImageProcessor,
     UVDocModel,
     is_torch_available,
@@ -35,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
@@ -49,6 +51,7 @@ if is_vision_available():
 class UVDocModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=128,
         num_channels=3,
@@ -73,6 +76,7 @@ class UVDocModelTester:
         out_features=["stage1", "stage2", "stage3"],
         out_indices=[1, 2, 3],
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -131,6 +135,7 @@ class UVDocModelTester:
         )
 
         return UVDocConfig(
+            num_hidden_layers=self.num_hidden_layers,
             kernel_size=self.kernel_size,
             padding_mode=self.padding_mode,
             hidden_act=self.hidden_act,
@@ -157,6 +162,22 @@ class UVDocModelTester:
 
 
 @require_torch
+class UVDocBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    all_model_classes = (UVDocBackbone,) if is_torch_available() else ()
+    has_attentions = False
+    config_class = UVDocConfig
+
+    def setUp(self):
+        self.model_tester = UVDocModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=UVDocConfig,
+            has_text_modality=False,
+            common_properties=[],
+        )
+
+
+@require_torch
 class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UVDocModel,) if is_torch_available() else ()
 
@@ -164,12 +185,7 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = UVDocModelTester(
-            batch_size=3,
-            is_training=False,
-            image_size=128,
-        )
-        self.model_tester.parent = self
+        self.model_tester = UVDocModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=UVDocConfig,

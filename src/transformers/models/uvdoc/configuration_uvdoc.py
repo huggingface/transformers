@@ -112,6 +112,7 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     padding_mode: str = "reflect"
 
     def __post_init__(self, **kwargs):
+        self.depths = [len(stages) for stages in self.stage_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.stage_configs) + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

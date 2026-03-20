@@ -101,14 +101,10 @@ print(result)
 
 [[autodoc]] UVDocImageProcessor
 
-## UVDocPreTrainedModel
-
-[[autodoc]] UVDocPreTrainedModel
-
 ## UVDocBackbone
 
 [[autodoc]] UVDocBackbone
 
-## UVDocBridge
+## UVDocPreTrainedModel
 
-[[autodoc]] UVDocBridge
+[[autodoc]] UVDocPreTrainedModel

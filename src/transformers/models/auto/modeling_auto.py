@@ -1703,6 +1703,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("timm_backbone", "TimmBackbone"),
         ("vitdet", "VitDetBackbone"),
         ("vitpose_backbone", "VitPoseBackbone"),
+        ("uvdoc", "UVDocBackbone"),
     ]
 )
 
