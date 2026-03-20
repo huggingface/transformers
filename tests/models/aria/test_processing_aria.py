@@ -236,8 +236,10 @@ And who is that?<|im_end|>
             messages,
             add_generation_prompt=True,
             tokenize=True,
-            padding="max_length",
-            max_length=50,
+            processor_kwargs={
+                "padding": "max_length",
+                "max_length": 50,
+            }
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 50)
 
@@ -246,7 +248,7 @@ And who is that?<|im_end|>
             add_generation_prompt=True,
             tokenize=True,
             truncation=True,
-            max_length=5,
+            processor_kwargs={"max_length": 5},
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
 
@@ -264,8 +266,8 @@ And who is that?<|im_end|>
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            max_image_size=980,
             return_tensors="pt",
+            processor_kwargs={"max_image_size": 980},
         )
         self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
 
