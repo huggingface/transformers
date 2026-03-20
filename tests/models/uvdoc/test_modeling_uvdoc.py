@@ -119,6 +119,7 @@ class UVDocModelTester:
             ((32, 2),),
         )
         backbone_config = {
+            "model_type": "uvdoc_backbone",
             "kernel_size": self.kernel_size,
             "resnet_configs": resnet_configs,
             "stage_configs": stage_configs,

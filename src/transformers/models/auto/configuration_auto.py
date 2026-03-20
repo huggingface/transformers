@@ -1139,6 +1139,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("wav2vec2-bert", "wav2vec2_bert"),
         ("vibevoice_acoustic_tokenizer_encoder", "vibevoice_acoustic_tokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "vibevoice_acoustic_tokenizer"),
+        ("uvdoc_backbone", "uvdoc"),
     ]
 )
 
