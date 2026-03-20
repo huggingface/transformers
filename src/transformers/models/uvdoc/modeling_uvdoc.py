@@ -70,8 +70,8 @@ class UVDocConvLayer(nn.Module):
         return hidden_state
 
 
-class UVDocResidualBlockWithDilation(nn.Module):
-    """Residual block with optional downsampling and dilation support."""
+class UVDocResidualBlock(nn.Module):
+    """Base residual block with dilation support."""
 
     def __init__(
         self,
@@ -79,23 +79,10 @@ class UVDocResidualBlockWithDilation(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
-        downsample: bool | None = None,
-        block_index: bool = False,
+        block_index: int = 0,
         activation: str = "relu",
     ):
         super().__init__()
-
-        self.conv_down = None
-        if downsample:
-            self.conv_down = UVDocConvLayer(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=kernel_size // 2,
-                bias=True,
-                activation=None,
-            )
 
         if stride != 1 or block_index == 0:
             stride, padding, dilation = stride, kernel_size // 2, 1
@@ -126,34 +113,81 @@ class UVDocResidualBlockWithDilation(nn.Module):
         self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        if self.conv_down is not None:
-            residual = self.conv_down(hidden_states)
+        residual = self.get_residual(hidden_states)
         hidden_states = self.conv_start(hidden_states)
         hidden_states = self.conv_final(hidden_states)
         hidden_states = hidden_states + residual
-
         hidden_states = self.act_fn(hidden_states)
         return hidden_states
+
+    def get_residual(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Return the residual connection. Override in subclasses for downsampling."""
+        return hidden_states
+
+
+class UVDocResidualBlockWithDownsample(UVDocResidualBlock):
+    """Residual block with downsampling."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        block_index: int = 0,
+        activation: str = "relu",
+    ):
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            block_index=block_index,
+            activation=activation,
+        )
+
+        self.conv_down = UVDocConvLayer(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=kernel_size // 2,
+            bias=True,
+            activation=None,
+        )
+
+    def get_residual(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Apply downsampling convolution to the residual connection."""
+        return self.conv_down(hidden_states)
 
 
 class UVDocResNetStage(nn.Module):
     """A ResNet stage containing multiple residual blocks."""
 
-    def __init__(self, config, in_channels, out_channels, stride, kernel_size, stage_index):
+    def __init__(
+        self,
+        config,
+        in_channels,
+        out_channels,
+        stride,
+        kernel_size,
+        stage_index,
+    ):
         super().__init__()
-        downsample = None
-        if stride != 1 or in_channels != out_channels:
-            downsample = True
-
         self.layers = nn.ModuleList([])
+
         for index in range(config.stage_layer_num[stage_index]):
-            layer = UVDocResidualBlockWithDilation(
+            # Determine if we need downsampling for the first block
+            needs_downsample = index == 0 and (stride != 1 or in_channels != out_channels)
+
+            # Choose the appropriate block class
+            block_class = UVDocResidualBlockWithDownsample if needs_downsample else UVDocResidualBlock
+
+            layer = block_class(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=kernel_size,
                 stride=stride if index == 0 else 1,
-                downsample=downsample if index == 0 else None,
                 block_index=index,
             )
             self.layers.append(layer)
