@@ -33,7 +33,7 @@ from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import TensorType, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -42,6 +42,9 @@ from ..got_ocr2.modeling_got_ocr2 import (
     GotOcr2VisionAttention,
     GotOcr2VisionEncoder,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
@@ -184,7 +187,9 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
         if isinstance(module, SLANeXtSLAHead):
             std = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
-            for generator in (module.structure_generator, module.loc_generator):
+            # TODO: check with loc_generator
+            #for generator in (module.structure_generator, module.loc_generator):
+            for generator in (module.structure_generator,):
                 for layer in generator.children():
                     if isinstance(layer, nn.Linear):
                         init.uniform_(layer.weight, -std, std)
@@ -227,7 +232,9 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
     ):
         super().__init__(config)
 
-        self.structure_attention_cell = SLANeXtAttentionGRUCell(config.post_conv_out_channels, config.hidden_size)
+        self.structure_attention_cell = SLANeXtAttentionGRUCell(
+            config.post_conv_out_channels, config.hidden_size, config.out_channels
+        )
         self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
         # TODO: loc_generator is not used
         # self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
@@ -243,15 +250,15 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        hidden_states = torch.zeros((hidden_states.shape[0], self.config.hidden_size), device=hidden_states.device)
+        features = torch.zeros((hidden_states.shape[0], self.config.hidden_size), device=hidden_states.device)
         predicted_chars = torch.zeros(size=[hidden_states.shape[0]], dtype=torch.long, device=hidden_states.device)
 
         structure_preds_list = []
         structure_ids_list = []
         for _ in range(self.config.max_text_length + 1):
             embedding_feature = F.one_hot(predicted_chars, self.config.out_channels).float()
-            hidden_states, _ = self.structure_attention_cell(hidden_states, hidden_states, embedding_feature, **kwargs)
-            structure_step = self.structure_generator(hidden_states)
+            features, _ = self.structure_attention_cell(features, hidden_states, embedding_feature)
+            structure_step = self.structure_generator(features)
             predicted_chars = structure_step.argmax(dim=1)
 
             structure_preds_list.append(structure_step)
@@ -297,8 +304,8 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
-        backbone_outputs = self.backbone(pixel_values)
-        head_outputs = self.head(backbone_outputs.last_hidden_state)
+        backbone_outputs = self.backbone(pixel_values, **kwargs)
+        head_outputs = self.head(backbone_outputs.last_hidden_state, **kwargs)
         return SLANeXtForTableRecognitionOutput(
             last_hidden_state=head_outputs.last_hidden_state,
             hidden_states=backbone_outputs.hidden_states,
@@ -407,8 +414,8 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        if resample is not None:
-            raise ValueError("Resampling is not supported in SLANeXt!")
+        if resample is not None and not is_torchdynamo_compiling():
+            raise logger.warning_once("Resampling is not supported in SLANeXt")
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

@@ -15,6 +15,7 @@
 """Testing suite for the SLANeXt model."""
 
 import inspect
+import tempfile
 import unittest
 
 import requests
@@ -94,7 +95,6 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (SLANeXtForTableRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
-    has_attentions = True  # vision attentions
     test_resize_embeddings = False
     test_torch_exportable = False
 
@@ -115,6 +115,10 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SLANeXt does not use inputs_embeds")
+    def test_enable_input_require_grads(self):
+        pass
+
+    @unittest.skip(reason="SLANeXt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -122,25 +126,8 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="SLANeXt does not use tensor output")
-    def test_determinism(self):
-        pass
-
     @unittest.skip(reason="SLANeXt does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
-
-    # TODO: check
-    # @unittest.skip(reason="SLANeXt does not support attention")
-    # def test_retain_grad_hidden_states_attentions(self):
-    #    pass
-
-    @unittest.skip(reason="SLANeXt does not support train")
-    def test_problem_types(self):
         pass
 
     def test_forward_signature(self):
@@ -153,12 +140,14 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @parameterized.expand(["float32"])
+    @parameterized.expand(["float32", "float16", "bfloa16"])
     @require_torch_accelerator
     @slow
     def test_inference_with_different_dtypes(self, dtype_str):
         dtype = {
             "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloa16": torch.bfloat16,
         }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -166,12 +155,18 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device).to(dtype)
-            model.eval()
-            for key, tensor in inputs_dict.items():
-                if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(dtype)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Save and reload to make use of keep in fp32 modules
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model.from_pretrained(tmpdirname).to(torch_device)
+                model.eval()
+
+                for key, tensor in inputs_dict.items():
+                    if tensor.dtype == torch.float32:
+                        inputs_dict[key] = tensor.to(dtype)
+                with torch.no_grad():
+                    _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 @require_torch

@@ -27,9 +27,12 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import auto_docstring
+from ...utils import auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import TensorType
 from ...utils.import_utils import requires
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -131,8 +134,8 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        if resample is not None:
-            raise ValueError("Resampling is not supported in SLANeXt!")
+        if resample is not None and not is_torchdynamo_compiling():
+            raise logger.warning_once("Resampling is not supported in SLANeXt")
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
