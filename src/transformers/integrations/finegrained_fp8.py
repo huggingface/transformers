@@ -31,28 +31,6 @@ _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
-
-def w8a8_per_tensor_fp8_matmul(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    As: torch.Tensor,
-    Bs: torch.Tensor,
-    output_dtype: torch.dtype = torch.bfloat16,
-) -> torch.Tensor:
-    """Per-tensor FP8 matmul using torch._scaled_mm (cuBLAS).
-
-    torch._scaled_mm requires rowwise scales [M,1] + [1,N].
-    """
-    N, K = B.shape
-    original_shape = A.shape
-    M = A.numel() // K
-    A_2d = A.reshape(M, K).contiguous()
-    scale_a = As.float().reshape(1, 1).expand(M, 1).contiguous()
-    scale_b = Bs.float().reshape(1, 1).expand(1, N).contiguous()
-    C = torch._scaled_mm(A_2d, B.t(), scale_a=scale_a, scale_b=scale_b, out_dtype=output_dtype)
-    return C.reshape(original_shape[:-1] + (N,))
-
-
 # Global for the Triton quantization kernel (lazily compiled)
 _triton_kernel = None
 _triton_kernel_available = None
@@ -184,6 +162,33 @@ def w8a8_block_fp8_matmul_cutlass(
     return C.view(original_shape[:-1] + (N,))
 
 
+def _needs_triton_padding(dim: int) -> bool:
+    r"""Check if a matrix dimension needs padding for the Triton tensor-scale FP8 kernel.
+
+    The Triton kernel uses ``BLOCK_SIZE = 128`` when ``dim % 128 == 0``, otherwise it
+    falls back to ``BLOCK_SIZE = dim``. Since ``tl.arange`` requires a power-of-2 range,
+    dimensions that are neither divisible by 128 nor a power of 2 will crash.
+    """
+    if dim % 128 == 0:
+        return False
+    # dim is used directly as block size; must be a power of 2
+    return (dim & (dim - 1)) != 0
+
+
+def _pad_dim_to_multiple_of_128(tensor: torch.Tensor, dim: int) -> torch.Tensor:
+    r"""Pad ``tensor`` with zeros along ``dim`` to the next multiple of 128."""
+    dim = dim % tensor.ndim  # normalise negative dims
+    size = tensor.shape[dim]
+    target = (size + 127) // 128 * 128
+    if target == size:
+        return tensor
+    pad_amount = target - size
+    pad = [0] * (2 * tensor.ndim)
+    pad_idx = 2 * (tensor.ndim - 1 - dim) + 1
+    pad[pad_idx] = pad_amount
+    return F.pad(tensor, pad)
+
+
 def w8a8_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -204,16 +209,35 @@ def w8a8_fp8_matmul(
 
     Otherwise falls back to Triton.
     """
-    # Per-tensor quantization (block_size=None): use torch._scaled_mm (cuBLAS).
-    # Faster than the Triton tensor-scale kernel and avoids a use-after-free in
-    # the upstream hub kernel when called in tight loops (e.g. MoE expert routing).
-    if block_size is None:
-        return w8a8_per_tensor_fp8_matmul(A, B, As, Bs, output_dtype)
 
     if _supports_cutlass(A, B, block_size, output_dtype):
         return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
 
-    # Block-wise: fall back to Triton hub kernel
+    # Ensure correct CUDA device context for Triton JIT on multi-GPU
+    torch.cuda.set_device(A.device)
+
+    # For tensor-scale mode the Triton kernel uses the raw N / K as block sizes
+    # when they are not divisible by 128.  Triton requires tl.arange ranges to be
+    # powers of 2, so we pad to the next multiple of 128 and slice afterwards.
+    is_tensor_mode = block_size is None or (block_size[0] == B.size(0) and block_size[1] == B.size(1))
+    if is_tensor_mode:
+        N, K = B.shape
+        needs_n_pad = _needs_triton_padding(N)
+        needs_k_pad = _needs_triton_padding(K)
+
+        if needs_n_pad or needs_k_pad:
+            if needs_n_pad:
+                B = _pad_dim_to_multiple_of_128(B, dim=0)
+            if needs_k_pad:
+                B = _pad_dim_to_multiple_of_128(B, dim=1)
+                A = _pad_dim_to_multiple_of_128(A, dim=-1)
+
+            padded_block_size = [B.size(0), B.size(1)] if block_size is not None else None
+            kernel = _get_triton_kernel()
+            result = kernel.w8a8_fp8_matmul(A, B, As, Bs, padded_block_size, output_dtype)
+            return result[..., :N]
+
+    # Fall back to Triton
     kernel = _get_triton_kernel()
     return kernel.w8a8_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
@@ -263,6 +287,7 @@ class FP8Linear(nn.Linear):
             weight = self.weight._local_tensor.contiguous()
             scale_inv = self.weight_scale_inv._local_tensor.contiguous()
         else:
+            # why wouldn't it be contiguous?
             weight = self.weight.contiguous()
             scale_inv = self.weight_scale_inv.contiguous()
 
@@ -292,89 +317,15 @@ class FP8Linear(nn.Linear):
         return output.to(dtype=input.dtype)
 
 
-def _fp8_quantize_and_scaled_mm(
-    x: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale_inv: torch.Tensor,
-    activation_scale: torch.Tensor | None,
-) -> torch.Tensor:
-    """Quantize bf16 activations to FP8 and run torch._scaled_mm for a single expert."""
-    M, K = x.shape
-    N = weight.shape[0]
-
-    if activation_scale is not None:
-        a_scale = activation_scale.float()
-        qx = (x / a_scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        sa = a_scale.reshape(1, 1).expand(M, 1).contiguous()
-    else:
-        kernel = _get_triton_kernel()
-        qx, a_scale = kernel.fp8_act_quant(x, K)
-        sa = a_scale.float().reshape(-1, 1).contiguous()
-
-    sb = weight_scale_inv.float().reshape(1, 1).expand(1, N).contiguous()
-    return torch._scaled_mm(qx, weight.t(), scale_a=sa, scale_b=sb, out_dtype=x.dtype)
-
-
-def _batched_scaled_mm(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale_inv: torch.Tensor,
-    activation_scale: torch.Tensor | None,
-    expert_ids: torch.Tensor,
-    num_experts: int,
-) -> torch.Tensor:
-    """Batched FP8 matmul using torch._scaled_mm, mirroring _batched_linear.
-
-    Tokens are unsorted; uses boolean masks to select tokens per expert.
-    """
-    output = torch.empty(input.shape[0], weight.shape[1], device=input.device, dtype=input.dtype)
-
-    for eidx in range(num_experts):
-        mask = expert_ids == eidx
-        if not mask.any():
-            continue
-        act_scale = activation_scale[eidx] if activation_scale is not None else None
-        output[mask] = _fp8_quantize_and_scaled_mm(input[mask], weight[eidx], weight_scale_inv[eidx], act_scale)
-
-    return output
-
-
-def _grouped_scaled_mm(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale_inv: torch.Tensor,
-    activation_scale: torch.Tensor | None,
-    tokens_per_expert: torch.Tensor,
-) -> torch.Tensor:
-    """Grouped FP8 matmul using torch._scaled_mm, mirroring _grouped_mm_fallback.
-
-    Tokens are sorted by expert; processes contiguous slices.
-    """
-    output = torch.empty(input.shape[0], weight.shape[1], device=input.device, dtype=input.dtype)
-
-    # Single cpu<->gpu sync point, avoids multiple syncs inside the loop
-    start = 0
-    for eidx, end in enumerate(torch.cumsum(tokens_per_expert, 0).int().tolist()):
-        if start == end:
-            continue
-        act_scale = activation_scale[eidx] if activation_scale is not None else None
-        output[start:end] = _fp8_quantize_and_scaled_mm(
-            input[start:end], weight[eidx], weight_scale_inv[eidx], act_scale
-        )
-        start = end
-
-    return output
-
-
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if self.block_size is not None:
-        kernel = _get_triton_kernel()
+    kernel = _get_triton_kernel()
     device = hidden_states.device
+    torch.cuda.set_device(device)
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
@@ -388,54 +339,37 @@ def fp8_batched_mm_experts_forward(
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    if self.block_size is not None:
-        # --- Block-wise: use fused batched kernel ---
-        proj_out = kernel.w8a8_fp8_matmul_batched(
-            selected_hidden_states,
-            self.gate_up_proj if self.has_gate else self.up_proj,
-            self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
-            block_size=self.block_size,
-            expert_ids=expert_ids,
-        )
-    else:
-        # --- Per-tensor: batched _scaled_mm with mask-based expert dispatch ---
-        proj_out = _batched_scaled_mm(
-            selected_hidden_states,
-            self.gate_up_proj if self.has_gate else self.up_proj,
-            self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
-            self.gate_up_proj_activation_scale if self.activation_scheme == "static" else None,
-            expert_ids,
-            self.num_experts,
-        )
+    # --- Up projection per expert (FP8 batched) ---
+    proj_out = kernel.w8a8_fp8_matmul_batched(
+        selected_hidden_states,
+        self.gate_up_proj if self.has_gate else self.up_proj,
+        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        block_size=self.block_size,
+        expert_ids=expert_ids,
+    )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
 
     # Apply gating or activation
     if self.has_gate:
-        proj_out = self._apply_gate(proj_out)
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
     else:
-        proj_out = self.act_fn(proj_out)
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
-    if self.block_size is not None:
-        proj_out = kernel.w8a8_fp8_matmul_batched(
-            proj_out,
-            self.down_proj,
-            self.down_proj_scale_inv,
-            block_size=self.block_size,
-            expert_ids=expert_ids,
-        )
-    else:
-        proj_out = _batched_scaled_mm(
-            proj_out,
-            self.down_proj,
-            self.down_proj_scale_inv,
-            self.down_proj_activation_scale if self.activation_scheme == "static" else None,
-            expert_ids,
-            self.num_experts,
-        )
+    # --- Down projection per expert (FP8 batched) ---
+    proj_out = kernel.w8a8_fp8_matmul_batched(
+        proj_out,
+        self.down_proj,
+        self.down_proj_scale_inv,
+        block_size=self.block_size,
+        expert_ids=expert_ids,
+    )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)
+    weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
     final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
@@ -447,9 +381,9 @@ def fp8_grouped_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if self.block_size is not None:
-        kernel = _get_triton_kernel()
+    kernel = _get_triton_kernel()
     device = hidden_states.device
+    torch.cuda.set_device(device)
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
@@ -477,58 +411,42 @@ def fp8_grouped_mm_experts_forward(
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
-    gate_up_weight = self.gate_up_proj if self.has_gate else self.up_proj
-    gate_up_scale = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
-
-    if self.block_size is not None:
-        proj_out = kernel.w8a8_fp8_matmul_grouped(
-            selected_hidden_states_g,
-            gate_up_weight,
-            gate_up_scale,
-            tokens_per_expert=tokens_per_expert,
-            block_size=self.block_size,
-            offsets=offsets,
-        )
-    else:
-        proj_out = _grouped_scaled_mm(
-            selected_hidden_states_g,
-            gate_up_weight,
-            gate_up_scale,
-            self.gate_up_proj_activation_scale if self.activation_scheme == "static" else None,
-            tokens_per_expert,
-        )
+    # --- Up projection per expert (FP8 grouped) ---
+    proj_out = kernel.w8a8_fp8_matmul_grouped(
+        selected_hidden_states_g,
+        self.gate_up_proj if self.has_gate else self.up_proj,
+        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        tokens_per_expert=tokens_per_expert,
+        block_size=self.block_size,
+        offsets=offsets,
+    )  # (S, 2 * intermediate_dim)
 
     # Apply gating or activation
     if self.has_gate:
-        proj_out = self._apply_gate(proj_out)
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
     else:
-        proj_out = self.act_fn(proj_out)
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
-    if self.block_size is not None:
-        proj_out = kernel.w8a8_fp8_matmul_grouped(
-            proj_out,
-            self.down_proj,
-            self.down_proj_scale_inv,
-            tokens_per_expert=tokens_per_expert,
-            block_size=self.block_size,
-            offsets=offsets,
-        )
-    else:
-        proj_out = _grouped_scaled_mm(
-            proj_out,
-            self.down_proj,
-            self.down_proj_scale_inv,
-            self.down_proj_activation_scale if self.activation_scheme == "static" else None,
-            tokens_per_expert,
-        )
+    # --- Down projection per expert (FP8 grouped) ---
+    proj_out = kernel.w8a8_fp8_matmul_grouped(
+        proj_out,
+        self.down_proj,
+        self.down_proj_scale_inv,
+        tokens_per_expert=tokens_per_expert,
+        block_size=self.block_size,
+        offsets=offsets,
+    )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
     weighted_out = weighted_out[inv_perm]
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
     final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
@@ -837,11 +755,21 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
-            # case where we only got weights, need to check for "weight$"
             return {full_layer_name: input_dict["weight$"]}
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["weight_scale_inv"][0]
+        if "weight$" in input_dict:
+            quantized = input_dict["weight$"][0]
+            scales = input_dict["weight_scale_inv"][0]
+            if f"{full_layer_name[:-7]}_scale_inv" in kwargs["loading_info"].unexpected_keys: 
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_scale_inv")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_weight")
+        else:
+            quantized, scales = input_dict.values()
+            quantized, scales =quantized[0], scales[0]
+            if f"{full_layer_name}_scale_inv" in kwargs["loading_info"].unexpected_keys: 
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_scale_inv")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_activation_scale")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_weight")
 
         rows, cols = quantized.shape[-2:]
         block_size = self.hf_quantizer.quantization_config.weight_block_size
@@ -854,6 +782,7 @@ class Fp8Dequantize(ConversionOps):
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
             )
+
         quantized = quantized.to(scales.dtype)
         reshaped = quantized.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
         expanded_scales = scales.reshape(-1, rows // block_m, cols // block_n)
