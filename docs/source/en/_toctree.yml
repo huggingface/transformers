@@ -87,6 +87,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: paged_attention
+      title: Paged attention
     - sections:
       - local: kernel_doc/overview
         title: Kernels
@@ -632,6 +634,8 @@
         title: Jamba
       - local: model_doc/jetmoe
         title: JetMoe
+      - local: model_doc/jina_embeddings_v3
+        title: jina_embeddings_v3
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -1274,8 +1278,14 @@
         title: PP-DocLayoutV3
       - local: model_doc/pp_ocrv5_mobile_det
         title: PP-OCRv5_mobile_det
+      - local: model_doc/pp_ocrv5_mobile_rec
+        title: PP-OCRv5_mobile_rec
       - local: model_doc/pp_ocrv5_server_det
         title: PP-OCRv5_server_det
+      - local: model_doc/pp_ocrv5_server_rec
+        title: PP-OCRv5_server_rec
+      - local: model_doc/pp_chart2table
+        title: PPChart2Table
       - local: model_doc/pp_lcnet
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3

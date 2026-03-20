@@ -332,7 +332,13 @@ class ProcessorTesterMixin:
                 component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
             else:
                 component_class = component_class[0] if component_class[0] is not None else component_class[1]
-
+        elif isinstance(component_class, dict):
+            if not use_fast:
+                component_class = component_class["pil"]
+            else:
+                component_class = (
+                    component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
+                )
         return component_class
 
     @classmethod

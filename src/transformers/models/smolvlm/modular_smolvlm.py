@@ -26,7 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
-from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
+from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
 from ..idefics3.modeling_idefics3 import (
     Idefics3BaseModelOutputWithPast,
     Idefics3ForConditionalGeneration,
@@ -95,7 +95,7 @@ class SmolVLMImageProcessor(Idefics3ImageProcessor):
     pass
 
 
-class SmolVLMImageProcessorFast(Idefics3ImageProcessorFast):
+class SmolVLMImageProcessorPil(Idefics3ImageProcessorPil):
     pass
 
 
@@ -346,7 +346,7 @@ __all__ = [
     "SmolVLMVisionConfig",
     "SmolVLMConfig",
     "SmolVLMImageProcessor",
-    "SmolVLMImageProcessorFast",
+    "SmolVLMImageProcessorPil",
     "SmolVLMForConditionalGeneration",
     "SmolVLMPreTrainedModel",
     "SmolVLMModel",

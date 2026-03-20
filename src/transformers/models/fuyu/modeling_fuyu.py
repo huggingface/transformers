@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
     config: FuyuConfig
-    base_model_prefix = "fuyu"
+    base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
@@ -49,8 +49,6 @@ class FuyuPreTrainedModel(PreTrainedModel):
     """
 )
 class FuyuModel(FuyuPreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -214,11 +212,6 @@ class FuyuModel(FuyuPreTrainedModel):
     """
 )
 class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_embed_tokens": "model.vision_embed_tokens",
-        "^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: FuyuConfig):
@@ -325,7 +318,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         image_patches=None,
         image_patches_indices=None,
-        cache_position=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -338,7 +330,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             image_patches=image_patches,
             image_patches_indices=image_patches_indices,
-            cache_position=cache_position,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )

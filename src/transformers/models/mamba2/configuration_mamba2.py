@@ -68,7 +68,7 @@ class Mamba2Config(PreTrainedConfig):
     layer_norm_epsilon: float = 1e-5
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     expand: int = 2
     conv_kernel: int = 4
     n_groups: int = 8
