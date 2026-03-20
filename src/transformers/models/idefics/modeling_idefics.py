@@ -391,22 +391,7 @@ class IdeficsEmbedding(torch.nn.Module):
 
     def forward(self, x, seq_len):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if is_tracing():
-            seq_len = seq_len.item()
-            torch_compilable_check(
-                seq_len > 0,
-                msg=f"seq_len {seq_len} must be positive.",
-            )
-            torch_compilable_check(
-                seq_len <= self.cos_cached.shape[0],
-                msg=f"seq_len {seq_len} cannot be greater than max_seq_len_cached {self.cos_cached.shape[0]}.",
-            )
-            torch_compilable_check(
-                seq_len <= self.sin_cached.shape[0],
-                msg=f"seq_len {seq_len} cannot be greater than max_seq_len_cached {self.sin_cached.shape[0]}.",
-            )
-        elif seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+        self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
             self.cos_cached[:seq_len].to(dtype=x.dtype),
