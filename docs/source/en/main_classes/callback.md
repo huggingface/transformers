@@ -46,6 +46,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
 
 [[autodoc]] EarlyStoppingCallback
 
+[[autodoc]] MoERouterHealthCallback
+
 [[autodoc]] integrations.TensorBoardCallback
 
 [[autodoc]] integrations.TrackioCallback

@@ -156,6 +156,8 @@
       title: Subclassing Trainer methods
     - local: trainer_callbacks
       title: Callbacks
+    - local: moe_telemetry
+      title: MoE telemetry
     - local: data_collators
       title: Data collators
     - local: optimizers

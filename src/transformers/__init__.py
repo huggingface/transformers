@@ -191,6 +191,7 @@ _import_structure = {
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
+        "MoERouterHealthCallback",
         "PrinterCallback",
         "ProgressCallback",
         "TrainerCallback",
@@ -717,6 +718,7 @@ if TYPE_CHECKING:
     from .trainer import Trainer as Trainer
     from .trainer_callback import DefaultFlowCallback as DefaultFlowCallback
     from .trainer_callback import EarlyStoppingCallback as EarlyStoppingCallback
+    from .trainer_callback import MoERouterHealthCallback as MoERouterHealthCallback
     from .trainer_callback import PrinterCallback as PrinterCallback
     from .trainer_callback import ProgressCallback as ProgressCallback
     from .trainer_callback import TrainerCallback as TrainerCallback
