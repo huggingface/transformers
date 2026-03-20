@@ -950,12 +950,13 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 
             trainer.evaluate()
 
-            self.assertIn("optimizer", live_config,
-                "optimizer config permanently deleted by evaluate()")
+            self.assertIn("optimizer", live_config, "optimizer config permanently deleted by evaluate()")
             if sched_total == "auto":
                 self.assertEqual(
-                    live_config["scheduler"]["params"]["total_num_steps"], "auto",
-                    "scheduler total_num_steps 'auto' was replaced with 0 by evaluate()")
+                    live_config["scheduler"]["params"]["total_num_steps"],
+                    "auto",
+                    "scheduler total_num_steps 'auto' was replaced with 0 by evaluate()",
+                )
 
     @require_optuna
     def test_hyperparameter_search(self):
