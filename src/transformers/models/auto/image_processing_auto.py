@@ -249,7 +249,7 @@ else:
             ("timm_wrapper", {"pil": "TimmWrapperImageProcessor"}),
             ("trocr", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("tvp", {"torchvision": "TvpImageProcessor", "pil": "TvpImageProcessorPil"}),
-            ("uvdoc", {"torchvision": "UVDocImageProcessor", "pil": "UVDocImageProcessorPil"}),
+            ("uvdoc", {"torchvision": "UVDocImageProcessor"}),
             ("udop", {"torchvision": "LayoutLMv3ImageProcessor", "pil": "LayoutLMv3ImageProcessorPil"}),
             ("upernet", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
             ("video_llama_3", {"torchvision": "VideoLlama3ImageProcessor", "pil": "VideoLlama3ImageProcessorPil"}),

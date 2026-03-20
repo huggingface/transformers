@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import SizeDict, PILImageResampling
 from ...modeling_outputs import BaseModelOutputWithNoAttention
@@ -102,7 +102,7 @@ class UVDocConfig(PreTrainedConfig):
 
 
 @auto_docstring
-class UVDocImageProcessorFast(BaseImageProcessorFast):
+class UVDocImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_resize = True
     size = {"height": 712, "width": 488}
@@ -113,7 +113,6 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -147,7 +146,7 @@ class UVDocImageProcessorFast(BaseImageProcessorFast):
             # Interpolate to target size (use interpolate with align_corners=True to match original implementation)
             if do_resize:
                 stacked_images = F.interpolate(
-                    stacked_images, size=(size.height, size.width), mode=interpolation.value, align_corners=True
+                    stacked_images, size=(size.height, size.width), mode="bilinear", align_corners=True
                 )
             interpolated_images_grouped[shape] = stacked_images
 
@@ -504,7 +503,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
 
 __all__ = [
-    "UVDocImageProcessorFast",
+    "UVDocImageProcessor",
     "UVDocConfig",
     "UVDocModel",
     "UVDocPreTrainedModel",
