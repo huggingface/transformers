@@ -267,7 +267,7 @@ class ModelManager:
                     progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
         return model, processor
 
-    async def load_model_streaming(self, model_id: str):
+    async def load_model_streaming(self, model_id_and_revision: str):
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
@@ -277,17 +277,18 @@ class ModelManager:
 
         Yields SSE ``data: ...`` lines.
         """
+        mid = model_id_and_revision
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already cached
-        if model_id in self.loaded_models and not self.loaded_models[model_id].is_deleted():
-            self.loaded_models[model_id].reset_timer()
-            yield f"data: {json.dumps({'status': 'ready', 'model': model_id, 'cached': True})}\n\n"
+        if mid in self.loaded_models and not self.loaded_models[mid].is_deleted():
+            self.loaded_models[mid].reset_timer()
+            yield f"data: {json.dumps({'status': 'ready', 'model': mid, 'cached': True})}\n\n"
             return
 
         # Case 2: load in progress — join existing subscribers
-        if model_id in self._loading_tasks:
-            self._loading_subscribers[model_id].append(queue)
+        if mid in self._loading_tasks:
+            self._loading_subscribers[mid].append(queue)
             while True:
                 item = await queue.get()
                 if item is None:
@@ -296,19 +297,19 @@ class ModelManager:
             return
 
         # Case 3: first request — start the load
-        self._loading_subscribers[model_id] = [queue]
+        self._loading_subscribers[mid] = [queue]
         loop = asyncio.get_running_loop()
 
         def enqueue(payload: dict):
             msg = f"data: {json.dumps(payload)}\n\n"
 
             def broadcast():
-                for q in self._loading_subscribers.get(model_id, []):
+                for q in self._loading_subscribers.get(mid, []):
                     q.put_nowait(msg)
 
             loop.call_soon_threadsafe(broadcast)
 
-        tqdm_class = make_progress_tqdm_class(enqueue, model_id)
+        tqdm_class = make_progress_tqdm_class(enqueue, mid)
 
         def _tqdm_hook(factory, args, kwargs):
             return tqdm_class(*args, **kwargs)
@@ -322,25 +323,25 @@ class ModelManager:
                 try:
                     await asyncio.to_thread(
                         self.load_model_and_processor,
-                        model_id,
+                        mid,
                         progress_callback=enqueue,
                         tqdm_class=tqdm_class,
                     )
                 finally:
                     logging.set_tqdm_hook(previous_hook)
             except Exception as e:
-                logger.error(f"Failed to load {model_id}: {e}", exc_info=True)
-                enqueue({"status": "error", "model": model_id, "message": str(e)})
+                logger.error(f"Failed to load {mid}: {e}", exc_info=True)
+                enqueue({"status": "error", "model": mid, "message": str(e)})
             finally:
 
                 def _send_sentinel():
-                    for q in self._loading_subscribers.pop(model_id, []):
+                    for q in self._loading_subscribers.pop(mid, []):
                         q.put_nowait(None)
-                    self._loading_tasks.pop(model_id, None)
+                    self._loading_tasks.pop(mid, None)
 
                 loop.call_soon_threadsafe(_send_sentinel)
 
-        self._loading_tasks[model_id] = asyncio.create_task(run_load())
+        self._loading_tasks[mid] = asyncio.create_task(run_load())
 
         while True:
             item = await queue.get()
