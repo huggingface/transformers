@@ -60,7 +60,7 @@ class SLANeXtModelTester:
         vision_config=None,
     ):
         if vision_config is None:
-            vision_config={
+            vision_config = {
                 "hidden_size": 1,
                 "num_hidden_layers": 1,
                 "num_attention_heads": 1,
@@ -156,6 +156,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         NOTE: We ignore the head hidden states as they can be dynamic
         """
+
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
             model.to(torch_device)

@@ -575,7 +575,9 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        features = torch.zeros((hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device)
+        features = torch.zeros(
+            (hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device
+        )
         predicted_chars = torch.zeros(size=[hidden_states.shape[0]], dtype=torch.long, device=hidden_states.device)
 
         structure_preds_list = []

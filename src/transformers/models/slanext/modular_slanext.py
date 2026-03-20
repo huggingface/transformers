@@ -188,7 +188,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
             std = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
             # TODO: check with loc_generator
-            #for generator in (module.structure_generator, module.loc_generator):
+            # for generator in (module.structure_generator, module.loc_generator):
             for generator in (module.structure_generator,):
                 for layer in generator.children():
                     if isinstance(layer, nn.Linear):
@@ -250,14 +250,16 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        features = torch.zeros((hidden_states.shape[0], self.config.hidden_size), device=hidden_states.device)
+        features = torch.zeros(
+            (hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device
+        )
         predicted_chars = torch.zeros(size=[hidden_states.shape[0]], dtype=torch.long, device=hidden_states.device)
 
         structure_preds_list = []
         structure_ids_list = []
         for _ in range(self.config.max_text_length + 1):
             embedding_feature = F.one_hot(predicted_chars, self.config.out_channels).float()
-            features, _ = self.structure_attention_cell(features, hidden_states, embedding_feature)
+            features, _ = self.structure_attention_cell(features, hidden_states.float(), embedding_feature)
             structure_step = self.structure_generator(features)
             predicted_chars = structure_step.argmax(dim=1)
 
