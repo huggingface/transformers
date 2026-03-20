@@ -114,8 +114,10 @@ def _build_checkpoint_conversion_mapping():
         "timm_wrapper": [
             # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
             # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            # Note: we don't add `timm_model` when it is part of a bigger VLM, because they already have `timm_model`
+            # saved in state dict keys. Thus the look behind check
             WeightRenaming(
-                source_patterns=r"(.+)",
+                source_patterns=r"^(?!(?:model\.|backbone\.|tower\.))(.+)$",
                 target_patterns=r"timm_model.\1",
             )
         ],
@@ -370,6 +372,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 r"decoder.layers.(\d+).ca_qpos_sine_proj", r"decoder.layers.\1.encoder_attn.q_pos_sine_proj"
             ),
+            # The rest of patterns are used only in `ConditionalDetrForSegmentation`
+            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+            # Mask head refactor
+            WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
+            WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
+            WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
+            WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
+            WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
+            WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
+            WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
+            WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
+            WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
+            WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
+            WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
+            WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
+            WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
+            WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
         ],
         "deformable_detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
