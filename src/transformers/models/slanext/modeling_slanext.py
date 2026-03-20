@@ -226,7 +226,6 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _can_compile_fullgraph = True
     _can_record_outputs = {
         "attentions": SLANeXtAttentionGRUCell,
     }
