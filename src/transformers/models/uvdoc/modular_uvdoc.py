@@ -50,9 +50,14 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
         Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
     resnet_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
-        (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False),
-        (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
+        (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True),
+        (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
         Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
+    stage_configs (Sequence[Sequence[tuple[int, int, int] | list[int]]], *optional*, defaults to `(((128, 128, 1),), ((128, 128, 2),),
+        ((128, 128, 5),), ((128, 128, 8), (128, 128, 3), (128, 128, 2)), ((128, 128, 12), (128, 128, 7), (128, 128, 4)), ((128, 128, 18),
+        (128, 128, 12), (128, 128, 6))))`:
+        Configuration for the bridge module stages in format [in_channels, out_channels, dilation_value].
+        Each inner sequence corresponds to a single bridge block, and the outer sequence groups blocks by bridge stage.
     bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
         Configuration for the bridge connector in format [in_channels, out_channels].
     out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
