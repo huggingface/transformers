@@ -726,12 +726,6 @@ class EsmModel(EsmPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        seq_len = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if position_ids is None:
-            position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
-
         if inputs_embeds is None:
             # Important, attention_mask must be passed to the embedding class
             # This effects how the token_dropout is calculated
@@ -749,9 +743,13 @@ class EsmModel(EsmPreTrainedModel):
             past_key_values=None,
         )
 
-        position_embeddings = (
-            self.rotary_embeddings(inputs_embeds, position_ids) if self.position_embedding_type == "rotary" else None
-        )
+        if self.position_embedding_type == "rotary":
+            if position_ids is None:
+                seq_len = inputs_embeds.shape[1]
+                position_ids = torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0)
+            position_embeddings = self.rotary_embeddings(inputs_embeds, position_ids)
+        else:
+            position_embeddings = None
 
         encoder_outputs = self.encoder(
             inputs_embeds,
