@@ -293,7 +293,7 @@ class SLANeXtModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
         self.model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = AutoImageProcessor.from_pretrained(model_path)
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
     def test_inference_table_recognition_head(self):
