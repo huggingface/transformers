@@ -21,7 +21,6 @@
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -30,6 +29,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_uvdoc import UVDocConfig
 
 
@@ -63,7 +63,7 @@ class UVDocConvLayer(nn.Module):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         hidden_state = self.convolution(input)
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
@@ -130,42 +130,6 @@ class UVDocResidualBlock(nn.Module):
         return hidden_states
 
 
-class UVDocResidualBlockWithDownsample(UVDocResidualBlock):
-    """Residual block with downsampling."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        block_index: int = 0,
-        activation: str = "relu",
-    ):
-        super().__init__(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            block_index=block_index,
-            activation=activation,
-        )
-
-        self.conv_down = UVDocConvLayer(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=kernel_size // 2,
-            bias=True,
-            activation=None,
-        )
-
-    def get_residual(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Apply downsampling convolution to the residual connection."""
-        return self.conv_down(hidden_states)
-
-
 class UVDocResNetStage(nn.Module):
     """A ResNet stage containing multiple residual blocks."""
 
@@ -183,7 +147,7 @@ class UVDocResNetStage(nn.Module):
                 in_channels=in_channels,
                 out_channels=out_channels,
                 stride=config.resnet_stage_stride[stage_index][index],
-                padding=config.resnet_stage_padding[stage_index][index],
+                padding=config.resnet_stage_dilation[stage_index][index] * 2,
                 dilation=config.resnet_stage_dilation[stage_index][index],
                 downsample=config.resnet_stage_downsample[stage_index][index],
                 kernel_size=config.kernel_size,
@@ -334,6 +298,7 @@ class UVDocModel(UVDocPreTrainedModel):
         self.post_init()
 
     @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

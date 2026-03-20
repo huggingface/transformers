@@ -52,29 +52,69 @@ class UVDocModelTester:
         batch_size=3,
         image_size=128,
         num_channels=3,
-        num_stages=6,
         is_training=False,
-        num_filter=8,
+        bridge_in_channels=32,
         kernel_size=5,
-        block_stride_values=(1, 2, 2),
-        feature_map_multipliers=(1, 2, 4),
-        block_counts_per_stage=(3, 4, 6),
-        dilation_values=((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6)),
+        stage_layer_num=(3, 4, 6),
+        resnet_head=(
+            (3, 8, 2),
+            (8, 8, 2),
+        ),
+        resnet_stage_dilation=(
+            (1, 3, 3),
+            (1, 3, 3, 3),
+            (1, 3, 3, 3, 3, 3),
+        ),
+        resnet_stage_stride=(
+            (1, 1, 1),
+            (2, 1, 1, 1),
+            (2, 1, 1, 1, 1, 1),
+        ),
+        resnet_stage_downsample=(
+            (False, False, False),
+            (True, False, False, False),
+            (True, False, False, False, False, False),
+        ),
+        resnet_down=(
+            (8, 8),
+            (8, 16),
+            (16, 32),
+        ),
+        bridge_connector=(32, 32, 1),
+        out_point_positions2D=(
+            (32, 8, 1),
+            (8, 2, 1),
+        ),
+        dilation_values=(
+            (1,),
+            (2,),
+            (5,),
+            (8, 3, 2),
+            (12, 7, 4),
+            (18, 12, 6),
+        ),
         padding_mode="reflect",
+        hidden_act="prelu",
     ):
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
-        self.num_stages = num_stages
-        self.num_filter = num_filter
+        self.bridge_in_channels = bridge_in_channels
         self.kernel_size = kernel_size
-        self.block_stride_values = block_stride_values
-        self.feature_map_multipliers = feature_map_multipliers
-        self.block_counts_per_stage = block_counts_per_stage
+        self.stage_layer_num = stage_layer_num
+        self.resnet_head = resnet_head
+        self.resnet_stage_dilation = resnet_stage_dilation
+        self.resnet_stage_stride = resnet_stage_stride
+        self.resnet_stage_downsample = resnet_stage_downsample
+        self.resnet_down = resnet_down
+        self.bridge_connector = bridge_connector
+        self.out_point_positions2D = out_point_positions2D
         self.dilation_values = dilation_values
+        self.padding_mode = padding_mode
         self.num_hidden_layers = len(dilation_values)
         self.padding_mode = padding_mode
+        self.hidden_act = hidden_act
         # For test_hidden_states_output: UVDoc outputs spatial hidden states (B, C, H, W)
         # with shape[-2:] = (8, 8) for image_size=128
         self.seq_length = 8
@@ -93,14 +133,20 @@ class UVDocModelTester:
 
     def get_config(self) -> UVDocConfig:
         return UVDocConfig(
-            num_filter=self.num_filter,
-            in_channels=self.num_channels,
             kernel_size=self.kernel_size,
-            block_stride_values=list(self.block_stride_values),
-            feature_map_multipliers=list(self.feature_map_multipliers),
-            block_counts_per_stage=list(self.block_counts_per_stage),
-            dilation_values=[list(d) for d in self.dilation_values],
             padding_mode=self.padding_mode,
+            hidden_act=self.hidden_act,
+            bridge_in_channels=self.bridge_in_channels,
+            stage_layer_num=list(self.stage_layer_num),
+            resnet_head=[list(h) for h in self.resnet_head],
+            resnet_stage_dilation=[list(d) for d in self.resnet_stage_dilation],
+            resnet_stage_padding=[list(p) for p in self.resnet_stage_padding],
+            resnet_stage_stride=[list(s) for s in self.resnet_stage_stride],
+            resnet_stage_downsample=[list(down) for down in self.resnet_stage_downsample],
+            resnet_down=[list(rd) for rd in self.resnet_down],
+            bridge_connector=list(self.bridge_connector),
+            out_point_positions2D=[list(op) for op in self.out_point_positions2D],
+            dilation_values=[list(d) for d in self.dilation_values],
         )
 
     def create_and_check_uvdoc_document_rectification(self, config, pixel_values):
@@ -191,7 +237,7 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/UVDoc_safetensors"
+        model_path = "/workspace/model_weight_torch/UVDoc"
         self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor() if is_vision_available() else None
         self.image = Image.open(

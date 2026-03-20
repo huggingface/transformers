@@ -18,6 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from collections.abc import Sequence
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -47,8 +50,6 @@ class UVDocConfig(PreTrainedConfig):
             Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
         resnet_stage_dilation (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1, 3, 3), (1, 3, 3, 3), (1, 3, 3, 3, 3, 3))`):
             Dilation values for each layer in each ResNet stage. First layer uses dilation=1, subsequent layers use dilation=3.
-        resnet_stage_padding (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((2, 6, 6), (2, 6, 6, 6), (2, 6, 6, 6, 6, 6))`):
-            Padding values for each layer in each ResNet stage.
         resnet_stage_stride (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1, 1, 1), (2, 1, 1, 1), (2, 1, 1, 1, 1, 1))`):
             Stride values for each layer in each ResNet stage. First stage uses stride=1, others use stride=2 for downsampling.
         resnet_stage_downsample (`list[list[bool]]` or `tuple[tuple[bool, ...], ...]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
@@ -69,7 +70,7 @@ class UVDocConfig(PreTrainedConfig):
     bridge_in_channels = 128
     kernel_size: int = 5
     stage_layer_num: list[int] | tuple[int, ...] = (3, 4, 6)
-    resnet_head: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_head: Sequence[list[int] | tuple[int, ...]] = (
         (
             3,
             32,
@@ -81,7 +82,7 @@ class UVDocConfig(PreTrainedConfig):
             2,
         ),
     )
-    resnet_stage_dilation: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_stage_dilation: Sequence[list[int] | tuple[int, ...]] = (
         (
             1,
             3,
@@ -102,28 +103,7 @@ class UVDocConfig(PreTrainedConfig):
             3,
         ),
     )
-    resnet_stage_padding: list[list[int]] | tuple[tuple[int, ...], ...] = (
-        (
-            2,
-            6,
-            6,
-        ),
-        (
-            2,
-            6,
-            6,
-            6,
-        ),
-        (
-            2,
-            6,
-            6,
-            6,
-            6,
-            6,
-        ),
-    )
-    resnet_stage_stride: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_stage_stride: Sequence[list[int] | tuple[int, ...]] = (
         (
             1,
             1,
@@ -144,12 +124,12 @@ class UVDocConfig(PreTrainedConfig):
             1,
         ),
     )
-    resnet_stage_downsample: list[list[bool]] | tuple[tuple[bool, ...], ...] = (
+    resnet_stage_downsample: Sequence[list[bool] | tuple[bool, ...]] = (
         (False, False, False),
         (True, False, False, False),
         (True, False, False, False, False, False),
     )
-    resnet_down: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_down: Sequence[list[int] | tuple[int, ...]] = (
         (
             32,
             32,
@@ -164,7 +144,7 @@ class UVDocConfig(PreTrainedConfig):
         ),
     )
     bridge_connector: list[int] | tuple[int, ...] = (128, 128, 1)
-    out_point_positions2D: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = (
         (
             128,
             32,
@@ -185,6 +165,7 @@ class UVDocConfig(PreTrainedConfig):
         (18, 12, 6),
     )
     padding_mode: str = "reflect"
+    hidden_act: str = "prelu"
 
 
 __all__ = ["UVDocConfig"]

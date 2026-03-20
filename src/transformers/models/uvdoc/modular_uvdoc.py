@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
@@ -25,17 +25,16 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import SizeDict, PILImageResampling
+from ...image_utils import PILImageResampling, SizeDict
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, requires_backends
-from ...utils.generic import TensorType
-
-from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
-from ...modeling_layers import GradientCheckpointingLayer
+from ...utils.generic import TensorType, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetPreTrainedModel
-from ...utils.generic import merge_with_config_defaults
+
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
 @strict(accept_kwargs=True)
@@ -60,8 +59,6 @@ class UVDocConfig(PreTrainedConfig):
             Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
         resnet_stage_dilation (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1, 3, 3), (1, 3, 3, 3), (1, 3, 3, 3, 3, 3))`):
             Dilation values for each layer in each ResNet stage. First layer uses dilation=1, subsequent layers use dilation=3.
-        resnet_stage_padding (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((2, 6, 6), (2, 6, 6, 6), (2, 6, 6, 6, 6, 6))`):
-            Padding values for each layer in each ResNet stage.
         resnet_stage_stride (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1, 1, 1), (2, 1, 1, 1), (2, 1, 1, 1, 1, 1))`):
             Stride values for each layer in each ResNet stage. First stage uses stride=1, others use stride=2 for downsampling.
         resnet_stage_downsample (`list[list[bool]]` or `tuple[tuple[bool, ...], ...]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
@@ -82,7 +79,7 @@ class UVDocConfig(PreTrainedConfig):
     bridge_in_channels = 128
     kernel_size: int = 5
     stage_layer_num: list[int] | tuple[int, ...] = (3, 4, 6)
-    resnet_head: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_head: Sequence[list[int] | tuple[int, ...]] = (
         (
             3,
             32,
@@ -94,7 +91,7 @@ class UVDocConfig(PreTrainedConfig):
             2,
         ),
     )
-    resnet_stage_dilation: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_stage_dilation: Sequence[list[int] | tuple[int, ...]] = (
         (
             1,
             3,
@@ -115,28 +112,7 @@ class UVDocConfig(PreTrainedConfig):
             3,
         ),
     )
-    resnet_stage_padding: list[list[int]] | tuple[tuple[int, ...], ...] = (
-        (
-            2,
-            6,
-            6,
-        ),
-        (
-            2,
-            6,
-            6,
-            6,
-        ),
-        (
-            2,
-            6,
-            6,
-            6,
-            6,
-            6,
-        ),
-    )
-    resnet_stage_stride: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_stage_stride: Sequence[list[int] | tuple[int, ...]] = (
         (
             1,
             1,
@@ -157,12 +133,12 @@ class UVDocConfig(PreTrainedConfig):
             1,
         ),
     )
-    resnet_stage_downsample: list[list[bool]] | tuple[tuple[bool, ...], ...] = (
-        (False, False, False), 
+    resnet_stage_downsample: Sequence[list[bool] | tuple[bool, ...]] = (
+        (False, False, False),
         (True, False, False, False),
         (True, False, False, False, False, False),
     )
-    resnet_down: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    resnet_down: Sequence[list[int] | tuple[int, ...]] = (
         (
             32,
             32,
@@ -177,7 +153,7 @@ class UVDocConfig(PreTrainedConfig):
         ),
     )
     bridge_connector: list[int] | tuple[int, ...] = (128, 128, 1)
-    out_point_positions2D: list[list[int]] | tuple[tuple[int, ...], ...] = (
+    out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = (
         (
             128,
             32,
@@ -198,6 +174,7 @@ class UVDocConfig(PreTrainedConfig):
         (18, 12, 6),
     )
     padding_mode: str = "reflect"
+    hidden_act: str = "prelu"
 
 
 @auto_docstring
@@ -344,7 +321,7 @@ class UVDocConvLayer(nn.Module):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         hidden_state = self.convolution(input)
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
@@ -360,7 +337,7 @@ class UVDocResidualBlock(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
-        padding: int = 0, 
+        padding: int = 0,
         dilation: int = 1,
         downsample: bool = False,
         activation: str = "relu",
@@ -411,42 +388,6 @@ class UVDocResidualBlock(nn.Module):
         return hidden_states
 
 
-class UVDocResidualBlockWithDownsample(UVDocResidualBlock):
-    """Residual block with downsampling."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        block_index: int = 0,
-        activation: str = "relu",
-    ):
-        super().__init__(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            block_index=block_index,
-            activation=activation,
-        )
-
-        self.conv_down = UVDocConvLayer(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=kernel_size // 2,
-            bias=True,
-            activation=None,
-        )
-
-    def get_residual(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Apply downsampling convolution to the residual connection."""
-        return self.conv_down(hidden_states)
-
-
 class UVDocResNetStage(nn.Module):
     """A ResNet stage containing multiple residual blocks."""
 
@@ -464,10 +405,10 @@ class UVDocResNetStage(nn.Module):
                 in_channels=in_channels,
                 out_channels=out_channels,
                 stride=config.resnet_stage_stride[stage_index][index],
-                padding=config.resnet_stage_padding[stage_index][index],
+                padding=config.resnet_stage_dilation[stage_index][index] * 2,
                 dilation=config.resnet_stage_dilation[stage_index][index],
                 downsample=config.resnet_stage_downsample[stage_index][index],
-                kernel_size=config.kernel_size
+                kernel_size=config.kernel_size,
             )
             self.layers.append(layer)
             in_channels = out_channels
@@ -605,6 +546,7 @@ class UVDocModel(UVDocPreTrainedModel):
         self.post_init()
 
     @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
