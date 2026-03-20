@@ -14,6 +14,7 @@
 
 
 import inspect
+import io
 import json
 import os
 import random
@@ -22,6 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import httpx
 import numpy as np
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
