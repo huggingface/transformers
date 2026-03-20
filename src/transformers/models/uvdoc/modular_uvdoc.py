@@ -40,6 +40,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import TensorType, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig
 from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetPreTrainedModel
 
@@ -60,6 +61,7 @@ class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
         Configuration for the bridge module stages in format [in_channels, dilation_value].
         Each inner sequence corresponds to a single bridge block, and the outer sequence groups blocks by bridge stage.
     """
+
     model_type = "uvdoc_backbone"
 
     _out_features: list[str] | None = None
@@ -139,8 +141,8 @@ class UVDocConfig(PreTrainedConfig):
     """
 
     model_type = "uvdoc"
-    sub_configs = {"backbone_config": UVDocBackboneConfig}
-    backbone_config: dict | UVDocBackboneConfig | None = None
+    sub_configs = {"backbone_config": AutoConfig}
+    backbone_config: dict | PreTrainedConfig | None = None
 
     hidden_act: str = "prelu"
     padding_mode: str = "reflect"
@@ -370,15 +372,17 @@ class UVDocResNetStage(nn.Module):
         stages = config.resnet_configs[stage_index]
         self.layers = nn.ModuleList([])
         for in_channels, out_channels, dilation, downsample in stages:
-            self.layers.append(UVDocResidualBlock(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                stride=2 if downsample else 1,
-                padding=dilation * 2,
-                dilation=dilation,
-                downsample=downsample,
-                kernel_size=config.kernel_size,
-            ))
+            self.layers.append(
+                UVDocResidualBlock(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    stride=2 if downsample else 1,
+                    padding=dilation * 2,
+                    dilation=dilation,
+                    downsample=downsample,
+                    kernel_size=config.kernel_size,
+                )
+            )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:

@@ -26,6 +26,7 @@ from huggingface_hub.dataclasses import strict
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
@@ -124,8 +125,8 @@ class UVDocConfig(PreTrainedConfig):
     """
 
     model_type = "uvdoc"
-    sub_configs = {"backbone_config": UVDocBackboneConfig}
-    backbone_config: dict | UVDocBackboneConfig | None = None
+    sub_configs = {"backbone_config": AutoConfig}
+    backbone_config: dict | PreTrainedConfig | None = None
 
     hidden_act: str = "prelu"
     padding_mode: str = "reflect"
