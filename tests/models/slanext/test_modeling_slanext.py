@@ -21,9 +21,10 @@ import requests
 from parameterized import parameterized
 
 from transformers import (
+    AutoImageProcessor,
+    AutoModelForTableRecognition,
     SLANeXtConfig,
     SLANeXtForTableRecognition,
-    SLANeXtImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -179,10 +180,8 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class SLANeXtModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
-        self.model = SLANeXtForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
-        self.image_processor = (
-            SLANeXtImageProcessorFast.from_pretrained(model_path, use_fast=True) if is_vision_available() else None
-        )
+        self.model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
+        self.image_processor = AutoImageProcessor.from_pretrained(model_path)
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
