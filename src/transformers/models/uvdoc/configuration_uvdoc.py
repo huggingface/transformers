@@ -30,14 +30,10 @@ from ...utils import auto_docstring
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
 @strict(accept_kwargs=True)
-class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
+class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    kernel_size (`int`, *optional*, defaults to 5):
-        Kernel size for convolutional layers in the backbone network.
     resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
         Configuration for the ResNet head layers in format [in_channels, out_channels].
-    resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
-        Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
     resnet_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
         (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True),
         (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
@@ -47,22 +43,11 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         (128, 12), (128, 6))))`:
         Configuration for the bridge module stages in format [in_channels, dilation_value].
         Each inner sequence corresponds to a single bridge block, and the outer sequence groups blocks by bridge stage.
-    bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
-        Configuration for the bridge connector in format [in_channels, out_channels].
-    out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
-        Configuration for the output point positions 2D layer in format [in_channels, out_channels].
-    padding_mode (`str`, *optional*, defaults to `"reflect"`):
-        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     """
-
-    model_type = "uvdoc"
 
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
 
-    hidden_act: str = "prelu"
-    bridge_in_channels = 128
-    kernel_size: int = 5
     resnet_head: Sequence[list[int] | tuple[int, ...]] = (
         (3, 32),
         (32, 32),
@@ -111,9 +96,7 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         ),
     )
 
-    bridge_connector: list[int] | tuple[int, ...] = (128, 128)
-    out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
-    padding_mode: str = "reflect"
+    kernel_size: int = 5
 
     def __post_init__(self, **kwargs):
         self.depths = [len(stages) for stages in self.stage_configs]
@@ -124,4 +107,36 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["UVDocConfig"]
+@auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
+@strict(accept_kwargs=True)
+class UVDocConfig(PreTrainedConfig):
+    r"""
+    kernel_size (`int`, *optional*, defaults to 5):
+        Kernel size for convolutional layers in the backbone network.
+    bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
+        Configuration for the bridge connector in format [in_channels, out_channels].
+    out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
+        Configuration for the output point positions 2D layer in format [in_channels, out_channels].
+    padding_mode (`str`, *optional*, defaults to `"reflect"`):
+        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
+    """
+
+    model_type = "uvdoc"
+    sub_configs = {"backbone_config": UVDocBackboneConfig}
+    backbone_config: dict | UVDocBackboneConfig | None = None
+
+    hidden_act: str = "prelu"
+    padding_mode: str = "reflect"
+    kernel_size: int = 5
+    bridge_connector: list[int] | tuple[int, ...] = (128, 128)
+    out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
+
+    def __post_init__(self, **kwargs):
+        if self.backbone_config is None:
+            self.backbone_config = UVDocBackboneConfig()
+        elif isinstance(self.backbone_config, dict):
+            self.backbone_config = UVDocBackboneConfig(**self.backbone_config)
+        super().__post_init__(**kwargs)
+
+
+__all__ = ["UVDocBackboneConfig", "UVDocConfig"]

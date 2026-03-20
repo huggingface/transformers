@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_uvdoc import UVDocConfig
+from .configuration_uvdoc import UVDocBackboneConfig, UVDocConfig
 
 
 class UVDocConvLayer(nn.Module):
@@ -249,7 +249,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     """
 
     config: UVDocConfig
-    base_model_prefix = "backbone"
+    base_model_prefix = "uvdoc"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
@@ -293,8 +293,9 @@ class UVDocBridge(UVDocPreTrainedModel):
 )
 class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
     has_attentions = False
+    base_model_prefix = "backbone"
 
-    def __init__(self, config: UVDocConfig):
+    def __init__(self, config: UVDocBackboneConfig):
         super().__init__(config)
 
         num_features = [config.resnet_head[-1][-1]]
@@ -333,7 +334,7 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
 class UVDocHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_bridge_layers = len(config.stage_configs)
+        self.num_bridge_layers = len(config.backbone_config.stage_configs)
 
         self.bridge_connector = UVDocConvLayer(
             in_channels=config.bridge_connector[0] * self.num_bridge_layers,
@@ -366,7 +367,7 @@ class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
-        self.backbone = UVDocBackbone(config)
+        self.backbone = UVDocBackbone(config.backbone_config)
         self.head = UVDocHead(config)
         self.post_init()
 

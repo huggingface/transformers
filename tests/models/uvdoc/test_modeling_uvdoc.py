@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import (
     UVDocBackbone,
+    UVDocBackboneConfig,
     UVDocConfig,
     UVDocImageProcessor,
     UVDocModel,
@@ -56,17 +57,11 @@ class UVDocModelTester:
         image_size=128,
         num_channels=3,
         is_training=False,
-        bridge_in_channels=32,
         kernel_size=5,
-        stage_layer_num=(3, 4, 6),
-        resnet_head=((3, 8), (8, 8)),
-        resnet_down=((8, 8), (8, 16), (16, 32)),
         bridge_connector=(32, 32),
         out_point_positions2D=((32, 8), (8, 2)),
         padding_mode="reflect",
         hidden_act="prelu",
-        out_features=["stage1", "stage2"],
-        out_indices=[1, 2],
         num_hidden_layers=2,
     ):
         self.parent = parent
@@ -74,17 +69,11 @@ class UVDocModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
-        self.bridge_in_channels = bridge_in_channels
         self.kernel_size = kernel_size
-        self.stage_layer_num = stage_layer_num
-        self.resnet_head = resnet_head
-        self.resnet_down = resnet_down
         self.bridge_connector = bridge_connector
         self.out_point_positions2D = out_point_positions2D
         self.padding_mode = padding_mode
         self.hidden_act = hidden_act
-        self.out_features = out_features
-        self.out_indices = out_indices
         self.num_hidden_layers = num_hidden_layers
         # For test_hidden_states_output: UVDoc outputs spatial hidden states (B, C, H, W)
         # with shape[-2:] = (8, 8) for image_size=128
@@ -129,21 +118,22 @@ class UVDocModelTester:
             ((32, 1),),
             ((32, 2),),
         )
+        backbone_config = {
+            "kernel_size": self.kernel_size,
+            "resnet_configs": resnet_configs,
+            "stage_configs": stage_configs,
+            "out_features": ["stage1", "stage2"],
+            "out_indices": [1, 2],
+            "resnet_head": ((3, 8), (8, 8)),
+        }
 
         return UVDocConfig(
             kernel_size=self.kernel_size,
             padding_mode=self.padding_mode,
             hidden_act=self.hidden_act,
-            bridge_in_channels=self.bridge_in_channels,
-            stage_layer_num=self.stage_layer_num,
-            resnet_head=self.resnet_head,
-            resnet_configs=resnet_configs,
-            stage_configs=stage_configs,
-            resnet_down=self.resnet_down,
+            backbone_config=backbone_config,
             bridge_connector=self.bridge_connector,
             out_point_positions2D=self.out_point_positions2D,
-            out_features=self.out_features,
-            out_indices=self.out_indices,
         )
 
     def create_and_check_uvdoc_document_rectification(self, config, pixel_values):
@@ -156,17 +146,91 @@ class UVDocModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 2, 8, 8))
 
 
+class UVDocBackboneTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        image_size=128,
+        num_channels=3,
+        is_training=False,
+        kernel_size=5,
+        resnet_head=((3, 8), (8, 8)),
+        out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
+        num_hidden_layers=2,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.is_training = is_training
+        self.kernel_size = kernel_size
+        self.resnet_head = resnet_head
+        self.out_features = out_features
+        self.out_indices = out_indices
+        self.num_hidden_layers = num_hidden_layers
+
+    def prepare_config_and_inputs_for_common(self):
+        config, pixel_values = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self) -> UVDocBackbone:
+        resnet_configs = (
+            (
+                (8, 8, 1, False),
+                (8, 8, 3, False),
+                (8, 8, 3, False),
+            ),
+            (
+                (8, 16, 1, True),
+                (16, 16, 3, False),
+                (16, 16, 3, False),
+                (16, 16, 3, False),
+            ),
+            (
+                (16, 32, 1, True),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+            ),
+        )
+
+        stage_configs = (
+            ((32, 1),),
+            ((32, 2),),
+        )
+
+        return UVDocBackboneConfig(
+            kernel_size=self.kernel_size,
+            resnet_head=self.resnet_head,
+            resnet_configs=resnet_configs,
+            stage_configs=stage_configs,
+            out_features=self.out_features,
+            out_indices=self.out_indices,
+        )
+
+
 @require_torch
 class UVDocBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (UVDocBackbone,) if is_torch_available() else ()
     has_attentions = False
-    config_class = UVDocConfig
+    config_class = UVDocBackboneConfig
 
     def setUp(self):
-        self.model_tester = UVDocModelTester(self)
+        self.model_tester = UVDocBackboneTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=UVDocConfig,
+            config_class=UVDocBackboneConfig,
             has_text_modality=False,
             common_properties=[],
         )
