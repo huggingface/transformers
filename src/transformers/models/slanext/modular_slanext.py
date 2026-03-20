@@ -146,7 +146,7 @@ class SLANeXtMLP(nn.Module):
 
 class SLANeXtPreTrainedModel(PreTrainedModel):
     config: SLANeXtConfig
-    base_model_prefix = "model"
+    base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
