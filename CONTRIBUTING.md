@@ -19,7 +19,7 @@ limitations under the License.
 ## Code agent contributions
 
 >[!WARNING]
->As of early 2026, the Transformers repo is being overwhelmed by a large number of PRs and issue comments written by
+>As of early 2026, the Transformers repo is being overwhelmed by a large number of PRs and comments written by
 >code agents. Please read this section and the one below it in their entirety if you intend to use code agents to contribute to Transformers. 
 >The rest of this document predates the "agent era", and parts of it may be out of date as a result.
 
