@@ -29,8 +29,9 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithNoAttention, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -172,11 +173,64 @@ class SLANeXtVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class SLANeXtAttentionGRUCell(nn.Module):
+    def __init__(self, input_size, hidden_size, num_embeddings):
+        super().__init__()
+
+        self.input_to_hidden = nn.Linear(input_size, hidden_size, bias=False)
+        self.hidden_to_hidden = nn.Linear(hidden_size, hidden_size)
+        self.score = nn.Linear(hidden_size, 1, bias=False)
+
+        self.rnn = nn.GRUCell(input_size + num_embeddings, hidden_size)
+
+    def forward(
+        self,
+        prev_hidden: torch.FloatTensor,
+        batch_hidden: torch.FloatTensor,
+        char_onehots: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        batch_hidden_proj = self.input_to_hidden(batch_hidden)
+        prev_hidden_proj = self.hidden_to_hidden(prev_hidden).unsqueeze(1)
+
+        attention_scores = batch_hidden_proj + prev_hidden_proj
+        attention_scores = torch.tanh(attention_scores)
+        attention_scores = self.score(attention_scores)
+
+        attn_weights = F.softmax(attention_scores, dim=1, dtype=torch.float32).to(attention_scores.dtype)
+        attn_weights = attn_weights.transpose(1, 2)
+        context = torch.matmul(attn_weights, batch_hidden).squeeze(1)
+        concat_context = torch.cat([context, char_onehots], 1)
+        hidden_states = self.rnn(concat_context, prev_hidden)
+
+        return hidden_states, attn_weights
+
+
+class SLANeXtMLP(nn.Module):
+    def __init__(self, hidden_size, out_channels, activation=None):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, out_channels)
+        self.act_fn = nn.Identity() if activation is None else ACT2CLS[activation]()
+
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        return hidden_states
+
+
 class SLANeXtPreTrainedModel(PreTrainedModel):
     config: SLANeXtConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "attentions": SLANeXtAttentionGRUCell,
+    }
+    _keep_in_fp32_modules_strict = ["structure_attention_cell", "structure_generator"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -478,70 +532,21 @@ class SLANeXtBackbone(nn.Module):
         **kwargs,
     ):
         super().__init__()
-
-        self.vision_config = config.vision_config
-        self.post_conv_in_channels = config.post_conv_in_channels
-        self.post_conv_out_channels = config.post_conv_out_channels
-
-        self.vision_tower = SLANeXtVisionEncoder(self.vision_config)
+        self.vision_tower = SLANeXtVisionEncoder(config.vision_config)
         self.post_conv = nn.Conv2d(
-            self.post_conv_in_channels, self.post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
+            config.post_conv_in_channels, config.post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
         )
 
-    def forward(self, hidden_states):
-        vision_hidden_states = self.vision_tower(hidden_states).last_hidden_state
-        hidden_states = self.post_conv(vision_hidden_states)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
+        vision_output = self.vision_tower(hidden_states, **kwargs)
+        hidden_states = self.post_conv(vision_output.last_hidden_state)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=vision_hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states, hidden_states=vision_output.hidden_states
+        )
 
 
-class SLANeXtAttentionGRUCell(nn.Module):
-    def __init__(self, input_size, hidden_size, num_embeddings, use_gru=False):
-        super().__init__()
-
-        self.input_to_hidden = nn.Linear(input_size, hidden_size, bias=False)
-        self.hidden_to_hidden = nn.Linear(hidden_size, hidden_size)
-        self.score = nn.Linear(hidden_size, 1, bias=False)
-
-        self.rnn = nn.GRUCell(input_size + num_embeddings, hidden_size)
-
-    def forward(
-        self,
-        prev_hidden: torch.FloatTensor,
-        batch_hidden: torch.FloatTensor,
-        char_onehots: torch.FloatTensor,
-    ):
-        batch_hidden_proj = self.input_to_hidden(batch_hidden)
-        prev_hidden_proj = self.hidden_to_hidden(prev_hidden).unsqueeze(1)
-
-        attention_scores = batch_hidden_proj + prev_hidden_proj
-        attention_scores = torch.tanh(attention_scores)
-        attention_scores = self.score(attention_scores)
-
-        attn_weights = F.softmax(attention_scores, dim=1, dtype=torch.float32).to(attention_scores.dtype)
-        attn_weights = attn_weights.transpose(1, 2)
-        context = torch.matmul(attn_weights, batch_hidden).squeeze(1)
-        concat_context = torch.cat([context, char_onehots], 1)
-        hidden_states = self.rnn(concat_context, prev_hidden)
-
-        return hidden_states, attn_weights
-
-
-class SLANeXtMLP(nn.Module):
-    def __init__(self, hidden_size, out_channels, activation=None):
-        super().__init__()
-        self.fc1 = nn.Linear(hidden_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, out_channels)
-        self.act_fn = nn.Identity() if activation is None else ACT2CLS[activation]()
-
-    def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        return hidden_states
-
-
-class SLANeXtSLAHead(nn.Module):
+class SLANeXtSLAHead(SLANeXtPreTrainedModel):
     def __init__(
         self,
         config: dict | None = None,
@@ -551,37 +556,54 @@ class SLANeXtSLAHead(nn.Module):
 
         self.config = config
 
-        self.structure_attention_cell = SLANeXtAttentionGRUCell(
-            config.post_conv_out_channels, config.hidden_size, config.out_channels
-        )
+        self.structure_attention_cell = SLANeXtAttentionGRUCell(config.post_conv_out_channels, config.hidden_size)
         self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
-        self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
+        # TODO: loc_generator is not used
+        # self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
 
-    def forward(self, hidden_states: torch.FloatTensor, targets: torch.Tensor | None = None):
-        batch_size = hidden_states.shape[0]
+    @merge_with_config_defaults
+    @capture_outputs
+    @filter_output_hidden_states
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        targets: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        hidden_states = torch.zeros((hidden_states.shape[0], self.config.hidden_size), device=hidden_states.device)
+        predicted_chars = torch.zeros(size=[hidden_states.shape[0]], dtype=torch.long, device=hidden_states.device)
 
-        hidden = torch.zeros((batch_size, self.config.hidden_size), device=hidden_states.device)
         structure_preds_list = []
         structure_ids_list = []
-        pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=hidden_states.device)
         for _ in range(self.config.max_text_length + 1):
-            emb_feature = F.one_hot(pre_chars, self.config.out_channels).float()
-            hidden, _ = self.structure_attention_cell(hidden, hidden_states, emb_feature)
-            structure_step = self.structure_generator(hidden)
-            pre_chars = structure_step.argmax(dim=1)
+            embedding_feature = F.one_hot(predicted_chars, self.config.out_channels).float()
+            hidden_states, _ = self.structure_attention_cell(hidden_states, hidden_states, embedding_feature, **kwargs)
+            structure_step = self.structure_generator(hidden_states)
+            predicted_chars = structure_step.argmax(dim=1)
+
             structure_preds_list.append(structure_step)
-            structure_ids_list.append(pre_chars)
+            structure_ids_list.append(predicted_chars)
             if torch.stack(structure_ids_list, dim=1).eq(self.config.out_channels - 1).any(-1).all():
                 break
-        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1, dtype=torch.float32)
+        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1, dtype=torch.float32).to(
+            hidden_states.dtype
+        )
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
+        return BaseModelOutput(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
 @dataclass
 @auto_docstring
 class SLANeXtForTableRecognitionOutput(BaseModelOutputWithNoAttention):
+    r"""
+    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Hidden-states of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
+    head_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Attentions of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` attentions (depending on early exits).
+    """
+
     head_hidden_states: torch.FloatTensor | None = None
+    head_attentions: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -608,6 +630,7 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
             last_hidden_state=head_outputs.last_hidden_state,
             hidden_states=backbone_outputs.hidden_states,
             head_hidden_states=head_outputs.hidden_states,
+            head_attentions=head_outputs.attentions,
         )
 
 

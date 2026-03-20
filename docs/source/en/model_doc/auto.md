@@ -153,6 +153,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForTextRecognition
 
+### AutoModelForTableRecognition
+
+[[autodoc]] AutoModelForTableRecognition
+
 ### AutoModelForImageClassification
 
 [[autodoc]] AutoModelForImageClassification
