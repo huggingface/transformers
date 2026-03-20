@@ -16,14 +16,56 @@ limitations under the License.
 
 # Contribute to 🤗 Transformers
 
+## Code agent contributions
+
 >[!WARNING]
 >As of early 2026, the Transformers repo is being overwhelmed by a large number of PRs and issue comments written by
->code agents. Many of these are low quality, and we are currently bottlenecked by our ability to review and respond 
->to them. As a result, we are **not accepting pure code agent contributions from new users** at this time. 
->You may use code agents in drafting or to help you diagnose issues, but 
->**new users should not submit PRs written by code agents under any circumstances**. Using LLMs or code agents
->to post reviews on other users' issues is banned. These prohibitions also apply to autonomous "OpenClaw"-like agents. 
->Violations of this policy will get you blocked across the entire Hugging Face GitHub organization.
+>code agents. Please read the code sections in their entirety if you intend to use code agents to contribute to Transformers. 
+>The rest of this document predates the "agent era", and parts of it may be out of date as a result.
+
+Because of the rise of code agents, the Transformers maintainers are currently bottlenecked by our ability to review
+and respond to issues and PRs. As a result, we are **not accepting pure code agent contributions from new users** 
+at this time. You may use code agents in drafting or to help you diagnose issues, but 
+**new users should not submit PRs written by code agents under any circumstances**. Using LLMs or code agents
+to post reviews on other users' issues is banned. These prohibitions also apply to autonomous "OpenClaw"-like agents. 
+
+Pure agent PRs will probably be closed without review, and repeated violations of this policy may result in a ban
+from contributing across the entire Hugging Face organization. 
+
+## Our code agent philosophy
+
+We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
+This is exactly the reason that pure code agent PRs are unhelpful to us, though - if you simply run a code agent
+and generate a PR, you are acting as a pointless middleman between maintainers and the agent. There's no reason
+for you to be involved; we could simply run a code agent ourselves and get the same output.
+
+If you want to contribute usefully, you need to provide value beyond what an agent can do on its own. In particular,
+we've found the following to be very helpful:
+- Clear diagnosis of bugs. Code agents like to quickly fix problems with a workaround that often causes code bloat
+or incompatibilities with other models. Spending time to track down the exact cause of a problem, and in particular
+locating the first commit where it appeared (for example with [git bisect](https://git-scm.com/docs/git-bisect)) is valuable.
+- Taking the time to reproduce the problem. Very often when a user reports an issue, the issue is actually caused by
+environment issues on their machine, or they misdiagnose the problem and suggest an invalid solution. Many code agents
+trust the user comments too much, which results in bad solutions, sometimes for problems that 
+do not exist! Writing a simple reproducer script and running it to make sure you see the problem is valuable.
+- Compare against other models. The Transformers repo is very large, and many models are doing similar things. When
+fixing a bug, it's valuable to see if the bug exists in other models. If your PR says
+"fixed by using the same approach as [other model]", with a link to the relevant code, that is very helpful for maintainers,
+because it tells us that the fix is likely to be correct and compatible with the rest of the codebase. Code agents often
+look at the code "narrowly", and make a fix that causes models to diverge from the rest of the codebase.
+- Avoid small or "busywork" PRs. In the past, we used to accept these, but given the current flood, we simply don't
+have time for small typo fixes in comments. Please do not ask your code agent to "find issues and fix them" or anything
+like that, because the things it finds are usually trivial or invalid like this. You can provide value beyond a code
+agent simply by having good taste about what's really important, and what isn't.
+- Verify tests locally and in the CI. Before opening a PR 
+
+We could summarize this as "You need to give the reviewer confidence that your solution is necessary and correct".
+Now that the bottleneck for contributions is reviewing code, not writing code, the best way to contribute is to support
+the reviewers as much as possible.
+
+
+
+## Welcome to the 🤗 Transformers community!
 
 Everyone is welcome to contribute, and we value everybody's contribution. Code
 contributions are not the only way to help the community. Answering questions, helping

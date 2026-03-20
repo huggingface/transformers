@@ -22,7 +22,8 @@ to them. As a result, we are **not accepting pure code agent contributions from 
 You may use code agents in drafting or to help you diagnose issues, but **new users should not submit PRs written
 by code agents under any circumstances**. The same prohibition applies to autonomous "OpenClaw"-like agents.
 
-Violations of this policy will get you blocked across the entire Hugging Face GitHub organization.
+PRs that appear to be fully agent-written will probably be closed without review. Repeated violations of this policy
+may result in a ban from contributing across the entire Hugging Face organization.
 
 - [ ] I confirm that this PR was written by a human.
 
