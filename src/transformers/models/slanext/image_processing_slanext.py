@@ -135,7 +135,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         if resample is not None and not is_torchdynamo_compiling():
-            raise logger.warning_once("Resampling is not supported in SLANeXt")
+            logger.warning_once("Resampling is not supported in SLANeXt")
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
