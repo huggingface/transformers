@@ -312,7 +312,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.attn_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
             if layer_idx != 0
@@ -508,11 +507,11 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 past_key_values=past_key_values,
                 position_ids=position_ids,
                 **kwargs,

@@ -137,6 +137,7 @@ else:
             ("pix2struct", "Pix2StructProcessor"),
             ("pixtral", "PixtralProcessor"),
             ("pop2piano", "Pop2PianoProcessor"),
+            ("pp_chart2table", "PPChart2TableProcessor"),
             ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
             ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
             ("qwen2_audio", "Qwen2AudioProcessor"),

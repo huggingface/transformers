@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -25,7 +24,8 @@ from huggingface_hub.dataclasses import strict
 from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     PILImageResampling,
     SizeDict,
@@ -115,7 +115,7 @@ class PPOCRV5ServerRecImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class PPOCRV5ServerRecImageProcessorFast(BaseImageProcessorFast):
+class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -135,7 +135,7 @@ class PPOCRV5ServerRecImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -159,9 +159,7 @@ class PPOCRV5ServerRecImageProcessorFast(BaseImageProcessorFast):
 
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images.float(), size=target_size, interpolation=interpolation
-                )
+                stacked_images = self.resize(image=stacked_images.float(), size=target_size, resample=resample)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -463,7 +461,7 @@ class PPOCRV5ServerRecForTextRecognition(PPOCRV5ServerRecPreTrainedModel):
 
 __all__ = [
     "PPOCRV5ServerRecForTextRecognition",
-    "PPOCRV5ServerRecImageProcessorFast",
+    "PPOCRV5ServerRecImageProcessor",
     "PPOCRV5ServerRecConfig",
     "PPOCRV5ServerRecModel",
     "PPOCRV5ServerRecPreTrainedModel",
