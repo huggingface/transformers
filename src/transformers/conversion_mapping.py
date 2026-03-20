@@ -158,9 +158,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
-            WeightRenaming(r"(?<!decoder)(?<!text_model)\.embed_tokens\.", "text_model.embed_tokens."),
-            WeightRenaming(r"(?<!decoder)(?<!text_model)\.norm\.", "text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder)(?<!decoder)(?<!text_model)\.layers.", "text_model.layers."),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens\.", "text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)(?<!layer)(?<!_)norm\.", "text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
         ],
         "gpt_oss": [
             # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
@@ -511,8 +511,7 @@ def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightC
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
-        if model_specific_conversions is not None:
-            return model_specific_conversions
+        return model_specific_conversions
     return None
 
 
@@ -549,7 +548,6 @@ def get_model_conversion_mapping(
         if (
             submodule is not model
             and isinstance(submodule, PreTrainedModel)
-            and submodule.config.__class__ != model.config.__class__
             and submodule.config.model_type not in seen_model_types
         ):
             conversions = extract_weight_conversions_for_model(submodule)

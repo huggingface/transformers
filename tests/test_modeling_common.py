@@ -4715,8 +4715,7 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
-                    # No conversion mapping for this model only, needs to test other classes
-                    continue
+                    self.skipTest(f"No conversion found for {model_class}")
 
                 # Find the model keys, so the targets according to the conversions
                 model_keys = list(model.state_dict().keys())
@@ -4792,8 +4791,7 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
-                    # No conversion mapping for this model only, needs to test other classes
-                    continue
+                    self.skipTest(f"No conversion found for {model_class}")
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Serialize without reverting the mapping
