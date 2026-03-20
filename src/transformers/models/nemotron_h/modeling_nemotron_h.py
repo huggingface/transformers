@@ -42,7 +42,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.zamba2.modeling_zamba2 import Zamba2HybridDynamicCache, Zamba2RMSNormGated
+from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
@@ -674,7 +674,7 @@ class NemotronHMamba2Mixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: Zamba2HybridDynamicCache | None = None,
+        cache_params: NemotronHHybridDynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):

@@ -133,7 +133,7 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
     def forward(
         self,
         hidden_states,
-        cache_params: Zamba2HybridDynamicCache | None = None,
+        cache_params: NemotronHHybridDynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
