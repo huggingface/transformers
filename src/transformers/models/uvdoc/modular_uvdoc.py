@@ -585,6 +585,7 @@ class UVDocModel(UVDocPreTrainedModel):
 
 
 __all__ = [
+    "UVDocBridge",
     "UVDocBackbone",
     "UVDocImageProcessor",
     "UVDocConfig",

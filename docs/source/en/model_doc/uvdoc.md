@@ -101,6 +101,10 @@ print(result)
 
 [[autodoc]] UVDocImageProcessor
 
+## UVDocBridge
+
+[[autodoc]] UVDocBridge
+
 ## UVDocBackbone
 
 [[autodoc]] UVDocBackbone

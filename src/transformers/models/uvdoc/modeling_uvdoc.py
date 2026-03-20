@@ -394,4 +394,4 @@ class UVDocModel(UVDocPreTrainedModel):
         )
 
 
-__all__ = ["UVDocBackbone", "UVDocModel", "UVDocPreTrainedModel"]
+__all__ = ["UVDocBridge", "UVDocBackbone", "UVDocModel", "UVDocPreTrainedModel"]
