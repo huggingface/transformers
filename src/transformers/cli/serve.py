@@ -296,8 +296,7 @@ class DownloadAggregator:
 
     huggingface_hub opens one tqdm bar per file shard. This class tracks them all and emits
     a single aggregate ``{"stage": "download", "progress": {"current": ..., "total": ...}}``
-    event whenever any bar updates.
-    """
+    event whenever any bar updates."""
 
     def __init__(self, enqueue: Callable[[dict], None], model_id_and_revision: str):
         self.enqueue = enqueue
@@ -488,18 +487,130 @@ def set_tqdm_class(callback, mid):
     return ProgressTqdm
 
 
-class ToolState:
-    """Lightweight class to keep track of the tool call state."""
+class _ToolCallParser:
+    """Stateful parser that detects and structures tool calls from streamed tokens.
 
-    def __init__(self):
-        self.reset()
+    Call `feed(token)` for each streamed token; it returns a list of `ChoiceDeltaToolCall` objects to emit
+    (may be empty if the parser is buffering).
 
-    def reset(self):
-        """Reset the tool call state (assumes we're outside a tool call)."""
+    Attributes:
+        finished: Set to True when a tool call end token is detected.
+    """
+
+    def __init__(self, tool_model_family: str):
+        self.tool_model_family = tool_model_family
         self.inside_tool_call = False
         self.has_tool_name_defined = False
         self.arg_nesting_level = 0
         self.buffer = ""
+        self.finished = False
+
+    def feed(self, token: str) -> list["ChoiceDeltaToolCall"]:
+        """Process a single streamed token. Returns a list of tool call deltas to emit."""
+        # Start of a tool call
+        if token.strip() == _TOOL_CALL_TOKENS[self.tool_model_family]["start"]:
+            self.inside_tool_call = True
+            return []
+
+        # End of tool call
+        if token.strip() == _TOOL_CALL_TOKENS[self.tool_model_family]["end"]:
+            self._reset()
+            self.finished = True
+            return []
+
+        if not self.inside_tool_call:
+            return []
+
+        self.buffer += token
+
+        # First step: extract the tool name (may need several tokens)
+        if not self.has_tool_name_defined:
+            tool_name_match = re.search(r"\"name\": \"(.*?)\"", self.buffer)
+            if tool_name_match is None:
+                return []
+            self.has_tool_name_defined = True
+            return [
+                ChoiceDeltaToolCall(
+                    function=ChoiceDeltaToolCallFunction(name=tool_name_match.group(1)),
+                    index=0,
+                    type="function",
+                    id="_tool_call",
+                )
+            ]
+
+        # Second step: extract tool arguments
+        if token == "":
+            return []
+        # Until we see the `"arguments": {` in the buffer, we skip
+        # TODO: other models will likely need more elaborate processing here
+        if '"arguments": {' not in self.buffer:
+            return []
+
+        # Handle nesting
+        self.arg_nesting_level += token.count("{")
+        self.arg_nesting_level -= token.count("}")
+        if self.arg_nesting_level < 0:
+            token = "".join(token.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
+
+        return [
+            ChoiceDeltaToolCall(
+                function=ChoiceDeltaToolCallFunction(arguments=token),
+                index=0,
+                type="function",
+            )
+        ]
+
+    def _reset(self):
+        self.inside_tool_call = False
+        self.has_tool_name_defined = False
+        self.arg_nesting_level = 0
+        self.buffer = ""
+
+
+class _GptossFilter:
+    """Handles the gptoss-specific hacks: CoT filtering and return suffix removal.
+
+    Usage:
+        filt = _GptossFilter(model)
+        for token in streamer:
+            token, should_skip = filt.process(token)
+            if should_skip:
+                continue
+            # ... emit token
+    """
+
+    def __init__(self, model: "PreTrainedModel"):
+        arch = model.config.architectures[0].lower()
+        self.is_gptoss = "gptoss" in arch
+        self.filter_cot = self.is_gptoss
+        self.cot_trace_end = "<|channel|>final<|message|>" if self.is_gptoss else None
+        self._accumulated = ""
+
+    @property
+    def skip_special_tokens(self) -> bool:
+        return not self.is_gptoss
+
+    def process(self, token: str) -> tuple[str, bool]:
+        """Returns (processed_token, should_skip). If should_skip is True, the token should not be emitted."""
+        if self.is_gptoss:
+            token = token.removesuffix("<|return|>")
+        self._accumulated += token
+
+        if self.filter_cot:
+            if self.cot_trace_end in self._accumulated:
+                self.filter_cot = False
+                self._accumulated = ""
+            return token, True
+
+        return token, False
+
+    def reset_accumulated(self):
+        """Reset accumulated text (used when transitioning from CoT to final output in Response API)."""
+        self._accumulated = ""
+
+    @property
+    def accumulated(self) -> str:
+        return self._accumulated
 
 
 class TimedModel:
@@ -556,7 +667,6 @@ class TimedModel:
 
 class Serve:
     # Defining a class to help with internal state but in practice it's just a method to call
-    # TODO: refactor into a proper module with helpers + 1 main method
     def __init__(
         self,
         continuous_batching: Annotated[
@@ -651,6 +761,7 @@ class Serve:
         # Internal state:
         # 1. Tracks models in memory, to prevent reloading the model unnecessarily
         self.loaded_models: dict[str, TimedModel] = {}
+        self._cb_cm = None  # The context manager wrapping the CB manager
         self.running_continuous_batching_manager: ContinuousBatchingManager | None = None
 
         # Tracks in-flight model loads for fan-out to multiple SSE subscribers
@@ -675,6 +786,24 @@ class Serve:
             self.last_model = model_id_and_revision
             self.load_model_and_processor(model_id_and_revision)
 
+        app = self._create_app()
+
+        config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info")
+        self.server = uvicorn.Server(config)
+
+        if self.non_blocking:
+            self.start_server()
+        else:
+            self.server.run()
+
+    # ------------------------------------------------------------------
+    # FastAPI app creation
+    # ------------------------------------------------------------------
+
+    def _create_app(self) -> "FastAPI":
+        """Build and return the FastAPI application with all routes registered."""
+        from fastapi import Request
+
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
@@ -682,8 +811,6 @@ class Serve:
 
         app = FastAPI(lifespan=lifespan)
 
-        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled. However, for
-        # security purposes, it's disabled by default
         if self.enable_cors:
             app.add_middleware(
                 CORSMiddleware,
@@ -695,8 +822,6 @@ class Serve:
             logger.warning_once(
                 "CORS allow origin is set to `*`. This is not recommended for production environments."
             )
-
-        from fastapi import Request
 
         @app.post("/v1/chat/completions")
         def chat_completion(request: Request, body: dict):
@@ -758,88 +883,9 @@ class Serve:
                 raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
 
             model_id_and_revision = self.process_model_name(model)
-
-            async def event_publisher():
-                queue: asyncio.Queue[str | None] = asyncio.Queue()
-                model_loaded = model_id_and_revision in self.loaded_models
-                model_not_deleted = model_loaded and not self.loaded_models[model_id_and_revision].is_deleted()
-
-                # Case 1: Model already cached
-                if model_loaded and model_not_deleted:
-                    self.loaded_models[model_id_and_revision].reset_timer()
-                    yield f"data: {json.dumps({'status': 'ready', 'model': model_id_and_revision, 'cached': True})}\n\n"
-                    return
-
-                # Case 2: Load already happening, join existing subscribers
-                if model_id_and_revision in self.loading_tasks:
-                    self.loading_subscribers[model_id_and_revision].append(queue)
-
-                    while True:
-                        item = await queue.get()
-                        if item is None:
-                            break
-                        yield item
-                    return
-
-                # Case 3: First request — start the load task
-                self.loading_subscribers[model_id_and_revision] = [queue]
-                loop = asyncio.get_running_loop()
-
-                def enqueue(payload: dict):
-                    msg = f"data: {json.dumps(payload)}\n\n"
-
-                    def broadcast():
-                        for q in self.loading_subscribers.get(model_id_and_revision, []):
-                            q.put_nowait(msg)
-
-                    loop.call_soon_threadsafe(broadcast)
-
-                download_aggregator = DownloadAggregator(enqueue, model_id_and_revision)
-
-                def streaming_tqdm_hook(factory, args, kwargs):
-                    bar = factory(*args, **kwargs)
-                    desc = kwargs.get("desc") or getattr(bar, "desc", None) or ""
-                    unit = kwargs.get("unit") or getattr(bar, "unit", "it")
-                    total = getattr(bar, "total", kwargs.get("total"))
-
-                    # Only forward byte-progress bars (file downloads) — skip noise like "Fetching N files"
-                    if unit == "B":
-                        download_aggregator.register(id(bar), total)
-                        return DownloadProxy(bar, download_aggregator=download_aggregator)
-
-                    # "Loading weights" bar — emit as stage: "weights" with item-count progress
-                    if desc == "Loading weights":
-                        return WeightsProxy(bar, enqueue, model_id_and_revision)
-
-                    # Other non-byte, non-weights bars (noise) — return unmodified
-                    return bar
-
-                async def run_load():
-                    previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
-                    try:
-                        await asyncio.to_thread(self.load_model_and_processor, model_id_and_revision, enqueue)
-                    except Exception as e:
-                        logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
-                        enqueue({"status": "error", "model": model_id_and_revision, "message": str(e)})
-                    finally:
-                        logging.set_tqdm_hook(previous_hook)
-
-                        def _send_sentinel():
-                            for q in self.loading_subscribers.pop(model_id_and_revision, []):
-                                q.put_nowait(None)
-                            self.loading_tasks.pop(model_id_and_revision, None)
-
-                        loop.call_soon_threadsafe(_send_sentinel)
-
-                self.loading_tasks[model_id_and_revision] = asyncio.create_task(run_load())
-
-                while True:
-                    item = await queue.get()
-                    if item is None:
-                        break
-                    yield item
-
-            return StreamingResponse(event_publisher(), media_type="text/event-stream")
+            return StreamingResponse(
+                self._load_model_event_publisher(model_id_and_revision), media_type="text/event-stream"
+            )
 
         @app.middleware("http")
         async def get_or_set_request_id(request: Request, call_next):
@@ -849,13 +895,97 @@ class Serve:
             response.headers[X_REQUEST_ID] = request_id
             return response
 
-        config = uvicorn.Config(app, host=self.host, port=self.port, log_level="info")
-        self.server = uvicorn.Server(config)
+        return app
 
-        if self.non_blocking:
-            self.start_server()
-        else:
-            self.server.run()
+    # ------------------------------------------------------------------
+    # Load model SSE publisher (extracted from load_model endpoint)
+    # ------------------------------------------------------------------
+
+    async def _load_model_event_publisher(self, model_id_and_revision: str):
+        """SSE event publisher for the /load_model endpoint. Handles caching, fan-out to multiple subscribers,
+        and progress streaming."""
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        model_loaded = model_id_and_revision in self.loaded_models
+        model_not_deleted = model_loaded and not self.loaded_models[model_id_and_revision].is_deleted()
+
+        # Case 1: Model already cached
+        if model_loaded and model_not_deleted:
+            self.loaded_models[model_id_and_revision].reset_timer()
+            yield f"data: {json.dumps({'status': 'ready', 'model': model_id_and_revision, 'cached': True})}\n\n"
+            return
+
+        # Case 2: Load already happening, join existing subscribers
+        if model_id_and_revision in self.loading_tasks:
+            self.loading_subscribers[model_id_and_revision].append(queue)
+
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+            return
+
+        # Case 3: First request — start the load task
+        self.loading_subscribers[model_id_and_revision] = [queue]
+        loop = asyncio.get_running_loop()
+
+        def enqueue(payload: dict):
+            msg = f"data: {json.dumps(payload)}\n\n"
+
+            def broadcast():
+                for q in self.loading_subscribers.get(model_id_and_revision, []):
+                    q.put_nowait(msg)
+
+            loop.call_soon_threadsafe(broadcast)
+
+        download_aggregator = DownloadAggregator(enqueue, model_id_and_revision)
+
+        def streaming_tqdm_hook(factory, args, kwargs):
+            bar = factory(*args, **kwargs)
+            desc = kwargs.get("desc") or getattr(bar, "desc", None) or ""
+            unit = kwargs.get("unit") or getattr(bar, "unit", "it")
+            total = getattr(bar, "total", kwargs.get("total"))
+
+            # Only forward byte-progress bars (file downloads) — skip noise like "Fetching N files"
+            if unit == "B":
+                download_aggregator.register(id(bar), total)
+                return DownloadProxy(bar, download_aggregator=download_aggregator)
+
+            # "Loading weights" bar — emit as stage: "weights" with item-count progress
+            if desc == "Loading weights":
+                return WeightsProxy(bar, enqueue, model_id_and_revision)
+
+            # Other non-byte, non-weights bars (noise) — return unmodified
+            return bar
+
+        async def run_load():
+            previous_hook = logging.set_tqdm_hook(streaming_tqdm_hook)
+            try:
+                await asyncio.to_thread(self.load_model_and_processor, model_id_and_revision, enqueue)
+            except Exception as e:
+                logger.error(f"Failed to load {model_id_and_revision}: {e}", exc_info=True)
+                enqueue({"status": "error", "model": model_id_and_revision, "message": str(e)})
+            finally:
+                logging.set_tqdm_hook(previous_hook)
+
+                def _send_sentinel():
+                    for q in self.loading_subscribers.pop(model_id_and_revision, []):
+                        q.put_nowait(None)
+                    self.loading_tasks.pop(model_id_and_revision, None)
+
+                loop.call_soon_threadsafe(_send_sentinel)
+
+        self.loading_tasks[model_id_and_revision] = asyncio.create_task(run_load())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
+
+    # ------------------------------------------------------------------
+    # Server lifecycle
+    # ------------------------------------------------------------------
 
     def start_server(self):
         def _run():
@@ -878,17 +1008,36 @@ class Serve:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
 
+    def _start_cb_manager(self, model: "PreTrainedModel", generation_config: GenerationConfig):
+        """Create and start a new continuous batching manager via its context manager."""
+        self._stop_cb_manager()
+        self._cb_cm = model.continuous_batching_context_manager(
+            generation_config=generation_config, block=True, timeout=2
+        )
+        self.running_continuous_batching_manager = self._cb_cm.__enter__()
+        # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
+        self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
+
+    def _stop_cb_manager(self):
+        """Stop the running continuous batching manager if any."""
+        if self._cb_cm is not None:
+            logger.warning("Resetting the continuous batching manager.")
+            self._cb_cm.__exit__(None, None, None)
+            self._cb_cm = None
+            self.running_continuous_batching_manager = None
+
     def reset_loaded_models(self):
         """
         Resets all loaded models.
         """
-        if self.running_continuous_batching_manager is not None:
-            logger.warning("Resetting the continuous batching manager.")
-            self.running_continuous_batching_manager.stop(block=True, timeout=2)
-            self.running_continuous_batching_manager = None
+        self._stop_cb_manager()
         for model in list(self.loaded_models.values()):
             model.delete_model()
         self.last_model = None
+
+    # ------------------------------------------------------------------
+    # Request validation
+    # ------------------------------------------------------------------
 
     def _validate_request(
         self,
@@ -962,6 +1111,10 @@ class Serve:
             validator=transcription_validator,
             unused_fields=UNUSED_TRANSCRIPTION_FIELDS,
         )
+
+    # ------------------------------------------------------------------
+    # Chunk / event builders
+    # ------------------------------------------------------------------
 
     def build_chat_completion_chunk(
         self,
@@ -1042,6 +1195,37 @@ class Serve:
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     @staticmethod
+    def _build_response_object(
+        request_id: str,
+        created_at: float,
+        status: str,
+        model: str,
+        req: dict,
+        output: list | None = None,
+        error: "ResponseError | None" = None,
+    ) -> "Response":
+        """Build a Response object with common fields filled in."""
+        return Response(
+            id=f"resp_{request_id}",
+            created_at=created_at,
+            status=status,
+            model=model,
+            instructions=req.get("instructions"),
+            text={"format": {"type": "text"}},
+            output=output or [],
+            object="response",
+            tools=[],
+            parallel_tool_calls=req.get("parallel_tool_calls", False),
+            tool_choice="auto",
+            metadata=req.get("metadata"),
+            error=error,
+        )
+
+    # ------------------------------------------------------------------
+    # Model listing
+    # ------------------------------------------------------------------
+
+    @staticmethod
     @lru_cache
     def get_gen_models(cache_dir: str | None = None) -> list[dict[str, any]]:
         """
@@ -1090,175 +1274,9 @@ class Serve:
 
         return generative_models
 
-    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> "StreamingResponse | JSONResponse":
-        """
-        Generates an OpenAI Chat Completion using continuous batching.
-
-        Args:
-            req (`dict`): The request to generate an OpenAI Chat Completion for.
-
-        Returns:
-            `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
-        """
-
-        model_id_and_revision = self.process_model_name(req["model"])
-        must_discard_cache = model_id_and_revision != self.last_model
-
-        self.last_model = model_id_and_revision
-
-        # When switching models, terminate a continuous batching manager if it is running.
-        if must_discard_cache:
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=2)
-                self.running_continuous_batching_manager = None
-
-        model, processor = self.load_model_and_processor(model_id_and_revision)
-
-        # Continuous batching only supports text-only models
-        if self.get_model_modality(model, processor=processor) != Modality.LLM:
-            logger.warning_once(
-                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
-            )
-            return self.generate_chat_completion(req)
-
-        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
-
-        generation_config = create_generation_config_from_req(
-            req,
-            model_generation_config=model.generation_config,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
-            use_cache=False,
-            do_sample=False,
-            scheduler="fifo",
-        )
-
-        if self.running_continuous_batching_manager is None:
-            self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config
-            )
-
-            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
-            self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
-            self.running_continuous_batching_manager.start()
-
-        # TODO (Joao, Lysandre): this should also work with tool support
-        modality = self.get_model_modality(model, processor=processor)
-        processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
-
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=req.get("tools"),
-            return_tensors="pt",
-            return_dict=True,
-            tokenize=True,
-        )
-        inputs = inputs["input_ids"][0].to(model.device)
-
-        def stream_chat_completion(request_id, decode_stream):
-            from ..generation.continuous_batching import RequestStatus
-
-            try:
-                # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
-                # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
-
-                n_tokens_generated = 0
-                for result in self.running_continuous_batching_manager.request_id_iter(request_id):
-                    n_tokens_generated += 1
-
-                    # Always yield the token content (even for the final FINISHED token)
-                    if result.generated_tokens:
-                        token_id = result.generated_tokens[-1]
-                        yield self.build_chat_completion_chunk(
-                            request_id=request_id,
-                            content=token_id,
-                            model=model_id_and_revision,
-                            decode_stream=decode_stream,
-                            tokenizer=tokenizer,
-                        )
-
-                    if result.status == RequestStatus.FINISHED:
-                        generated_all_tokens = (
-                            generation_config.max_new_tokens is not None
-                            and n_tokens_generated >= generation_config.max_new_tokens
-                        )
-
-                        # If the tokenizer has an eos_token, we can have a more robust check.
-                        if hasattr(tokenizer, "eos_token"):
-                            final_token_is_eos = result == tokenizer.eos_token
-                            generated_all_tokens = generated_all_tokens and not final_token_is_eos
-
-                        reason = "length" if generated_all_tokens else "stop"
-
-                        yield self.build_chat_completion_chunk(
-                            request_id,
-                            finish_reason=reason,
-                            model=model_id_and_revision,
-                        )
-                        break
-
-            except Exception as e:
-                logger.error(str(e))
-                self.running_continuous_batching_manager.cancel_request(request_id)
-                yield f'data: {{"error": "{str(e)}"}}'
-
-        def buffer_chat_completion(_request_id):
-            result = None
-            while self.running_continuous_batching_manager.is_running() and result is None:
-                result = self.running_continuous_batching_manager.get_result(request_id=_request_id, timeout=1)
-
-            content = tokenizer.decode(result.generated_tokens)
-
-            chat_completion_result = ChatCompletion(
-                id=_request_id,
-                created=int(time.time()),
-                object="chat.completion",
-                model=model_id_and_revision,
-                choices=[
-                    Choice(
-                        # TODO check the index
-                        index=0,
-                        message=ChatCompletionMessage(content=content, role="assistant"),
-                        finish_reason="stop",
-                    )
-                ],
-                # TODO implement function calling
-                # TODO implement usage
-            )
-
-            return chat_completion_result
-
-        async def cancellation_wrapper_stream(_request_id):
-            # Enables cancellation in an async context
-            try:
-                decode_stream = DecodeStream(inputs.tolist(), False)
-                for _chunk in stream_chat_completion(_request_id, decode_stream):
-                    yield self.chunk_to_sse_element(_chunk)
-                    await asyncio.sleep(0)
-            except asyncio.CancelledError:
-                self.running_continuous_batching_manager.cancel_request(_request_id)
-                logger.warning(f"Request {_request_id} was cancelled.")
-
-        def cancellation_wrapper_buffer(_request_id):
-            # Enables cancellation in an async context
-            try:
-                return buffer_chat_completion(_request_id)
-            except asyncio.CancelledError:
-                self.running_continuous_batching_manager.cancel_request(_request_id)
-                logger.warning(f"Request {_request_id} was cancelled.")
-
-        request_id = self.running_continuous_batching_manager.add_request(
-            inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=req.get("stream")
-        )
-
-        if req.get("stream"):
-            return StreamingResponse(cancellation_wrapper_stream(request_id), media_type="text/event-stream")
-        else:
-            chunk = cancellation_wrapper_buffer(request_id)
-            json_chunk = chunk.model_dump_json(exclude_none=True)
-            return JSONResponse(json_chunk, media_type="application/json")
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
@@ -1327,6 +1345,211 @@ class Serve:
             processor_inputs.append(parsed_message)
         return processor_inputs
 
+    @staticmethod
+    def _parse_response_inputs(req: dict) -> list[dict]:
+        """Convert a Response API request's `input` field into a list of chat messages."""
+        if isinstance(req["input"], str):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append({"role": "user", "content": req["input"]})
+        elif isinstance(req["input"], list):
+            if "instructions" in req:
+                if req["input"][0]["role"] != "system":
+                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
+                else:
+                    inputs = req["input"]
+                    inputs[0]["content"] = req["instructions"]
+            else:
+                inputs = req["input"]
+        elif isinstance(req["input"], dict):
+            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
+            inputs.append(req["input"])
+        else:
+            raise TypeError("inputs should be a list, dict, or str")
+        return inputs
+
+    def _get_tool_model_family(self, model: "PreTrainedModel") -> str | None:
+        """Return the tool model family key if the model supports tool calls, else None."""
+        for family in _MODELS_WITH_TOOL_SUPPORT:
+            if family in model.config.architectures[0].lower():
+                return family
+        return None
+
+    def _get_kv_cache(self, req: dict, input_length: int, must_discard_cache: bool):
+        """Return a KV cache to reuse if the request is a continuation of the last, else None."""
+        if self.is_continuation(req) and not must_discard_cache:
+            seq_len = self.last_kv_cache.get_seq_length()
+            if input_length > seq_len:
+                return self.last_kv_cache
+        return None
+
+    def _generate_with_cache(self, model: "PreTrainedModel", **kwargs):
+        """Run model.generate and save the KV cache."""
+        generate_output = model.generate(**kwargs)
+        self.last_kv_cache = generate_output.past_key_values
+
+    def _compute_finish_reason(self, generation_config, n_tokens_generated, final_token, tokenizer=None) -> str:
+        """Determine finish reason based on token count and final token."""
+        generated_all_tokens = (
+            generation_config.max_new_tokens is not None and n_tokens_generated >= generation_config.max_new_tokens
+        )
+        if tokenizer is not None and hasattr(tokenizer, "eos_token"):
+            final_token_is_eos = final_token == tokenizer.eos_token
+            generated_all_tokens = generated_all_tokens and not final_token_is_eos
+        return "length" if generated_all_tokens else "stop"
+
+    # ------------------------------------------------------------------
+    # Chat Completion: continuous batching
+    # ------------------------------------------------------------------
+
+    def continuous_batching_chat_completion(self, req: dict, request_id: str) -> "StreamingResponse | JSONResponse":
+        """
+        Generates an OpenAI Chat Completion using continuous batching.
+
+        Args:
+            req (`dict`): The request to generate an OpenAI Chat Completion for.
+
+        Returns:
+            `Generator[str, None, None]`: A generator that yields the OpenAI Chat Completion chunks.
+        """
+
+        model_id_and_revision = self.process_model_name(req["model"])
+        must_discard_cache = model_id_and_revision != self.last_model
+
+        self.last_model = model_id_and_revision
+
+        # When switching models, terminate a continuous batching manager if it is running.
+        if must_discard_cache:
+            self._stop_cb_manager()
+
+        model, processor = self.load_model_and_processor(model_id_and_revision)
+
+        # Continuous batching only supports text-only models
+        if self.get_model_modality(model, processor=processor) != Modality.LLM:
+            logger.warning_once(
+                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+            )
+            return self.generate_chat_completion(req)
+
+        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+
+        generation_config = create_generation_config_from_req(
+            req,
+            model_generation_config=model.generation_config,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+            use_cache=False,
+            do_sample=False,
+            scheduler="fifo",
+        )
+
+        if self.running_continuous_batching_manager is None:
+            self._start_cb_manager(model, generation_config)
+
+        # TODO (Joao, Lysandre): this should also work with tool support
+        modality = self.get_model_modality(model, processor=processor)
+        processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
+
+        inputs = processor.apply_chat_template(
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=req.get("tools"),
+            return_tensors="pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        inputs = inputs["input_ids"][0].to(model.device)
+
+        request_id = self.running_continuous_batching_manager.add_request(
+            inputs, request_id=request_id, max_new_tokens=generation_config.max_new_tokens, streaming=req.get("stream")
+        )
+
+        if req.get("stream"):
+            return StreamingResponse(
+                self._cb_stream_wrapper(request_id, inputs, model_id_and_revision, generation_config, tokenizer),
+                media_type="text/event-stream",
+            )
+        else:
+            chunk = self._cb_buffer_completion(request_id, model_id_and_revision, tokenizer)
+            json_chunk = chunk.model_dump_json(exclude_none=True)
+            return JSONResponse(json_chunk, media_type="application/json")
+
+    def _cb_stream_chat_completion(
+        self, request_id: str, model_id_and_revision: str, generation_config, tokenizer, decode_stream
+    ) -> Generator:
+        """Stream chat completion chunks for continuous batching."""
+        from ..generation.continuous_batching import RequestStatus
+
+        yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
+
+        n_tokens_generated = 0
+        for result in self.running_continuous_batching_manager.request_id_iter(request_id):
+            n_tokens_generated += 1
+
+            if result.generated_tokens:
+                token_id = result.generated_tokens[-1]
+                yield self.build_chat_completion_chunk(
+                    request_id=request_id,
+                    content=token_id,
+                    model=model_id_and_revision,
+                    decode_stream=decode_stream,
+                    tokenizer=tokenizer,
+                )
+
+            if result.status == RequestStatus.FINISHED:
+                reason = self._compute_finish_reason(generation_config, n_tokens_generated, result, tokenizer)
+                yield self.build_chat_completion_chunk(
+                    request_id,
+                    finish_reason=reason,
+                    model=model_id_and_revision,
+                )
+                break
+
+    async def _cb_stream_wrapper(self, request_id, inputs, model_id_and_revision, generation_config, tokenizer):
+        """Async wrapper for CB streaming that supports cancellation."""
+        try:
+            decode_stream = DecodeStream(inputs.tolist(), False)
+            for chunk in self._cb_stream_chat_completion(
+                request_id, model_id_and_revision, generation_config, tokenizer, decode_stream
+            ):
+                yield self.chunk_to_sse_element(chunk)
+                await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            self.running_continuous_batching_manager.cancel_request(request_id)
+            logger.warning(f"Request {request_id} was cancelled.")
+        except Exception as e:
+            logger.error(str(e))
+            self.running_continuous_batching_manager.cancel_request(request_id)
+            yield f'data: {{"error": "{str(e)}"}}'
+
+    def _cb_buffer_completion(self, request_id: str, model_id_and_revision: str, tokenizer) -> "ChatCompletion":
+        """Buffer a full CB completion (non-streaming)."""
+        result = None
+        while self.running_continuous_batching_manager.is_running() and result is None:
+            result = self.running_continuous_batching_manager.get_result(request_id=request_id, timeout=1)
+
+        content = tokenizer.decode(result.generated_tokens)
+
+        return ChatCompletion(
+            id=request_id,
+            created=int(time.time()),
+            object="chat.completion",
+            model=model_id_and_revision,
+            choices=[
+                Choice(
+                    # TODO check the index
+                    index=0,
+                    message=ChatCompletionMessage(content=content, role="assistant"),
+                    finish_reason="stop",
+                )
+            ],
+            # TODO implement function calling
+            # TODO implement usage
+        )
+
+    # ------------------------------------------------------------------
+    # Chat Completion: standard generate
+    # ------------------------------------------------------------------
+
     def generate_chat_completion(self, req: dict) -> "StreamingResponse | JSONResponse":
         """
         Generates an OpenAI Chat Completion using `generate`.
@@ -1358,16 +1581,7 @@ class Serve:
         modality = self.get_model_modality(model, processor=processor)
         processor_inputs = self.get_processor_inputs_from_inbound_messages(messages, modality)
 
-        # ====== TOOL PREPROCESSING LOGIC ======
-        tool_model_family = None
-        for supported_model_families in _MODELS_WITH_TOOL_SUPPORT:
-            if supported_model_families in model.config.architectures[0].lower():
-                tool_model_family = supported_model_families
-                break
-        # TODO: trigger 2 constrained generations after the tool call start token is emitted:
-        # 1. force generation to pick from the tool names
-        # 2. force generation to pick from that tool's arguments
-        # ====== END OF TOOL PREPROCESSING LOGIC ======
+        tool_model_family = self._get_tool_model_family(model)
 
         inputs = processor.apply_chat_template(
             processor_inputs,
@@ -1380,27 +1594,14 @@ class Serve:
         inputs = inputs.to(model.device)
         request_id = req.get("request_id", "req_0")
 
-        # Temporary hack for GPTOSS 1: don't filter special tokens
-        skip_special_tokens = True
-        if "gptoss" in model.config.architectures[0].lower():
-            skip_special_tokens = False
-
+        gptoss = _GptossFilter(model)
         generation_streamer = TextIteratorStreamer(
             processor,
-            skip_special_tokens=skip_special_tokens,
+            skip_special_tokens=gptoss.skip_special_tokens,
             skip_prompt=True,
         )
 
-        if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()
-            if inputs["input_ids"].shape[-1] > seq_len:
-                last_kv_cache = self.last_kv_cache
-            else:
-                last_kv_cache = None
-        else:
-            seq_len = inputs["input_ids"].shape[-1]
-            last_kv_cache = None
-
+        last_kv_cache = self._get_kv_cache(req, inputs["input_ids"].shape[-1], must_discard_cache)
         generation_config = create_generation_config_from_req(
             req,
             model_generation_config=model.generation_config,
@@ -1414,162 +1615,38 @@ class Serve:
             "past_key_values": last_kv_cache,
         }
 
-        def stream_chat_completion(streamer, _request_id):
-            # Temporary hack for GPTOS 2: filter out the CoT tokens. Full solution here implies defining new output
-            # classes and piping the reasoning trace into a new field
-            filter_cot = False
-            cot_trace_end = None
-            if "gptoss" in model.config.architectures[0].lower():
-                filter_cot = True
-                cot_trace_end = "<|channel|>final<|message|>"
-
-            # Thin wrapper to save the KV cache after generation
-            def generate_with_cache(**kwargs):
-                generate_output = model.generate(**kwargs)
-                self.last_kv_cache = generate_output.past_key_values
-
-            thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
-            results = ""
-
-            try:
-                thread.start()
-                tool_state = ToolState()
-
-                # Emit the assistant role to start the stream. Other chunks won't have a role, as it is implicit
-                # they come from the assistant.
-                yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
-
-                result = ""
-                n_tokens_generated = 0
-
-                for result in streamer:
-                    n_tokens_generated += 1
-
-                    # Temporary hack for GPT-OSS 3: don't emit the final "<|return|>"
-                    if "gptoss" in model.config.architectures[0].lower():
-                        result = result.removesuffix("<|return|>")
-                    results += result
-
-                    # (related to temporary hack 2)
-                    if filter_cot:
-                        if cot_trace_end in results:  # end of reasoning trace observed -> stop filtering
-                            filter_cot = False
-                            continue
-                        else:
-                            continue
-
-                    # ====== TOOL CALL LOGIC ======
-                    if tool_model_family is not None:
-                        # Start of a tool call: reset state variables, set `inside_tool_call`
-                        if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["start"]:
-                            tool_state.inside_tool_call = True
-                            continue
-
-                        # End of tool call: reset `inside_tool_call`, emit a `finish_reason`
-                        if result.strip() == _TOOL_CALL_TOKENS[tool_model_family]["end"]:
-                            tool_state.reset()
-                            yield self.build_chat_completion_chunk(
-                                request_id=_request_id,
-                                role=None,
-                                finish_reason="tool_calls",
-                                model=model_id_and_revision,
-                            )
-
-                            continue
-                        # Inside a tool call
-                        if tool_state.inside_tool_call:
-                            tool_state.buffer += result
-
-                            # First step: extract the tool name (may need several tokens, and we can't emit a delta
-                            # until we have the full name)
-                            if not tool_state.has_tool_name_defined:
-                                tool_name = re.search(r"\"name\": \"(.*?)\"", tool_state.buffer)
-                                if tool_name is None:
-                                    continue
-                                else:
-                                    tool_name = tool_name.group(1)
-                                tool_state.has_tool_name_defined = True
-                                tool = ChoiceDeltaToolCall(
-                                    function=ChoiceDeltaToolCallFunction(name=tool_name),
-                                    index=0,
-                                    type="function",
-                                    id=_request_id + "_tool_call",  # Only the first tool call delta has an id
-                                )
-
-                            # Second step: extract tool arguments. The tool arguments can be seen as a json string
-                            # within the tool json string. We emit a delta for the arguments.
-                            else:
-                                # Empty text: skip
-                                if result == "":
-                                    continue
-                                # Until we see the `"arguments": {` in the buffer, we skip
-                                # TODO: other models will likely need more elaborate processing here
-                                if '"arguments": {' not in tool_state.buffer:
-                                    continue
-
-                                # Handle nesting. We want to exclude the last } from the emitted arguments (it's
-                                # closing the outermost nesting level, outside the arguments block)
-                                tool_state.arg_nesting_level += result.count("{")
-                                tool_state.arg_nesting_level -= result.count("}")
-                                if tool_state.arg_nesting_level < 0:
-                                    result = "".join(result.split("}")[:-2]) + "}"  # e.g. "4}}\n" -> "4}"
-
-                                tool = ChoiceDeltaToolCall(
-                                    function=ChoiceDeltaToolCallFunction(arguments=result),
-                                    index=0,
-                                    type="function",
-                                )
-
-                            yield self.build_chat_completion_chunk(
-                                request_id=_request_id,
-                                role=None,
-                                tool_calls=[tool],
-                                model=model_id_and_revision,
-                            )
-                            continue
-                    # ====== END OF TOOL CALL LOGIC ======
-
-                    # All non-tool related tokens are emitted as assistant messages. Empty text is skipped.
-                    if result != "":
-                        yield self.build_chat_completion_chunk(
-                            _request_id, content=result, model=model_id_and_revision
-                        )
-
-                generated_all_tokens = (
-                    generation_config.max_new_tokens is not None
-                    and n_tokens_generated >= generation_config.max_new_tokens
-                )
-
-                # If the tokenizer has an eos_token, we can have a more robust check.
-                if hasattr(streamer.tokenizer, "eos_token"):
-                    final_token_is_eos = result == streamer.tokenizer.eos_token
-                    generated_all_tokens = generated_all_tokens and not final_token_is_eos
-
-                reason = "length" if generated_all_tokens else "stop"
-
-                yield self.build_chat_completion_chunk(_request_id, finish_reason=reason, model=model_id_and_revision)
-
-                thread.join()
-            except Exception as e:
-                logger.error(str(e))
-                yield f'data: {{"error": "{str(e)}"}}'
-
-            finally:
-                thread.join()
-
         if req.get("stream"):
             return StreamingResponse(
-                map(self.chunk_to_sse_element, stream_chat_completion(generation_streamer, request_id)),
+                map(
+                    self.chunk_to_sse_element,
+                    self._stream_chat_completion(
+                        generation_streamer,
+                        request_id,
+                        model,
+                        model_id_and_revision,
+                        generation_config,
+                        generation_kwargs,
+                        tool_model_family,
+                        gptoss,
+                    ),
+                ),
                 media_type="text/event-stream",
             )
         else:
             content = []
             finish_reason = "stop"
-
-            generator = stream_chat_completion(generation_streamer, request_id)
             usage = None
 
-            for chunk in generator:
+            for chunk in self._stream_chat_completion(
+                generation_streamer,
+                request_id,
+                model,
+                model_id_and_revision,
+                generation_config,
+                generation_kwargs,
+                tool_model_family,
+                gptoss,
+            ):
                 choice = chunk.choices[0]
                 if getattr(choice.delta, "content", None):
                     content.append(choice.delta.content)
@@ -1599,6 +1676,82 @@ class Serve:
 
             return JSONResponse(result, media_type="application/json")
 
+    def _stream_chat_completion(
+        self,
+        streamer: "TextIteratorStreamer",
+        request_id: str,
+        model: "PreTrainedModel",
+        model_id_and_revision: str,
+        generation_config: GenerationConfig,
+        generation_kwargs: dict,
+        tool_model_family: str | None,
+        gptoss: _GptossFilter,
+    ) -> Generator:
+        """Stream chat completion chunks from a TextIteratorStreamer. Handles tool calls and gptoss filtering."""
+        thread = Thread(target=self._generate_with_cache, args=(model,), kwargs=generation_kwargs)
+
+        try:
+            thread.start()
+            tool_parser = _ToolCallParser(tool_model_family) if tool_model_family is not None else None
+
+            # Emit the assistant role to start the stream
+            yield self.build_chat_completion_chunk(request_id, role="assistant", model=model_id_and_revision)
+
+            result = ""
+            n_tokens_generated = 0
+
+            for result in streamer:
+                n_tokens_generated += 1
+                result, should_skip = gptoss.process(result)
+
+                if should_skip:
+                    continue
+
+                # Tool call logic
+                if tool_parser is not None:
+                    tool_deltas = tool_parser.feed(result)
+                    if tool_parser.finished:
+                        yield self.build_chat_completion_chunk(
+                            request_id=request_id,
+                            role=None,
+                            finish_reason="tool_calls",
+                            model=model_id_and_revision,
+                        )
+                        tool_parser.finished = False
+                        continue
+
+                    if tool_parser.inside_tool_call or tool_deltas:
+                        # Fix tool call ID on the first delta
+                        for delta in tool_deltas:
+                            if delta.id == "_tool_call":
+                                delta.id = request_id + "_tool_call"
+                            yield self.build_chat_completion_chunk(
+                                request_id=request_id,
+                                role=None,
+                                tool_calls=[delta],
+                                model=model_id_and_revision,
+                            )
+                        continue
+
+                # Regular content tokens
+                if result != "":
+                    yield self.build_chat_completion_chunk(request_id, content=result, model=model_id_and_revision)
+
+            reason = self._compute_finish_reason(generation_config, n_tokens_generated, result, streamer.tokenizer)
+            yield self.build_chat_completion_chunk(request_id, finish_reason=reason, model=model_id_and_revision)
+
+            thread.join()
+        except Exception as e:
+            logger.error(str(e))
+            yield f'data: {{"error": "{str(e)}"}}'
+
+        finally:
+            thread.join()
+
+    # ------------------------------------------------------------------
+    # Response API: streaming
+    # ------------------------------------------------------------------
+
     def generate_response(self, req: dict) -> Generator[str, None, None]:
         """
         Generates an OpenAI Response using `generate`.
@@ -1609,53 +1762,27 @@ class Serve:
         Returns:
             `Generator[str, None, None]`: A generator that yields the OpenAI Response events.
         """
-        # TODO -- Implement non-streaming mode
         model_id_and_revision = self.process_model_name(req["model"])
         must_discard_cache = model_id_and_revision != self.last_model
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        if isinstance(req["input"], str):
-            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
-            inputs.append({"role": "user", "content": req["input"]})
-        elif isinstance(req["input"], list):
-            if "instructions" in req:
-                if req["input"][0]["role"] != "system":
-                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
-                else:
-                    inputs = req["input"]
-                    inputs[0]["content"] = req["instructions"]
-            else:
-                inputs = req["input"]
-        elif isinstance(req["input"], dict):
-            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
-            inputs.append(req["input"])
-        else:
-            raise TypeError("inputs should be a list, dict, or str")
-
+        inputs = self._parse_response_inputs(req)
         inputs = processor.apply_chat_template(
             inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
         )["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
-        # Temporary hack for GPT-OSS 1: don't filter special tokens
-        skip_special_tokens = True
-        if "gptoss" in model.config.architectures[0].lower():
-            skip_special_tokens = False
-
+        gptoss = _GptossFilter(model)
         generation_streamer = TextIteratorStreamer(
             processor,
-            skip_special_tokens=skip_special_tokens,
+            skip_special_tokens=gptoss.skip_special_tokens,
             skip_prompt=True,
         )
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
-        last_kv_cache = None
-        if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()
-            if inputs.shape[-1] > seq_len:
-                last_kv_cache = self.last_kv_cache
+        last_kv_cache = self._get_kv_cache(req, inputs.shape[-1], must_discard_cache)
 
         generation_kwargs = {
             "inputs": inputs,
@@ -1666,76 +1793,55 @@ class Serve:
             "past_key_values": last_kv_cache,
         }
 
-        def stream_response(streamer, _request_id):
-            # Temporary hack for GPT-OSS 2: filter out the CoT tokens. Full solution here implies defining new output
-            # classes and piping the reasoning trace into a new field
-            filter_cot = False
-            cot_trace_end = None
-            if "gptoss" in model.config.architectures[0].lower():
-                filter_cot = True
-                cot_trace_end = "<|channel|>final<|message|>"
+        return self._stream_response(
+            generation_streamer, request_id, model, model_id_and_revision, req, generation_kwargs, gptoss
+        )
 
-            # Thin wrapper to save the KV cache after generation
-            def generate_with_cache(**kwargs):
-                generate_output = model.generate(**kwargs)
-                self.last_kv_cache = generate_output.past_key_values
+    def _stream_response(
+        self,
+        streamer: "TextIteratorStreamer",
+        request_id: str,
+        model: "PreTrainedModel",
+        model_id_and_revision: str,
+        req: dict,
+        generation_kwargs: dict,
+        gptoss: _GptossFilter,
+    ) -> Generator[str, None, None]:
+        """Stream OpenAI Response API events."""
+        thread = Thread(target=self._generate_with_cache, args=(model,), kwargs=generation_kwargs)
+        sequence_number = 0
+        output_index = 0
+        content_index = 0
 
-            thread = Thread(target=generate_with_cache, kwargs=generation_kwargs)
-            sequence_number = 0
-            output_index = 0
-            content_index = 0
+        try:
+            thread.start()
+            created_at = time.time()
 
-            try:
-                thread.start()
-                created_at = time.time()  # the spec expects a unix timestamp in seconds
-
-                # We start by acknowledging the request (the request has `status="queued"`), and then by moving it to
-                # in progress (`status="in_progress"`)
-                response_created = ResponseCreatedEvent(
+            # response.created
+            yield self.chunk_to_sse_element(
+                ResponseCreatedEvent(
                     type="response.created",
                     sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="queued",
-                        model=model_id_and_revision,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        object="response",
-                        tools=[],
-                        output=[],
-                        parallel_tool_calls=req.get("parallel_tool_calls", False),
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
-                    ),
+                    response=self._build_response_object(request_id, created_at, "queued", model_id_and_revision, req),
                 )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_created)
+            )
+            sequence_number += 1
 
-                response_in_progress = ResponseInProgressEvent(
+            # response.in_progress
+            yield self.chunk_to_sse_element(
+                ResponseInProgressEvent(
                     type="response.in_progress",
                     sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="in_progress",
-                        model=model_id_and_revision,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        object="response",
-                        tools=[],
-                        output=[],
-                        parallel_tool_calls=req.get("parallel_tool_calls", False),
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
+                    response=self._build_response_object(
+                        request_id, created_at, "in_progress", model_id_and_revision, req
                     ),
                 )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_in_progress)
+            )
+            sequence_number += 1
 
-                # Start the output item. Emit the assistant role to start the stream. Other chunks won't have a role,
-                # as it is implicit
-                response_output_item_added = ResponseOutputItemAddedEvent(
+            # response.output_item.added
+            yield self.chunk_to_sse_element(
+                ResponseOutputItemAddedEvent(
                     type="response.output_item.added",
                     sequence_number=sequence_number,
                     output_index=output_index,
@@ -1743,11 +1849,12 @@ class Serve:
                         id=f"msg_{request_id}", type="message", status="in_progress", role="assistant", content=[]
                     ),
                 )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_output_item_added)
+            )
+            sequence_number += 1
 
-                # Start the content part of the event
-                response_content_part_added = ResponseContentPartAddedEvent(
+            # response.content_part.added
+            yield self.chunk_to_sse_element(
+                ResponseContentPartAddedEvent(
                     type="response.content_part.added",
                     item_id=f"msg_{request_id}",
                     sequence_number=sequence_number,
@@ -1755,25 +1862,18 @@ class Serve:
                     content_index=content_index,
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_content_part_added)
+            )
+            sequence_number += 1
 
-                # Stream the actual generated text
-                results = ""
-                for result in streamer:
-                    # Temporary hack for GPTOS 3: don't emit the final "<|return|>"
-                    if "gptoss" in model.config.architectures[0].lower():
-                        result = result.removesuffix("<|return|>")
-                    results += result
+            # Stream the actual generated text
+            for result in streamer:
+                result, should_skip = gptoss.process(result)
 
-                    # (related to temporary hack 2)
-                    if filter_cot:
-                        if cot_trace_end in results:  # end of reasoning trace observed -> stop filtering
-                            filter_cot = False
-                            results = ""  # reset the results -> results will now track the final response
-                            continue
-                        else:
-                            response_output_text_delta = ResponseTextDeltaEvent(
+                if should_skip:
+                    # In CoT mode for Response API, we still emit the reasoning tokens as deltas
+                    if gptoss.is_gptoss and result:
+                        yield self.chunk_to_sse_element(
+                            ResponseTextDeltaEvent(
                                 type="response.output_text.delta",
                                 item_id=f"msg_{request_id}",
                                 sequence_number=sequence_number,
@@ -1782,129 +1882,117 @@ class Serve:
                                 delta=result,
                                 logprobs=[],
                             )
-                            sequence_number += 1
-                            yield self.chunk_to_sse_element(response_output_text_delta)
-                    else:
-                        # Normal path: emit token deltas when not filtering CoT
-                        if result:
-                            response_output_text_delta = ResponseTextDeltaEvent(
-                                type="response.output_text.delta",
-                                item_id=f"msg_{request_id}",
-                                sequence_number=sequence_number,
-                                output_index=output_index,
-                                content_index=content_index,
-                                delta=result,
-                                logprobs=[],
-                            )
-                            sequence_number += 1
-                            yield self.chunk_to_sse_element(response_output_text_delta)
+                        )
+                        sequence_number += 1
+                    continue
 
-                # Signal the end of the text generation
-                response_output_text_done = ResponseTextDoneEvent(
-                    type="response.output_text.done",
-                    item_id=f"msg_{request_id}",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    content_index=0,
-                    text=results,
-                    logprobs=[],
-                )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_output_text_done)
+                if result:
+                    yield self.chunk_to_sse_element(
+                        ResponseTextDeltaEvent(
+                            type="response.output_text.delta",
+                            item_id=f"msg_{request_id}",
+                            sequence_number=sequence_number,
+                            output_index=output_index,
+                            content_index=content_index,
+                            delta=result,
+                            logprobs=[],
+                        )
+                    )
+                    sequence_number += 1
 
-                # Complete the content part
-                response_content_part_done = ResponseContentPartDoneEvent(
-                    type="response.content_part.done",
-                    item_id=f"msg_{request_id}",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    content_index=content_index,
-                    part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
-                )
-                sequence_number += 1
-                content_index += 1
-                yield self.chunk_to_sse_element(response_content_part_done)
+            # response.output_text.done
+            response_output_text_done = ResponseTextDoneEvent(
+                type="response.output_text.done",
+                item_id=f"msg_{request_id}",
+                sequence_number=sequence_number,
+                output_index=output_index,
+                content_index=0,
+                text=gptoss.accumulated,
+                logprobs=[],
+            )
+            sequence_number += 1
+            yield self.chunk_to_sse_element(response_output_text_done)
 
-                # Complete the output item
-                response_output_item_done = ResponseOutputItemDoneEvent(
-                    type="response.output_item.done",
-                    sequence_number=sequence_number,
-                    output_index=output_index,
-                    item=ResponseOutputMessage(
-                        id=f"msg_{request_id}",
-                        type="message",
-                        status="completed",
-                        role="assistant",
-                        content=[response_content_part_done.part],
-                        annotations=[],
-                    ),
-                )
-                sequence_number += 1
-                output_index += 1
-                yield self.chunk_to_sse_element(response_output_item_done)
+            # response.content_part.done
+            response_content_part_done = ResponseContentPartDoneEvent(
+                type="response.content_part.done",
+                item_id=f"msg_{request_id}",
+                sequence_number=sequence_number,
+                output_index=output_index,
+                content_index=content_index,
+                part=ResponseOutputText(type="output_text", text=response_output_text_done.text, annotations=[]),
+            )
+            sequence_number += 1
+            content_index += 1
+            yield self.chunk_to_sse_element(response_content_part_done)
 
-                # Finally, Complete the event
-                response_completed = ResponseCompletedEvent(
+            # response.output_item.done
+            response_output_item_done = ResponseOutputItemDoneEvent(
+                type="response.output_item.done",
+                sequence_number=sequence_number,
+                output_index=output_index,
+                item=ResponseOutputMessage(
+                    id=f"msg_{request_id}",
+                    type="message",
+                    status="completed",
+                    role="assistant",
+                    content=[response_content_part_done.part],
+                    annotations=[],
+                ),
+            )
+            sequence_number += 1
+            output_index += 1
+            yield self.chunk_to_sse_element(response_output_item_done)
+
+            # response.completed
+            yield self.chunk_to_sse_element(
+                ResponseCompletedEvent(
                     type="response.completed",
                     sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="completed",
-                        model=model_id_and_revision,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
+                    response=self._build_response_object(
+                        request_id,
+                        created_at,
+                        "completed",
+                        model_id_and_revision,
+                        req,
                         output=[response_output_item_done.item],
-                        object="response",
-                        tools=[],
-                        parallel_tool_calls=req.get("parallel_tool_calls", False),
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
                     ),
                 )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_completed)
+            )
+            sequence_number += 1
 
-                thread.join()
-            except Exception as e:
-                logger.error(f"Exception in response generation: {str(e)}")
-                error_event = ResponseErrorEvent(
-                    type="error",
-                    sequence_number=sequence_number,
-                    message=str(e),
-                )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(error_event)
+            thread.join()
+        except Exception as e:
+            logger.error(f"Exception in response generation: {str(e)}")
+            error_event = ResponseErrorEvent(
+                type="error",
+                sequence_number=sequence_number,
+                message=str(e),
+            )
+            sequence_number += 1
+            yield self.chunk_to_sse_element(error_event)
 
-                response_failed = ResponseFailedEvent(
-                    type="response.failed",
-                    sequence_number=sequence_number,
-                    response=Response(
-                        id=f"resp_{request_id}",
-                        created_at=created_at,
-                        status="failed",
-                        model=model_id_and_revision,
-                        instructions=req.get("instructions"),
-                        text={"format": {"type": "text"}},
-                        output=[],
-                        object="response",
-                        tools=[],
-                        parallel_tool_calls=False,
-                        tool_choice="auto",
-                        metadata=req.get("metadata"),
-                        error=ResponseError(
-                            code="server_error",
-                            message=str(e),
-                        ),
-                    ),
-                )
-                sequence_number += 1
-                yield self.chunk_to_sse_element(response_failed)
+            response_failed = ResponseFailedEvent(
+                type="response.failed",
+                sequence_number=sequence_number,
+                response=self._build_response_object(
+                    request_id,
+                    created_at,
+                    "failed",
+                    model_id_and_revision,
+                    req,
+                    error=ResponseError(code="server_error", message=str(e)),
+                ),
+            )
+            sequence_number += 1
+            yield self.chunk_to_sse_element(response_failed)
 
-            finally:
-                thread.join()
+        finally:
+            thread.join()
 
-        return stream_response(generation_streamer, request_id)
+    # ------------------------------------------------------------------
+    # Response API: non-streaming
+    # ------------------------------------------------------------------
 
     def generate_response_non_streaming(self, req: dict) -> dict:
         """
@@ -1921,42 +2009,17 @@ class Serve:
         self.last_model = model_id_and_revision
         model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        if isinstance(req["input"], str):
-            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
-            inputs.append({"role": "user", "content": req["input"]})
-        elif isinstance(req["input"], list):
-            if "instructions" in req:
-                if req["input"][0]["role"] != "system":
-                    inputs = [{"role": "system", "content": req["instructions"]}, *req["input"]]
-                else:
-                    inputs = req["input"]
-                    inputs[0]["content"] = req["instructions"]
-            else:
-                inputs = req["input"]
-        elif isinstance(req["input"], dict):
-            inputs = [{"role": "system", "content": req["instructions"]}] if "instructions" in req else []
-            inputs.append(req["input"])
-        else:
-            raise ValueError("inputs should be a list, dict, or str")
-
+        inputs = self._parse_response_inputs(req)
         inputs = processor.apply_chat_template(
             inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
         )["input_ids"]
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
-        # Temporary hack for GPTOSS 1: don't filter special tokens
-        skip_special_tokens = True
-        if "gptoss" in model.config.architectures[0].lower():
-            skip_special_tokens = False
-
+        gptoss = _GptossFilter(model)
         generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
-        last_kv_cache = None
-        if self.is_continuation(req) and not must_discard_cache:
-            seq_len = self.last_kv_cache.get_seq_length()
-            if inputs.shape[-1] > seq_len:
-                last_kv_cache = self.last_kv_cache
+        last_kv_cache = self._get_kv_cache(req, inputs.shape[-1], must_discard_cache)
 
         generate_output = model.generate(
             inputs=inputs,
@@ -1969,7 +2032,9 @@ class Serve:
         self.last_kv_cache = generate_output.past_key_values
 
         # Decode full text
-        full_text = processor.batch_decode(generate_output.sequences, skip_special_tokens=skip_special_tokens)[0]
+        full_text = processor.batch_decode(generate_output.sequences, skip_special_tokens=gptoss.skip_special_tokens)[
+            0
+        ]
 
         created_at = time.time()
         response_output_item = ResponseOutputMessage(
@@ -1980,21 +2045,14 @@ class Serve:
             content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
             annotations=[],
         )
-        response_completed = Response(
-            id=f"resp_{request_id}",
-            created_at=created_at,
-            status="completed",
-            model=model_id_and_revision,
-            instructions=req.get("instructions"),
-            text={"format": {"type": "text"}},
-            output=[response_output_item],
-            object="response",
-            tools=[],
-            parallel_tool_calls=req.get("parallel_tool_calls", False),
-            tool_choice="auto",
-            metadata=req.get("metadata"),
+        response_completed = self._build_response_object(
+            request_id, created_at, "completed", model_id_and_revision, req, output=[response_output_item]
         )
         return response_completed.model_dump(exclude_none=True)
+
+    # ------------------------------------------------------------------
+    # Transcription
+    # ------------------------------------------------------------------
 
     def generate_transcription(self, req: dict) -> Generator[str, None, None]:
         """
@@ -2044,6 +2102,10 @@ class Serve:
 
         return _generate_transcription()
 
+    # ------------------------------------------------------------------
+    # Continuation / KV cache detection
+    # ------------------------------------------------------------------
+
     def is_continuation(self, req: dict) -> bool:
         """
         Determines whether the current request is a continuation of the last request. In other words, if it is the
@@ -2074,6 +2136,10 @@ class Serve:
         self.last_messages = messages
         return req_continues_last_messages
 
+    # ------------------------------------------------------------------
+    # Quantization
+    # ------------------------------------------------------------------
+
     def get_quantization_config(self) -> BitsAndBytesConfig | None:
         """
         Returns the quantization config for the given CLI arguments.
@@ -2097,6 +2163,10 @@ class Serve:
 
         return quantization_config
 
+    # ------------------------------------------------------------------
+    # Model name processing
+    # ------------------------------------------------------------------
+
     def process_model_name(self, model_id: str) -> str:
         """
         Applies the `force_model` CLI argument and canonicalizes the model name to the format "model_id@revision".
@@ -2113,6 +2183,10 @@ class Serve:
         if "@" in model_id:
             return model_id
         return f"{model_id}@main"
+
+    # ------------------------------------------------------------------
+    # Model loading
+    # ------------------------------------------------------------------
 
     def _load_model_and_data_processor(
         self, model_id_and_revision: str, progress_callback: Callable[[dict], None] | None = None
