@@ -23,7 +23,7 @@ import tempfile
 import unittest.mock
 import warnings
 from collections import defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
@@ -2283,6 +2283,77 @@ class ModelTesterMixin:
         }
         with _deepspeed_zero3(ds_config):
             self.test_resize_tokens_embeddings()
+
+    def test_resize_token_embeddings_no_reinitialization(self):
+        """
+        Regression test for https://github.com/huggingface/transformers/issues/35141
+
+        Calling post_init() after resize_token_embeddings() must NOT reinitialize the
+        output embedding (lm_head) weights when tie_word_embeddings=False.
+        """
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
+        original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config.tie_word_embeddings = False
+        with suppress(Exception):
+            original_config.get_text_config().tie_word_embeddings = False
+
+        if original_config.tie_word_embeddings:
+            self.skipTest(reason="Model cannot untie embeddings")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                model = model_class(config)
+                model.eval()
+
+                # Some models raise NotImplementedError for get_input_embeddings() (e.g. Informer,
+                # PatchTST, WavLM, Detr) or return non-standard embedding objects without a
+                # top-level .weight (e.g. KyutaiSpeechToTextEmbeddings).
+                # resize_token_embeddings() accesses .weight on BOTH input and output embeddings
+                # internally, so all guards must come before the call.
+                try:
+                    output_embeds = model.get_output_embeddings()
+                    input_embeds = model.get_input_embeddings()
+                except NotImplementedError:
+                    continue
+                if (
+                    output_embeds is None
+                    or not hasattr(output_embeds, "weight")
+                    or input_embeds is None
+                    or not hasattr(input_embeds, "weight")
+                ):
+                    continue
+
+                vocab_size = config.get_text_config().vocab_size
+                model.resize_token_embeddings(vocab_size + 10)
+
+                # Capture weights immediately after resize
+                output_embeds = model.get_output_embeddings()
+                weight_before = output_embeds.weight.data.clone()
+                # nn.Embedding has no .bias attribute; guard with hasattr to avoid AttributeError
+                bias_before = (
+                    output_embeds.bias.data.clone()
+                    if hasattr(output_embeds, "bias") and output_embeds.bias is not None
+                    else None
+                )
+
+                # post_init must NOT reinitialize the resized head
+                model.post_init()
+
+                weight_after = model.get_output_embeddings().weight.data
+                self.assertTrue(
+                    torch.equal(weight_before, weight_after),
+                    "post_init() must not reinitialize output embedding weights after resize_token_embeddings(). "
+                    "See https://github.com/huggingface/transformers/issues/35141",
+                )
+                if bias_before is not None:
+                    bias_after = model.get_output_embeddings().bias.data
+                    self.assertTrue(
+                        torch.equal(bias_before, bias_after),
+                        "post_init() must not reinitialize output embedding bias after resize_token_embeddings().",
+                    )
 
     def test_resize_embeddings_untied(self):
         if not self.test_resize_embeddings:
