@@ -57,7 +57,7 @@ class GroupViTTextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 49406
-    eos_token_id: int | None = 49407
+    eos_token_id: int | list[int] | None = 49407
 
 
 @auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")

@@ -144,6 +144,7 @@ for result in results:
 
 [[autodoc]] PPDocLayoutV3Config
 
-## PPDocLayoutV3ImageProcessorFast
+## PPDocLayoutV3ImageProcessor
 
-[[autodoc]] PPDocLayoutV3ImageProcessorFast
+[[autodoc]] PPDocLayoutV3ImageProcessor
+    - preprocess

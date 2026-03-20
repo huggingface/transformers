@@ -181,7 +181,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
     max_new_tokens: int | None = 256
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
-    eos_token_id: int | None = 3
+    eos_token_id: int | list[int] | None = 3
     speech_encoder_layers: int = 24
     speech_encoder_attention_heads: int = 16
     speech_encoder_intermediate_size: int = 4096
@@ -202,7 +202,7 @@ class SeamlessM4TConfig(PreTrainedConfig):
     conv_depthwise_kernel_size: int = 31
     t2u_bos_token_id: int | None = 0
     t2u_pad_token_id: int | None = 1
-    t2u_eos_token_id: int | None = 2
+    t2u_eos_token_id: int | list[int] | None = 2
     t2u_decoder_start_token_id: int = 2
     t2u_max_new_tokens: int = 1024
     t2u_encoder_layers: int = 6

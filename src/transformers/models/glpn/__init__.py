@@ -19,9 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_glpn import *
-    from .feature_extraction_glpn import *
     from .image_processing_glpn import *
-    from .image_processing_glpn_fast import *
+    from .image_processing_pil_glpn import *
     from .modeling_glpn import *
 else:
     import sys

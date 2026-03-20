@@ -59,7 +59,7 @@ class UMT5Config(PreTrainedConfig):
     use_cache: bool = True
     tokenizer_class: str = "T5Tokenizer"
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     decoder_start_token_id: int | None = 0
     classifier_dropout: float | int = 0.0
     is_decoder: bool = False

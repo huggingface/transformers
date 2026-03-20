@@ -41,6 +41,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
     "qwen2_moe": "qwen2_moe",
+    "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
     "dots1": "qwen2_moe",
@@ -79,6 +80,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
+    "pp_chart2table": "got_ocr2",
 }
 
 

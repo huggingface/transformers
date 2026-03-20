@@ -175,7 +175,7 @@ class SpeechT5Config(PreTrainedConfig):
     mask_feature_min_masks: int = 0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     decoder_start_token_id: int | None = 2
     num_mel_bins: int = 80
     speech_decoder_prenet_layers: int = 2
