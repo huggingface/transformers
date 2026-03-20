@@ -67,8 +67,8 @@ class PegasusConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 0
     scale_embedding: bool = False
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
-    forced_eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
+    forced_eos_token_id: int | list[int] | None = 1
     is_decoder: bool = False
     tie_word_embeddings: bool = True
 
