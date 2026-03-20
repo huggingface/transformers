@@ -21,6 +21,7 @@ import requests
 from parameterized import parameterized
 
 from transformers import (
+    AutoModel,
     UVDocBackbone,
     UVDocBackboneConfig,
     UVDocConfig,
@@ -307,7 +308,7 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
 class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/UVDoc_safetensors"
-        self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
+        self.model = AutoModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor()
         self.image = Image.open(
             requests.get(
