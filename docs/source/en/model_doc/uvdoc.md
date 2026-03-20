@@ -93,26 +93,22 @@ print(result)
 
 [[autodoc]] UVDocConfig
 
-## UVDocBackboneConfig
-
-[[autodoc]] UVDocBackboneConfig
-
 ## UVDocModel
 
 [[autodoc]] UVDocModel
 
-## UVDocImageProcessor
+## UVDocBackboneConfig
 
-[[autodoc]] UVDocImageProcessor
-
-## UVDocBridge
-
-[[autodoc]] UVDocBridge
+[[autodoc]] UVDocBackboneConfig
 
 ## UVDocBackbone
 
 [[autodoc]] UVDocBackbone
 
-## UVDocPreTrainedModel
+## UVDocBridge
 
-[[autodoc]] UVDocPreTrainedModel
+[[autodoc]] UVDocBridge
+
+## UVDocImageProcessor
+
+[[autodoc]] UVDocImageProcessor
