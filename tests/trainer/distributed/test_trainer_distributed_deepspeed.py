@@ -924,6 +924,18 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
             trainer.train()
             trainer.evaluate()
 
+    @parameterized.expand(stages, name_func=_parameterized_custom_name_func)
+    def test_evaluate_before_train(self, stage):
+        """evaluate() before train() should work for all ZeRO stages."""
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(
+                deepspeed=self.get_config_dict(stage),
+                bf16=True,
+                output_dir=self.get_auto_remove_tmp_dir(),
+            )
+            trainer.evaluate()
+            trainer.train()
+
     @require_optuna
     def test_hyperparameter_search(self):
         """Run Optuna hyperparameter search with DeepSpeed ZeRO-3."""
