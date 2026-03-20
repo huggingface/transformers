@@ -21,8 +21,8 @@ import requests
 from parameterized import parameterized
 
 from transformers import (
-    UVDocConfig,
     UVDocBackbone,
+    UVDocConfig,
     UVDocImageProcessor,
     UVDocModel,
     is_torch_available,

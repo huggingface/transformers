@@ -13,8 +13,8 @@
 # limitations under the License.
 
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -472,12 +472,14 @@ class UVDocBridge(UVDocPreTrainedModel):
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
 
+
 @dataclass
 class UVDocBackboneOutput(BackboneOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
     """
+
     last_hidden_state: torch.FloatTensor | None = None
 
 
@@ -510,7 +512,6 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs,
     ) -> UVDocBackboneOutput:
-
         kwargs["output_hidden_states"] = True
         hidden_states = self.resnet(pixel_values)
         outputs = self.bridge(hidden_states, **kwargs)

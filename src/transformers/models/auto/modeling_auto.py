@@ -1701,9 +1701,9 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Backbone"),
         ("textnet", "TextNetBackbone"),
         ("timm_backbone", "TimmBackbone"),
+        ("uvdoc", "UVDocBackbone"),
         ("vitdet", "VitDetBackbone"),
         ("vitpose_backbone", "VitPoseBackbone"),
-        ("uvdoc", "UVDocBackbone"),
     ]
 )
 
