@@ -432,19 +432,14 @@ class UVDocPointPositions2D(nn.Module):
 
 
 @auto_docstring
-class UVDocPreTrainedModel(PreTrainedModel):
-    config: UVDocConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _can_compile_fullgraph = True
+class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         """Initialize the weights."""
         if isinstance(module, nn.PReLU):
             module.reset_parameters()

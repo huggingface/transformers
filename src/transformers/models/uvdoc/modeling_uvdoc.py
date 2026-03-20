@@ -251,8 +251,13 @@ class UVDocPointPositions2D(nn.Module):
 
 @auto_docstring
 class UVDocPreTrainedModel(PreTrainedModel):
+    """
+    Base class for all PPOCRV5 Server Det pre-trained models. Handles model initialization,
+    configuration, and loading of pre-trained weights, following the Transformers library conventions.
+    """
+
     config: UVDocConfig
-    base_model_prefix = "model"
+    base_model_prefix = "uvdoc"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
