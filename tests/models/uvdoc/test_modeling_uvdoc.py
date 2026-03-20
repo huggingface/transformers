@@ -214,7 +214,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
-        self.image_processor = UVDocImageProcessor() if is_vision_available() else None
+        self.image_processor = UVDocImageProcessor()
         self.image = Image.open(
             requests.get(
                 "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True

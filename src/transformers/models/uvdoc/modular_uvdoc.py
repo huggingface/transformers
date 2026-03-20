@@ -33,7 +33,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, requires_backends
 from ...utils.generic import TensorType, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...utils.import_utils import requires
 from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetPreTrainedModel
+from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
@@ -53,21 +55,23 @@ class UVDocConfig(PreTrainedConfig):
             Kernel size for convolutional layers in the backbone network.
         stage_layer_num (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
             Number of layers in each ResNet stage.
-        resnet_head (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((3, 32), (32, 32))`):
+        resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
             Configuration for the ResNet head layers in format [in_channels, out_channels].
-        resnet_down (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
+        resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
             Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
-        resnet_stage_downsample (`list[list[bool]]` or `tuple[tuple[bool, ...], ...]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
+        resnet_stage_downsample (`Sequence[list[bool] | tuple[bool, ...]]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
             Whether to apply downsampling for each layer in each ResNet stage.
-        bridge_connector (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
+        bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
             Configuration for the bridge connector in format [in_channels, out_channels].
-        out_point_positions2D (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((128, 32), (32, 2))`):
+        out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
             Configuration for the output point positions 2D layer in format [in_channels, out_channels].
-        dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+        dilation_values (`list[list[int]] | tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
             Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
             rates for a single bridge block.
         padding_mode (`str`, *optional*, defaults to `"reflect"`):
             Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
+        hidden_act (`str`, *optional*, defaults to `"prelu"`):
+            Activation function for hidden layers.
     """
 
     model_type = "uvdoc"
@@ -128,6 +132,7 @@ class UVDocConfig(PreTrainedConfig):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class UVDocImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_resize = True
@@ -148,7 +153,6 @@ class UVDocImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, "torch")
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -203,7 +207,6 @@ class UVDocImageProcessor(TorchvisionBackend):
                 - "images": Rectified image tensor of shape (H, W, 3) with dtype torch.uint8
                           and BGR channel order (suitable for OpenCV visualization)
         """
-        requires_backends(self, "torch")
         image_list = list(original_images)
         scale = torch.tensor(float(scale), device=prediction.device)
         results = []
@@ -241,7 +244,7 @@ class UVDocImageProcessor(TorchvisionBackend):
         return results
 
 
-class UVDocConvLayer(nn.Module):
+class UVDocConvLayer(PPLCNetConvLayer):
     """Convolutional layer with batch normalization and activation."""
 
     def __init__(
@@ -268,14 +271,6 @@ class UVDocConvLayer(nn.Module):
             padding_mode=padding_mode,
             dilation=dilation,
         )
-        self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
 
 
 class UVDocResidualBlock(nn.Module):
@@ -294,17 +289,15 @@ class UVDocResidualBlock(nn.Module):
     ):
         super().__init__()
 
-        self.conv_down = nn.Identity()
-        if downsample:
-            self.conv_down = UVDocConvLayer(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=kernel_size // 2,
-                bias=True,
-                activation=None,
-            )
+        self.conv_down = UVDocConvLayer(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=kernel_size // 2,
+            bias=True,
+            activation=None,
+        ) if downsample else nn.Identity()
 
         self.conv_start = UVDocConvLayer(
             in_channels=in_channels,
@@ -477,7 +470,7 @@ class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
-        self.uvdoc_resnet = UVDocResNet(config)
+        self.resnet = UVDocResNet(config)
 
         self.bridge = nn.ModuleList([])
         for dilation_value in config.dilation_values:
@@ -505,7 +498,7 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        hidden_states = self.uvdoc_resnet(pixel_values)
+        hidden_states = self.resnet(pixel_values)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:

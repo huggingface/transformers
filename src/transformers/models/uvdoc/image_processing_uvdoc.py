@@ -26,11 +26,13 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class UVDocImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_resize = True
@@ -51,7 +53,6 @@ class UVDocImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        requires_backends(self, "torch")
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
@@ -106,7 +107,6 @@ class UVDocImageProcessor(TorchvisionBackend):
                 - "images": Rectified image tensor of shape (H, W, 3) with dtype torch.uint8
                           and BGR channel order (suitable for OpenCV visualization)
         """
-        requires_backends(self, "torch")
         image_list = list(original_images)
         scale = torch.tensor(float(scale), device=prediction.device)
         results = []

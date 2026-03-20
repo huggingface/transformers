@@ -21,6 +21,7 @@
 
 import torch
 import torch.nn as nn
+from torch import Tensor
 
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -63,7 +64,7 @@ class UVDocConvLayer(nn.Module):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: Tensor) -> Tensor:
         hidden_state = self.convolution(input)
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
@@ -86,9 +87,8 @@ class UVDocResidualBlock(nn.Module):
     ):
         super().__init__()
 
-        self.conv_down = nn.Identity()
-        if downsample:
-            self.conv_down = UVDocConvLayer(
+        self.conv_down = (
+            UVDocConvLayer(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=kernel_size,
@@ -97,6 +97,9 @@ class UVDocResidualBlock(nn.Module):
                 bias=True,
                 activation=None,
             )
+            if downsample
+            else nn.Identity()
+        )
 
         self.conv_start = UVDocConvLayer(
             in_channels=in_channels,
@@ -279,7 +282,7 @@ class UVDocModel(UVDocPreTrainedModel):
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
-        self.uvdoc_resnet = UVDocResNet(config)
+        self.resnet = UVDocResNet(config)
 
         self.bridge = nn.ModuleList([])
         for dilation_value in config.dilation_values:
@@ -307,7 +310,7 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        hidden_states = self.uvdoc_resnet(pixel_values)
+        hidden_states = self.resnet(pixel_values)
 
         bridge_outputs = []
         for bridge_layer in self.bridge:

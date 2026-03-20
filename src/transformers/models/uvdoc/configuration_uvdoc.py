@@ -44,21 +44,23 @@ class UVDocConfig(PreTrainedConfig):
             Kernel size for convolutional layers in the backbone network.
         stage_layer_num (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
             Number of layers in each ResNet stage.
-        resnet_head (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((3, 32), (32, 32))`):
+        resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
             Configuration for the ResNet head layers in format [in_channels, out_channels].
-        resnet_down (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
+        resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
             Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
-        resnet_stage_downsample (`list[list[bool]]` or `tuple[tuple[bool, ...], ...]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
+        resnet_stage_downsample (`Sequence[list[bool] | tuple[bool, ...]]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
             Whether to apply downsampling for each layer in each ResNet stage.
-        bridge_connector (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
+        bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
             Configuration for the bridge connector in format [in_channels, out_channels].
-        out_point_positions2D (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((128, 32), (32, 2))`):
+        out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
             Configuration for the output point positions 2D layer in format [in_channels, out_channels].
-        dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
+        dilation_values (`list[list[int]] | tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
             Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
             rates for a single bridge block.
         padding_mode (`str`, *optional*, defaults to `"reflect"`):
             Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
+        hidden_act (`str`, *optional*, defaults to `"prelu"`):
+            Activation function for hidden layers.
     """
 
     model_type = "uvdoc"

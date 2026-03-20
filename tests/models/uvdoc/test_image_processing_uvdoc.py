@@ -22,10 +22,6 @@ from transformers.utils import is_torchvision_available
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
-if is_torchvision_available():
-    from transformers import UVDocImageProcessor
-
-
 class UVDocImageProcessingTester:
     def __init__(
         self,
@@ -75,8 +71,6 @@ class UVDocImageProcessingTester:
 @require_torch
 @require_vision
 class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    fast_image_processing_class = UVDocImageProcessor if is_torchvision_available() else None
-    test_slow_image_processor = False
 
     def setUp(self):
         super().setUp()
@@ -91,7 +85,8 @@ class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_post_process_document_rectification(self):
-        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
 
         batch_size = 2
         height, width = 32, 48
@@ -125,7 +120,8 @@ class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_document_rectification_different_sizes(self):
         """Test post-processing with original images of different sizes (list of tensors)."""
-        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
 
         # Create predictions for 2 images (model output size is fixed)
         pred_height, pred_width = 16, 24
