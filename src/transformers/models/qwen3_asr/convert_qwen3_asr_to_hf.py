@@ -19,15 +19,17 @@ python src/transformers/models/qwen3_asr/convert_qwen3_asr_to_hf.py \
   --dst_dir qwen3-asr-hf
 ```
 """
+
 import argparse
+import json
 import logging
 import re
 import shutil
 import tempfile
-import torch
 from pathlib import Path
 from typing import Any
 
+import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import safe_open
 
@@ -92,6 +94,7 @@ def convert_state_dict(original_state_dict: dict[str, Any]) -> dict[str, Any]:
 
     return new_state_dict
 
+
 def write_processor(src_root: Path, dst_root: Path):
     # Load tokenizer from source model
     tokenizer = AutoTokenizer.from_pretrained(src_root)
@@ -115,6 +118,7 @@ def write_processor(src_root: Path, dst_root: Path):
     logger.info("processor saved to %s", dst_root)
     return processor
 
+
 def write_model(src_root: Path, dst_root: Path):
     # Load and clean up config
     config_path = src_root / "config.json"
@@ -123,11 +127,11 @@ def write_model(src_root: Path, dst_root: Path):
 
     # Clean up config for transformers compatibility
     config_dict = model_config.copy()
-    
+
     # Add any config field mappings here if needed
     # Example: if "old_name" in config_dict:
     #     config_dict["new_name"] = config_dict.pop("old_name")
-    
+
     # fmt: off
     # Remove unused/constant parameters at top level
     unused_keys = ["support_languages"]
@@ -137,7 +141,7 @@ def write_model(src_root: Path, dst_root: Path):
     # Flatten thinker_config structure (move to top level)
     if "thinker_config" in config_dict:
         thinker_config = config_dict.pop("thinker_config")
-        
+
         # Move thinker_config fields to top level
         if "audio_config" in thinker_config:
             config_dict["audio_config"] = thinker_config["audio_config"]
@@ -147,7 +151,7 @@ def write_model(src_root: Path, dst_root: Path):
             config_dict["audio_token_id"] = thinker_config["audio_token_id"]
         if "initializer_range" in thinker_config:
             config_dict["initializer_range"] = thinker_config["initializer_range"]
-    
+
     # Remove non-standard fields and auto-populated defaults from audio_config
     if "audio_config" in config_dict:
         audio_config_unused = [
@@ -160,7 +164,7 @@ def write_model(src_root: Path, dst_root: Path):
         ]
         for key in audio_config_unused:
             config_dict["audio_config"].pop(key, None)
-    
+
     # Remove non-standard fields and auto-populated defaults from text_config
     if "text_config" in config_dict:
         text_config_unused = [
@@ -208,18 +212,19 @@ def write_model(src_root: Path, dst_root: Path):
     if load_res.unexpected_keys:
         raise ValueError(f"Unexpected keys: {load_res.unexpected_keys}")
     model.to(torch.bfloat16)  # Ensure model is in correct dtype before saving
-    
+
     # Set generation config on model before saving
     model.generation_config = GenerationConfig(
-        eos_token_id=[151643, 151645],
+        eos_token_id=(151643, 151645),
         pad_token_id=151645,
         do_sample=False,
     )
-    
+
     model.save_pretrained(str(dst_root))
 
     logger.info("Model saved to %s", dst_root)
     return model
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Convert Qwen3ASR to Hugging Face format.")

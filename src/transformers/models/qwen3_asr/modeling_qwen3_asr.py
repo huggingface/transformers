@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_asr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 import math
 from collections.abc import Callable
@@ -14,32 +28,34 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from transformers.cache_utils import Cache, DynamicCache
-from transformers.generation import GenerationMixin
-from transformers.masking_utils import create_causal_mask
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_layers import GradientCheckpointingLayer
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from transformers.modeling_utils import PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.utils import auto_docstring, can_return_tuple
-from transformers.utils.generic import check_model_inputs
-
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...masking_utils import create_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested, maybe_autocast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, can_return_tuple
+from ...utils.generic import (
+    TransformersKwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3_asr import Qwen3ASRAudioEncoderConfig, Qwen3ASRConfig, Qwen3ASRTextConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Qwen3ASRTextRMSNorm(nn.Module):
+class Qwen3ASRRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        Qwen3ASRTextRMSNorm is equivalent to T5LayerNorm
+        Qwen3ASRRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -83,8 +99,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -128,7 +143,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class Qwen3ASRTextAttention(nn.Module):
+class Qwen3ASRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config, layer_idx):
@@ -167,7 +182,6 @@ class Qwen3ASRTextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -181,9 +195,7 @@ class Qwen3ASRTextAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -206,7 +218,7 @@ class Qwen3ASRTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Qwen3ASRTextMLP(nn.Module):
+class Qwen3ASRMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
@@ -226,10 +238,10 @@ class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Qwen3ASRTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Qwen3ASRTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Qwen3ASRTextMLP(config)
-        self.input_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen3ASRTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Qwen3ASRAttention(config=config, layer_idx=layer_idx)
+        self.mlp = Qwen3ASRMLP(config)
+        self.input_layernorm = Qwen3ASRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Qwen3ASRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -238,7 +250,6 @@ class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -251,7 +262,6 @@ class Qwen3ASRThinkerTextDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -277,9 +287,7 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "attentions": Qwen3ASRTextAttention,
-    }
+    _can_record_outputs = {"attentions": Qwen3ASRAttention}
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -414,9 +422,6 @@ class Qwen3ASRAudioEncoderLayer(GradientCheckpointingLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -530,7 +535,8 @@ class Qwen3ASRAudioEncoder(Qwen3ASRPreTrainedModel):
             attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
         return attention_mask
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -814,7 +820,6 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -828,9 +833,7 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -853,9 +856,31 @@ class Qwen3ASRThinkerTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Qwen3ASRTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Qwen3ASRTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 @auto_docstring(custom_intro=("Text part of Qwen3ASRThinker, "))
 class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
     config: Qwen3ASRTextConfig
+    input_modalities = ("text",)
     _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
     config_class = Qwen3ASRTextConfig
     _can_record_outputs = {
@@ -879,7 +904,6 @@ class Qwen3ASRThinkerTextModel(Qwen3ASRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs()
     @auto_docstring
     def forward(
         self,
