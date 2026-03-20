@@ -23,8 +23,7 @@ code agents. Many of these are low quality, and we are currently bottlenecked by
 to them. As a result, we are **not accepting pure code agent contributions from new users** at this time. 
 You may use code agents in drafting or to help you diagnose issues, but 
 **new users should not submit PRs written by code agents under any circumstances**. Using LLMs or code agents
-to post reviews on other users' issues is banned. These prohibitions also apply to autonomous "OpenClaw"-like agents.
-
+to post reviews on other users' issues is banned. These prohibitions also apply to autonomous "OpenClaw"-like agents. 
 Violations of this policy will get you blocked across the entire Hugging Face GitHub organization.
 
 </Tip>
