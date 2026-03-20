@@ -191,9 +191,7 @@ class SmolLM3Attention(LlamaAttention):
 
 
 class SmolLM3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: SmolLM3Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
+    pass
 
 
 class SmolLM3PreTrainedModel(LlamaPreTrainedModel):

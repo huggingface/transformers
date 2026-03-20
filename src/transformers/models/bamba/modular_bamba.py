@@ -839,8 +839,8 @@ class BambaModel(BambaPreTrainedModel):
         mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        for decoder_layer in self.layers:
-            layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+        for i, decoder_layer in enumerate(self.layers):
+            layer_mask = mamba_mask if self.config.layers_block_type[i] == "mamba" else causal_mask
 
             hidden_states, attn_weights = decoder_layer(
                 hidden_states,
