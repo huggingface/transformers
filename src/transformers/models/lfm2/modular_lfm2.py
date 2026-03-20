@@ -122,8 +122,8 @@ class Lfm2HybridConvCache:
                 device=device,
             )
             self.conv_cache.append(conv_state)
-            self.key_cache.append(torch.tensor([]))
-            self.value_cache.append(torch.tensor([]))
+            self.key_cache.append(torch.tensor([], device=device))
+            self.value_cache.append(torch.tensor([], device=device))
 
     def update(
         self,
