@@ -133,7 +133,7 @@ class IdeficsConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     cross_layer_interval: int = 1
     qk_layer_norms: bool = False

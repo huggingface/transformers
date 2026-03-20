@@ -995,6 +995,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("pi0", "PI0ForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("pixtral", "LlavaForConditionalGeneration"),
+        ("pp_chart2table", "GotOcr2ForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
         ("qwen2_vl", "Qwen2VLForConditionalGeneration"),
         ("qwen3_5", "Qwen3_5ForConditionalGeneration"),
@@ -1131,6 +1132,13 @@ MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
+    ]
+)
+
+
+MODEL_FOR_TABLE_RECOGNITION_MAPPING_NAMES = OrderedDict(
+    [
+        ("slanext", "SLANeXtForTableRecognition"),
     ]
 )
 
@@ -1852,6 +1860,7 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = _LazyAutoMapping(
 )
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
 MODEL_FOR_TEXT_RECOGNITION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES)
+MODEL_FOR_TABLE_RECOGNITION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TABLE_RECOGNITION_MAPPING_NAMES)
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
 )
@@ -2146,6 +2155,13 @@ class AutoModelForTextRecognition(_BaseAutoModelClass):
 AutoModelForTextRecognition = auto_class_update(AutoModelForTextRecognition, head_doc="text recognition")
 
 
+class AutoModelForTableRecognition(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TABLE_RECOGNITION_MAPPING
+
+
+AutoModelForTableRecognition = auto_class_update(AutoModelForTableRecognition, head_doc="table recognition")
+
+
 class AutoModelForVideoClassification(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
@@ -2256,6 +2272,7 @@ __all__ = [
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
     "MODEL_FOR_DEPTH_ESTIMATION_MAPPING",
     "MODEL_FOR_TEXT_RECOGNITION_MAPPING",
+    "MODEL_FOR_TABLE_RECOGNITION_MAPPING",
     "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
     "MODEL_FOR_IMAGE_MAPPING",
     "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
@@ -2302,6 +2319,7 @@ __all__ = [
     "AutoModelForCTC",
     "AutoModelForDepthEstimation",
     "AutoModelForTextRecognition",
+    "AutoModelForTableRecognition",
     "AutoModelForImageClassification",
     "AutoModelForImageSegmentation",
     "AutoModelForImageToImage",

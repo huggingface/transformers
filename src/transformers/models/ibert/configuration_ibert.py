@@ -53,7 +53,7 @@ class IBertConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     quant_mode: bool = False
     force_dequant: str = "none"
 
