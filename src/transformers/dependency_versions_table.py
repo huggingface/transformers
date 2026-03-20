@@ -23,7 +23,7 @@ deps = {
     "jinja2": "jinja2>=3.1.0",
     "jmespath": "jmespath>=1.0.1",
     "kenlm": "kenlm",
-    "kernels": "kernels>=0.10.2,<0.11",
+    "kernels": "kernels>=0.12.0",
     "librosa": "librosa",
     "mistral-common[image]": "mistral-common[image]>=1.10.0",
     "nltk": "nltk<=3.8.1",

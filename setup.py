@@ -91,7 +91,7 @@ _deps = [
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
     "kenlm",
-    "kernels>=0.11",
+    "kernels>=0.12.0",
     "librosa",
     "mistral-common[image]>=1.10.0",
     "nltk<=3.8.1",
