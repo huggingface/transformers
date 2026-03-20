@@ -57,11 +57,6 @@ class UVDocModelTester:
         kernel_size=5,
         stage_layer_num=(3, 4, 6),
         resnet_head=((3, 8), (8, 8)),
-        resnet_stage_downsample=(
-            (False, False, False),
-            (True, False, False, False),
-            (True, False, False, False, False, False),
-        ),
         resnet_down=((8, 8), (8, 16), (16, 32)),
         bridge_connector=(32, 32),
         out_point_positions2D=((32, 8), (8, 2)),
@@ -75,7 +70,10 @@ class UVDocModelTester:
         ),
         padding_mode="reflect",
         hidden_act="prelu",
+        out_features=["stage1", "stage2", "stage3"],
+        out_indices=[1, 2, 3]
     ):
+
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -84,7 +82,6 @@ class UVDocModelTester:
         self.kernel_size = kernel_size
         self.stage_layer_num = stage_layer_num
         self.resnet_head = resnet_head
-        self.resnet_stage_downsample = resnet_stage_downsample
         self.resnet_down = resnet_down
         self.bridge_connector = bridge_connector
         self.out_point_positions2D = out_point_positions2D
@@ -93,10 +90,13 @@ class UVDocModelTester:
         self.num_hidden_layers = len(dilation_values)
         self.padding_mode = padding_mode
         self.hidden_act = hidden_act
+        self.out_features = out_features
+        self.out_indices = out_indices
         # For test_hidden_states_output: UVDoc outputs spatial hidden states (B, C, H, W)
         # with shape[-2:] = (8, 8) for image_size=128
         self.seq_length = 8
         self.hidden_size = 8
+
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -110,18 +110,43 @@ class UVDocModelTester:
         return config, pixel_values
 
     def get_config(self) -> UVDocConfig:
+
+        stage_configs = (
+            (
+                (8, 8, 1, False),
+                (8, 8, 3, False),
+                (8, 8, 3, False),
+            ),
+            (
+                (8, 16, 1, True),
+                (16, 16, 3, False),
+                (16, 16, 3, False),
+                (16, 16, 3, False),
+            ),
+            (
+                (16, 32, 1, True),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+                (32, 32, 3, False),
+            ),
+        )
+
         return UVDocConfig(
             kernel_size=self.kernel_size,
             padding_mode=self.padding_mode,
             hidden_act=self.hidden_act,
             bridge_in_channels=self.bridge_in_channels,
-            stage_layer_num=list(self.stage_layer_num),
-            resnet_head=[list(h) for h in self.resnet_head],
-            resnet_stage_downsample=[list(down) for down in self.resnet_stage_downsample],
-            resnet_down=[list(rd) for rd in self.resnet_down],
-            bridge_connector=list(self.bridge_connector),
-            out_point_positions2D=[list(op) for op in self.out_point_positions2D],
-            dilation_values=[list(d) for d in self.dilation_values],
+            stage_layer_num=self.stage_layer_num,
+            resnet_head=self.resnet_head,
+            stage_configs=stage_configs,
+            resnet_down=self.resnet_down,
+            bridge_connector=self.bridge_connector,
+            out_point_positions2D=self.out_point_positions2D,
+            dilation_values=self.dilation_values,
+            out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_uvdoc_document_rectification(self, config, pixel_values):

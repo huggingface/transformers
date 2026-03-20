@@ -17,7 +17,6 @@ import unittest
 import torch
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 

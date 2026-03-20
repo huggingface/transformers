@@ -24,12 +24,12 @@ import torch.nn as nn
 from torch import Tensor
 
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.output_capturing import capture_outputs
 from .configuration_uvdoc import UVDocConfig
 
@@ -136,18 +136,12 @@ class UVDocResidualBlock(nn.Module):
 class UVDocResNetStage(nn.Module):
     """A ResNet stage containing multiple residual blocks."""
 
-    def __init__(
-        self,
-        config,
-        in_channels,
-        out_channels,
-        stage_index,
-    ):
+    def __init__(self, config, stage_index):
         super().__init__()
+
+        stages = config.stage_configs[stage_index]
         self.layers = nn.ModuleList([])
-        for index in range(config.stage_layer_num[stage_index]):
-            dilation = 1 if index == 0 else 3
-            downsample = config.resnet_stage_downsample[stage_index][index]
+        for in_channels, out_channels, dilation, downsample in stages:
             layer = UVDocResidualBlock(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -158,7 +152,6 @@ class UVDocResNetStage(nn.Module):
                 kernel_size=config.kernel_size,
             )
             self.layers.append(layer)
-            in_channels = out_channels
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
@@ -184,15 +177,9 @@ class UVDocResNet(nn.Module):
             )
 
         self.resnet_down = nn.ModuleList([])
-        for stage_index in range(len(config.resnet_down)):
-            self.resnet_down.append(
-                UVDocResNetStage(
-                    config=config,
-                    in_channels=config.resnet_down[stage_index][0],
-                    out_channels=config.resnet_down[stage_index][1],
-                    stage_index=stage_index,
-                )
-            )
+        for stage_index in range(len(config.stage_configs)):
+            stage = UVDocResNetStage(config, stage_index)
+            self.resnet_down.append(stage)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for head in self.resnet_head:
@@ -211,7 +198,7 @@ class UVDocBridgeBlock(GradientCheckpointingLayer):
         for dilation in dilation_values:
             self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
         for block in self.blocks:
             hidden_states = block(hidden_states)
         return hidden_states
@@ -260,6 +247,8 @@ class UVDocPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
+
+    supports_gradient_checkpointing = True
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,
     }
@@ -272,23 +261,61 @@ class UVDocPreTrainedModel(PreTrainedModel):
             module.reset_parameters()
 
 
+class UVDocBridge(UVDocPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.bridge = nn.ModuleList([])
+        for dilation_value in config.dilation_values:
+            self.bridge.append(UVDocBridgeBlock(config.bridge_in_channels, dilation_value))
+        self.post_init()
+
+    @capture_outputs
+    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
+        outputs = []
+        for layer in self.bridge:
+            output = layer(hidden_states)
+            outputs.append(output)
+        hidden_states = torch.cat(outputs, dim=1)
+
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
+
+
 @auto_docstring(
-    custom_intro=r"""
-    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
-    and outputs the rectified (corrected) document image tensor.
+    custom_intro="""
+    UVDoc backbone model for feature extraction.
     """
 )
-class UVDocModel(UVDocPreTrainedModel):
+class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
+    has_attentions = False
+
     def __init__(self, config: UVDocConfig):
         super().__init__(config)
 
         self.resnet = UVDocResNet(config)
+        self.bridge = UVDocBridge(config)
 
-        self.bridge = nn.ModuleList([])
-        for dilation_value in config.dilation_values:
-            self.bridge.append(UVDocBridgeBlock(config.bridge_in_channels, dilation_value))
+        self.post_init()
 
-        self.num_bridge_layers = len(self.bridge)
+    @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs,
+    ) -> BaseModelOutputWithNoAttention:
+        hidden_states = self.resnet(pixel_values)
+        outputs = self.bridge(hidden_states, **kwargs)
+        return BaseModelOutputWithNoAttention(
+            hidden_states=outputs.hidden_states,
+            last_hidden_state=outputs.last_hidden_state,
+        )
+
+
+class UVDocHead(UVDocPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_bridge_layers = len(config.dilation_values)
 
         self.bridge_connector = UVDocConvLayer(
             in_channels=config.bridge_connector[0] * self.num_bridge_layers,
@@ -300,29 +327,45 @@ class UVDocModel(UVDocPreTrainedModel):
         )
 
         self.out_point_positions2D = UVDocPointPositions2D(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs,
+    ) -> torch.torch.Tensor:
+        hidden_states = self.bridge_connector(hidden_states)
+        hidden_states = self.out_point_positions2D(hidden_states)
+        return hidden_states
+
+
+@auto_docstring(
+    custom_intro=r"""
+    The model takes raw document images (pixel values) as input, processes them through the UVDoc backbone to predict spatial transformation parameters,
+    and outputs the rectified (corrected) document image tensor.
+    """
+)
+class UVDocModel(UVDocPreTrainedModel):
+    def __init__(self, config: UVDocConfig):
+        super().__init__(config)
+
+        self.backbone = UVDocBackbone(config)
+        self.head = UVDocHead(config)
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        hidden_states = self.resnet(pixel_values)
+        outputs = self.backbone(pixel_values, **kwargs)
+        head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 
-        bridge_outputs = []
-        for bridge_layer in self.bridge:
-            bridge_output = bridge_layer(hidden_states)
-            bridge_outputs.append(bridge_output)
-
-        bridge_concat = torch.cat(bridge_outputs, dim=1)
-        bridge = self.bridge_connector(bridge_concat)
-
-        out_point_positions2D = self.out_point_positions2D(bridge)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=out_point_positions2D)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=head_outputs,
+            hidden_states=outputs.hidden_states,
+        )
 
 
 __all__ = ["UVDocModel", "UVDocPreTrainedModel"]
