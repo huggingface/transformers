@@ -1139,7 +1139,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
+        output_hidden_states: bool | None = False,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | PatchTSMixerEncoderOutput:
@@ -1249,7 +1249,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         observed_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
+        output_hidden_states: bool | None = False,
         return_dict: bool | None = None,
         **kwargs,
     ) -> PatchTSMixerModelOutput:
@@ -1359,7 +1359,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         observed_mask: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
+        output_hidden_states: bool | None = False,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -1571,7 +1571,7 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         past_values: torch.Tensor,
         observed_mask: torch.Tensor | None = None,
         future_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
+        output_hidden_states: bool | None = False,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -1602,10 +1602,6 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         return_loss (`bool`,  *optional*):
             Whether to return the loss in the `forward` call.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
         elif self.loss == "nll":
@@ -1798,7 +1794,7 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         target_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
+        output_hidden_states: bool | None = False,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -1829,9 +1825,6 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         return_loss (`bool`, *optional*):
             Whether to return the loss in the `forward` call.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         loss = torch.nn.CrossEntropyLoss()
 
@@ -1991,7 +1984,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         target_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
+        output_hidden_states: bool | None = False,
         return_loss: bool = True,
         return_dict: bool | None = None,
         **kwargs,
@@ -2021,9 +2014,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return_loss (`bool`, *optional*):
             Whether to return the loss in the `forward` call.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
         if self.loss == "mse":
             loss = nn.MSELoss(reduction="mean")
