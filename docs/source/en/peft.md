@@ -42,14 +42,27 @@ lora_config = LoraConfig(
 model.add_adapter(lora_config, adapter_name="my_adapter")
 ```
 
-To train additional modules alongside an adapter (for example, the language model head), specify them in `modules_to_save`.
+### Fully fine-tuning specific layers
+
+To train additional modules alongside an adapter (for example, the language model head), specify them in `modules_to_save`. `modules_to_save` specifies layers that are fully fine-tuned alongside the adapter, so *all* of their parameters are updated. This is useful when certain layers need updates, for example the language model head (`lm_head`), when adapting a causal LM for sequence classification.
+
+```py
+lora_config = LoraConfig(
+    modules_to_save=["lm_head"],
+    ...
+)
+model.add_adapter(lora_config)
+```
+
+### Choosing which layers to adapt
+
+For common architectures (Llama, Gemma, Qwen, etc.), PEFT has predefined default targets (like `q_proj` and `v_proj`), so you don't need to specify `target_modules`. If you want to target different layers, or the model doesn't have predefined targets, pass `target_modules` explicitly as a list of module names or a regex pattern.
 
 ```py
 lora_config = LoraConfig(
     target_modules=["q_proj", "k_proj"],
-    modules_to_save=["lm_head"],
+    ...
 )
-
 model.add_adapter(lora_config)
 ```
 
@@ -139,19 +152,6 @@ model = AutoModelForCausalLM.from_pretrained(
     "klcsp/gemma7b-lora-alpaca-11-v1",
     quantization_config=BitsAndBytesConfig(load_in_8bit=True),
     device_map="auto",
-)
-```
-
-### Loading from a state dict
-
-To load an adapter programmatically from a state dict (without reading from disk), pass `adapter_state_dict` and `peft_config` directly.
-
-```py
-model.load_adapter(
-    None,
-    adapter_name="my_adapter",
-    peft_config=peft_config_dict,
-    adapter_state_dict=adapter_state_dict,
 )
 ```
 
