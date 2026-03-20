@@ -79,15 +79,24 @@ class UVDocResidualBlock(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
-        block_index: int = 0,
+        padding: int = 0,
+        dilation: int = 1,
+        downsample: bool = False,
         activation: str = "relu",
     ):
         super().__init__()
 
-        if stride != 1 or block_index == 0:
-            stride, padding, dilation = stride, kernel_size // 2, 1
-        else:
-            stride, padding, dilation = 1, 3 * (kernel_size // 2), 3
+        self.conv_down = nn.Identity()
+        if downsample:
+            self.conv_down = UVDocConvLayer(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=kernel_size // 2,
+                bias=True,
+                activation=None,
+            )
 
         self.conv_start = UVDocConvLayer(
             in_channels=in_channels,
@@ -113,15 +122,11 @@ class UVDocResidualBlock(nn.Module):
         self.act_fn = ACT2FN[activation] if activation is not None else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = self.get_residual(hidden_states)
+        residual = self.conv_down(hidden_states)
         hidden_states = self.conv_start(hidden_states)
         hidden_states = self.conv_final(hidden_states)
         hidden_states = hidden_states + residual
         hidden_states = self.act_fn(hidden_states)
-        return hidden_states
-
-    def get_residual(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Return the residual connection. Override in subclasses for downsampling."""
         return hidden_states
 
 
@@ -169,26 +174,19 @@ class UVDocResNetStage(nn.Module):
         config,
         in_channels,
         out_channels,
-        stride,
-        kernel_size,
         stage_index,
     ):
         super().__init__()
         self.layers = nn.ModuleList([])
-
         for index in range(config.stage_layer_num[stage_index]):
-            # Determine if we need downsampling for the first block
-            needs_downsample = index == 0 and (stride != 1 or in_channels != out_channels)
-
-            # Choose the appropriate block class
-            block_class = UVDocResidualBlockWithDownsample if needs_downsample else UVDocResidualBlock
-
-            layer = block_class(
+            layer = UVDocResidualBlock(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                kernel_size=kernel_size,
-                stride=stride if index == 0 else 1,
-                block_index=index,
+                stride=config.resnet_stage_stride[stage_index][index],
+                padding=config.resnet_stage_padding[stage_index][index],
+                dilation=config.resnet_stage_dilation[stage_index][index],
+                downsample=config.resnet_stage_downsample[stage_index][index],
+                kernel_size=config.kernel_size,
             )
             self.layers.append(layer)
             in_channels = out_channels
@@ -223,8 +221,6 @@ class UVDocResNet(nn.Module):
                     config=config,
                     in_channels=config.resnet_down[stage_index][0],
                     out_channels=config.resnet_down[stage_index][1],
-                    stride=config.resnet_down[stage_index][2],
-                    kernel_size=config.kernel_size,
                     stage_index=stage_index,
                 )
             )
