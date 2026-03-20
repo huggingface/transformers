@@ -15,6 +15,7 @@
 import copy
 import json
 import os
+import tempfile
 from typing import Any, TypeVar
 
 import numpy as np
@@ -38,6 +39,18 @@ ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
 
 
 logger = logging.get_logger(__name__)
+
+
+def download_url(url):
+    """Download a URL to a temp file and return the file path."""
+    import httpx
+
+    response = httpx.get(url, follow_redirects=True)
+    response.raise_for_status()
+    tmp_fd, tmp_file = tempfile.mkstemp()
+    with os.fdopen(tmp_fd, "wb") as f:
+        f.write(response.content)
+    return tmp_file
 
 
 # TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils_fast
@@ -276,6 +289,12 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
+        elif pretrained_model_name_or_path.startswith("http://") or pretrained_model_name_or_path.startswith(
+            "https://"
+        ):
+            image_processor_file = pretrained_model_name_or_path
+            resolved_image_processor_file = download_url(pretrained_model_name_or_path)
+            resolved_processor_file = None
         else:
             image_processor_file = image_processor_filename
             try:

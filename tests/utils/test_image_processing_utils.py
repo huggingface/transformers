@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import sys
 import tempfile
 import unittest
@@ -65,6 +66,24 @@ class ImageProcessorUtilTester(unittest.TestCase):
         )
 
         self.assertIsNotNone(config)
+
+    def test_image_processor_from_pretrained_url(self):
+        # Regression test: loading from a URL should work (see #44821)
+        config_data = {
+            "image_processor_type": "ViTImageProcessor",
+            "size": {"height": 224, "width": 224},
+            "do_resize": True,
+        }
+        # Write a fake config to a temp file, then have download_url return that path
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            tmp_path = f.name
+
+        with mock.patch("transformers.image_processing_base.download_url", return_value=tmp_path):
+            processor = AutoImageProcessor.from_pretrained("https://example.com/preprocessor_config.json")
+
+        self.assertIsInstance(processor, ViTImageProcessor)
+        self.assertEqual(processor.size, {"height": 224, "width": 224})
 
 
 @is_staging_test
