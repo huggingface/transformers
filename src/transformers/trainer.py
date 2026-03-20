@@ -1554,6 +1554,12 @@ class Trainer:
 
     def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
+        # DeepSpeed: clear stale inference engine refs left by evaluate()/predict()
+        # so that _wrap_model() and accelerator.prepare() can create a training engine.
+        if self.is_deepspeed_enabled and self.model_wrapped is not self.model:
+            self.model_wrapped = self.model
+            self.deepspeed = None
+
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
 
         # Can't delay optimizer creation when using FSDP2: https://github.com/huggingface/accelerate/blob/3f636d626063ffcf9a337c7d3624d61b7d187d59/src/accelerate/accelerator.py#L1404
