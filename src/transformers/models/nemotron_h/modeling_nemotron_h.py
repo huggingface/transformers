@@ -1083,7 +1083,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
     ]
-    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     @torch.no_grad()
@@ -1247,7 +1246,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
 class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
 
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__(config)
         self.model = NemotronHModel(config)
         self.vocab_size = config.vocab_size

@@ -70,7 +70,7 @@ class OPTConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 2
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     enable_bias: bool = True
     layer_norm_elementwise_affine: bool = True
     tie_word_embeddings: bool = True

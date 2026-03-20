@@ -38,7 +38,7 @@ if is_vision_available():
 
 
 if is_torchvision_available():
-    from transformers import VitPoseImageProcessorFast
+    from transformers import VitPoseImageProcessor
 
 
 class VitPoseModelTester:
@@ -233,7 +233,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            VitPoseImageProcessorFast.from_pretrained("usyd-community/vitpose-base-simple")
+            VitPoseImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
             if is_vision_available()
             else None
         )
@@ -311,7 +311,6 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         assert torch.allclose(heatmaps[0, 0, :3, :3], expected_slice, atol=1e-4)
 
         pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)
-        print(pose_results)
 
         expected_bbox = torch.tensor([391.9900, 190.0800, 391.1575, 189.3034])
         expected_keypoints = torch.tensor(

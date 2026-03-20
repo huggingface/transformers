@@ -97,8 +97,8 @@ class FSMTConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
-    forced_eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
+    forced_eos_token_id: int | list[int] | None = 2
 
     def __post_init__(self, **kwargs):
         kwargs.pop("decoder", None)  # delete unused kwargs

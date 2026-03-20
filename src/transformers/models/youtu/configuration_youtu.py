@@ -69,7 +69,7 @@ class YoutuConfig(PreTrainedConfig):
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
     kv_lora_rank: int = 512
-    q_lora_rank: int = 1536
+    q_lora_rank: int | None = 1536
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 128

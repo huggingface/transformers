@@ -28,17 +28,17 @@ object for which you are lacking a dependency will error-out when calling any me
 This object is still importable:
 
 ```python
->>> from transformers import DetrImageProcessorFast
->>> print(DetrImageProcessorFast)
-<class 'DetrImageProcessorFast'>
+>>> from transformers import DetrImageProcessor
+>>> print(DetrImageProcessor)
+<class 'DetrImageProcessor'>
 ```
 
 However, no method can be called on that object:
 
 ```python
->>> DetrImageProcessorFast.from_pretrained()
-ImportError: 
-DetrImageProcessorFast requires the Torchvision library but it was not found in your environment. Check out the instructions on the
+>>> DetrImageProcessor.from_pretrained()
+ImportError:
+DetrImageProcessor requires the Torchvision library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 ```
