@@ -148,6 +148,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: apt-get update && apt-get install -y make
             - run: uv pip install -e ".[quality]"
             - run:
                 name: Show installed libraries and their versions
@@ -167,6 +168,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: apt-get update && apt-get install -y make
             - run: uv pip install -e ".[quality]"
             - run:
                 name: Show installed libraries and their versions
