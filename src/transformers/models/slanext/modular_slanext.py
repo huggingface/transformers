@@ -184,8 +184,6 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
         if isinstance(module, SLANeXtSLAHead):
             std = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
-            # TODO: check with loc_generator
-            # for generator in (module.structure_generator, module.loc_generator):
             for generator in (module.structure_generator,):
                 for layer in generator.children():
                     if isinstance(layer, nn.Linear):
@@ -238,8 +236,6 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
             config.post_conv_out_channels, config.hidden_size, config.out_channels
         )
         self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
-        # TODO: loc_generator is not used
-        # self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
 
         self.post_init()
 

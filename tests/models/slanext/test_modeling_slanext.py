@@ -290,11 +290,16 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @slow
 class SLANeXtModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
+        # model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
+        # self.model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
+        # self.image_processor = AutoImageProcessor.from_pretrained(model_path)
+        # url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+        # self.image = Image.open(requests.get(url, stream=True).raw)
+        model_path = "/workspace/ssd1/liujiaxuan01/trans_to_transformer/test/slanext/wired_tf_new"
         self.model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = AutoImageProcessor.from_pretrained(model_path)
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        path = "/workspace/ssd1/liujiaxuan01/trans_to_transformer/test/slanext/table_recognition.jpg"
+        self.image = Image.open(path).convert("RGB")
 
     def test_inference_table_recognition_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
