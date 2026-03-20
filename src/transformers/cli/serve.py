@@ -802,6 +802,8 @@ class Serve:
         default_seed: Annotated[
             int | None, typer.Option(help="The default seed for torch, should be an integer.")
         ] = None,
+        # Some apps that make requests from external domains (e.g. Cursor) require CORS to be enabled.
+        # However, for security purposes, it's disabled by default
         enable_cors: Annotated[
             bool,
             typer.Option(
