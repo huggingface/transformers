@@ -553,14 +553,14 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         config: dict | None = None,
         **kwargs,
     ):
-        super().__init__()
-
-        self.config = config
+        super().__init__(config)
 
         self.structure_attention_cell = SLANeXtAttentionGRUCell(config.post_conv_out_channels, config.hidden_size)
         self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
         # TODO: loc_generator is not used
         # self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
+
+        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
