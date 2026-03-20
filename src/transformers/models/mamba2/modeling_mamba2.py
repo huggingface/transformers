@@ -502,11 +502,9 @@ class Mamba2Mixer(nn.Module):
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
 
-
         # 2. Convolution sequence transformation
         if cache_params is not None and cache_params.has_previous_state:
             cache_params.update_conv_state(layer_idx=self.layer_idx, new_conv_state=hidden_states_B_C, cache_init=False)
-
 
             # We need to guarantee that anything regarding the cache is on the same device
             conv_states = cache_params.conv_states[self.layer_idx].to(device=self.conv1d.weight.device)
@@ -911,9 +909,6 @@ class Mamba2Model(Mamba2PreTrainedModel):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if cache_params and not cache_params.has_previous_state:
-            cache_params.has_previous_state = True
 
         if not return_dict:
             return tuple(v for v in [hidden_states, cache_params, all_hidden_states] if v is not None)
