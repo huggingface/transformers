@@ -65,9 +65,9 @@ class UVDocModelTester:
         out_point_positions2D=((32, 8), (8, 2)),
         padding_mode="reflect",
         hidden_act="prelu",
-        out_features=["stage1", "stage2", "stage3", "stage4", "stage5", "stage6"],
-        out_indices=[1, 2, 3, 4, 5, 6],
-        num_hidden_layers=6,
+        out_features=["stage1", "stage2"],
+        out_indices=[1, 2],
+        num_hidden_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -126,78 +126,8 @@ class UVDocModelTester:
         )
 
         stage_configs = (
-            (
-                (
-                    32,
-                    32,
-                    1,
-                ),
-            ),
-            (
-                (
-                    32,
-                    32,
-                    2,
-                ),
-            ),
-            (
-                (
-                    32,
-                    32,
-                    5,
-                ),
-            ),
-            (
-                (
-                    32,
-                    32,
-                    8,
-                ),
-                (
-                    32,
-                    32,
-                    3,
-                ),
-                (
-                    32,
-                    32,
-                    2,
-                ),
-            ),
-            (
-                (
-                    32,
-                    32,
-                    12,
-                ),
-                (
-                    32,
-                    32,
-                    7,
-                ),
-                (
-                    32,
-                    32,
-                    4,
-                ),
-            ),
-            (
-                (
-                    32,
-                    32,
-                    18,
-                ),
-                (
-                    32,
-                    32,
-                    12,
-                ),
-                (
-                    32,
-                    32,
-                    6,
-                ),
-            ),
+            ((32, 32, 1),),
+            ((32, 32, 2),),
         )
 
         return UVDocConfig(
@@ -305,9 +235,9 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="Large number of hidden layers but small spatial dimensions")
-    def test_num_layers_is_small(self):
-        pass
+    # @unittest.skip(reason="Large number of hidden layers but small spatial dimensions")
+    # def test_num_layers_is_small(self):
+    #     pass
 
 
 @require_torch
