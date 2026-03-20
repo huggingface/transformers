@@ -43,7 +43,7 @@ from ..utils import logging
 from ..utils.export_config import OnnxConfig
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
 from .exporter_dynamo import DynamoExporter
-from .utils import _LEAF_SKIP_TYPES, get_leaf_tensors
+from .utils import duplicate_leaf_tensors, get_leaf_tensors
 
 
 if is_torch_available():
@@ -132,46 +132,13 @@ def patch_model_outputs(model):
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
         outputs = original_forward(*args, **kwargs)
-        return get_leaf_tensors(duplicate_leaf_tensors(outputs), default="output")
+        return get_leaf_tensors(duplicate_leaf_tensors(outputs))
 
     try:
         model.forward = patched_forward
         yield
     finally:
         model.forward = original_forward
-
-
-def duplicate_leaf_tensors(obj: Any, seen: dict | None = None) -> Any:
-    """Clone tensors that appear more than once in an output structure.
-
-    When a model returns the same tensor under two output names (e.g. `last_hidden_state`
-    and `hidden_states[0]`), the ONNX optimizer deduplicates the two output nodes and
-    renames one, breaking the expected name mapping. Cloning duplicates gives each output
-    leaf a distinct identity so the optimizer has nothing to merge.
-    """
-    if seen is None:
-        seen = {}
-    if isinstance(obj, _LEAF_SKIP_TYPES):
-        return obj
-    if isinstance(obj, torch.Tensor):
-        if id(obj) in seen:
-            return obj.clone()
-        seen[id(obj)] = True
-        return obj
-    if isinstance(obj, dict):
-        return type(obj)({k: duplicate_leaf_tensors(v, seen) for k, v in obj.items()})
-    if isinstance(obj, (list, tuple)):
-        items = [duplicate_leaf_tensors(v, seen) for v in obj]
-        try:
-            return type(obj)(items)
-        except TypeError:
-            return type(obj)(*items)  # NamedTuple
-    if hasattr(obj, "__dict__"):
-        cls = type(obj)
-        instance = cls.__new__(cls)
-        instance.__dict__.update({k: duplicate_leaf_tensors(v, seen) for k, v in vars(obj).items()})
-        return instance
-    return obj
 
 
 def get_inputs_outputs_names(inputs: dict[str, Any], outputs: Any) -> tuple[list[str], list[str]]:

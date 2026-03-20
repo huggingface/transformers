@@ -60,39 +60,91 @@ _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "retu
 _LEAF_SKIP_TYPES = (type, enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
 
 
-# ── Leaf tensors ────────────────────────────────────────────────────────────
+# ── Recursive structure traversal ──────────────────────────────────────────
+# All tensor utilities share this traversal. _map_leaf_tensors applies a function
+# to every tensor leaf; _iter_leaf_tensors yields (path, tensor) pairs.
 
 
-def _iter_leaf_tensors(obj: Any, prefix: str = "", default: str = "output"):
+def _map_leaf_tensors(obj: Any, fn: callable) -> Any:
+    """Apply `fn` to every tensor in a nested structure, preserving container types.
+
+    Traverses dicts, lists, tuples, sets, and objects with `__dict__` (e.g. cache objects).
+    Skips non-traversable leaf types (enum, SymInt, etc.).
+    """
+    if isinstance(obj, _LEAF_SKIP_TYPES):
+        return obj
+    if isinstance(obj, torch.Tensor):
+        return fn(obj)
+    if isinstance(obj, (list, tuple, set)):
+        return type(obj)(_map_leaf_tensors(item, fn) for item in obj)
+    if isinstance(obj, dict):
+        return type(obj)({k: _map_leaf_tensors(v, fn) for k, v in obj.items()})
+    if hasattr(obj, "__dict__"):
+        for attr, attr_val in vars(obj).items():
+            setattr(obj, attr, _map_leaf_tensors(attr_val, fn))
+    return obj
+
+
+def _iter_leaf_tensors(obj: Any, prefix: str = ""):
+    """Yield `(dotted_path, tensor)` for every tensor in a nested structure."""
     if isinstance(obj, _LEAF_SKIP_TYPES):
         return
     if isinstance(obj, torch.Tensor):
-        yield prefix or default, obj
+        yield prefix or "output", obj
     elif isinstance(obj, (list, tuple, set)):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
-            yield from _iter_leaf_tensors(item, path, default)
+            yield from _iter_leaf_tensors(item, path)
     elif isinstance(obj, dict):
         for key, value in obj.items():
             path = f"{prefix}.{key}" if prefix else key
-            yield from _iter_leaf_tensors(value, path, default)
+            yield from _iter_leaf_tensors(value, path)
     elif hasattr(obj, "__dict__"):
-        yield from _iter_leaf_tensors(vars(obj), prefix, default)
+        yield from _iter_leaf_tensors(vars(obj), prefix)
 
 
-def get_leaf_tensors(obj: Any, default: str = "output") -> dict[str, torch.Tensor]:
+# ── Public tensor utilities ────────────────────────────────────────────────
+
+
+def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
     """Recursively retrieve all leaf tensors from a potentially nested structure.
 
     Args:
         obj (`Any`):
             A tensor, dataclass, dict, list, tuple, or any nesting thereof.
-        default (`str`, *optional*, defaults to `"output"`):
-            Key to use when a bare tensor has no natural name.
 
     Returns:
         `dict[str, torch.Tensor]`: Flat mapping from dotted path strings to tensors.
     """
-    return dict(_iter_leaf_tensors(obj, default=default))
+    return dict(_iter_leaf_tensors(obj))
+
+
+def duplicate_leaf_tensors(obj: Any) -> Any:
+    """Clone tensors that appear more than once in an output structure.
+
+    When a model returns the same tensor under two output names (e.g. `last_hidden_state`
+    and `hidden_states[0]`), the ONNX optimizer deduplicates the two output nodes and
+    renames one, breaking the expected name mapping. Cloning duplicates gives each output
+    leaf a distinct identity so the optimizer has nothing to merge.
+    """
+    seen = set()
+
+    def _dedup(tensor: torch.Tensor) -> torch.Tensor:
+        if id(tensor) in seen:
+            return tensor.clone()
+        seen.add(id(tensor))
+        return tensor
+
+    return _map_leaf_tensors(obj, _dedup)
+
+
+def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any:
+    """Recursively cast all floating-point tensors to the given dtype and device."""
+
+    def _cast(tensor: torch.Tensor) -> torch.Tensor:
+        return tensor.to(dtype=dtype, device=device) if tensor.is_floating_point() else tensor.to(device=device)
+
+    return _map_leaf_tensors(obj, _cast)
 
 
 # ── Model patching ──────────────────────────────────────────────────────────
@@ -192,6 +244,15 @@ def prepare_for_export(
         # Reset internal caches that are not part of past_key_values (e.g. DSA indexer in glm_moe_dsa)
         if hasattr(module, "_cached_keys"):
             module._cached_keys = None
+
+    # Cast all input tensors to match the model's dtype and device (e.g. cache objects
+    # created before the model was moved to bfloat16/CUDA by a backend preparation step).
+    try:
+        model_dtype = next(model.parameters()).dtype
+        model_device = next(model.parameters()).device
+        inputs = cast_leaf_tensors(inputs, dtype=model_dtype, device=model_device)
+    except StopIteration:
+        pass
 
     return model, inputs
 

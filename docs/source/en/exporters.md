@@ -31,8 +31,6 @@ and all inherit from a common base so multicomponent and generative decompositio
 > [!TIP]
 > The exporters described here operate directly on `PreTrainedModel` instances and require no additional
 > libraries beyond `torch` (and `onnxscript`/`executorch` for the respective backends).
-> For the production-ready Optimum-based exporters that support quantization, graph optimisation, and Hub upload,
-> see [Exporting to production](./serialization).
 
 ## Installation
 

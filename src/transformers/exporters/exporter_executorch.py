@@ -56,11 +56,11 @@ class ExecutorchExporter(DynamoExporter):
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExecutorchProgramManager":
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        prepare = _BACKEND_PREPARE.get(self.export_config.backend)
-        if prepare is None:
+        prepare_for_backend = _BACKEND_PREPARE.get(self.export_config.backend)
+        if prepare_for_backend is None:
             raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
 
-        model, partitioner = prepare(model)
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
         with patch_torch_ops():
             exported_program: ExportedProgram = super().export(model, sample_inputs)
@@ -73,44 +73,43 @@ class ExecutorchExporter(DynamoExporter):
 
 
 # ── Backend preparation ────────────────────────────────────────────────────────
-# Each _prepare_* function receives the model and returns (model, partitioners).
+# Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
+# and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
 # - Move the model to the target device.
+# - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
 # - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
-# To add a new backend: implement _prepare_<name> and register it in _BACKEND_PREPARE.
+# To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
 
 
-def _prepare_xnnpack(model: "PreTrainedModel"):
+def prepare_for_xnnpack(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 
-    model = model.to(device="cpu")
-    return model, [XnnpackPartitioner()]
+    if model.device.type != "cpu":
+        model = model.to(device="cpu")
+    partitioner = [XnnpackPartitioner()]
+    return model, sample_inputs, partitioner
 
 
-def _prepare_cuda(model: "PreTrainedModel"):
+def prepare_for_cuda(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
     """GPU inference via the ExecuTorch CUDA backend.
 
-    Moves the model to CUDA and, when the model supports it, upcasts to bfloat16 +
-    enables SDPA — both required by the CUDA backend for transformer attention.
+    Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
-    model = model.to(device="cuda")
-    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
-    if (
-        next(model.parameters()).dtype != torch.bfloat16
-        and hasattr(model, "_can_set_attn_implementation")
-        and model._can_set_attn_implementation()
-        and model._supports_sdpa
-    ):
+    if model.device.type != "cuda":
+        model = model.to(device="cuda")
+    if next(model.parameters()).dtype != torch.bfloat16:
         model = model.to(dtype=torch.bfloat16)
-    return model, partitioner
+    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
+    return model, sample_inputs, partitioner
 
 
 _BACKEND_PREPARE = {
-    "xnnpack": _prepare_xnnpack,
-    "cuda": _prepare_cuda,
+    "xnnpack": prepare_for_xnnpack,
+    "cuda": prepare_for_cuda,
 }
 
 
