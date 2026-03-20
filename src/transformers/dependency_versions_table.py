@@ -70,7 +70,7 @@ deps = {
     "sudachidict_core": "sudachidict_core>=20220729",
     "tensorboard": "tensorboard",
     "timeout-decorator": "timeout-decorator",
-    "tomli": "tomli",
+    "tomli": "tomli ; python_version<'3.11'",
     "tiktoken": "tiktoken",
     "timm": "timm>=1.0.23",
     "tokenizers": "tokenizers>=0.22.0,<=0.23.0",

@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality-base check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
@@ -22,10 +22,13 @@ typing:
 	python utils/check_types.py $(ty_check_dirs)
 	python -m utils.mlinter
 
-# Run the same linting, typing, and import-order checks as the CircleCI code quality job.
-check-code-quality: typing
+# Run the strict subset shared by local `check-repo` and the CircleCI code quality job.
+check-code-quality-base: typing
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
+
+# Run the same linting, typing, and import-order checks as the CircleCI code quality job.
+check-code-quality: check-code-quality-base
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 
@@ -53,7 +56,30 @@ check-repository-consistency:
 	}
 
 # Check that the repo is in a good state (both style and consistency CI checks)
-check-repo: check-code-quality check-repository-consistency
+# Note: keep the legacy local behavior where some repository consistency checks are best-effort and don't stop the run.
+check-repo: check-code-quality-base
+	-python utils/custom_init_isort.py --check_only
+	-python utils/sort_auto_mappings.py --check_only
+	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+	-python utils/check_copies.py
+	-python utils/check_modular_conversion.py
+	-python utils/check_doc_toc.py
+	-python utils/check_docstrings.py
+	-python utils/check_dummies.py
+	-python utils/check_repo.py
+	-python utils/check_inits.py
+	-python utils/check_pipeline_typing.py
+	-python utils/check_config_docstrings.py
+	-python utils/check_config_attributes.py
+	-python utils/check_doctest_list.py
+	-python utils/update_metadata.py --check-only
+	-python utils/add_dates.py --check-only
+	-@{ \
+		md5sum src/transformers/dependency_versions_table.py > md5sum.saved; \
+		python setup.py deps_table_update; \
+		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes. This requires Python 3.10.\n" && exit 1); \
+		rm md5sum.saved; \
+	}
 
 
 

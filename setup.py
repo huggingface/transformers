@@ -141,7 +141,7 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
-    "tomli",
+    "tomli ; python_version<'3.11'",
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
