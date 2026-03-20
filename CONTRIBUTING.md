@@ -16,7 +16,7 @@ limitations under the License.
 
 # Contribute to 🤗 Transformers
 
-## Code agent contributions
+## Code agent policy
 
 >[!WARNING]
 >The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
@@ -26,9 +26,7 @@ limitations under the License.
 >not to open any PRs or issues for the moment.
 >
 >PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
->repeatedly or maliciously. 
-
-## Our code agent philosophy
+>repeatedly or maliciously.
 
 We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
 However, it's important to realize that **if you simply run a code agent
