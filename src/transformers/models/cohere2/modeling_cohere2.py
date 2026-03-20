@@ -290,7 +290,6 @@ class Cohere2DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Cohere2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Cohere2MLP(config)
         self.input_layernorm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,

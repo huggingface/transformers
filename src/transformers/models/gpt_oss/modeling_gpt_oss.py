@@ -353,7 +353,6 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.mlp = GptOssMLP(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,

@@ -304,7 +304,6 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma2MLP(config)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

@@ -354,7 +354,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
     ]
-    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     @torch.no_grad()
@@ -516,10 +515,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
-
-    def __init__(self, config):
-        super().__init__(config)
-        del self._tied_weights_keys
 
     @can_return_tuple
     @auto_docstring

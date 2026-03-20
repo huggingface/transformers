@@ -423,7 +423,6 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
 
         self.self_attn = AfmoeAttention(config=config, layer_idx=layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
 
         # Dual normalization for attention
         self.input_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

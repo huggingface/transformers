@@ -236,7 +236,6 @@ class VaultGemmaDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = VaultGemmaAttention(config=config, layer_idx=layer_idx)
         self.mlp = VaultGemmaMLP(config)
         self.input_layernorm = VaultGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

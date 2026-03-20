@@ -138,7 +138,7 @@ class OlmoHybridConfig(LlamaConfig):
     max_position_embeddings: int = 65536
     pad_token_id: int | None = 100277
     bos_token_id: int | None = None
-    eos_token_id: int | None = 100257
+    eos_token_id: int | list[int] | None = 100257
     rms_norm_eps: float = 1e-06
     layer_types: list[str] | None = None
     linear_num_key_heads: int | None = None

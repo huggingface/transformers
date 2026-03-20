@@ -220,7 +220,6 @@ class Cohere2Attention(CohereAttention):
 class Cohere2DecoderLayer(CohereDecoderLayer):
     def __init__(self, config: Cohere2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,

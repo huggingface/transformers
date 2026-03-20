@@ -1282,7 +1282,6 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Gemma3nTextAttention(config, layer_idx)
         self.mlp = Gemma3nTextMLP(config, layer_idx=layer_idx)
         self.input_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)

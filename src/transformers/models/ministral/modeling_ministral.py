@@ -227,7 +227,6 @@ class MinistralDecoderLayer(GradientCheckpointingLayer):
         self.mlp = MinistralMLP(config)
         self.input_layernorm = MinistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MinistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,

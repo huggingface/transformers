@@ -99,9 +99,7 @@ class Qwen2Attention(LlamaAttention):
 
 
 class Qwen2DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: Qwen2Config, layer_idx: int):
-        super().__init__(config=config, layer_idx=layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
+    pass
 
 
 class Qwen2PreTrainedModel(LlamaPreTrainedModel):
