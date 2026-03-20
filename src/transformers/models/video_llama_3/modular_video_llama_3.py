@@ -13,12 +13,11 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch.nn import LayerNorm
 
@@ -26,6 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -34,9 +34,6 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    make_flat_list_of_images,
-    valid_images,
-    validate_preprocess_arguments,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -46,6 +43,7 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
+    is_torchvision_available,
     logging,
 )
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
@@ -57,10 +55,8 @@ from ...video_utils import (
 )
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
-from ..qwen2_vl.image_processing_qwen2_vl_fast import (
-    Qwen2VLImageProcessorFast,
-)
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
@@ -85,6 +81,10 @@ from ..siglip.modeling_siglip import (
     SiglipEncoderLayer,
     SiglipMLP,
 )
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -494,7 +494,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
 
 class VideoLlama3Model(Qwen2VLModel):
-    _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
@@ -685,7 +684,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):
@@ -993,8 +991,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
@@ -1124,243 +1121,7 @@ class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     pass
 
 
-class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
-    r"""
-    Constructs a VideoLLaMA3 image processor that dynamically resizes images based on the original images.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}`):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 1):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 1):
-            The merge size of the vision encoder to llm encoder.
-    """
-
-    model_input_names = ["pixel_values", "image_grid_thw", "image_merge_sizes"]
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        patch_size: int = 14,
-        temporal_patch_size: int = 1,
-        merge_size: int = 1,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
-            patch_size=patch_size,
-            temporal_patch_size=temporal_patch_size,
-            merge_size=merge_size,
-            **kwargs,
-        )
-
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-
-        if self.temporal_patch_size != 1:
-            raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        videos: VideoInput | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        patch_size: int | None = None,
-        temporal_patch_size: int | None = None,
-        merge_size: int | None = None,
-        do_convert_rgb: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ):
-        """
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            videos (`VideoInput`):
-                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            min_pixels (`int`, *optional*, defaults to `self.min_pixels`):
-                The min pixels of the image to resize the image.
-            max_pixels (`int`, *optional*, defaults to `self.max_pixels`):
-                The max pixels of the image to resize the image.
-            patch_size (`int`, *optional*, defaults to `self.patch_size`):
-                The spatial patch size of the vision encoder.
-            temporal_patch_size (`int`, *optional*, defaults to `self.temporal_patch_size`):
-                The temporal patch size of the vision encoder.
-            merge_size (`int`, *optional*, defaults to `self.merge_size`):
-                The merge size of the vision encoder to llm encoder.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        """
-        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
-        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
-
-        if size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-            min_pixels = size["shortest_edge"]
-        elif min_pixels is not None and max_pixels is not None:
-            # backward compatibility: override size with min_pixels and max_pixels if they are provided
-            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
-        else:
-            size = {**self.size}
-
-        do_resize = do_resize if do_resize is not None else self.do_resize
-
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        patch_size = patch_size if patch_size is not None else self.patch_size
-        temporal_patch_size = temporal_patch_size if temporal_patch_size is not None else self.temporal_patch_size
-        merge_size = merge_size if merge_size is not None else self.merge_size
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        if images is not None:
-            images = self.fetch_images(images)
-            images = make_flat_list_of_images(images)
-
-        if images is not None and not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        validate_preprocess_arguments(
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        data = {}
-        if images is not None:
-            pixel_values, vision_grid_thws = [], []
-            for image in images:
-                patches, image_grid_thw = self._preprocess(
-                    image,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    patch_size=patch_size,
-                    temporal_patch_size=temporal_patch_size,
-                    merge_size=merge_size,
-                    data_format=data_format,
-                    do_convert_rgb=do_convert_rgb,
-                    input_data_format=input_data_format,
-                )
-                pixel_values.extend(patches)
-                vision_grid_thws.append(image_grid_thw)
-            data.update(
-                {
-                    "pixel_values": np.array(pixel_values),
-                    "image_grid_thw": np.array(vision_grid_thws),
-                    "image_merge_sizes": np.array([merge_size] * len(vision_grid_thws)),
-                }
-            )
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
+class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
@@ -1372,28 +1133,203 @@ class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
         "image_merge_sizes",
     ]
 
-    def _preprocess_image_like_inputs(
+    def _preprocess(
         self,
-        images: ImageInput,
-        do_convert_rgb: bool,
-        input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[VideoLlama3ImageProcessorKwargs],
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        return_tensors: str | TensorType | None,
+        **kwargs,
     ) -> BatchFeature:
-        # Prepare input images
-        batch_feature = BatchFeature()
-        if kwargs["temporal_patch_size"] != 1:
-            raise ValueError("`temporal_patch_size` must be 1 for VideoLLaMA3")
-        images = self._prepare_image_like_inputs(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        all_patches = []
+        all_grids = []
+
+        for image in images:
+            height, width = image.shape[-2:]
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=patch_size * merge_size,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
+                )
+                image = self.resize(
+                    image,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample,
+                )
+            else:
+                resized_height, resized_width = height, width
+
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+
+            patches = np.expand_dims(image, axis=0)
+            if patches.ndim == 4:
+                patches = np.expand_dims(patches, axis=1)
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = np.repeat(
+                    patches[:, -1:], temporal_patch_size - (patches.shape[1] % temporal_patch_size), axis=1
+                )
+                patches = np.concatenate([patches, repeats], axis=1)
+
+            batch_size, grid_t, channel = patches.shape[0], patches.shape[1] // temporal_patch_size, patches.shape[2]
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+            patches = patches.reshape(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
+            )
+            patches = patches.transpose(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            flatten_patches = patches.reshape(
+                batch_size * grid_t * grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
+
+            all_patches.append(flatten_patches)
+            all_grids.append([grid_t, grid_h, grid_w])
+
+        pixel_values = np.concatenate(all_patches, axis=0)
+        image_grid_thw = np.array(all_grids, dtype=np.int64)
+        image_merge_sizes = np.array([merge_size] * image_grid_thw.shape[0], dtype=np.int64)
+
+        return BatchFeature(
+            data={
+                "pixel_values": pixel_values,
+                "image_grid_thw": image_grid_thw,
+                "image_merge_sizes": image_merge_sizes,
+            },
+            tensor_type=return_tensors,
         )
-        batch_feature = self._preprocess(images, **kwargs)
-        batch_feature["image_merge_sizes"] = torch.tensor(
-            [kwargs["merge_size"]] * batch_feature.image_grid_thw.size(0),
-            dtype=batch_feature.image_grid_thw.dtype,
-            device=batch_feature.image_grid_thw.device,
+
+
+class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    temporal_patch_size = 1
+    merge_size = 1
+    valid_kwargs = VideoLlama3ImageProcessorKwargs
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "image_merge_sizes",
+    ]
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int,
+        temporal_patch_size: int,
+        merge_size: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            height, width = stacked_images.shape[-2:]
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=patch_size * merge_size,
+                    min_pixels=size.shortest_edge,
+                    max_pixels=size.longest_edge,
+                )
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=SizeDict(height=resized_height, width=resized_width),
+                    resample=resample,
+                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        processed_grids = {}
+        for shape, stacked_images in grouped_images.items():
+            resized_height, resized_width = stacked_images.shape[-2:]
+            patches = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            if patches.ndim == 4:
+                patches = patches.unsqueeze(1)
+            if patches.shape[1] % temporal_patch_size != 0:
+                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
+                patches = torch.cat([patches, repeats], dim=1)
+            batch_size, grid_t, channel = patches.shape[:3]
+            grid_t = grid_t // temporal_patch_size
+            grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+
+            patches = patches.view(
+                batch_size,
+                grid_t,
+                temporal_patch_size,
+                channel,
+                grid_h // merge_size,
+                merge_size,
+                patch_size,
+                grid_w // merge_size,
+                merge_size,
+                patch_size,
+            )
+            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            flatten_patches = patches.reshape(
+                batch_size,
+                grid_t * grid_h * grid_w,
+                channel * temporal_patch_size * patch_size * patch_size,
+            )
+
+            processed_images_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_grids_ordered = reorder_images(processed_grids, grouped_images_index)
+        pixel_values = torch.cat(processed_images, dim=0)
+        image_grid_thw = torch.tensor(processed_grids_ordered, dtype=torch.long)
+        image_merge_sizes = torch.tensor(
+            [merge_size] * image_grid_thw.size(0),
+            dtype=image_grid_thw.dtype,
+            device=image_grid_thw.device,
         )
-        return batch_feature
+
+        return BatchFeature(
+            data={
+                "pixel_values": pixel_values,
+                "image_grid_thw": image_grid_thw,
+                "image_merge_sizes": image_merge_sizes,
+            },
+            tensor_type=return_tensors,
+        )
 
 
 class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
@@ -1460,7 +1396,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1491,7 +1427,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                 stacked_videos = self.resize(
                     image=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
@@ -1581,6 +1517,6 @@ __all__ = [
     "VideoLlama3ForConditionalGeneration",
     "VideoLlama3Processor",
     "VideoLlama3ImageProcessor",
-    "VideoLlama3ImageProcessorFast",
+    "VideoLlama3ImageProcessorPil",
     "VideoLlama3VideoProcessor",
 ]

@@ -410,6 +410,10 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             rtols=rtols,
         )
 
+    @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
@@ -860,6 +864,12 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     @pytest.mark.generate
     @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
     def test_generate_with_quant_cache(self):
+        pass
+
+    @unittest.skip(
+        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
     def _check_hidden_states_for_generate(

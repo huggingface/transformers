@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import random
 import unittest
 
+import httpx
 import numpy as np
-import requests
 from PIL import Image
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,10 +32,6 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers import FlavaImageProcessor
-
-    if is_torchvision_available():
-        from transformers import FlavaImageProcessorFast
     from transformers.image_utils import PILImageResampling
     from transformers.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
@@ -173,8 +170,6 @@ class FlavaImageProcessingTester:
 @require_torch
 @require_vision
 class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = FlavaImageProcessor if is_vision_available() else None
-    fast_image_processing_class = FlavaImageProcessorFast if is_torchvision_available() else None
     maxDiff = None
 
     def setUp(self):
@@ -186,7 +181,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -209,14 +204,14 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "codebook_image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 224, "width": 224})
             self.assertEqual(image_processor.crop_size, {"height": 224, "width": 224})
             self.assertEqual(image_processor.codebook_size, {"height": 112, "width": 112})
             self.assertEqual(image_processor.codebook_crop_size, {"height": 112, "width": 112})
 
-            image_processor = self.image_processing_class.from_dict(
+            image_processor = image_processing_class.from_dict(
                 self.image_processor_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
             )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
@@ -225,7 +220,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(image_processor.codebook_crop_size, {"height": 66, "width": 66})
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -264,7 +259,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def _test_call_framework(self, instance_class, prepare_kwargs):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random tensors
@@ -346,15 +341,23 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self._test_call_framework(np.ndarray, prepare_kwargs={"numpify": True})
 
     def test_call_numpy_4_channels(self):
-        self.image_processing_class.num_channels = 4
+        # Get the first backend class to modify num_channels
+        first_backend_class = list(self.image_processing_classes.values())[0]
+        original_num_channels = (
+            first_backend_class.num_channels if hasattr(first_backend_class, "num_channels") else None
+        )
+        first_backend_class.num_channels = 4
         self._test_call_framework(np.ndarray, prepare_kwargs={"numpify": True})
-        self.image_processing_class.num_channels = 3
+        if original_num_channels is not None:
+            first_backend_class.num_channels = original_num_channels
+        else:
+            delattr(first_backend_class, "num_channels")
 
     def test_call_pytorch(self):
         self._test_call_framework(torch.Tensor, prepare_kwargs={"torchify": True})
 
     def test_masking(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             random.seed(1234)
             image_processing = image_processing_class(**self.image_processor_dict)
@@ -365,7 +368,7 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoded_images.bool_masked_pos.sum().item(), 75)
 
     def test_codebook_pixels(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -397,26 +400,29 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+            io.BytesIO(
+                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
+            )
         )
-        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
-        encoding_slow = image_processor_slow(
-            dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
-        )
-        encoding_fast = image_processor_fast(
-            dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
-        )
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
+        # Create processors for each backend
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(
+                dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
+            )
 
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.codebook_pixel_values, encoding_fast.codebook_pixel_values
-        )
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_encoding.codebook_pixel_values, encodings[backend_name].codebook_pixel_values
+            )

@@ -257,8 +257,6 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColPaliForRetrieval):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         del self._tied_weights_keys

@@ -157,3 +157,21 @@ good_example = '''
 # Keep implementation local in this modeling file.
 # If code is reused, copy it with an appropriate # Copied from ... statement.
 '''
+
+[rules.TRF010]
+description = "Direct config definitions must use @strict(accept_kwargs=True)."
+default_enabled = true
+allowlist_models = ["nemotron_h", "vibevoice_asr"]
+
+[rules.TRF010.explanation]
+what_it_does = "Checks direct PreTrainedConfig/PretrainedConfig subclasses in configuration_*.py and modular_*.py for an explicit @strict(accept_kwargs=True) decorator."
+why_bad = "Without strict, new config classes miss the repo's runtime type-validation contract and drift from the dataclass-based config standard."
+bad_example = '''
+class FooConfig(PreTrainedConfig):
+    ...
+'''
+good_example = '''
+@strict(accept_kwargs=True)
+class FooConfig(PreTrainedConfig):
+    ...
+'''

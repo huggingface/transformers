@@ -136,8 +136,6 @@ class FastVlmModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class FastVlmModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
 
@@ -240,8 +238,6 @@ class FastVlmCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     """
 )
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -1510,7 +1510,9 @@ class TrainingArguments:
                 )
 
         if (
-            self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            self.load_best_model_at_end
+            or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            or self.lr_scheduler_type == SchedulerType.GREEDY
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
@@ -1524,6 +1526,12 @@ class TrainingArguments:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
+
+        # Auto-enable Kubeflow integration when running inside a Kubeflow TrainJob
+        from .integrations import is_kubeflow_available
+
+        if is_kubeflow_available() and "kubeflow" not in self.report_to:
+            self.report_to = list(self.report_to) + ["kubeflow"]
 
         # ── 4. Validation ──
         self._validate_args()
@@ -1701,6 +1709,10 @@ class TrainingArguments:
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires an eval strategy")
             if not is_torch_available():
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
+
+        if self.lr_scheduler_type == SchedulerType.GREEDY:
+            if self.eval_strategy == IntervalStrategy.NO:
+                raise ValueError("lr_scheduler_type greedy requires an eval strategy")
 
         if self.warmup_steps < 0:
             raise ValueError("warmup_steps must be an integer or a float")

@@ -4734,6 +4734,13 @@ class ModelTesterMixin:
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
                     for source_pattern in conversion.source_patterns:
+                        # Some patterns are written for gen-model only and won't be applied on base model
+                        if "lm_head" in source_pattern and model_class not in [
+                            *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+                        ]:
+                            continue
+
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search

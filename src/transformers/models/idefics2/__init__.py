@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_idefics2 import *
     from .image_processing_idefics2 import *
-    from .image_processing_idefics2_fast import *
+    from .image_processing_pil_idefics2 import *
     from .modeling_idefics2 import *
     from .processing_idefics2 import *
 else:

@@ -1071,7 +1071,6 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
         causal_mask: torch.Tensor | None = None,
         past_key_values: Zamba2HybridDynamicCache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         transformer_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1085,8 +1084,6 @@ class Zamba2MambaDecoderLayer(GradientCheckpointingLayer):
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
         """
 
         residual = hidden_states
@@ -1372,7 +1369,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1405,7 +1401,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1437,7 +1432,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         is_first_iteration=False,
@@ -1456,7 +1450,6 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,

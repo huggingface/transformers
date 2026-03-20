@@ -524,6 +524,9 @@ Hey how are you doing"""  # noqa: W293
     EXPECTED_ADEPT_FUYU_8B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_MICROSOFT_PHI_3_MINI_4K_INSTRUCT = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n \nhi there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_MUCAI_VIP_LLAVA_7B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_DISHAM993_ELECTRICAL_NER_MODERNBERT_BASE = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_DEEPSEEK_AI_DEEPSEEK_R1 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_REDHATAI_DEEPSEEK_CODER_V2_LITE_INSTRUCT_FP8 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED = [
         ("xlangai/OpenCUA-7B", EXPECTED_XLANGAI_OPENCUA_7B),
@@ -533,6 +536,12 @@ Hey how are you doing"""  # noqa: W293
         ("adept/fuyu-8b", EXPECTED_ADEPT_FUYU_8B),
         ("microsoft/Phi-3-mini-4k-instruct", EXPECTED_MICROSOFT_PHI_3_MINI_4K_INSTRUCT),
         ("mucai/vip-llava-7b", EXPECTED_MUCAI_VIP_LLAVA_7B),
+        ("disham993/electrical-ner-ModernBERT-base", EXPECTED_DISHAM993_ELECTRICAL_NER_MODERNBERT_BASE),
+        ("deepseek-ai/DeepSeek-R1", EXPECTED_DEEPSEEK_AI_DEEPSEEK_R1),
+        (
+            "RedHatAI/DeepSeek-Coder-V2-Lite-Instruct-FP8",
+            EXPECTED_REDHATAI_DEEPSEEK_CODER_V2_LITE_INSTRUCT_FP8,
+        ),
     ]
 
     @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)

@@ -322,8 +322,8 @@ class FalconAttention(nn.Module):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -341,10 +341,7 @@ class FalconAttention(nn.Module):
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
         if layer_past is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            if alibi is None:
-                cache_kwargs.update({"sin": sin, "cos": cos})
-            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx)
 
         kv_length = key_layer.shape[-2]
 
@@ -454,8 +451,8 @@ class FalconFlashAttention2(FalconAttention):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -473,10 +470,7 @@ class FalconFlashAttention2(FalconAttention):
             query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
         if layer_past is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            if alibi is None:
-                cache_kwargs.update({"sin": sin, "cos": cos})
-            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -592,7 +586,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         layer_past: Cache | tuple[torch.Tensor, torch.Tensor] | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ):
@@ -613,7 +606,6 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
             alibi=alibi,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
         )
 
@@ -716,7 +708,6 @@ class FalconModel(FalconPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -769,19 +760,15 @@ class FalconModel(FalconPreTrainedModel):
             )
             alibi = build_alibi_tensor(mask, self.num_heads, dtype=inputs_embeds.dtype)
 
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             # Force mask creation for alibi
             and_mask_function=lambda *args: torch.tensor(True, dtype=torch.bool),
@@ -821,7 +808,6 @@ class FalconModel(FalconPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 alibi=alibi,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
             )
 
@@ -880,7 +866,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -914,7 +899,6 @@ class FalconForCausalLM(FalconPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         hidden_states = transformer_outputs[0]
 

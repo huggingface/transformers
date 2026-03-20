@@ -2068,9 +2068,6 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self.model = model
 
     def set_inputs(self, inputs):
-        # build `cache_position` on the fly
-        seq_length = inputs["input_ids"].shape[1]
-        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
         # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
