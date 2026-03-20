@@ -81,9 +81,6 @@ class SLANeXtConfig(PreTrainedConfig):
             Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
         max_text_length (`int`, *optional*, defaults to 500):
             Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
-        loc_reg_num (`int`, *optional*, defaults to 8):
-            Number of regression values predicted per token for bounding box localisation (e.g., 8 values for four
-            corner coordinates).
     """
 
     model_type = "slanext"
@@ -95,7 +92,6 @@ class SLANeXtConfig(PreTrainedConfig):
     out_channels: int = 50
     hidden_size: int = 512
     max_text_length: int = 500
-    loc_reg_num: int = 8
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
