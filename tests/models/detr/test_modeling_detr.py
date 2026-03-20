@@ -50,7 +50,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrImageProcessor
+    from transformers import DetrImageProcessorPil
 
 
 class DetrModelTester:
@@ -630,7 +630,7 @@ def prepare_img():
 class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DetrImageProcessor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        return DetrImageProcessorPil.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)

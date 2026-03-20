@@ -170,6 +170,9 @@ tags
 # ruff
 .ruff_cache
 
+# modeling structure lint cache
+utils/.check_modeling_structure_cache.json
+
 # modular conversion
 *.modular_backup
 

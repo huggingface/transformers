@@ -85,6 +85,12 @@ The original code can be found [here]([(https://github.com/baaivision/Painter/tr
     - preprocess
     - post_process_semantic_segmentation
 
+## SegGptImageProcessorPil
+
+[[autodoc]] SegGptImageProcessorPil
+    - preprocess
+    - post_process_semantic_segmentation
+
 ## SegGptModel
 
 [[autodoc]] SegGptModel

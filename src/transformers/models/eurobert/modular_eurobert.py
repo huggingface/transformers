@@ -63,7 +63,7 @@ class EuroBertConfig(LlamaConfig):
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-05
     bos_token_id: int | None = 128000
-    eos_token_id: int | None = 128001
+    eos_token_id: int | list[int] | None = 128001
     pad_token_id: int | None = 128001
     mask_token_id: int = 128002
     pretraining_tp: int = 1

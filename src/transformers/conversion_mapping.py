@@ -41,6 +41,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
     "qwen2_moe": "qwen2_moe",
+    "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
     "dots1": "qwen2_moe",
@@ -78,6 +79,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
+    "pp_chart2table": "got_ocr2",
 }
 
 
@@ -423,6 +425,22 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="LayerNorm.beta",
                 target_patterns="LayerNorm.bias",
             ),
+        ],
+        "jina_embeddings_v3": [
+            WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
+            WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
+            WeightConverter(
+                source_patterns="mixer.Wqkv",
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(source_patterns="mixer.out_proj", target_patterns="self_attn.o_proj"),
+            WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
+            WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
     }
     mapping["legacy"] += [

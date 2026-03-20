@@ -13,330 +13,100 @@
 # limitations under the License.
 """Image processor class for VideoMAE."""
 
-import numpy as np
-
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    is_valid_image,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    SizeDict,
+    make_nested_list_of_images,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-from ...utils.import_utils import requires
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 
 
-if is_vision_available():
-    import PIL
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
-logger = logging.get_logger(__name__)
+@auto_docstring
+class VideoMAEImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"shortest_edge": 224}
+    default_to_square = False
+    crop_size = {"height": 224, "width": 224}
+    do_resize = True
+    do_center_crop = True
+    do_rescale = True
+    do_normalize = True
 
-
-def make_batched(videos) -> list[list[ImageInput]]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
-
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        return [videos]
-
-    elif is_valid_image(videos):
-        return [[videos]]
-
-    raise ValueError(f"Could not make batched video from {videos}")
-
-
-@requires(backends=("vision",))
-class VideoMAEImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a VideoMAE image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Size of the output image after resizing. The shortest edge of the image will be resized to
-            `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
-            `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by the `do_center_crop`
-            parameter in the `preprocess` method.
-        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the image after applying the center crop. Can be overridden by the `crop_size` parameter in the
-            `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
-            in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-    """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_center_crop: bool = True,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
-        size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        self.do_resize = do_resize
-        self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
+        return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
-    def resize(
+    @auto_docstring
+    def preprocess(self, videos: ImageInput, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
+        r"""
+        videos (`ImageInput`):
+            Video or batch of videos to preprocess. Expects a single video (list of frames) or a batch of videos
+            (list of list of frames). Each frame can be a PIL image, numpy array, or torch tensor with pixel values
+            ranging from 0 to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
+        """
+        return super().preprocess(videos, **kwargs)
+
+    def _preprocess(
         self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        images: list[list["torch.Tensor"]],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Size of the output image. If `size` is of the form `{"height": h, "width": w}`, the output image will
-                have the size `(h, w)`. If `size` is of the form `{"shortest_edge": s}`, the output image will have its
-                shortest edge of length `s` while keeping the aspect ratio of the original image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
-        size = get_size_dict(size, default_to_square=False)
-        if "shortest_edge" in size:
-            output_size = get_resize_output_image_size(
-                image, size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
-            )
-        elif "height" in size and "width" in size:
-            output_size = (size["height"], size["width"])
-        else:
-            raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
+    ) -> BatchFeature:
+        grouped_images, grouped_images_index = group_images_by_shape(
+            images, is_nested=True, disable_grouping=disable_grouping
         )
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(stacked_images, size, resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index, is_nested=True)
 
-    def _preprocess_image(
-        self,
-        image: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """Preprocesses a single image."""
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+        grouped_images, grouped_images_index = group_images_by_shape(
+            resized_images, is_nested=True, disable_grouping=disable_grouping
         )
-
-        # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
-
-        if do_rescale and is_scaled_image(image):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index, is_nested=True)
 
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
-        if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
-        if do_center_crop:
-            image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
-
-        if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-        return image
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        videos: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after applying resize.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_centre_crop`):
-                Whether to centre crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the image after applying the centre crop.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                    - Unset: Use the inferred channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
-
-        if not valid_images(videos):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        videos = make_batched(videos)
-
-        videos = [
-            [
-                self._preprocess_image(
-                    image=img,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_center_crop=do_center_crop,
-                    crop_size=crop_size,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                for img in video
-            ]
-            for video in videos
-        ]
-
-        data = {"pixel_values": videos}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        # Stack frames per video: list[list[Tensor(C,H,W)]] → list[Tensor(num_frames,C,H,W)]
+        pixel_values = [torch.stack(video_frames) for video_frames in processed_images]
+        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 
 __all__ = ["VideoMAEImageProcessor"]

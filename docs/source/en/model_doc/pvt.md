@@ -63,9 +63,9 @@ This model was contributed by [Xrenya](https://huggingface.co/Xrenya). The origi
 [[autodoc]] PvtImageProcessor
     - preprocess
 
-## PvtImageProcessorFast
+## PvtImageProcessorPil
 
-[[autodoc]] PvtImageProcessorFast
+[[autodoc]] PvtImageProcessorPil
     - preprocess
 
 ## PvtForImageClassification

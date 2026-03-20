@@ -171,14 +171,15 @@ print(f"Output tokens: {output_tokens}")
 [[autodoc]] GlmImageImageProcessor
     - preprocess
 
-## GlmImageImageProcessorFast
+## GlmImageImageProcessorPil
 
-[[autodoc]] GlmImageImageProcessorFast
+[[autodoc]] GlmImageImageProcessorPil
     - preprocess
 
 ## GlmImageProcessor
 
 [[autodoc]] GlmImageProcessor
+    - __call__
 
 ## GlmImageVisionModel
 
