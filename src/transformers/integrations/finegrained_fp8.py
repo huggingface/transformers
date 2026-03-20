@@ -213,7 +213,7 @@ def w8a8_fp8_matmul(
     if _supports_cutlass(A, B, block_size, output_dtype):
         return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
 
-    # Fall back to Triton
+    # Block-wise: fall back to Triton hub kernel
     kernel = _get_triton_kernel()
     return kernel.w8a8_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
@@ -292,6 +292,29 @@ class FP8Linear(nn.Linear):
         return output.to(dtype=input.dtype)
 
 
+def _fp8_quantize_and_scaled_mm(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    weight_scale_inv: torch.Tensor,
+    activation_scale: torch.Tensor | None,
+) -> torch.Tensor:
+    """Quantize bf16 activations to FP8 and run torch._scaled_mm for a single expert."""
+    M, K = x.shape
+    N = weight.shape[0]
+
+    if activation_scale is not None:
+        a_scale = activation_scale.float()
+        qx = (x / a_scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        sa = a_scale.reshape(1, 1).expand(M, 1).contiguous()
+    else:
+        kernel = _get_triton_kernel()
+        qx, a_scale = kernel.fp8_act_quant(x, K)
+        sa = a_scale.float().reshape(-1, 1).contiguous()
+
+    sb = weight_scale_inv.float().reshape(1, 1).expand(1, N).contiguous()
+    return torch._scaled_mm(qx, weight.t(), scale_a=sa, scale_b=sb, out_dtype=x.dtype)
+
+
 def _batched_scaled_mm(
     input: torch.Tensor,
     weight: torch.Tensor,
@@ -303,37 +326,15 @@ def _batched_scaled_mm(
     """Batched FP8 matmul using torch._scaled_mm, mirroring _batched_linear.
 
     Tokens are unsorted; uses boolean masks to select tokens per expert.
-
-    Args:
-        input: bf16 activations ``[S, K]`` (unsorted).
-        weight: FP8 expert weights ``[E, N, K]``.
-        weight_scale_inv: Per-expert weight scales ``[E, 1, 1]`` or ``[E]``.
-        activation_scale: Per-expert activation scales ``[E]`` (static) or ``None`` (dynamic).
-        expert_ids: Expert assignment per token ``[S]``.
-        num_experts: Total number of experts.
     """
-    S, K = input.shape
-    N = weight.shape[1]
-    output = torch.empty(S, N, device=input.device, dtype=input.dtype)
+    output = torch.empty(input.shape[0], weight.shape[1], device=input.device, dtype=input.dtype)
 
     for eidx in range(num_experts):
         mask = expert_ids == eidx
         if not mask.any():
             continue
-
-        x = input[mask]
-
-        if activation_scale is not None:
-            a_scale = activation_scale[eidx].float()
-            qx = (x / a_scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            sa = a_scale.reshape(1, 1).expand(x.shape[0], 1).contiguous()
-        else:
-            kernel = _get_triton_kernel()
-            qx, a_scale = kernel.fp8_act_quant(x, K)
-            sa = a_scale.float().reshape(-1, 1).contiguous()
-
-        sb = weight_scale_inv[eidx].float().reshape(1, 1).expand(1, N).contiguous()
-        output[mask] = torch._scaled_mm(qx, weight[eidx].t(), scale_a=sa, scale_b=sb, out_dtype=input.dtype)
+        act_scale = activation_scale[eidx] if activation_scale is not None else None
+        output[mask] = _fp8_quantize_and_scaled_mm(input[mask], weight[eidx], weight_scale_inv[eidx], act_scale)
 
     return output
 
@@ -347,41 +348,19 @@ def _grouped_scaled_mm(
 ) -> torch.Tensor:
     """Grouped FP8 matmul using torch._scaled_mm, mirroring _grouped_mm_fallback.
 
-    Tokens are sorted by expert. For each expert slice, quantizes activations
-    to FP8, then calls torch._scaled_mm with the expert's weight.
-
-    Args:
-        input: bf16 activations ``[S, K]`` sorted by expert.
-        weight: FP8 expert weights ``[E, N, K]``.
-        weight_scale_inv: Per-expert weight scales ``[E, 1, 1]`` or ``[E]``.
-        activation_scale: Per-expert activation scales ``[E]`` (static) or ``None`` (dynamic).
-        tokens_per_expert: Token counts per expert ``[E]``.
+    Tokens are sorted by expert; processes contiguous slices.
     """
-    S, K = input.shape
-    N = weight.shape[1]
-    output = torch.empty(S, N, device=input.device, dtype=input.dtype)
+    output = torch.empty(input.shape[0], weight.shape[1], device=input.device, dtype=input.dtype)
 
-    # Pre-compute per-expert scale_b tensors ([1, N] each) — one allocation per expert
-    # Single cpu<->gpu sync point here, avoids multiple syncs inside the loop
+    # Single cpu<->gpu sync point, avoids multiple syncs inside the loop
     start = 0
     for eidx, end in enumerate(torch.cumsum(tokens_per_expert, 0).int().tolist()):
         if start == end:
             continue
-
-        x = input[start:end]  # contiguous slice
-
-        # Quantize activations to FP8
-        if activation_scale is not None:
-            a_scale = activation_scale[eidx].float()
-            qx = (x / a_scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            sa = a_scale.reshape(1, 1).expand(x.shape[0], 1).contiguous()
-        else:
-            kernel = _get_triton_kernel()
-            qx, a_scale = kernel.fp8_act_quant(x, K)
-            sa = a_scale.float().reshape(-1, 1).contiguous()
-
-        sb = weight_scale_inv[eidx].float().reshape(1, 1).expand(1, N).contiguous()
-        output[start:end] = torch._scaled_mm(qx, weight[eidx].t(), scale_a=sa, scale_b=sb, out_dtype=input.dtype)
+        act_scale = activation_scale[eidx] if activation_scale is not None else None
+        output[start:end] = _fp8_quantize_and_scaled_mm(
+            input[start:end], weight[eidx], weight_scale_inv[eidx], act_scale
+        )
         start = end
 
     return output
