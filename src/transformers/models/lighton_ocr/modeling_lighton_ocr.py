@@ -29,7 +29,12 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_lighton_ocr import LightOnOcrConfig
@@ -156,7 +161,6 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     """
 )
 class LightOnOcrModel(LightOnOcrPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
     base_model_prefix = ""
 
     def __init__(self, config: LightOnOcrConfig):
@@ -297,7 +301,6 @@ class LightOnOcrCausalLMOutputWithPast(ModelOutput):
     """
 )
 class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LightOnOcrConfig):

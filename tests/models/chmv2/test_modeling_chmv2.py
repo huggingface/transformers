@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CHMv2ImageProcessorFast
+    from transformers import CHMv2ImageProcessor
 
 
 class CHMv2ModelTester:
@@ -175,9 +175,7 @@ class CHMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 @slow
 class CHMv2IntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        processor = CHMv2ImageProcessorFast.from_pretrained(
-            "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
-        )
+        processor = CHMv2ImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1")
         model = CHMv2ForDepthEstimation.from_pretrained(
             "facebook/dinov3-vitl16-chmv2-dpt-head", revision="refs/pr/1"
         ).to(torch_device)

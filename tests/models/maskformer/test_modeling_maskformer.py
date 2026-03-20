@@ -45,7 +45,7 @@ if is_torch_available():
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
+        from transformers import MaskFormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
@@ -499,7 +499,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerImageProcessorPil.from_pretrained("facebook/maskformer-swin-small-coco")
             if is_vision_available()
             else None
         )

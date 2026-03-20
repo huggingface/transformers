@@ -16,10 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Image processors
 
-Image processors converts images into pixel values, tensors that represent image colors and size. The pixel values are inputs to a vision model. To ensure a pretrained model receives the correct input, an image processor can perform the following operations to make sure an image is exactly like the images a model was pretrained on.
+Image processors convert images into pixel values, tensors that represent image colors and size. The pixel values are inputs to a vision model. To ensure a pretrained model receives the correct input, an image processor can perform the following operations to make sure an image is exactly like the images a model was pretrained on.
 
-- [`~BaseImageProcessor.center_crop`] to resize an image
-- [`~BaseImageProcessor.normalize`] or [`~BaseImageProcessor.rescale`] pixel values
+- center-crop or resize an image
+- normalize or rescale pixel values
 
 Use [`~ImageProcessingMixin.from_pretrained`] to load an image processors configuration (image size, whether to normalize and rescale, etc.) from a vision model on the Hugging Face [Hub](https://hf.co) or local directory. The configuration for each pretrained model is saved in a [preprocessor_config.json](https://huggingface.co/google/vit-base-patch16-224/blob/main/preprocessor_config.json) file.
 
@@ -44,34 +44,43 @@ This guide covers the image processor class and how to preprocess images for vis
 
 ## Image processor classes
 
-Image processors inherit from the [`BaseImageProcessor`] class which provides the [`~BaseImageProcessor.center_crop`], [`~BaseImageProcessor.normalize`], and [`~BaseImageProcessor.rescale`] functions. There are two types of image processors.
+Image processors use a backend-based architecture with two backends:
 
-- [`BaseImageProcessor`] is a Python implementation.
-- [`BaseImageProcessorFast`] is a faster [torchvision-backed](https://pytorch.org/vision/stable/index.html) version. For a batch of [torch.Tensor](https://pytorch.org/docs/stable/tensors.html) inputs, this can be up to 33x faster. [`BaseImageProcessorFast`] is not available for all vision models at the moment. Refer to a models API documentation to check if it is supported.
+- [`TorchvisionBackend`] — the default [torchvision-backed](https://pytorch.org/vision/stable/index.html) implementation. GPU-accelerated and up to 33x faster than the PIL backend for batches of [torch.Tensor](https://pytorch.org/docs/stable/tensors.html) inputs. All models support this backend; newer models only support this one.
+- [`PilBackend`] — the PIL/NumPy alternative. Portable and CPU-only. Only available for older models, where it is useful to reproduce the exact numerical outputs of the original implementation.
 
-Each image processor subclasses the [`ImageProcessingMixin`] class which provides the [`~ImageProcessingMixin.from_pretrained`] and [`~ImageProcessingMixin.save_pretrained`] methods for loading and saving image processors.
+The active backend on a loaded processor can be inspected with its `backend` attribute (e.g., `processor.backend == "torchvision"`). Each image processor subclasses [`ImageProcessingMixin`] which provides the [`~ImageProcessingMixin.from_pretrained`] and [`~ImageProcessingMixin.save_pretrained`] methods.
 
-There are two ways you can load an image processor, with [`AutoImageProcessor`] or a model-specific image processor.
+There are two ways you can load an image processor: with [`AutoImageProcessor`] or directly from a model-specific class.
 
 <hfoptions id="image-processor-classes">
 <hfoption id="AutoImageProcessor">
 
 The [AutoClass](./model_doc/auto) API provides a convenient method to load an image processor without directly specifying the model the image processor is associated with.
 
-Use [`~AutoImageProcessor.from_pretrained`] to load an image processor, and set `use_fast=True` to load a fast image processor if it's supported.
+Use [`~AutoImageProcessor.from_pretrained`] with the `backend` argument to select the backend. When `backend` is omitted (the default), torchvision is picked when it is installed and PIL is used otherwise. Note that `backend="pil"` is only supported for older models; newer models only expose the torchvision backend.
+
+> **Note:** a small set of older models (Chameleon, Flava, Idefics3, SmolVLM) use Lanczos interpolation that torchvision does not support, so they always default to the PIL backend regardless of torchvision availability. Pass `backend="torchvision"` explicitly to override this.
 
 ```py
 from transformers import AutoImageProcessor
 
-image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224", use_fast=True)
+# Default: picks torchvision if available, otherwise pil
+image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+
+# Explicitly request the torchvision backend
+image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224", backend="torchvision")
+
+# Explicitly request the PIL backend (only for models that support it)
+image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224", backend="pil")
 ```
 
 </hfoption>
 <hfoption id="model-specific image processor">
 
-Each image processor is associated with a specific pretrained vision model, and the image processors configuration contains the models expected size and whether to normalize and resize.
+Each image processor is associated with a specific pretrained vision model, and its configuration contains the model's expected size and normalization parameters.
 
-The image processor can be loaded directly from the model-specific class. Check a models API documentation to see whether it supports a fast image processor.
+Load the torchvision backend processor directly from the model-specific class.
 
 ```py
 from transformers import ViTImageProcessor
@@ -79,35 +88,35 @@ from transformers import ViTImageProcessor
 image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
-To load a fast image processor, use the fast implementation class.
+For models that support it, you can load the PIL backend with the `Pil`-suffixed class. This is useful when you need exact numerical parity with the original implementation.
 
 ```py
-from transformers import ViTImageProcessorFast
+from transformers import ViTImageProcessorPil
 
-image_processor = ViTImageProcessorFast.from_pretrained("google/vit-base-patch16-224")
+image_processor = ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-224")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Fast image processors
+## Torchvision backend processors
 
-[`BaseImageProcessorFast`] is based on [torchvision](https://pytorch.org/vision/stable/index.html) and is significantly faster, especially when processing on a GPU. This class can be used as a drop-in replacement for [`BaseImageProcessor`] if it's available for a model because it has the same design. Make sure [torchvision](https://pytorch.org/get-started/locally/#mac-installation) is installed, and set the `use_fast` parameter to `True`.
+[`TorchvisionBackend`] is the **default** backend. Make sure [torchvision](https://pytorch.org/get-started/locally/#mac-installation) is installed, then load it with `backend="torchvision"` (or simply omit `backend`, since torchvision is selected automatically when available).
 
 ```py
 from transformers import AutoImageProcessor
 
-processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", use_fast=True)
+processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50", backend="torchvision")
 ```
 
-Control which device processing is performed on with the `device` parameter. Processing is performed on the same device as the input by default if the inputs are tensors, otherwise they are processed on the CPU. The example below places the fast processor on a GPU.
+Control which device processing is performed on with the `device` argument. Processing is performed on the same device as the input by default if the inputs are tensors, otherwise it falls back to CPU. The example below runs processing on a GPU.
 
 ```py
 from torchvision.io import read_image
-from transformers import DetrImageProcessorFast
+from transformers import DetrImageProcessor
 
 images = read_image("image.jpg")
-processor = DetrImageProcessorFast.from_pretrained("facebook/detr-resnet-50")
+processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 images_processed = processor(images, return_tensors="pt", device="cuda")
 ```
 

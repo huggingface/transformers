@@ -139,6 +139,7 @@ for label_id in predicted_labels:
 
 [[autodoc]] PPLCNetBackbone
 
-## PPLCNetImageProcessorFast
+## PPLCNetImageProcessor
 
-[[autodoc]] PPLCNetImageProcessorFast
+[[autodoc]] PPLCNetImageProcessor
+    - preprocess

@@ -152,9 +152,9 @@ print(output)
 [[autodoc]] PixtralImageProcessor
     - preprocess
 
-## PixtralImageProcessorFast
+## PixtralImageProcessorPil
 
-[[autodoc]] PixtralImageProcessorFast
+[[autodoc]] PixtralImageProcessorPil
     - preprocess
 
 ## PixtralProcessor

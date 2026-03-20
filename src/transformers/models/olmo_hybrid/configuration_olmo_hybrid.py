@@ -100,7 +100,7 @@ class OlmoHybridConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 100277
     bos_token_id: int | None = None
-    eos_token_id: int | None = 100257
+    eos_token_id: int | list[int] | None = 100257
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
