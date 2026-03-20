@@ -77,7 +77,7 @@ class Mistral4Config(PreTrainedConfig):
     n_routed_experts: int = 128
     routed_scaling_factor: float = 1.0
     kv_lora_rank: int = 256
-    q_lora_rank: int = 1024
+    q_lora_rank: int | None = 1024
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 64
@@ -93,7 +93,7 @@ class Mistral4Config(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 11
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None

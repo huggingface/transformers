@@ -60,9 +60,9 @@ depth = processor.post_process_depth_estimation(
 
 [[autodoc]] CHMv2Config
 
-## CHMv2ImageProcessorFast
+## CHMv2ImageProcessor
 
-[[autodoc]] CHMv2ImageProcessorFast
+[[autodoc]] CHMv2ImageProcessor
     - preprocess
     - post_process_depth_estimation
 

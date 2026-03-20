@@ -16,22 +16,19 @@ import json
 import os
 import warnings
 from collections.abc import Callable
-from copy import deepcopy
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
-from .image_processing_utils import (
-    BatchFeature,
-    get_size_dict,
-)
-from .image_processing_utils_fast import BaseImageProcessorFast
+from .image_processing_backends import TorchvisionBackend
+from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
     validate_kwargs,
 )
@@ -147,7 +144,7 @@ BASE_VIDEO_PROCESSOR_DOCSTRING = r"""
     BASE_VIDEO_PROCESSOR_DOCSTRING,
 )
 @requires(backends=("vision", "torchvision"))
-class BaseVideoProcessor(BaseImageProcessorFast):
+class BaseVideoProcessor(TorchvisionBackend):
     _auto_class = None
 
     resample = None
@@ -172,35 +169,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     model_input_names = ["pixel_values_videos"]
 
     def __init__(self, **kwargs: Unpack[VideosKwargs]) -> None:
-        super().__init__()
-
-        kwargs.pop("processor_class", None)
-
-        # Additional attributes without default values
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
-
-        # Prepare size related keys and turn then into `SizeDict`
-        size = kwargs.pop("size", self.size)
-        self.size = (
-            get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
-            if size is not None
-            else None
-        )
-        crop_size = kwargs.pop("crop_size", self.crop_size)
-        self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-
-        # Save valid kwargs in a list for further processing
-        self.model_valid_processing_keys = list(self.valid_kwargs.__annotations__.keys())
-        for key in self.model_valid_processing_keys:
-            if kwargs.get(key) is not None:
-                setattr(self, key, kwargs[key])
-            else:
-                setattr(self, key, deepcopy(getattr(self, key, None)))
+        super().__init__(**kwargs)
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         return self.preprocess(videos, **kwargs)
@@ -387,7 +356,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         )
         videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
-        kwargs = self._further_process_kwargs(**kwargs)
+        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess
@@ -405,7 +374,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -423,7 +392,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 
@@ -736,25 +705,21 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         """
         video_processor_dict = video_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-
-        # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
-        # We set `size` here directly to the `video_processor_dict` so that it is converted to the appropriate
-        # dict within the video processor and isn't overwritten if `size` is passed in as a kwarg.
-        if "size" in kwargs and "size" in video_processor_dict:
-            video_processor_dict["size"] = kwargs.pop("size")
-        if "crop_size" in kwargs and "crop_size" in video_processor_dict:
-            video_processor_dict["crop_size"] = kwargs.pop("crop_size")
-
+        video_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         video_processor = cls(**video_processor_dict)
 
-        # Update video_processor with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(video_processor, key):
-                setattr(video_processor, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
+        # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
+        extra_keys = []
+        for key in reversed(list(kwargs.keys())):
+            if hasattr(video_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                setattr(video_processor, key, kwargs.pop(key, None))
+                extra_keys.append(key)
+        if extra_keys:
+            logger.warning_once(
+                f"Image processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                f"To avoid this warning, add them to valid_kwargs: create a custom TypedDict extending "
+                f"ImagesKwargs with these keys and set it as the `valid_kwargs` class attribute."
+            )
 
         logger.info(f"Video processor {video_processor}")
         if return_unused_kwargs:
@@ -769,19 +734,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this video processor instance.
         """
-        output = deepcopy(self.__dict__)
-        filtered_dict = {}
-        for key, value in output.items():
-            if value is None:
-                class_default = getattr(type(self), key, "NOT_FOUND")
-                # Keep None if user explicitly set it (class default is non-None)
-                if class_default != "NOT_FOUND" and class_default is not None:
-                    filtered_dict[key] = value
-            else:
-                filtered_dict[key] = value
-
-        filtered_dict.pop("model_valid_processing_keys", None)
-        filtered_dict.pop("_valid_kwargs_names", None)
+        filtered_dict = super().to_dict()
+        filtered_dict.pop("image_processor_type", None)
         filtered_dict["video_processor_type"] = self.__class__.__name__
 
         return filtered_dict

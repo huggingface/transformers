@@ -152,9 +152,9 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 [[autodoc]] SiglipImageProcessor
     - preprocess
 
-## SiglipImageProcessorFast
+## SiglipImageProcessorPil
 
-[[autodoc]] SiglipImageProcessorFast
+[[autodoc]] SiglipImageProcessorPil
     - preprocess
 
 ## SiglipProcessor
