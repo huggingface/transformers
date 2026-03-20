@@ -19,28 +19,25 @@ limitations under the License.
 ## Code agent contributions
 
 >[!WARNING]
->As of early 2026, the Transformers repo is being overwhelmed by a large number of PRs and comments written by
->code agents. Please read this section and the one below in their entirety if you intend to use code agents to contribute to Transformers. 
->The rest of this document predates the "agent era", and parts of it may be out of date as a result.
-
-Because of the rise of code agents, the Transformers maintainers are currently bottlenecked by our ability to review
-and respond to issues and PRs. As a result, we are **not accepting pure code agent contributions from new users** 
-at this time. You may use code agents in drafting or to help you diagnose issues, but 
-**new users should not submit PRs written by code agents under any circumstances**. Using LLMs or code agents
-to post reviews on other users' issues is banned. These prohibitions also apply to autonomous "OpenClaw"-like agents. 
-
-Pure agent PRs will probably be closed without review, and repeated violations of this policy may result in a ban
-from contributing across the entire Hugging Face organization. 
+>The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
+>code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
+>**we ask that new users do not submit pure code agent PRs** at this time. 
+>You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous "OpenClaw"-like agents
+>not to open any PRs or issues for the moment.
+>
+>PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
+>repeatedly or maliciously. 
 
 ## Our code agent philosophy
 
 We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
-This is exactly the reason that pure code agent PRs are unhelpful to us, though - if you simply run a code agent
-and generate a PR, you are acting as a pointless middleman between maintainers and the agent. There's no reason
-for you to be involved; we could simply run a code agent ourselves and save time.
+However, it's important to realize that **if you simply run a code agent
+and generate a PR to an open-source project, you are merely a middleman between the reviewers and the agent**. 
+Although doing this creates something that looks very much like a useful contribution, in reality there was no reason 
+for you to be involved; the reviewers could have simply run the code agent themselves.
 
-If you want to contribute usefully, **you need to do things that agents can't do on their own**. In particular,
-we've found the following to be very helpful:
+If you want to contribute usefully to open-source in the agent era, **you need to do things that agents can't do on
+their own**. In particular, we've found the following to be very helpful:
 - Clear diagnosis of bugs. Code agents like to quickly fix problems with a workaround that often causes code bloat
 or incompatibilities with other models. Spending time to track down the exact cause of a problem, and in particular
 locating the first commit where it appeared (for example with [git bisect](https://git-scm.com/docs/git-bisect)) is valuable.
@@ -65,6 +62,11 @@ agent simply by having good taste about what's really important.
 see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
 they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before 
 pinging anyone for review! This reduces notification spam a lot, which keeps maintainers sane.
+
+Please bear in mind that this is an exciting, rapidly-changing but challenging era for open-source development, and indeed
+for the software industry as a whole. We will likely be rapidly updating these guidelines as we learn more about
+dealing effectively with code agents. Have patience with us if reviews are slower than normal, or if some
+PRs are closed without review!
 
 
 ## Welcome to the 🤗 Transformers community!
