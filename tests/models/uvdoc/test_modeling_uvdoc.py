@@ -212,7 +212,7 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "/workspace/model_weight_torch/UVDoc"
+        model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor() if is_vision_available() else None
         self.image = Image.open(
