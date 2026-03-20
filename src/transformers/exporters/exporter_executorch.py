@@ -27,13 +27,16 @@ if is_torch_available():
     from torch.export import ExportedProgram
 
 if is_executorch_available():
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
+    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
-logger = logging.get_logger(__file__)
+logger = logging.get_logger(__name__)
 
 
 class ExecutorchExporter(DynamoExporter):
@@ -83,9 +86,9 @@ class ExecutorchExporter(DynamoExporter):
 
 def prepare_for_xnnpack(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
-    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 
-    if model.device.type != "cpu":
+    device = getattr(model, "device", None) or next(model.parameters()).device
+    if device.type != "cpu":
         model = model.to(device="cpu")
     partitioner = [XnnpackPartitioner()]
     return model, sample_inputs, partitioner
@@ -96,12 +99,12 @@ def prepare_for_cuda(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
-    from executorch.backends.cuda.cuda_backend import CudaBackend
-    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
-    if model.device.type != "cuda":
+    device = getattr(model, "device", None) or next(model.parameters()).device
+    if device.type != "cuda":
         model = model.to(device="cuda")
-    if next(model.parameters()).dtype != torch.bfloat16:
+    dtype = next(model.parameters()).dtype
+    if dtype != torch.bfloat16:
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
     return model, sample_inputs, partitioner

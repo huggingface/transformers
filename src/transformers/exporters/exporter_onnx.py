@@ -88,13 +88,10 @@ class OnnxExporter(DynamoExporter):
 
     def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
         with patch_model_outputs(model), patch_torch_ops(), patch_onnx_decomposition():
-            # Run the model once (inside patch_model_outputs so outputs are flat dict[str, Tensor])
-            # to resolve I/O names before torch.export and torch.onnx.export add their own passes.
+            exported_program: ExportedProgram = super().export(model, sample_inputs)
             with torch.no_grad():
                 sample_outputs = model(**copy.deepcopy(sample_inputs))
             inputs_names, outputs_names = get_inputs_outputs_names(sample_inputs, sample_outputs)
-
-            exported_program: ExportedProgram = super().export(model, sample_inputs)
             patch_fx_graph(exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
