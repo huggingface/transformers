@@ -70,7 +70,6 @@ class UVDocImageProcessingTester:
 @require_torch
 @require_vision
 class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = UVDocImageProcessingTester(self)

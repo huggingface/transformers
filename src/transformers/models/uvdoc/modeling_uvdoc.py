@@ -247,7 +247,6 @@ class UVDocPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
-
     supports_gradient_checkpointing = True
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,
@@ -312,7 +311,7 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         )
 
 
-class UVDocHead(UVDocPreTrainedModel):
+class UVDocHead(nn.Module):
     def __init__(self, config):
         super().__init__(config)
         self.num_bridge_layers = len(config.dilation_values)
@@ -327,6 +326,8 @@ class UVDocHead(UVDocPreTrainedModel):
         )
 
         self.out_point_positions2D = UVDocPointPositions2D(config)
+
+        self.post_init()
 
     def forward(
         self,
@@ -368,4 +369,4 @@ class UVDocModel(UVDocPreTrainedModel):
         )
 
 
-__all__ = ["UVDocModel", "UVDocPreTrainedModel"]
+__all__ = ["UVDocBackbone", "UVDocBridge", "UVDocModel", "UVDocPreTrainedModel"]

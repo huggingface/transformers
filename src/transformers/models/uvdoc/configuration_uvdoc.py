@@ -43,8 +43,6 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     Args:
         kernel_size (`int`, *optional*, defaults to 5):
             Kernel size for convolutional layers in the backbone network.
-        stage_layer_num (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
-            Number of layers in each ResNet stage.
         resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
             Configuration for the ResNet head layers in format [in_channels, out_channels].
         resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
@@ -74,7 +72,6 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "prelu"
     bridge_in_channels = 128
     kernel_size: int = 5
-    stage_layer_num: list[int] | tuple[int, ...] = (3, 4, 6)
     resnet_head: Sequence[list[int] | tuple[int, ...]] = (
         (3, 32),
         (32, 32),

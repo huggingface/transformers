@@ -71,9 +71,8 @@ class UVDocModelTester:
         padding_mode="reflect",
         hidden_act="prelu",
         out_features=["stage1", "stage2", "stage3"],
-        out_indices=[1, 2, 3]
+        out_indices=[1, 2, 3],
     ):
-
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -97,7 +96,6 @@ class UVDocModelTester:
         self.seq_length = 8
         self.hidden_size = 8
 
-
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
@@ -110,7 +108,6 @@ class UVDocModelTester:
         return config, pixel_values
 
     def get_config(self) -> UVDocConfig:
-
         stage_configs = (
             (
                 (8, 8, 1, False),

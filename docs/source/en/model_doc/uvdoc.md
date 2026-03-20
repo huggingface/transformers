@@ -104,3 +104,11 @@ print(result)
 ## UVDocPreTrainedModel
 
 [[autodoc]] UVDocPreTrainedModel
+
+## UVDocBackbone
+
+[[autodoc]] UVDocBackbone
+
+## UVDocBridge
+
+[[autodoc]] UVDocBridge

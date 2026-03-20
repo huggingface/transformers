@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneConfigMixin
+from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
@@ -31,12 +31,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import TensorType
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetPreTrainedModel
 from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
+from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetPreTrainedModel
+
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
 @strict(accept_kwargs=True)
@@ -53,14 +54,12 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     Args:
         kernel_size (`int`, *optional*, defaults to 5):
             Kernel size for convolutional layers in the backbone network.
-        stage_layer_num (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
-            Number of layers in each ResNet stage.
         resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
             Configuration for the ResNet head layers in format [in_channels, out_channels].
         resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
             Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
-        stage_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False), 
-            (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False), 
+        stage_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
+            (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False),
             (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
             Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
         bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
@@ -84,7 +83,6 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "prelu"
     bridge_in_channels = 128
     kernel_size: int = 5
-    stage_layer_num: list[int] | tuple[int, ...] = (3, 4, 6)
     resnet_head: Sequence[list[int] | tuple[int, ...]] = (
         (3, 32),
         (32, 32),
@@ -125,7 +123,6 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     padding_mode: str = "reflect"
 
     def __post_init__(self, **kwargs):
-
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.stage_configs) + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
@@ -441,7 +438,6 @@ class UVDocPointPositions2D(nn.Module):
 
 @auto_docstring
 class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
-
     supports_gradient_checkpointing = True
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,
@@ -506,7 +502,7 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         )
 
 
-class UVDocHead(UVDocPreTrainedModel):
+class UVDocHead(nn.Module):
     def __init__(self, config):
         super().__init__(config)
         self.num_bridge_layers = len(config.dilation_values)
@@ -521,6 +517,8 @@ class UVDocHead(UVDocPreTrainedModel):
         )
 
         self.out_point_positions2D = UVDocPointPositions2D(config)
+
+        self.post_init()
 
     def forward(
         self,
@@ -562,8 +560,9 @@ class UVDocModel(UVDocPreTrainedModel):
         )
 
 
-
 __all__ = [
+    "UVDocBackbone",
+    "UVDocBridge",
     "UVDocImageProcessor",
     "UVDocConfig",
     "UVDocModel",
