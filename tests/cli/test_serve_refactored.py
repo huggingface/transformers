@@ -19,6 +19,7 @@ Integration tests (need GPU): RUN_SLOW=1 pytest tests/cli/test_serve_refactored.
 """
 
 import asyncio
+import io
 import json
 import os
 import time
@@ -1205,3 +1206,128 @@ class TestLoadModel(unittest.TestCase):
             self.assertIn("response.created", types, f"Request {i} missing created event")
             self.assertIn("response.output_text.delta", types, f"Request {i} missing delta events")
             self.assertIn("response.completed", types, f"Request {i} missing completed event")
+
+
+# ---------------------------------------------------------------------------
+# 11. Integration tests — Transcription API (need GPU + model + librosa)
+# ---------------------------------------------------------------------------
+
+
+def _make_test_wav(duration: float = 2.0, sample_rate: int = 16000) -> bytes:
+    """Create a simple WAV file with a sine wave. Returns raw bytes."""
+    import wave
+
+    import numpy as np
+
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    audio = (np.sin(2 * np.pi * 440 * t) * 32767).astype(np.int16)
+    buf = io.BytesIO()
+    with wave.open(buf, "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio.tobytes())
+    return buf.getvalue()
+
+
+@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
+@require_openai
+class TestTranscription(unittest.TestCase):
+    """Integration tests for POST /v1/audio/transcriptions with whisper-tiny."""
+
+    MODEL = "openai/whisper-tiny"
+    PORT = 8880
+
+    @classmethod
+    def setUpClass(cls):
+        import requests as req
+
+        from transformers.cli.serve_refactored import Serve
+
+        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        for _ in range(30):
+            try:
+                if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+        cls.base_url = f"http://localhost:{cls.PORT}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    @classmethod
+    def _get_audio_bytes(cls):
+        """Download the MLK 'I have a dream' speech sample from HF Hub."""
+        if not hasattr(cls, "_audio_bytes"):
+            from huggingface_hub import hf_hub_download
+
+            path = hf_hub_download("Narsil/asr_dummy", "mlk.flac", repo_type="dataset")
+            with open(path, "rb") as f:
+                cls._audio_bytes = f.read()
+        return cls._audio_bytes
+
+    def test_transcription_returns_text(self):
+        """POST /v1/audio/transcriptions with real speech returns meaningful transcription."""
+        import requests as req
+
+        audio_bytes = self._get_audio_bytes()
+        resp = req.post(
+            f"{self.base_url}/v1/audio/transcriptions",
+            files={"file": ("mlk.flac", audio_bytes, "audio/flac")},
+            data={"model": self.MODEL},
+            timeout=120,
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("text", data)
+        self.assertIsInstance(data["text"], str)
+        # Whisper-tiny should recognize at least "dream" from the MLK speech
+        self.assertIn("dream", data["text"].lower())
+
+    def test_transcription_openai_client(self):
+        """Transcription should work via the OpenAI Python client."""
+        audio_bytes = self._get_audio_bytes()
+        client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+        result = client.audio.transcriptions.create(
+            model=self.MODEL,
+            file=("mlk.flac", audio_bytes),
+        )
+        self.assertIsInstance(result.text, str)
+        self.assertTrue(len(result.text) > 10)
+
+    def test_transcription_streaming(self):
+        """Streaming transcription should yield text chunks via SSE."""
+        import requests as req
+
+        audio_bytes = self._get_audio_bytes()
+        resp = req.post(
+            f"{self.base_url}/v1/audio/transcriptions",
+            files={"file": ("mlk.flac", audio_bytes, "audio/flac")},
+            data={"model": self.MODEL, "stream": "true"},
+            stream=True,
+            timeout=120,
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        chunks = []
+        for line in resp.iter_lines(decode_unicode=True):
+            if line and line.startswith("data: "):
+                chunks.append(line[len("data: ") :])
+
+        self.assertGreater(len(chunks), 0, "No streaming chunks received")
+        full_text = "".join(chunks)
+        self.assertIn("dream", full_text.lower())
+
+    def test_transcription_missing_file(self):
+        """POST without a file should fail."""
+        import requests as req
+
+        resp = req.post(
+            f"{self.base_url}/v1/audio/transcriptions",
+            data={"model": self.MODEL},
+            timeout=30,
+        )
+        self.assertNotEqual(resp.status_code, 200)

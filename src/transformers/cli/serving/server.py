@@ -28,6 +28,7 @@ from ...utils import logging
 from .chat_completion import ChatCompletionHandler
 from .model_manager import ModelManager
 from .response import ResponseHandler
+from .transcription import TranscriptionHandler
 from .utils import X_REQUEST_ID
 
 
@@ -90,6 +91,12 @@ def build_server(
     async def responses(request: Request, body: dict):
         return response_handler.handle_request(body, request.state.request_id)
 
+    transcription_handler = TranscriptionHandler(model_manager)
+
+    @app.post("/v1/audio/transcriptions")
+    async def audio_transcriptions(request: Request):
+        return await transcription_handler.handle_request(request)
+
     @app.post("/load_model")
     async def load_model(body: dict):
         from fastapi import HTTPException
@@ -97,8 +104,10 @@ def build_server(
         model = body.get("model")
         if model is None:
             raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
-        model_id = model_manager.process_model_name(model)
-        return StreamingResponse(model_manager.load_model_streaming(model_id), media_type="text/event-stream")
+        model_id_and_revision = model_manager.process_model_name(model)
+        return StreamingResponse(
+            model_manager.load_model_streaming(model_id_and_revision), media_type="text/event-stream"
+        )
 
     @app.post("/reset")
     def reset():

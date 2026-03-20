@@ -216,16 +216,17 @@ class DirectStreamer:
     ``TextIteratorStreamer`` which re-decodes the full sequence each time.
 
     Args:
-        processor: A HuggingFace processor or tokenizer (must have a ``._tokenizer`` attribute).
+        tokenizer: The raw ``tokenizers.Tokenizer`` instance (i.e. the Rust tokenizer,
+            typically accessed as ``processor._tokenizer`` or ``processor.tokenizer._tokenizer``).
         loop: The asyncio event loop to push results to.
         queue: The asyncio.Queue to push decoded text chunks to.
         skip_special_tokens: Whether to skip special tokens during decoding.
     """
 
-    def __init__(self, processor, loop, queue, skip_special_tokens: bool = True):
+    def __init__(self, tokenizer, loop, queue, skip_special_tokens: bool = True):
         from tokenizers.decoders import DecodeStream
 
-        self._tokenizer = processor._tokenizer  # raw tokenizers.Tokenizer
+        self._tokenizer = tokenizer
         self._loop = loop
         self._queue = queue
         self._decode_stream = DecodeStream([], skip_special_tokens)
@@ -389,7 +390,7 @@ class BaseHandler:
         """
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor, loop, queue, skip_special_tokens=True)
+        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
         def _run():
