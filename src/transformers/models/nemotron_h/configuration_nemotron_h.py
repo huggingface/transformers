@@ -39,14 +39,14 @@ class NemotronHConfig(PreTrainedConfig):
         Number of groups for expert routing.
     mamba_hidden_act (`str`, *optional*, defaults to `"silu"`):
         The non-linear activation function in the Mamba layers.
-    mamba_dt_min (`float`, *optional*, defaults to 0.001):
-        Minimum value for the time step in Mamba.
-    mamba_dt_max (`float`, *optional*, defaults to 0.1):
-        Maximum value for the time step in Mamba.
-    mamba_dt_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
-        Limits for the time step in Mamba.
-    mamba_dt_init_floor (`float`, *optional*, defaults to 0.0001):
-        Floor value for time step initialization in Mamba.
+    n_groups (`int`, *optional*, default to 8):
+        Number of mamba groups.
+    expand (`int`, *optional*, default to 2):
+        Expand size for the mamba layers.
+    use_conv_bias (`bool`, *optional*, defaults to `True`):
+        Whetehr to use bias for mamba conv layers.
+    chunk_size (`int`, *optional*, default to 128):
+        CHunk size for mamba layers.
     mamba_ssm_cache_dtype (`str`, *optional*, defaults to `"float32"`):
         Data type for Mamba SSM cache states.
     moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 7688):
