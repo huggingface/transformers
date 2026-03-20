@@ -52,6 +52,8 @@ CLI usage
 
 import argparse
 import ast
+import hashlib
+import json
 import subprocess
 import sys
 from collections.abc import Callable
@@ -120,6 +122,27 @@ TRF_MODEL_DIR_ALLOWLISTS = {
     rule_id: spec["allowlist_models"] for rule_id, spec in TRF_RULE_SPECS.items() if spec["allowlist_models"]
 }
 CONSOLE = Console(stderr=True)
+CACHE_PATH = Path(__file__).with_name(".check_modeling_structure_cache.json")
+
+
+def _content_hash(text: str, enabled_rules: set[str]) -> str:
+    h = hashlib.sha256(text.encode("utf-8"))
+    h.update(",".join(sorted(enabled_rules)).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _load_cache() -> dict[str, str]:
+    try:
+        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_cache(cache: dict[str, str]) -> None:
+    try:
+        CACHE_PATH.write_text(json.dumps(cache, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 @dataclass(frozen=True)
@@ -947,6 +970,11 @@ def parse_args() -> argparse.Namespace:
         help="Disable interactive progress animation.",
     )
     parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Ignore the lint cache and re-check every file.",
+    )
+    parser.add_argument(
         "--enable-all-trf-rules",
         action="store_true",
         help="Enable all TRF rules (defaults already enable most).",
@@ -1052,13 +1080,33 @@ def main() -> int:
         else nullcontext()
     )
 
+    use_cache = not args.no_cache
+    cache = _load_cache() if use_cache else {}
+    new_cache: dict[str, str] = {}
+    skipped = 0
+
     with status_ctx:
         for file_path in modeling_files:
             try:
                 text = file_path.read_text(encoding="utf-8")
-                violations.extend(analyze_file(file_path, text, enabled_rules=enabled_rules))
+                file_key = str(file_path)
+                digest = _content_hash(text, enabled_rules)
+
+                if use_cache and cache.get(file_key) == digest:
+                    new_cache[file_key] = digest
+                    skipped += 1
+                    continue
+
+                file_violations = analyze_file(file_path, text, enabled_rules=enabled_rules)
+                violations.extend(file_violations)
+
+                if not file_violations:
+                    new_cache[file_key] = digest
             except Exception as exc:
                 violations.append(Violation(file_path=file_path, line_number=1, message=f"failed to parse ({exc})."))
+
+    if use_cache:
+        _save_cache(new_cache)
 
     if len(violations) > 0:
         violations = sorted(violations, key=lambda v: (str(v.file_path), v.line_number, v.message))
