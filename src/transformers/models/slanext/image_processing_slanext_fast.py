@@ -41,20 +41,18 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 512, "width": 512}
     pad_size = {"height": 512, "width": 512}
-    rescale_factor = 1 / 255
+    do_convert_rgb = True
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = ImagesKwargs
-    model_input_names = ["pixel_values"]
 
     def _resize(
         self,
-        image: torch.Tensor,
+        image: "torch.Tensor",
         size: SizeDict,
         interpolation: Optional["tvF.InterpolationMode"] = None,
-    ) -> torch.Tensor:
+    ) -> "torch.Tensor":
         batch_size, channels, height, width = image.shape
         image = image.view(batch_size * channels, height, width)
 
@@ -64,51 +62,55 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
         target_height = round(height * scale)
         target_width = round(width * scale)
 
-        target_x = torch.arange(target_width, dtype=torch.float32, device=device)
-        src_x = (target_x + 0.5) * (float(width) / float(target_width)) - 0.5
-        src_x_floor = src_x.floor().to(torch.int32)
-        src_x_frac = src_x - src_x_floor.float()
+        target_col = torch.arange(target_width, dtype=torch.float32, device=device)
+        src_col = (target_col + 0.5) * (float(width) / float(target_width)) - 0.5
+        src_col_floor = src_col.floor().to(torch.int32)
+        src_col_frac = src_col - src_col_floor.float()
         # boundary handling
-        src_x_frac = torch.where(src_x_floor < 0, torch.zeros_like(src_x_frac), src_x_frac)
-        src_x_floor = torch.where(src_x_floor < 0, torch.zeros_like(src_x_floor), src_x_floor)
-        src_x_frac = torch.where(src_x_floor >= width - 1, torch.ones_like(src_x_frac), src_x_frac)
-        src_x_floor = torch.where(src_x_floor >= width - 1, torch.full_like(src_x_floor, width - 2), src_x_floor)
-        # fixed-point weights
-        weight_x_r = (src_x_frac * 2048 + 0.5).floor().to(torch.int32)  # round-to-nearest
-        weight_x_l = 2048 - weight_x_r  # (target_w,)
-        # --- Y coordinate tables ---
-        target_y = torch.arange(target_height, dtype=torch.float32, device=device)
-        src_y = (target_y + 0.5) * (float(height) / float(target_height)) - 0.5
-        src_y_floor = src_y.floor().to(torch.int32)
-        src_y_frac = src_y - src_y_floor.float()
-        src_y_frac = torch.where(src_y_floor < 0, torch.zeros_like(src_y_frac), src_y_frac)
-        src_y_floor = torch.where(src_y_floor < 0, torch.zeros_like(src_y_floor), src_y_floor)
-        src_y_frac = torch.where(src_y_floor >= height - 1, torch.ones_like(src_y_frac), src_y_frac)
-        src_y_floor = torch.where(src_y_floor >= height - 1, torch.full_like(src_y_floor, height - 2), src_y_floor)
-        weight_y_b = (src_y_frac * 2048 + 0.5).floor().to(torch.int32)
-        weight_y_t = 2048 - weight_y_b  # (target_h,)
-
-        img_u8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
-        img_i32 = img_u8.to(torch.int32)  # (C, H, W)
-        x_left = src_x_floor.long()  # (target_w,)
-        x_right = (src_x_floor + 1).long()  # (target_w,)  safe: src_x_floor <= width-2
-        y_top = src_y_floor.long()  # (target_h,)
-        y_bottom = (src_y_floor + 1).long()  # (target_h,)
-        # gather 4 neighbours: (C, target_h, target_w)
-        p00 = img_i32[:, y_top[:, None], x_left[None, :]]
-        p10 = img_i32[:, y_top[:, None], x_right[None, :]]
-        p01 = img_i32[:, y_bottom[:, None], x_left[None, :]]
-        p11 = img_i32[:, y_bottom[:, None], x_right[None, :]]
-        # fixed-point bilinear: weights broadcast over (C, target_h, target_w)
-        weight_y_b_ = weight_y_b.view(1, target_height, 1)
-        weight_y_t_ = weight_y_t.view(1, target_height, 1)
-        weight_x_r_ = weight_x_r.view(1, 1, target_width)
-        weight_x_l_ = weight_x_l.view(1, 1, target_width)
-        val = weight_y_t_ * (weight_x_l_ * p00 + weight_x_r_ * p10) + weight_y_b_ * (
-            weight_x_l_ * p01 + weight_x_r_ * p11
+        src_col_frac = torch.where(src_col_floor < 0, torch.zeros_like(src_col_frac), src_col_frac)
+        src_col_floor = torch.where(src_col_floor < 0, torch.zeros_like(src_col_floor), src_col_floor)
+        src_col_frac = torch.where(src_col_floor >= width - 1, torch.ones_like(src_col_frac), src_col_frac)
+        src_col_floor = torch.where(
+            src_col_floor >= width - 1, torch.full_like(src_col_floor, width - 2), src_col_floor
         )
-        val = (val + (1 << 21)) >> 22
-        result = val.clamp(0, 255).to(torch.uint8)  # (B*C, target_h, target_w)
+        # fixed-point weights
+        weight_right = (src_col_frac * 2048 + 0.5).floor().to(torch.int32)  # round-to-nearest
+        weight_left = 2048 - weight_right  # (target_w,)
+        # --- row coordinate tables ---
+        target_row = torch.arange(target_height, dtype=torch.float32, device=device)
+        src_row = (target_row + 0.5) * (float(height) / float(target_height)) - 0.5
+        src_row_floor = src_row.floor().to(torch.int32)
+        src_row_frac = src_row - src_row_floor.float()
+        src_row_frac = torch.where(src_row_floor < 0, torch.zeros_like(src_row_frac), src_row_frac)
+        src_row_floor = torch.where(src_row_floor < 0, torch.zeros_like(src_row_floor), src_row_floor)
+        src_row_frac = torch.where(src_row_floor >= height - 1, torch.ones_like(src_row_frac), src_row_frac)
+        src_row_floor = torch.where(
+            src_row_floor >= height - 1, torch.full_like(src_row_floor, height - 2), src_row_floor
+        )
+        weight_bottom = (src_row_frac * 2048 + 0.5).floor().to(torch.int32)
+        weight_top = 2048 - weight_bottom  # (target_h,)
+
+        image_uint8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
+        image_int32 = image_uint8.to(torch.int32)  # (C, H, W)
+        col_left = src_col_floor.long()  # (target_w,)
+        col_right = (src_col_floor + 1).long()  # (target_w,)  safe: src_col_floor <= width-2
+        row_top = src_row_floor.long()  # (target_h,)
+        row_bottom = (src_row_floor + 1).long()  # (target_h,)
+        # gather 4 neighbours: (C, target_h, target_w)
+        pixel_top_left = image_int32[:, row_top[:, None], col_left[None, :]]
+        pixel_top_right = image_int32[:, row_top[:, None], col_right[None, :]]
+        pixel_bottom_left = image_int32[:, row_bottom[:, None], col_left[None, :]]
+        pixel_bottom_right = image_int32[:, row_bottom[:, None], col_right[None, :]]
+        # fixed-point bilinear: weights broadcast over (C, target_h, target_w)
+        weight_bottom_3d = weight_bottom.view(1, target_height, 1)
+        weight_top_3d = weight_top.view(1, target_height, 1)
+        weight_right_3d = weight_right.view(1, 1, target_width)
+        weight_left_3d = weight_left.view(1, 1, target_width)
+        interp = weight_top_3d * (
+            weight_left_3d * pixel_top_left + weight_right_3d * pixel_top_right
+        ) + weight_bottom_3d * (weight_left_3d * pixel_bottom_left + weight_right_3d * pixel_bottom_right)
+        interp = (interp + (1 << 21)) >> 22
+        result = interp.clamp(0, 255).to(torch.uint8)  # (B*C, target_h, target_w)
 
         return result.view(batch_size, channels, target_height, target_width).to(dtype=image.dtype)
 

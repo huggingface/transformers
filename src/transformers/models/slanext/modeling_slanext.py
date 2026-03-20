@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
-from ...activations import ACT2FN
+from ...activations import ACT2CLS, ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -173,11 +173,6 @@ class SLANeXtVisionAttention(nn.Module):
 
 
 class SLANeXtPreTrainedModel(PreTrainedModel):
-    """
-    Base class for all SLANeXt pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-
     config: SLANeXtConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
@@ -201,24 +196,24 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
 
         # Initialize GRUCell (replicates PyTorch default reset_parameters)
         if isinstance(module, nn.GRUCell):
-            stdv = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
-            init.uniform_(module.weight_ih, -stdv, stdv)
-            init.uniform_(module.weight_hh, -stdv, stdv)
+            std = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
+            init.uniform_(module.weight_ih, -std, std)
+            init.uniform_(module.weight_hh, -std, std)
             if module.bias_ih is not None:
-                init.uniform_(module.bias_ih, -stdv, stdv)
+                init.uniform_(module.bias_ih, -std, std)
             if module.bias_hh is not None:
-                init.uniform_(module.bias_hh, -stdv, stdv)
+                init.uniform_(module.bias_hh, -std, std)
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
-            stdv = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
+            std = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
             for generator in (module.structure_generator, module.loc_generator):
                 for layer in generator.children():
                     if isinstance(layer, nn.Linear):
-                        init.uniform_(layer.weight, -stdv, stdv)
+                        init.uniform_(layer.weight, -std, std)
                         if layer.bias is not None:
-                            init.uniform_(layer.bias, -stdv, stdv)
+                            init.uniform_(layer.bias, -std, std)
 
 
 class SLANeXtMLPBlock(nn.Module):
@@ -494,12 +489,10 @@ class SLANeXtBackbone(nn.Module):
         )
 
     def forward(self, hidden_states):
-        if hidden_states.shape[1] == 1:
-            hidden_states = torch.repeat_interleave(hidden_states, repeats=3, dim=1)
-        hidden_states = self.vision_tower(hidden_states).last_hidden_state
-        hidden_states = self.post_conv(hidden_states)
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
-        return hidden_states
+        vision_hidden_states = self.vision_tower(hidden_states).last_hidden_state
+        hidden_states = self.post_conv(vision_hidden_states)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=vision_hidden_states)
 
 
 class SLANeXtAttentionGRUCell(nn.Module):
@@ -512,7 +505,12 @@ class SLANeXtAttentionGRUCell(nn.Module):
 
         self.rnn = nn.GRUCell(input_size + num_embeddings, hidden_size)
 
-    def forward(self, prev_hidden, batch_hidden, char_onehots):
+    def forward(
+        self,
+        prev_hidden: torch.FloatTensor,
+        batch_hidden: torch.FloatTensor,
+        char_onehots: torch.FloatTensor,
+    ):
         batch_hidden_proj = self.input_to_hidden(batch_hidden)
         prev_hidden_proj = self.hidden_to_hidden(prev_hidden).unsqueeze(1)
 
@@ -520,39 +518,26 @@ class SLANeXtAttentionGRUCell(nn.Module):
         attention_scores = torch.tanh(attention_scores)
         attention_scores = self.score(attention_scores)
 
-        alpha = F.softmax(attention_scores, dim=1)
-        alpha = alpha.transpose(1, 2)
-        context = torch.bmm(alpha, batch_hidden).squeeze(1)
+        attn_weights = F.softmax(attention_scores, dim=1, dtype=torch.float32).to(attention_scores.dtype)
+        attn_weights = attn_weights.transpose(1, 2)
+        context = torch.matmul(attn_weights, batch_hidden).squeeze(1)
         concat_context = torch.cat([context, char_onehots], 1)
+        hidden_states = self.rnn(concat_context, prev_hidden)
 
-        cur_hidden = self.rnn(concat_context, prev_hidden)
-
-        return (cur_hidden, cur_hidden), alpha
+        return hidden_states, attn_weights
 
 
-class SLANeXtStructureMLP(nn.Module):
-    def __init__(self, hidden_size, out_channels):
+class SLANeXtMLP(nn.Module):
+    def __init__(self, hidden_size, out_channels, activation=None):
         super().__init__()
-        self.linear1 = nn.Linear(hidden_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, out_channels)
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, out_channels)
+        self.act_fn = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, hidden_states):
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        return hidden_states
-
-
-class SLANeXtLocationMLP(nn.Module):
-    def __init__(self, hidden_size, loc_reg_num):
-        super().__init__()
-        self.linear1 = nn.Linear(hidden_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, loc_reg_num)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, hidden_states):
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        hidden_states = self.sigmoid(hidden_states)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         return hidden_states
 
 
@@ -569,46 +554,43 @@ class SLANeXtSLAHead(nn.Module):
         self.structure_attention_cell = SLANeXtAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
         )
-        self.structure_generator = SLANeXtStructureMLP(config.hidden_size, config.out_channels)
-        self.loc_generator = SLANeXtLocationMLP(config.hidden_size, config.loc_reg_num)
+        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
+        self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
 
-    def forward(self, features, targets=None):
-        batch_size = features.shape[0]
+    def forward(self, hidden_states: torch.FloatTensor, targets: torch.Tensor | None = None):
+        batch_size = hidden_states.shape[0]
 
-        hidden = torch.zeros((batch_size, self.config.hidden_size), device=features.device)
+        hidden = torch.zeros((batch_size, self.config.hidden_size), device=hidden_states.device)
         structure_preds_list = []
         structure_ids_list = []
-        pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
+        pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=hidden_states.device)
         for _ in range(self.config.max_text_length + 1):
-            hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
+            emb_feature = F.one_hot(pre_chars, self.config.out_channels).float()
+            hidden, _ = self.structure_attention_cell(hidden, hidden_states, emb_feature)
+            structure_step = self.structure_generator(hidden)
             pre_chars = structure_step.argmax(dim=1)
             structure_preds_list.append(structure_step)
             structure_ids_list.append(pre_chars)
             if torch.stack(structure_ids_list, dim=1).eq(self.config.out_channels - 1).any(-1).all():
                 break
-        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
+        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1, dtype=torch.float32)
 
-        return structure_preds
-
-    def _decode(self, pre_chars, features, hidden):
-        emb_feature = self._char_to_onehot(pre_chars)
-        (output, hidden), alpha = self.structure_attention_cell(hidden, features, emb_feature)
-
-        structure_step = self.structure_generator(output)
-        loc_step = self.loc_generator(output)
-        return hidden, structure_step, loc_step
-
-    def _char_to_onehot(self, input_char):
-        return F.one_hot(input_char, self.config.out_channels).float()
+        return BaseModelOutputWithNoAttention(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
+@dataclass
 @auto_docstring
-class SLANeXtModel(SLANeXtPreTrainedModel):
-    """
-    Core SLANeXt model, consisting of Backbone and Head networks.
-    Generates structure probs for table recognition tasks.
-    """
+class SLANeXtForTableRecognitionOutput(BaseModelOutputWithNoAttention):
+    head_hidden_states: torch.FloatTensor | None = None
 
+
+@auto_docstring(
+    custom_intro="""
+    SLANeXt Table Recognition model for table recognition tasks. Wraps the core SLANeXtPreTrainedModel
+    and returns outputs compatible with the Transformers table recognition API.
+    """
+)
+class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
         self.backbone = SLANeXtBackbone(config=config)
@@ -620,12 +602,13 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        backbone_states = self.backbone(pixel_values)
-        hidden_states = self.head(backbone_states)
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=backbone_states,
+        backbone_outputs = self.backbone(pixel_values)
+        head_outputs = self.head(backbone_outputs.last_hidden_state)
+        return SLANeXtForTableRecognitionOutput(
+            last_hidden_state=head_outputs.last_hidden_state,
+            hidden_states=backbone_outputs.hidden_states,
+            head_hidden_states=head_outputs.hidden_states,
         )
 
 
-__all__ = ["SLANeXtModel", "SLANeXtPreTrainedModel"]
+__all__ = ["SLANeXtForTableRecognition", "SLANeXtPreTrainedModel"]

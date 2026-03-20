@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_slanext import *
+    from .image_processing_slanext_fast import *
     from .modeling_slanext import *
 else:
     import sys

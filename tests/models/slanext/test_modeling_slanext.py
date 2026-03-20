@@ -22,8 +22,8 @@ from parameterized import parameterized
 
 from transformers import (
     SLANeXtConfig,
+    SLANeXtForTableRecognition,
     SLANeXtImageProcessorFast,
-    SLANeXtModel,
     is_torch_available,
     is_vision_available,
 )
@@ -74,23 +74,15 @@ class SLANeXtModelTester:
     def get_config(self) -> SLANeXtConfig:
         config = SLANeXtConfig(
             vision_config={
-                "image_size": 512,
-                "output_channels": 256,
-                "num_channels": 3,
-                "patch_size": 16,
-                "hidden_act": "gelu",
-                "layer_norm_eps": 1e-6,
-                "attention_dropout": 0.0,
-                "qkv_bias": True,
-                "use_abs_pos": True,
-                "use_rel_pos": True,
-                "window_size": 14,
-                "hidden_size": 768,
-                "num_hidden_layers": 12,
-                "num_attention_heads": 12,
-                "global_attn_indexes": [2, 5, 8, 11],
-                "mlp_dim": 3072,
-            }
+                "hidden_size": 1,
+                "num_hidden_layers": 1,
+                "num_attention_heads": 1,
+                "global_attn_indexes": [1, 1, 1, 1],
+                "mlp_dim": 4,
+            },
+            out_channels=1,
+            hidden_size=1,
+            max_text_length=1,
         )
 
         return config
@@ -98,10 +90,12 @@ class SLANeXtModelTester:
 
 @require_torch
 class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (SLANeXtModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-feature-extraction": SLANeXtModel} if is_torch_available() else {}
+    all_model_classes = (SLANeXtForTableRecognition,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
     has_attentions = False
+    test_resize_embeddings = False
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = SLANeXtModelTester(
@@ -131,24 +125,8 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_determinism(self):
         pass
 
-    @unittest.skip(reason="SLANeXt does not use tensor output")
-    def test_torch_export(self):
-        pass
-
     @unittest.skip(reason="SLANeXt does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="SLANeXt does not support input and output embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="SLANeXt does not support batching inference")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="SLANeXt does not use token embeddings")
-    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
@@ -161,10 +139,6 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="SLANeXt does not support attention")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="SLANeXt does not support attention")
-    def test_attention_outputs(self):
         pass
 
     @unittest.skip(reason="SLANeXt does not support train")
@@ -212,7 +186,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class SLANeXtModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/SLANeXt_wired_safetensors"
-        self.model = SLANeXtModel.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
+        self.model = SLANeXtForTableRecognition.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         self.image_processor = (
             SLANeXtImageProcessorFast.from_pretrained(model_path, use_fast=True) if is_vision_available() else None
         )

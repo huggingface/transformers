@@ -45,11 +45,11 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModel
 
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
-model = AutoModel.from_pretrained(model_path, dtype=torch.float32)
-image_processor = AutoImageProcessor.from_pretrained(model_path, use_fast=True)
+model = AutoModel.from_pretrained(model_path, dtype=torch.float32, device_map="auto")
+image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw).convert("RGB")
-inputs = image_processor(images=image, return_tensors="pt")
+image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 results = image_processor.post_process_table_recognition(outputs)
@@ -70,9 +70,9 @@ print(result['structure_score'])
 
 [[autodoc]] SLANeXtConfig
 
-## SLANeXtModel
+## SLANeXtForTableRecognition
 
-[[autodoc]] SLANeXtModel
+[[autodoc]] SLANeXtForTableRecognition
 
 ## SLANeXtImageProcessorFast
 

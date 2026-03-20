@@ -14,6 +14,7 @@
 
 
 import math
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -23,6 +24,7 @@ import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
+from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -50,25 +52,29 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
     pass
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/SLANeXt_wired_safetensors",
-    custom_args=r"""
-    post_conv_in_channels (`int`, *optional*, defaults to 256):
-        Number of input channels for the post-encoder convolution layer.
-    post_conv_out_channels (`int`, *optional*, defaults to 512):
-        Number of output channels for the post-encoder convolution layer.
-    out_channels (`int`, *optional*, defaults to 50):
-        Number of output token classes for the structure prediction head (i.e., vocabulary size for table structure
-        tokens).
-    max_text_length (`int`, *optional*, defaults to 500):
-        Maximum number of decoding steps (tokens) for the autoregressive structure and location decoder.
-    loc_reg_num (`int`, *optional*, defaults to 8):
-        Number of regression values predicted per token for bounding box location (e.g., 8 for four corner
-        coordinates).
-    """,
-)
+@auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
 @strict(accept_kwargs=True)
 class SLANeXtConfig(PreTrainedConfig):
+    """
+    Args:
+        vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
+            Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
+        post_conv_in_channels (`int`, *optional*, defaults to 256):
+            Number of input channels for the post-encoder convolution layer.
+        post_conv_out_channels (`int`, *optional*, defaults to 512):
+            Number of output channels for the post-encoder convolution layer.
+        out_channels (`int`, *optional*, defaults to 50):
+            Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
+            tokens the model can predict.
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
+        max_text_length (`int`, *optional*, defaults to 500):
+            Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
+        loc_reg_num (`int`, *optional*, defaults to 8):
+            Number of regression values predicted per token for bounding box localisation (e.g., 8 values for four
+            corner coordinates).
+    """
+
     model_type = "slanext"
     sub_configs = {"vision_config": SLANeXtVisionConfig}
 
@@ -89,11 +95,6 @@ class SLANeXtConfig(PreTrainedConfig):
 
 
 class SLANeXtPreTrainedModel(PreTrainedModel):
-    """
-    Base class for all SLANeXt pre-trained models. Handles model initialization,
-    configuration, and loading of pre-trained weights, following the Transformers library conventions.
-    """
-
     config: SLANeXtConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
@@ -117,24 +118,24 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
 
         # Initialize GRUCell (replicates PyTorch default reset_parameters)
         if isinstance(module, nn.GRUCell):
-            stdv = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
-            init.uniform_(module.weight_ih, -stdv, stdv)
-            init.uniform_(module.weight_hh, -stdv, stdv)
+            std = 1.0 / math.sqrt(module.hidden_size) if module.hidden_size > 0 else 0
+            init.uniform_(module.weight_ih, -std, std)
+            init.uniform_(module.weight_hh, -std, std)
             if module.bias_ih is not None:
-                init.uniform_(module.bias_ih, -stdv, stdv)
+                init.uniform_(module.bias_ih, -std, std)
             if module.bias_hh is not None:
-                init.uniform_(module.bias_hh, -stdv, stdv)
+                init.uniform_(module.bias_hh, -std, std)
 
         # Initialize SLAHead layers
         if isinstance(module, SLANeXtSLAHead):
-            stdv = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
+            std = 1.0 / math.sqrt(self.config.hidden_size * 1.0)
             # Initialize structure_generator and loc_generator layers
             for generator in (module.structure_generator, module.loc_generator):
                 for layer in generator.children():
                     if isinstance(layer, nn.Linear):
-                        init.uniform_(layer.weight, -stdv, stdv)
+                        init.uniform_(layer.weight, -std, std)
                         if layer.bias is not None:
-                            init.uniform_(layer.bias, -stdv, stdv)
+                            init.uniform_(layer.bias, -std, std)
 
 
 class SLANeXtVisionEncoder(GotOcr2VisionEncoder):
@@ -159,12 +160,10 @@ class SLANeXtBackbone(nn.Module):
         )
 
     def forward(self, hidden_states):
-        if hidden_states.shape[1] == 1:
-            hidden_states = torch.repeat_interleave(hidden_states, repeats=3, dim=1)
-        hidden_states = self.vision_tower(hidden_states).last_hidden_state
-        hidden_states = self.post_conv(hidden_states)
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
-        return hidden_states
+        vision_hidden_states = self.vision_tower(hidden_states).last_hidden_state
+        hidden_states = self.post_conv(vision_hidden_states)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=vision_hidden_states)
 
 
 class SLANeXtAttentionGRUCell(nn.Module):
@@ -177,7 +176,12 @@ class SLANeXtAttentionGRUCell(nn.Module):
 
         self.rnn = nn.GRUCell(input_size + num_embeddings, hidden_size)
 
-    def forward(self, prev_hidden, batch_hidden, char_onehots):
+    def forward(
+        self,
+        prev_hidden: torch.FloatTensor,
+        batch_hidden: torch.FloatTensor,
+        char_onehots: torch.FloatTensor,
+    ):
         batch_hidden_proj = self.input_to_hidden(batch_hidden)
         prev_hidden_proj = self.hidden_to_hidden(prev_hidden).unsqueeze(1)
 
@@ -185,39 +189,26 @@ class SLANeXtAttentionGRUCell(nn.Module):
         attention_scores = torch.tanh(attention_scores)
         attention_scores = self.score(attention_scores)
 
-        alpha = F.softmax(attention_scores, dim=1)
-        alpha = alpha.transpose(1, 2)
-        context = torch.bmm(alpha, batch_hidden).squeeze(1)
+        attn_weights = F.softmax(attention_scores, dim=1, dtype=torch.float32).to(attention_scores.dtype)
+        attn_weights = attn_weights.transpose(1, 2)
+        context = torch.matmul(attn_weights, batch_hidden).squeeze(1)
         concat_context = torch.cat([context, char_onehots], 1)
+        hidden_states = self.rnn(concat_context, prev_hidden)
 
-        cur_hidden = self.rnn(concat_context, prev_hidden)
-
-        return (cur_hidden, cur_hidden), alpha
+        return hidden_states, attn_weights
 
 
-class SLANeXtStructureMLP(nn.Module):
-    def __init__(self, hidden_size, out_channels):
+class SLANeXtMLP(nn.Module):
+    def __init__(self, hidden_size, out_channels, activation=None):
         super().__init__()
-        self.linear1 = nn.Linear(hidden_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, out_channels)
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, out_channels)
+        self.act_fn = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, hidden_states):
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        return hidden_states
-
-
-class SLANeXtLocationMLP(nn.Module):
-    def __init__(self, hidden_size, loc_reg_num):
-        super().__init__()
-        self.linear1 = nn.Linear(hidden_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, loc_reg_num)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, hidden_states):
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        hidden_states = self.sigmoid(hidden_states)
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         return hidden_states
 
 
@@ -234,46 +225,43 @@ class SLANeXtSLAHead(nn.Module):
         self.structure_attention_cell = SLANeXtAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
         )
-        self.structure_generator = SLANeXtStructureMLP(config.hidden_size, config.out_channels)
-        self.loc_generator = SLANeXtLocationMLP(config.hidden_size, config.loc_reg_num)
+        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
+        self.loc_generator = SLANeXtMLP(config.hidden_size, config.loc_reg_num, activation="sigmoid")
 
-    def forward(self, features, targets=None):
-        batch_size = features.shape[0]
+    def forward(self, hidden_states: torch.FloatTensor, targets: torch.Tensor | None = None):
+        batch_size = hidden_states.shape[0]
 
-        hidden = torch.zeros((batch_size, self.config.hidden_size), device=features.device)
+        hidden = torch.zeros((batch_size, self.config.hidden_size), device=hidden_states.device)
         structure_preds_list = []
         structure_ids_list = []
-        pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=features.device)
+        pre_chars = torch.zeros(size=[batch_size], dtype=torch.long, device=hidden_states.device)
         for _ in range(self.config.max_text_length + 1):
-            hidden, structure_step, loc_step = self._decode(pre_chars, features, hidden)
+            emb_feature = F.one_hot(pre_chars, self.config.out_channels).float()
+            hidden, _ = self.structure_attention_cell(hidden, hidden_states, emb_feature)
+            structure_step = self.structure_generator(hidden)
             pre_chars = structure_step.argmax(dim=1)
             structure_preds_list.append(structure_step)
             structure_ids_list.append(pre_chars)
             if torch.stack(structure_ids_list, dim=1).eq(self.config.out_channels - 1).any(-1).all():
                 break
-        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1)
+        structure_preds = F.softmax(torch.stack(structure_preds_list, dim=1), dim=-1, dtype=torch.float32)
 
-        return structure_preds
-
-    def _decode(self, pre_chars, features, hidden):
-        emb_feature = self._char_to_onehot(pre_chars)
-        (output, hidden), alpha = self.structure_attention_cell(hidden, features, emb_feature)
-
-        structure_step = self.structure_generator(output)
-        loc_step = self.loc_generator(output)
-        return hidden, structure_step, loc_step
-
-    def _char_to_onehot(self, input_char):
-        return F.one_hot(input_char, self.config.out_channels).float()
+        return BaseModelOutputWithNoAttention(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
+@dataclass
 @auto_docstring
-class SLANeXtModel(SLANeXtPreTrainedModel):
-    """
-    Core SLANeXt model, consisting of Backbone and Head networks.
-    Generates structure probs for table recognition tasks.
-    """
+class SLANeXtForTableRecognitionOutput(BaseModelOutputWithNoAttention):
+    head_hidden_states: torch.FloatTensor | None = None
 
+
+@auto_docstring(
+    custom_intro="""
+    SLANeXt Table Recognition model for table recognition tasks. Wraps the core SLANeXtPreTrainedModel
+    and returns outputs compatible with the Transformers table recognition API.
+    """
+)
+class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     def __init__(self, config: SLANeXtConfig):
         super().__init__(config)
         self.backbone = SLANeXtBackbone(config=config)
@@ -285,11 +273,12 @@ class SLANeXtModel(SLANeXtPreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        backbone_states = self.backbone(pixel_values)
-        hidden_states = self.head(backbone_states)
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_states,
-            hidden_states=backbone_states,
+        backbone_outputs = self.backbone(pixel_values)
+        head_outputs = self.head(backbone_outputs.last_hidden_state)
+        return SLANeXtForTableRecognitionOutput(
+            last_hidden_state=head_outputs.last_hidden_state,
+            hidden_states=backbone_outputs.hidden_states,
+            head_hidden_states=head_outputs.hidden_states,
         )
 
 
@@ -301,20 +290,18 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
     image_std = IMAGENET_DEFAULT_STD
     size = {"height": 512, "width": 512}
     pad_size = {"height": 512, "width": 512}
-    rescale_factor = 1 / 255
+    do_convert_rgb = True
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_pad = True
-    valid_kwargs = ImagesKwargs
-    model_input_names = ["pixel_values"]
 
     def _resize(
         self,
-        image: torch.Tensor,
+        image: "torch.Tensor",
         size: SizeDict,
         interpolation: Optional["tvF.InterpolationMode"] = None,
-    ) -> torch.Tensor:
+    ) -> "torch.Tensor":
         batch_size, channels, height, width = image.shape
         image = image.view(batch_size * channels, height, width)
 
@@ -324,51 +311,55 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
         target_height = round(height * scale)
         target_width = round(width * scale)
 
-        target_x = torch.arange(target_width, dtype=torch.float32, device=device)
-        src_x = (target_x + 0.5) * (float(width) / float(target_width)) - 0.5
-        src_x_floor = src_x.floor().to(torch.int32)
-        src_x_frac = src_x - src_x_floor.float()
+        target_col = torch.arange(target_width, dtype=torch.float32, device=device)
+        src_col = (target_col + 0.5) * (float(width) / float(target_width)) - 0.5
+        src_col_floor = src_col.floor().to(torch.int32)
+        src_col_frac = src_col - src_col_floor.float()
         # boundary handling
-        src_x_frac = torch.where(src_x_floor < 0, torch.zeros_like(src_x_frac), src_x_frac)
-        src_x_floor = torch.where(src_x_floor < 0, torch.zeros_like(src_x_floor), src_x_floor)
-        src_x_frac = torch.where(src_x_floor >= width - 1, torch.ones_like(src_x_frac), src_x_frac)
-        src_x_floor = torch.where(src_x_floor >= width - 1, torch.full_like(src_x_floor, width - 2), src_x_floor)
-        # fixed-point weights
-        weight_x_r = (src_x_frac * 2048 + 0.5).floor().to(torch.int32)  # round-to-nearest
-        weight_x_l = 2048 - weight_x_r  # (target_w,)
-        # --- Y coordinate tables ---
-        target_y = torch.arange(target_height, dtype=torch.float32, device=device)
-        src_y = (target_y + 0.5) * (float(height) / float(target_height)) - 0.5
-        src_y_floor = src_y.floor().to(torch.int32)
-        src_y_frac = src_y - src_y_floor.float()
-        src_y_frac = torch.where(src_y_floor < 0, torch.zeros_like(src_y_frac), src_y_frac)
-        src_y_floor = torch.where(src_y_floor < 0, torch.zeros_like(src_y_floor), src_y_floor)
-        src_y_frac = torch.where(src_y_floor >= height - 1, torch.ones_like(src_y_frac), src_y_frac)
-        src_y_floor = torch.where(src_y_floor >= height - 1, torch.full_like(src_y_floor, height - 2), src_y_floor)
-        weight_y_b = (src_y_frac * 2048 + 0.5).floor().to(torch.int32)
-        weight_y_t = 2048 - weight_y_b  # (target_h,)
-
-        img_u8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
-        img_i32 = img_u8.to(torch.int32)  # (C, H, W)
-        x_left = src_x_floor.long()  # (target_w,)
-        x_right = (src_x_floor + 1).long()  # (target_w,)  safe: src_x_floor <= width-2
-        y_top = src_y_floor.long()  # (target_h,)
-        y_bottom = (src_y_floor + 1).long()  # (target_h,)
-        # gather 4 neighbours: (C, target_h, target_w)
-        p00 = img_i32[:, y_top[:, None], x_left[None, :]]
-        p10 = img_i32[:, y_top[:, None], x_right[None, :]]
-        p01 = img_i32[:, y_bottom[:, None], x_left[None, :]]
-        p11 = img_i32[:, y_bottom[:, None], x_right[None, :]]
-        # fixed-point bilinear: weights broadcast over (C, target_h, target_w)
-        weight_y_b_ = weight_y_b.view(1, target_height, 1)
-        weight_y_t_ = weight_y_t.view(1, target_height, 1)
-        weight_x_r_ = weight_x_r.view(1, 1, target_width)
-        weight_x_l_ = weight_x_l.view(1, 1, target_width)
-        val = weight_y_t_ * (weight_x_l_ * p00 + weight_x_r_ * p10) + weight_y_b_ * (
-            weight_x_l_ * p01 + weight_x_r_ * p11
+        src_col_frac = torch.where(src_col_floor < 0, torch.zeros_like(src_col_frac), src_col_frac)
+        src_col_floor = torch.where(src_col_floor < 0, torch.zeros_like(src_col_floor), src_col_floor)
+        src_col_frac = torch.where(src_col_floor >= width - 1, torch.ones_like(src_col_frac), src_col_frac)
+        src_col_floor = torch.where(
+            src_col_floor >= width - 1, torch.full_like(src_col_floor, width - 2), src_col_floor
         )
-        val = (val + (1 << 21)) >> 22
-        result = val.clamp(0, 255).to(torch.uint8)  # (B*C, target_h, target_w)
+        # fixed-point weights
+        weight_right = (src_col_frac * 2048 + 0.5).floor().to(torch.int32)  # round-to-nearest
+        weight_left = 2048 - weight_right  # (target_w,)
+        # --- row coordinate tables ---
+        target_row = torch.arange(target_height, dtype=torch.float32, device=device)
+        src_row = (target_row + 0.5) * (float(height) / float(target_height)) - 0.5
+        src_row_floor = src_row.floor().to(torch.int32)
+        src_row_frac = src_row - src_row_floor.float()
+        src_row_frac = torch.where(src_row_floor < 0, torch.zeros_like(src_row_frac), src_row_frac)
+        src_row_floor = torch.where(src_row_floor < 0, torch.zeros_like(src_row_floor), src_row_floor)
+        src_row_frac = torch.where(src_row_floor >= height - 1, torch.ones_like(src_row_frac), src_row_frac)
+        src_row_floor = torch.where(
+            src_row_floor >= height - 1, torch.full_like(src_row_floor, height - 2), src_row_floor
+        )
+        weight_bottom = (src_row_frac * 2048 + 0.5).floor().to(torch.int32)
+        weight_top = 2048 - weight_bottom  # (target_h,)
+
+        image_uint8 = image.clamp(0, 255).to(torch.uint8)  # (C, H, W)
+        image_int32 = image_uint8.to(torch.int32)  # (C, H, W)
+        col_left = src_col_floor.long()  # (target_w,)
+        col_right = (src_col_floor + 1).long()  # (target_w,)  safe: src_col_floor <= width-2
+        row_top = src_row_floor.long()  # (target_h,)
+        row_bottom = (src_row_floor + 1).long()  # (target_h,)
+        # gather 4 neighbours: (C, target_h, target_w)
+        pixel_top_left = image_int32[:, row_top[:, None], col_left[None, :]]
+        pixel_top_right = image_int32[:, row_top[:, None], col_right[None, :]]
+        pixel_bottom_left = image_int32[:, row_bottom[:, None], col_left[None, :]]
+        pixel_bottom_right = image_int32[:, row_bottom[:, None], col_right[None, :]]
+        # fixed-point bilinear: weights broadcast over (C, target_h, target_w)
+        weight_bottom_3d = weight_bottom.view(1, target_height, 1)
+        weight_top_3d = weight_top.view(1, target_height, 1)
+        weight_right_3d = weight_right.view(1, 1, target_width)
+        weight_left_3d = weight_left.view(1, 1, target_width)
+        interp = weight_top_3d * (
+            weight_left_3d * pixel_top_left + weight_right_3d * pixel_top_right
+        ) + weight_bottom_3d * (weight_left_3d * pixel_bottom_left + weight_right_3d * pixel_bottom_right)
+        interp = (interp + (1 << 21)) >> 22
+        result = interp.clamp(0, 255).to(torch.uint8)  # (B*C, target_h, target_w)
 
         return result.view(batch_size, channels, target_height, target_width).to(dtype=image.dtype)
 
@@ -511,6 +502,6 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
 __all__ = [
     "SLANeXtImageProcessorFast",
     "SLANeXtConfig",
-    "SLANeXtModel",
+    "SLANeXtForTableRecognition",
     "SLANeXtPreTrainedModel",
 ]
