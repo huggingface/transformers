@@ -152,9 +152,6 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _can_record_outputs = {
-        "attentions": SLANeXtAttentionGRUCell,
-    }
     _keep_in_fp32_modules_strict = ["structure_attention_cell", "structure_generator"]
 
     @torch.no_grad()
@@ -201,17 +198,18 @@ class SLANeXtVisionEncoder(GotOcr2VisionEncoder):
     pass
 
 
-class SLANeXtBackbone(nn.Module):
+class SLANeXtBackbone(SLANeXtPreTrainedModel):
     def __init__(
         self,
         config: dict | None = None,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(config)
         self.vision_tower = SLANeXtVisionEncoder(config.vision_config)
         self.post_conv = nn.Conv2d(
             config.post_conv_in_channels, config.post_conv_out_channels, kernel_size=3, stride=2, padding=1, bias=False
         )
+        self.post_init()
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         vision_output = self.vision_tower(hidden_states, **kwargs)
@@ -225,6 +223,10 @@ class SLANeXtBackbone(nn.Module):
 
 
 class SLANeXtSLAHead(SLANeXtPreTrainedModel):
+    _can_record_outputs = {
+        "attentions": SLANeXtAttentionGRUCell,
+    }
+
     def __init__(
         self,
         config: dict | None = None,
@@ -540,6 +542,7 @@ __all__ = [
     "SLANeXtImageProcessor",
     "SLANeXtConfig",
     "SLANeXtSLAHead",
+    "SLANeXtBackbone",
     "SLANeXtForTableRecognition",
     "SLANeXtPreTrainedModel",
 ]

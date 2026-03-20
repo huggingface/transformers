@@ -69,6 +69,10 @@ print(result['structure_score'])
 
 [[autodoc]] SLANeXtForTableRecognition
 
+## SLANeXtBackbone
+
+[[autodoc]] SLANeXtBackbone
+
 ## SLANeXtSLAHead
 
 [[autodoc]] SLANeXtSLAHead
