@@ -11,6 +11,101 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+OpenAI-compatible serving layer for transformers models.
+
+This module implements a FastAPI server (``transformers serve``) that exposes
+local HuggingFace models through the OpenAI Chat Completion, Response, and
+Audio Transcription APIs.  Models are loaded on demand, cached with a
+configurable inactivity timeout, and can optionally use continuous batching.
+
+Architecture overview
+---------------------
+
+::
+
+    CLI (typer)
+        |
+        v
+    Serve.__init__          -- parses CLI args, wires state, starts uvicorn
+        |
+        +-- _create_app()   -- builds the FastAPI app & registers routes
+        |       |
+        |       +-- POST /v1/chat/completions  --> generate_chat_completion()
+        |       |                                  or continuous_batching_chat_completion()
+        |       +-- POST /v1/responses         --> generate_response()
+        |       |                                  or generate_response_non_streaming()
+        |       +-- POST /v1/audio/transcriptions --> generate_transcription()
+        |       +-- POST /load_model           --> _load_model_event_publisher()
+        |       +-- GET  /v1/models            --> get_gen_models()
+        |       +-- GET  /health
+        |
+        +-- Model lifecycle
+                |
+                +-- load_model_and_processor()      -- thread-safe load with TimedModel cache
+                +-- load_audio_model_and_processor() -- same, for speech models
+                +-- _start_cb_manager()              -- enter continuous batching context manager
+                +-- _stop_cb_manager()               -- exit  continuous batching context manager
+                +-- reset_loaded_models()            -- teardown on shutdown
+
+Request flow (chat completion, streaming)
+-----------------------------------------
+
+::
+
+    request dict
+        |
+        v
+    validate_chat_completion_request()
+        |
+        v
+    load_model_and_processor()  -- returns (model, processor) from cache or disk
+        |
+        v
+    _GptossFilter(model)        -- detects model-specific hacks (CoT filtering, etc.)
+        |
+        v
+    processor.apply_chat_template()  -- tokenize
+        |
+        v
+    _stream_chat_completion()   -- spawns a Thread for model.generate(),
+        |                          reads from TextIteratorStreamer,
+        |                          delegates tool-call parsing to _ToolCallParser
+        |
+        v
+    build_chat_completion_chunk() + chunk_to_sse_element()
+        |
+        v
+    StreamingResponse (SSE)
+
+Classes
+-------
+
+Serve
+    Main server class.  Instantiated by the ``transformers serve`` CLI via
+    typer.  Holds all server config, model cache, and request handlers.
+
+TimedModel
+    Wraps a loaded ``PreTrainedModel`` + processor with an inactivity timer.
+    After ``model_timeout`` seconds without a request, the model is evicted
+    from memory.
+
+_ToolCallParser
+    Stateful token-by-token parser that detects tool-call start/end tokens
+    (model-family specific, currently Qwen) and structures them into
+    ``ChoiceDeltaToolCall`` objects for the Chat Completion stream.
+
+_GptossFilter
+    Encapsulates model-specific post-processing hacks (gptoss CoT trace
+    filtering, ``<|return|>`` suffix removal, ``skip_special_tokens`` flag).
+    Applied per-token during streaming.
+
+DownloadAggregator / DownloadProxy / WeightsProxy
+    Progress-reporting wrappers used by the ``/load_model`` SSE endpoint.
+    They intercept tqdm bars from ``huggingface_hub`` downloads and weight
+    loading, aggregating them into a single progress stream for the client.
+"""
+
 import asyncio
 import base64
 import copy
@@ -898,7 +993,7 @@ class Serve:
         return app
 
     # ------------------------------------------------------------------
-    # Load model SSE publisher (extracted from load_model endpoint)
+    # Load model SSE publisher
     # ------------------------------------------------------------------
 
     async def _load_model_event_publisher(self, model_id_and_revision: str):
