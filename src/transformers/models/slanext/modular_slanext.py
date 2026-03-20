@@ -27,8 +27,9 @@ from ... import initialization as init
 from ...activations import ACT2CLS
 from ...backbone_utils import filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -304,7 +305,7 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
 
 @auto_docstring
 @requires(backends=("torch",))
-class SLANeXtImageProcessorFast(BaseImageProcessorFast):
+class SLANeXtImageProcessor(TorchvisionBackend):
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -520,7 +521,7 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
 
 
 __all__ = [
-    "SLANeXtImageProcessorFast",
+    "SLANeXtImageProcessor",
     "SLANeXtConfig",
     "SLANeXtForTableRecognition",
     "SLANeXtPreTrainedModel",

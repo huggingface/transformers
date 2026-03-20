@@ -18,7 +18,6 @@ import numpy as np
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -29,9 +28,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    from transformers import SLANeXtImageProcessorFast
 
 
 class SLANeXtImageProcessingTester:
@@ -119,9 +115,6 @@ class SLANeXtImageProcessingTester:
 @require_torch
 @require_vision
 class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    test_slow_image_processor = False
-    fast_image_processing_class = SLANeXtImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SLANeXtImageProcessingTester(self)
@@ -133,7 +126,7 @@ class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -150,7 +143,7 @@ class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -166,7 +159,7 @@ class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
     # Override to skip batched input tests.
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images

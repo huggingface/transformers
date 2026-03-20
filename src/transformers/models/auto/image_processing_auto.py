@@ -234,7 +234,7 @@ else:
             ("shieldgemma2", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("siglip", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("siglip2", {"torchvision": "Siglip2ImageProcessor", "pil": "Siglip2ImageProcessorPil"}),
-            ("slanext", (None, "SLANeXtImageProcessorFast")),
+            ("slanext", {"torchvision": "SLANeXtImageProcessor"}),
             ("smolvlm", {"torchvision": "SmolVLMImageProcessor", "pil": "SmolVLMImageProcessorPil"}),
             ("superglue", {"torchvision": "SuperGlueImageProcessor", "pil": "SuperGlueImageProcessorPil"}),
             ("superpoint", {"torchvision": "SuperPointImageProcessor", "pil": "SuperPointImageProcessorPil"}),

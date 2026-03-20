@@ -93,6 +93,7 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (SLANeXtForTableRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
+    # Special attentions (in the head module) of a combined attention x rnn cell that can vary based on predictions (early exits)
     has_attentions = False
     test_resize_embeddings = False
     test_torch_exportable = False
@@ -133,10 +134,6 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SLANeXt has a minimum parameter count of 1.7M")
-    def test_model_is_small(self):
-        pass
-
     @unittest.skip(reason="SLANeXt does not support attention")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -174,10 +171,6 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                     inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
-
-    @unittest.skip(reason="SLANeXt does not support hidden_states")
-    def test_hidden_states_output(self):
-        pass
 
 
 @require_torch

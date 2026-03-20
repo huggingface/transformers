@@ -24,8 +24,9 @@ from typing import Optional
 import torch
 import torchvision.transforms.v2.functional as tvF
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
@@ -35,7 +36,7 @@ from ...utils.import_utils import requires
 
 @auto_docstring
 @requires(backends=("torch",))
-class SLANeXtImageProcessorFast(BaseImageProcessorFast):
+class SLANeXtImageProcessor(TorchvisionBackend):
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -250,4 +251,4 @@ class SLANeXtImageProcessorFast(BaseImageProcessorFast):
         return {"structure": structure, "structure_score": structure_score}
 
 
-__all__ = ["SLANeXtImageProcessorFast"]
+__all__ = ["SLANeXtImageProcessor"]
