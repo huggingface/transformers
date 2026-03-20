@@ -414,7 +414,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model.language_model.model", target_patterns="model"),
             WeightRenaming(source_patterns=r"model.language_model.lm_head", target_patterns="lm_head"),
         ],
-        "hyperclovax": [
+        "vlm": [
+            WeightRenaming("mm_projector", "projector"),
+            WeightRenaming("language_model.model", "language_model"),
+            WeightRenaming("language_model.lm_head", "lm_head"),
+        ],
+        "hyperclovax_vlm": [
             WeightRenaming("mm_projector", "projector"),
             WeightRenaming("language_model.model", "language_model"),
             WeightRenaming("language_model.lm_head", "lm_head"),
