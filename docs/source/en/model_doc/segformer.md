@@ -101,9 +101,9 @@ processor = SegformerImageProcessor(do_reduce_labels=True)
     - preprocess
     - post_process_semantic_segmentation
 
-## SegformerImageProcessorFast
+## SegformerImageProcessorPil
 
-[[autodoc]] SegformerImageProcessorFast
+[[autodoc]] SegformerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
 

@@ -473,7 +473,7 @@ class DecoderLayer(nn.Module):
         causal_mask=None,
         decoder_padding_mask=None,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         residual = x
 
@@ -485,7 +485,6 @@ class DecoderLayer(nn.Module):
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -500,7 +499,6 @@ class DecoderLayer(nn.Module):
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         x = nn.functional.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -557,7 +555,7 @@ class FSMTDecoder(nn.Module):
         output_attentions: bool | None = False,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -634,7 +632,6 @@ class FSMTDecoder(nn.Module):
                 layer_state=past_key_values,
                 causal_mask=decoder_causal_mask,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             if output_attentions:
@@ -709,7 +706,7 @@ class Attention(nn.Module):
         layer_state: Cache | None = None,
         attn_mask: Tensor | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[Tensor, Tensor | None]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         tgt_len, bsz, embed_dim = query.size()
@@ -741,10 +738,7 @@ class Attention(nn.Module):
 
             if layer_state is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not self.encoder_decoder_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if self.encoder_decoder_attention:
                     layer_state.is_updated[self.layer_idx] = True
@@ -841,7 +835,6 @@ class FSMTModel(PretrainedFSMTModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqModelOutput:
         r"""
@@ -917,7 +910,6 @@ class FSMTModel(PretrainedFSMTModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -979,7 +971,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | Seq2SeqLMOutput:
         r"""
@@ -1035,7 +1026,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         lm_logits = outputs[0]
 

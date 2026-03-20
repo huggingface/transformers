@@ -21,7 +21,7 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision, slow
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
@@ -31,11 +31,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import YolosImageProcessor
-
-    if is_torchvision_available():
-        from transformers import YolosImageProcessorFast
 
 
 class YolosImageProcessingTester:
@@ -145,9 +140,6 @@ class YolosImageProcessingTester:
 @require_torch
 @require_vision
 class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = YolosImageProcessor if is_vision_available() else None
-    fast_image_processing_class = YolosImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = YolosImageProcessingTester(self)
@@ -157,7 +149,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
@@ -166,30 +158,13 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
             self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
             self.assertEqual(image_processor.do_pad, True)
 
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 1333})
-
-    def test_equivalence_padding(self):
-        # Initialize image_processings
-        image_processing_1 = self.image_processing_class(**self.image_processor_dict)
-        image_processing_2 = self.image_processing_class(do_resize=False, do_normalize=False, do_rescale=False)
-        # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test whether the method "pad" and calling the image processor return the same tensors
-        encoded_images_with_method = image_processing_1.pad(image_inputs, return_tensors="pt")
-        encoded_images = image_processing_2(image_inputs, return_tensors="pt")
-
-        torch.testing.assert_close(
-            encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], rtol=1e-4, atol=1e-4
-        )
 
     @parameterized.expand(
         [
@@ -202,7 +177,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         ]
     )
     def test_resize_max_size_respected(self, image_size, longest_edge, shortest_edge):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # create torch tensors as image
@@ -228,7 +203,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
         target = {"image_id": 39769, "annotations": target}
 
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class.from_pretrained("hustvl/yolos-small")
             encoding = image_processing(images=image, annotations=target, return_tensors="pt")
@@ -275,7 +250,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # encode them
             image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
@@ -343,7 +318,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         images = [image_0, image_1]
         annotations = [annotations_0, annotations_1]
 
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class()
             encoding = image_processing(
                 images=images,
@@ -465,9 +440,8 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         annotations = [annotation_0, annotation_1]
 
         # encode them
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class()
-            image_processing = YolosImageProcessor(format="coco_panoptic")
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(format="coco_panoptic")
             encoding = image_processing(
                 images=images,
                 annotations=annotations,
@@ -562,7 +536,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->Yolos
     def test_max_width_max_height_resizing_and_pad_strategy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_1 = torch.ones([200, 100, 3], dtype=torch.uint8)
 
             # do_pad=False, max_height=100, max_width=100, image=200x100 -> 100x50

@@ -84,7 +84,7 @@ class Speech2TextConfig(PreTrainedConfig):
     scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_source_positions: int = 6000
     max_target_positions: int = 1024
     num_conv_layers: int = 2

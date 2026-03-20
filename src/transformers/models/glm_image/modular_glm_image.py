@@ -48,8 +48,8 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionPatchEmbed,
 )
 from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attention_forward
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
@@ -1166,8 +1166,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
@@ -1234,7 +1233,7 @@ class GlmImageImageProcessor(Qwen2VLImageProcessor):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
-class GlmImageImageProcessorFast(Qwen2VLImageProcessorFast):
+class GlmImageImageProcessorPil(Qwen2VLImageProcessorPil):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
@@ -1480,6 +1479,6 @@ __all__ = [
     "GlmImageModel",
     "GlmImageForConditionalGeneration",
     "GlmImageImageProcessor",
-    "GlmImageImageProcessorFast",
+    "GlmImageImageProcessorPil",
     "GlmImageProcessor",
 ]

@@ -53,6 +53,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
     ```"""
 
     model_type = "recurrent_gemma"
+    attribute_map = {"sliding_window": "attention_window_size"}
 
     num_hidden_layers: int = 26
     vocab_size: int = 256000

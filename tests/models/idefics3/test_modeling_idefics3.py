@@ -133,7 +133,7 @@ class Idefics3VisionText2TextModelTester:
             [
                 self.batch_size,
                 self.num_images,
-                3,  # Idefics3ImageProcessor always generates RGB pixel values
+                3,  # Idefics3ImageProcessorPil always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]

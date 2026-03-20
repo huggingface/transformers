@@ -169,6 +169,12 @@ class BenchmarkRunner:
         self.model = None
         flush_memory()
 
+    @staticmethod
+    def _is_primary_process() -> bool:
+        if not torch.distributed.is_available() or not torch.distributed.is_initialized():
+            return True
+        return torch.distributed.get_rank() == 0
+
     def setup_benchmark(self, model_id: str, config: BenchmarkConfig) -> None:
         # Some attributes only need to be set once per model
         if self._setup_for != model_id:
@@ -184,7 +190,7 @@ class BenchmarkRunner:
             max_length=config.sequence_length,
             truncation=True,
             return_attention_mask=True,
-        ).to(config.device)
+        )
         self.inputs["use_cache"] = True
 
         # Prepare generation config
@@ -206,15 +212,18 @@ class BenchmarkRunner:
         self.logger.debug(f"Loading model {model_id} on device {config.device}...")
         dtype = getattr(torch, config.dtype.removeprefix("torch."))
         use_kernels = config.kernelize and kernelize is not None and Mode is not None
+        device_map = config.device if config.tp_plan is None else None
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=dtype,
             attn_implementation=config.attn_implementation,
             generation_config=generation_config,
             use_kernels=use_kernels,
-            device_map=config.device,
+            device_map=device_map,
+            tp_plan=config.tp_plan,
         )
         self.model = self.model.eval()
+        self.inputs = self.inputs.to(self.model.device)
 
     def run_benchmark(self, config: BenchmarkConfig, num_tokens_to_profile: int = 0) -> BenchmarkResult | None:
         """Run a single benchmark with the given model ID and config."""
@@ -378,6 +387,8 @@ class BenchmarkRunner:
             raise RuntimeError("No benchmark was run successfully")
 
         if pretty_print_summary:
+            if not self._is_primary_process():
+                return (timestamp, all_results)
             print()
             print("=" * 100)
             print(f"Finished benchmarks in {time.perf_counter() - start_time:.2f} seconds")
@@ -401,6 +412,8 @@ class BenchmarkRunner:
 
     def save_results(self, model_name: str, results: dict, timestamp: str = "", summarized: bool = True) -> str:
         """Save benchmark results to JSON file."""
+        if not self._is_primary_process():
+            return ""
         # Create model-specific subdirectory
         model_name = model_name.replace("/", "_")
         model_dir = os.path.join(self.output_dir, model_name)
