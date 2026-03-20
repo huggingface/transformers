@@ -53,10 +53,10 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True),
         (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
         Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
-    stage_configs (Sequence[Sequence[tuple[int, int, int] | list[int]]], *optional*, defaults to `(((128, 128, 1),), ((128, 128, 2),),
-        ((128, 128, 5),), ((128, 128, 8), (128, 128, 3), (128, 128, 2)), ((128, 128, 12), (128, 128, 7), (128, 128, 4)), ((128, 128, 18),
-        (128, 128, 12), (128, 128, 6))))`:
-        Configuration for the bridge module stages in format [in_channels, out_channels, dilation_value].
+    stage_configs (Sequence[Sequence[tuple[int, ...] | list[int]]], *optional*, defaults to `(((128, 1),), ((128, 2),),
+        ((128, 5),), ((128, 8), (128, 3), (128, 2)), ((128, 12), (128, 7), (128, 4)), ((128, 18),
+        (128, 12), (128, 6))))`:
+        Configuration for the bridge module stages in format [in_channels, dilation_value].
         Each inner sequence corresponds to a single bridge block, and the outer sequence groups blocks by bridge stage.
     bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
         Configuration for the bridge connector in format [in_channels, out_channels].
@@ -102,77 +102,23 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     )
 
     stage_configs: Sequence[Sequence[tuple[int, ...] | list[int]]] = (
+        ((128, 1),),
+        ((128, 2),),
+        ((128, 5),),
         (
-            (
-                128,
-                128,
-                1,
-            ),
+            (128, 8),
+            (128, 3),
+            (128, 2),
         ),
         (
-            (
-                128,
-                128,
-                2,
-            ),
+            (128, 12),
+            (128, 7),
+            (128, 4),
         ),
         (
-            (
-                128,
-                128,
-                5,
-            ),
-        ),
-        (
-            (
-                128,
-                128,
-                8,
-            ),
-            (
-                128,
-                128,
-                3,
-            ),
-            (
-                128,
-                128,
-                2,
-            ),
-        ),
-        (
-            (
-                128,
-                128,
-                12,
-            ),
-            (
-                128,
-                128,
-                7,
-            ),
-            (
-                128,
-                128,
-                4,
-            ),
-        ),
-        (
-            (
-                128,
-                128,
-                18,
-            ),
-            (
-                128,
-                128,
-                12,
-            ),
-            (
-                128,
-                128,
-                6,
-            ),
+            (128, 18),
+            (128, 12),
+            (128, 6),
         ),
     )
 
@@ -456,7 +402,7 @@ class UVDocBridgeBlock(GradientCheckpointingLayer):
         super().__init__()
         self.blocks = nn.ModuleList([])
         bridge = config.stage_configs[bridge_index]
-        for in_channels, out_channels, dilation in bridge:
+        for in_channels, dilation in bridge:
             self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
     def forward(
@@ -502,6 +448,7 @@ class UVDocPointPositions2D(nn.Module):
 
 @auto_docstring
 class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
+    base_model_prefix = "backbone"
     supports_gradient_checkpointing = True
     _can_record_outputs = {
         "hidden_states": UVDocBridgeBlock,
@@ -564,13 +511,15 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.resnet(pixel_values)
         outputs = self.bridge(hidden_states, **kwargs)
+
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
                 feature_maps += (outputs.hidden_states[idx],)
+
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states,

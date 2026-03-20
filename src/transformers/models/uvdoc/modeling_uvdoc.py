@@ -197,7 +197,7 @@ class UVDocBridgeBlock(GradientCheckpointingLayer):
         super().__init__()
         self.blocks = nn.ModuleList([])
         bridge = config.stage_configs[bridge_index]
-        for in_channels, out_channels, dilation in bridge:
+        for in_channels, dilation in bridge:
             self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
     def forward(
@@ -249,7 +249,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     """
 
     config: UVDocConfig
-    base_model_prefix = "uvdoc"
+    base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
@@ -315,13 +315,15 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.resnet(pixel_values)
         outputs = self.bridge(hidden_states, **kwargs)
+
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
                 feature_maps += (outputs.hidden_states[idx],)
+
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states,

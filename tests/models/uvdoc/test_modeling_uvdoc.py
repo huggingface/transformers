@@ -126,8 +126,8 @@ class UVDocModelTester:
         )
 
         stage_configs = (
-            ((32, 32, 1),),
-            ((32, 32, 2),),
+            ((32, 1),),
+            ((32, 2),),
         )
 
         return UVDocConfig(
@@ -234,10 +234,6 @@ class UVDocModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="UVDoc does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
-
-    # @unittest.skip(reason="Large number of hidden layers but small spatial dimensions")
-    # def test_num_layers_is_small(self):
-    #     pass
 
 
 @require_torch

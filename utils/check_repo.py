@@ -258,7 +258,7 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
-        "UVDocBridge",  # Building part of a bigger model
+        "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     ]
 )
 
@@ -481,7 +481,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
-    "UVDocBridge",  # Building part of a bigger model
+    "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
 ]
 
 
