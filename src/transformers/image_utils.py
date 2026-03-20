@@ -1001,3 +1001,17 @@ class SizeDict:
                 getattr(other, f.name) for f in fields(self)
             )
         return NotImplemented
+
+    def __or__(self, other) -> "SizeDict":
+        if isinstance(other, dict | SizeDict):
+            merged = dict(self)
+            merged.update(dict(other))
+            return SizeDict(**merged)
+        return NotImplemented
+
+    def __ror__(self, other) -> dict:
+        if isinstance(other, dict):
+            merged = dict(other)
+            merged.update(dict(self))
+            return merged
+        return NotImplemented
