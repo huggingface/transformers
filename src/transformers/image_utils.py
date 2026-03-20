@@ -15,9 +15,9 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from io import BytesIO
-from typing import Optional, Union
+from typing import Any, Union
 
 import httpx
 import numpy as np
@@ -60,8 +60,11 @@ if is_vision_available():
             PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
             PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
         }
+        # Create inverse mapping: InterpolationMode -> PILImageResampling
+        torch_pil_interpolation_mapping = {v: k for k, v in pil_torch_interpolation_mapping.items()}
     else:
         pil_torch_interpolation_mapping = {}
+        torch_pil_interpolation_mapping = {}
 
 
 if is_torch_available():
@@ -395,6 +398,28 @@ def get_image_size_for_max_height_width(
     return new_height, new_width
 
 
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
+    """
+    Return the maximum value across all indices of an iterable of values.
+    """
+    return [max(values_i) for values_i in zip(*values)]
+
+
+def get_max_height_width(
+    images: list[Union["torch.Tensor", np.ndarray]], input_data_format: str | ChannelDimension = ChannelDimension.FIRST
+) -> list[int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+    if input_data_format == ChannelDimension.FIRST:
+        _, max_height, max_width = max_across_indices([img.shape for img in images])
+    elif input_data_format == ChannelDimension.LAST:
+        max_height, max_width, _ = max_across_indices([img.shape for img in images])
+    else:
+        raise ValueError(f"Invalid channel dimension format: {input_data_format}")
+    return (max_height, max_width)
+
+
 def is_valid_annotation_coco_detection(annotation: dict[str, list | tuple]) -> bool:
     if (
         isinstance(annotation, dict)
@@ -509,8 +534,7 @@ def validate_preprocess_arguments(
     crop_size: dict[str, int] | None = None,
     do_resize: bool | None = None,
     size: dict[str, int] | None = None,
-    resample: Optional["PILImageResampling"] = None,
-    interpolation: Optional["InterpolationMode"] = None,
+    resample: Union["PILImageResampling", "InterpolationMode", int] | None = None,
 ):
     """
     Checks validity of typically used arguments in an `ImageProcessor` `preprocess` method.
@@ -540,13 +564,8 @@ def validate_preprocess_arguments(
     if do_center_crop and crop_size is None:
         raise ValueError("`crop_size` must be specified if `do_center_crop` is `True`.")
 
-    if interpolation is not None and resample is not None:
-        raise ValueError(
-            "Only one of `interpolation` and `resample` should be specified, depending on image processor type."
-        )
-
-    if do_resize and not (size is not None and (resample is not None or interpolation is not None)):
-        raise ValueError("`size` and `resample/interpolation` must be specified if `do_resize` is `True`.")
+    if do_resize and not (size is not None and resample is not None):
+        raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
 
 
 class ImageFeatureExtractionMixin:
@@ -933,7 +952,7 @@ def validate_kwargs(valid_processor_keys: list[str], captured_kwargs: list[str])
         logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
 
 
-@dataclass(frozen=True)
+@dataclass()
 class SizeDict:
     """
     Hashable dictionary to store image size information.
@@ -950,3 +969,35 @@ class SizeDict:
         if hasattr(self, key):
             return getattr(self, key)
         raise KeyError(f"Key {key} not found in SizeDict.")
+
+    def get(self, key, default=None):
+        if hasattr(self, key) and getattr(self, key) is not None:
+            return getattr(self, key)
+        return default
+
+    def __iter__(self):
+        # Yield only non-None (key, value) pairs so dict(self) excludes missing values.
+        for f in fields(self):
+            val = getattr(self, f.name)
+            if val is not None:
+                yield f.name, val
+
+    def __hash__(self):
+        return hash((self.height, self.width, self.longest_edge, self.shortest_edge, self.max_height, self.max_width))
+
+    def __contains__(self, key):
+        return hasattr(self, key) and getattr(self, key) is not None
+
+    def __setitem__(self, key, value):
+        if not hasattr(self, key):
+            raise KeyError(f"Key {key} is not a valid field of SizeDict.")
+        object.__setattr__(self, key, value)
+
+    def __eq__(self, other):
+        if isinstance(other, dict):
+            return dict(self) == other
+        if isinstance(other, SizeDict):
+            return tuple(getattr(self, f.name) for f in fields(self)) == tuple(
+                getattr(other, f.name) for f in fields(self)
+            )
+        return NotImplemented

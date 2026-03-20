@@ -188,9 +188,9 @@ print(output_text)
 [[autodoc]] Ernie4_5_VLMoeImageProcessor
     - preprocess
 
-## Ernie4_5_VLMoeImageProcessorFast
+## Ernie4_5_VLMoeImageProcessorPil
 
-[[autodoc]] Ernie4_5_VLMoeImageProcessorFast
+[[autodoc]] Ernie4_5_VLMoeImageProcessorPil
     - preprocess
 
 ## Ernie4_5_VLMoeVideoProcessor

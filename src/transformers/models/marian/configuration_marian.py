@@ -73,9 +73,9 @@ class MarianConfig(PreTrainedConfig):
     decoder_start_token_id: int = 58100
     scale_embedding: bool = False
     pad_token_id: int | None = 58100
-    eos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 0
     bos_token_id: int | None = None
-    forced_eos_token_id: int | None = 0
+    forced_eos_token_id: int | list[int] | None = 0
     share_encoder_decoder_embeddings: bool = True
     is_decoder: bool = False
     tie_word_embeddings: bool = True
