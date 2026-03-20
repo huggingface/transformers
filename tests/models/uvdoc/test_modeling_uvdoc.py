@@ -56,35 +56,15 @@ class UVDocModelTester:
         bridge_in_channels=32,
         kernel_size=5,
         stage_layer_num=(3, 4, 6),
-        resnet_head=(
-            (3, 8, 2),
-            (8, 8, 2),
-        ),
-        resnet_stage_dilation=(
-            (1, 3, 3),
-            (1, 3, 3, 3),
-            (1, 3, 3, 3, 3, 3),
-        ),
-        resnet_stage_stride=(
-            (1, 1, 1),
-            (2, 1, 1, 1),
-            (2, 1, 1, 1, 1, 1),
-        ),
+        resnet_head=((3, 8), (8, 8)),
         resnet_stage_downsample=(
             (False, False, False),
             (True, False, False, False),
             (True, False, False, False, False, False),
         ),
-        resnet_down=(
-            (8, 8),
-            (8, 16),
-            (16, 32),
-        ),
-        bridge_connector=(32, 32, 1),
-        out_point_positions2D=(
-            (32, 8, 1),
-            (8, 2, 1),
-        ),
+        resnet_down=((8, 8), (8, 16), (16, 32)),
+        bridge_connector=(32, 32),
+        out_point_positions2D=((32, 8), (8, 2)),
         dilation_values=(
             (1,),
             (2,),
@@ -104,8 +84,6 @@ class UVDocModelTester:
         self.kernel_size = kernel_size
         self.stage_layer_num = stage_layer_num
         self.resnet_head = resnet_head
-        self.resnet_stage_dilation = resnet_stage_dilation
-        self.resnet_stage_stride = resnet_stage_stride
         self.resnet_stage_downsample = resnet_stage_downsample
         self.resnet_down = resnet_down
         self.bridge_connector = bridge_connector
@@ -139,9 +117,6 @@ class UVDocModelTester:
             bridge_in_channels=self.bridge_in_channels,
             stage_layer_num=list(self.stage_layer_num),
             resnet_head=[list(h) for h in self.resnet_head],
-            resnet_stage_dilation=[list(d) for d in self.resnet_stage_dilation],
-            resnet_stage_padding=[list(p) for p in self.resnet_stage_padding],
-            resnet_stage_stride=[list(s) for s in self.resnet_stage_stride],
             resnet_stage_downsample=[list(down) for down in self.resnet_stage_downsample],
             resnet_down=[list(rd) for rd in self.resnet_down],
             bridge_connector=list(self.bridge_connector),

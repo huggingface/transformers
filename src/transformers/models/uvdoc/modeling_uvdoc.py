@@ -143,13 +143,15 @@ class UVDocResNetStage(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList([])
         for index in range(config.stage_layer_num[stage_index]):
+            dilation = 1 if index == 0 else 3
+            downsample = config.resnet_stage_downsample[stage_index][index]
             layer = UVDocResidualBlock(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                stride=config.resnet_stage_stride[stage_index][index],
-                padding=config.resnet_stage_dilation[stage_index][index] * 2,
-                dilation=config.resnet_stage_dilation[stage_index][index],
-                downsample=config.resnet_stage_downsample[stage_index][index],
+                stride=2 if downsample else 1,
+                padding=dilation * 2,
+                dilation=dilation,
+                downsample=downsample,
                 kernel_size=config.kernel_size,
             )
             self.layers.append(layer)
@@ -173,7 +175,7 @@ class UVDocResNet(nn.Module):
                     in_channels=config.resnet_head[i][0],
                     out_channels=config.resnet_head[i][1],
                     kernel_size=config.kernel_size,
-                    stride=config.resnet_head[i][2],
+                    stride=2,
                     padding=config.kernel_size // 2,
                 )
             )
@@ -222,7 +224,7 @@ class UVDocPointPositions2D(nn.Module):
             in_channels=config.out_point_positions2D[0][0],
             out_channels=config.out_point_positions2D[0][1],
             kernel_size=config.kernel_size,
-            stride=config.out_point_positions2D[0][2],
+            stride=1,
             padding=config.kernel_size // 2,
             padding_mode=config.padding_mode,
             activation=config.hidden_act,
@@ -232,7 +234,7 @@ class UVDocPointPositions2D(nn.Module):
             in_channels=config.out_point_positions2D[1][0],
             out_channels=config.out_point_positions2D[1][1],
             kernel_size=config.kernel_size,
-            stride=config.out_point_positions2D[1][2],
+            stride=1,
             padding=config.kernel_size // 2,
             padding_mode=config.padding_mode,
         )
@@ -289,7 +291,7 @@ class UVDocModel(UVDocPreTrainedModel):
             in_channels=config.bridge_connector[0] * self.num_bridge_layers,
             out_channels=config.bridge_connector[1],
             kernel_size=1,
-            stride=config.bridge_connector[2],
+            stride=1,
             padding=0,
             dilation=1,
         )

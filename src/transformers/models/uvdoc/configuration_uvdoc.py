@@ -44,20 +44,16 @@ class UVDocConfig(PreTrainedConfig):
             Kernel size for convolutional layers in the backbone network.
         stage_layer_num (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(3, 4, 6)`):
             Number of layers in each ResNet stage.
-        resnet_head (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((3, 32, 2), (32, 32, 2))`):
-            Configuration for the ResNet head layers in format [in_channels, out_channels, stride].
+        resnet_head (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((3, 32), (32, 32))`):
+            Configuration for the ResNet head layers in format [in_channels, out_channels].
         resnet_down (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
             Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
-        resnet_stage_dilation (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1, 3, 3), (1, 3, 3, 3), (1, 3, 3, 3, 3, 3))`):
-            Dilation values for each layer in each ResNet stage. First layer uses dilation=1, subsequent layers use dilation=3.
-        resnet_stage_stride (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1, 1, 1), (2, 1, 1, 1), (2, 1, 1, 1, 1, 1))`):
-            Stride values for each layer in each ResNet stage. First stage uses stride=1, others use stride=2 for downsampling.
         resnet_stage_downsample (`list[list[bool]]` or `tuple[tuple[bool, ...], ...]`, *optional*, defaults to `((False, False, False), (True, False, False, False), (True, False, False, False, False, False))`):
             Whether to apply downsampling for each layer in each ResNet stage.
-        bridge_connector (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(128, 128, 1)`):
-            Configuration for the bridge connector in format [in_channels, out_channels, kernel_size].
-        out_point_positions2D (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((128, 32, 1), (32, 2, 1))`):
-            Configuration for the output point positions 2D layer in format [in_channels, out_channels, kernel_size].
+        bridge_connector (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
+            Configuration for the bridge connector in format [in_channels, out_channels].
+        out_point_positions2D (`list[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((128, 32), (32, 2))`):
+            Configuration for the output point positions 2D layer in format [in_channels, out_channels].
         dilation_values (`tuple[list[int]]` or `tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
             Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
             rates for a single bridge block.
@@ -74,54 +70,10 @@ class UVDocConfig(PreTrainedConfig):
         (
             3,
             32,
-            2,
         ),
         (
             32,
             32,
-            2,
-        ),
-    )
-    resnet_stage_dilation: Sequence[list[int] | tuple[int, ...]] = (
-        (
-            1,
-            3,
-            3,
-        ),
-        (
-            1,
-            3,
-            3,
-            3,
-        ),
-        (
-            1,
-            3,
-            3,
-            3,
-            3,
-            3,
-        ),
-    )
-    resnet_stage_stride: Sequence[list[int] | tuple[int, ...]] = (
-        (
-            1,
-            1,
-            1,
-        ),
-        (
-            2,
-            1,
-            1,
-            1,
-        ),
-        (
-            2,
-            1,
-            1,
-            1,
-            1,
-            1,
         ),
     )
     resnet_stage_downsample: Sequence[list[bool] | tuple[bool, ...]] = (
@@ -148,12 +100,10 @@ class UVDocConfig(PreTrainedConfig):
         (
             128,
             32,
-            1,
         ),
         (
             32,
             2,
-            1,
         ),
     )
     dilation_values: list[list[int]] | tuple[tuple[int, ...], ...] = (
