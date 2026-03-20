@@ -23,7 +23,8 @@ You may use code agents in drafting or to help you diagnose issues, but **new us
 by code agents under any circumstances**. The same prohibition applies to autonomous "OpenClaw"-like agents.
 
 PRs that appear to be fully agent-written will probably be closed without review. Repeated violations of this policy
-may result in a ban from contributing across the entire Hugging Face organization.
+may result in a ban from contributing across the entire Hugging Face organization. For more information on this policy,
+please read `CONTRIBUTING.md`.
 
 - [ ] I confirm that this PR was written by a human.
 
