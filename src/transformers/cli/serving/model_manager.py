@@ -17,6 +17,7 @@ Model loading, caching, and lifecycle management.
 
 from __future__ import annotations
 
+import asyncio
 import gc
 import json
 import threading
@@ -30,7 +31,7 @@ import transformers
 from transformers import AutoTokenizer, BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
-from .utils import Modality, reset_torch_cache
+from .utils import Modality, make_progress_tqdm_class, reset_torch_cache
 
 
 if TYPE_CHECKING:
@@ -128,6 +129,14 @@ class ModelManager:
 
         self.loaded_models: dict[str, TimedModel] = {}
 
+        # Thread-safety for concurrent load_model_and_processor calls
+        self._model_locks: dict[str, threading.Lock] = {}
+        self._model_locks_guard = threading.Lock()
+
+        # Tracks in-flight loads for fan-out to multiple SSE subscribers (used by load_model_streaming)
+        self._loading_subscribers: dict[str, list[asyncio.Queue[str | None]]] = {}
+        self._loading_tasks: dict[str, asyncio.Task] = {}
+
         if force_model is not None:
             self.load_model_and_processor(self.process_model_name(force_model), processor_id=processor_id)
 
@@ -176,7 +185,7 @@ class ModelManager:
             except OSError:
                 raise OSError(f"Failed to load processor for {model_id} with AutoProcessor and AutoTokenizer.")
 
-    def _load_model(self, model_id_and_revision: str) -> PreTrainedModel:
+    def _load_model(self, model_id_and_revision: str, tqdm_class=None, progress_callback=None) -> PreTrainedModel:
         """Load a model. GGUF files are detected by the `.gguf` extension and loaded via llama.cpp."""
         import torch
 
@@ -205,33 +214,139 @@ class ModelManager:
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
             "quantization_config": self.get_quantization_config(),
+            "tqdm_class": tqdm_class,
         }
 
+        if progress_callback is not None:
+            progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
-        self, model_id_and_revision: str, processor_id: str | None = None
+        self,
+        model_id_and_revision: str,
+        processor_id: str | None = None,
+        progress_callback=None,
+        tqdm_class=None,
     ) -> tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]:
         """Load a model (or return it from cache), resetting its inactivity timer.
 
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
-            processor_id: Optional per-request processor override (takes precedence
-                over the instance-level ``self.processor_id``).
+            processor_id: Optional per-request processor override.
+            progress_callback: If provided, called with dicts like
+                ``{"status": "loading", "model": ..., "stage": ...}`` during loading.
+            tqdm_class: Optional tqdm subclass for progress bars during ``from_pretrained``.
         """
-        if model_id_and_revision not in self.loaded_models or self.loaded_models[model_id_and_revision].is_deleted():
-            processor = self._load_processor(model_id_and_revision, processor_id=processor_id)
-            model = self._load_model(model_id_and_revision)
-            self.loaded_models[model_id_and_revision] = TimedModel(
-                model, timeout_seconds=self.model_timeout, processor=processor
-            )
-        else:
-            self.loaded_models[model_id_and_revision].reset_timer()
-            model = self.loaded_models[model_id_and_revision].model
-            processor = self.loaded_models[model_id_and_revision].processor
+        # Per-model lock prevents duplicate loads when concurrent requests arrive
+        with self._model_locks_guard:
+            lock = self._model_locks.setdefault(model_id_and_revision, threading.Lock())
+
+        with lock:
+            if (
+                model_id_and_revision not in self.loaded_models
+                or self.loaded_models[model_id_and_revision].is_deleted()
+            ):
+                if progress_callback is not None:
+                    progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "processor"})
+                processor = self._load_processor(model_id_and_revision, processor_id=processor_id)
+                model = self._load_model(
+                    model_id_and_revision, tqdm_class=tqdm_class, progress_callback=progress_callback
+                )
+                self.loaded_models[model_id_and_revision] = TimedModel(
+                    model, timeout_seconds=self.model_timeout, processor=processor
+                )
+                if progress_callback is not None:
+                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
+            else:
+                self.loaded_models[model_id_and_revision].reset_timer()
+                model = self.loaded_models[model_id_and_revision].model
+                processor = self.loaded_models[model_id_and_revision].processor
+                if progress_callback is not None:
+                    progress_callback({"status": "ready", "model": model_id_and_revision, "cached": True})
         return model, processor
+
+    async def load_model_streaming(self, model_id: str):
+        """Load a model and stream progress as SSE events.
+
+        Handles three cases:
+        1. Model already cached → single ``ready`` event
+        2. Load already in progress → join existing subscriber stream
+        3. First request → start loading, broadcast to all subscribers
+
+        Yields SSE ``data: ...`` lines.
+        """
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        # Case 1: already cached
+        if model_id in self.loaded_models and not self.loaded_models[model_id].is_deleted():
+            self.loaded_models[model_id].reset_timer()
+            yield f"data: {json.dumps({'status': 'ready', 'model': model_id, 'cached': True})}\n\n"
+            return
+
+        # Case 2: load in progress — join existing subscribers
+        if model_id in self._loading_tasks:
+            self._loading_subscribers[model_id].append(queue)
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+            return
+
+        # Case 3: first request — start the load
+        self._loading_subscribers[model_id] = [queue]
+        loop = asyncio.get_running_loop()
+
+        def enqueue(payload: dict):
+            msg = f"data: {json.dumps(payload)}\n\n"
+
+            def broadcast():
+                for q in self._loading_subscribers.get(model_id, []):
+                    q.put_nowait(msg)
+
+            loop.call_soon_threadsafe(broadcast)
+
+        tqdm_class = make_progress_tqdm_class(enqueue, model_id)
+
+        def _tqdm_hook(factory, args, kwargs):
+            return tqdm_class(*args, **kwargs)
+
+        async def run_load():
+            try:
+                # Install a global tqdm hook so the "Loading weights" bar in
+                # core_model_loading.py (which uses logging.tqdm) routes through
+                # our ProgressTqdm. The tqdm_class kwarg only covers download bars.
+                previous_hook = logging.set_tqdm_hook(_tqdm_hook)
+                try:
+                    await asyncio.to_thread(
+                        self.load_model_and_processor,
+                        model_id,
+                        progress_callback=enqueue,
+                        tqdm_class=tqdm_class,
+                    )
+                finally:
+                    logging.set_tqdm_hook(previous_hook)
+            except Exception as e:
+                logger.error(f"Failed to load {model_id}: {e}", exc_info=True)
+                enqueue({"status": "error", "model": model_id, "message": str(e)})
+            finally:
+
+                def _send_sentinel():
+                    for q in self._loading_subscribers.pop(model_id, []):
+                        q.put_nowait(None)
+                    self._loading_tasks.pop(model_id, None)
+
+                loop.call_soon_threadsafe(_send_sentinel)
+
+        self._loading_tasks[model_id] = asyncio.create_task(run_load())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
 
     def shutdown(self) -> None:
         """Delete all loaded models and free resources."""

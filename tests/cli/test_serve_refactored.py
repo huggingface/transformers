@@ -532,6 +532,32 @@ class TestChatCompletion(unittest.TestCase):
                 text += chunk.choices[0].delta.content
         self.assertTrue(len(text) > 0)
 
+    def test_early_return_due_to_length(self):
+        """When max_tokens is hit, finish_reason should be 'length'."""
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "Hello, how are you?"}],
+                stream=True,
+                max_tokens=3,
+            )
+        )
+        last = chunks[-1]
+        self.assertEqual(last.choices[0].finish_reason, "length")
+
+    def test_continues_until_stop(self):
+        """When model stops naturally, finish_reason should be 'stop'."""
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": 'Please only answer with "Hi."'}],
+                stream=True,
+                max_tokens=30,
+            )
+        )
+        last = chunks[-1]
+        self.assertEqual(last.choices[0].finish_reason, "stop")
+
     def test_stop_strings(self):
         resp = self.client.chat.completions.create(
             model=self.MODEL, messages=[{"role": "user", "content": "Count to 10"}], stop=["5"]
@@ -575,7 +601,9 @@ class TestChatCompletion(unittest.TestCase):
     def test_streaming_usage(self):
         chunks = list(
             self.client.chat.completions.create(
-                model=self.MODEL, messages=[{"role": "user", "content": "Say hello"}], stream=True,
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "Say hello"}],
+                stream=True,
             )
         )
         # Last chunk should have usage
@@ -584,6 +612,59 @@ class TestChatCompletion(unittest.TestCase):
         self.assertGreater(last.usage.prompt_tokens, 0)
         self.assertGreater(last.usage.completion_tokens, 0)
         self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+
+    def test_concurrent_non_streaming(self):
+        """Two concurrent non-streaming requests should both complete without interference."""
+        import concurrent.futures
+
+        prompts = [
+            [{"role": "user", "content": "Say hello"}],
+            [{"role": "user", "content": "Say goodbye"}],
+        ]
+        results = [None, None]
+
+        def request_in_thread(index):
+            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            results[index] = client.chat.completions.create(model=self.MODEL, messages=prompts[index])
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(request_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()  # re-raise exceptions
+
+        for i in range(2):
+            self.assertIsNotNone(results[i])
+            self.assertIsNotNone(results[i].choices[0].message.content)
+            self.assertTrue(len(results[i].choices[0].message.content) > 0)
+
+    def test_concurrent_streaming(self):
+        """Two concurrent streaming requests should both produce complete, non-empty output."""
+        import concurrent.futures
+
+        prompts = [
+            [{"role": "user", "content": "Say hello"}],
+            [{"role": "user", "content": "Say goodbye"}],
+        ]
+        results = [None, None]
+
+        def stream_in_thread(index):
+            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            text = ""
+            for chunk in client.chat.completions.create(model=self.MODEL, messages=prompts[index], stream=True):
+                if chunk.choices[0].delta.content:
+                    text += chunk.choices[0].delta.content
+            results[index] = text
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(stream_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            self.assertIsNotNone(results[i])
+            self.assertTrue(len(results[i]) > 0, f"Request {i} produced empty output")
 
 
 # ---------------------------------------------------------------------------
@@ -748,7 +829,6 @@ class TestResponseSSEFormat(unittest.TestCase):
         self.assertEqual(parsed["response"]["status"], "queued")
 
 
-
 # ---------------------------------------------------------------------------
 # 9. Integration tests — Responses API (need GPU + model)
 # ---------------------------------------------------------------------------
@@ -848,3 +928,280 @@ class TestResponsesIntegration(unittest.TestCase):
         self.assertGreater(usage.input_tokens, 0)
         self.assertGreater(usage.output_tokens, 0)
         self.assertEqual(usage.total_tokens, usage.input_tokens + usage.output_tokens)
+
+
+# ---------------------------------------------------------------------------
+# 10. Integration tests — /load_model endpoint (need GPU + model)
+# ---------------------------------------------------------------------------
+
+
+def _parse_sse_events(response):
+    """Parse SSE lines from a streaming requests response into a list of dicts."""
+    events = []
+    for line in response.iter_lines(decode_unicode=True):
+        if not line or not line.startswith("data: "):
+            continue
+        events.append(json.loads(line[len("data: ") :]))
+    return events
+
+
+@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
+@require_openai
+class TestLoadModel(unittest.TestCase):
+    """Integration tests for POST /load_model SSE endpoint."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+    PORT = 8879
+
+    @classmethod
+    def setUpClass(cls):
+        import requests as req
+
+        from transformers.cli.serve_refactored import Serve
+
+        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        for _ in range(30):
+            try:
+                if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+        cls.base_url = f"http://localhost:{cls.PORT}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def setUp(self):
+        # Clear model cache so each test starts fresh
+        self.serve.reset_loaded_models()
+
+    def _load_model(self, model: str):
+        import requests as req
+
+        resp = req.post(f"{self.base_url}/load_model", json={"model": model}, stream=True, timeout=120)
+        events = _parse_sse_events(resp)
+        return resp, events
+
+    def test_load_model_fresh(self):
+        """POST /load_model returns SSE events ending with ready."""
+        response, events = self._load_model(self.MODEL)
+
+        self.assertEqual(response.status_code, 200)
+
+        stages = [e["stage"] for e in events if e["status"] == "loading" and "stage" in e]
+        self.assertIn("processor", stages)
+        self.assertIn("weights", stages)
+
+        last = events[-1]
+        self.assertEqual(last["status"], "ready")
+        self.assertFalse(last["cached"])
+
+        for event in events:
+            self.assertIn("status", event)
+            self.assertIn("model", event)
+
+    def test_load_model_cached(self):
+        """Loading an already-loaded model returns a single ready event with cached: true."""
+        self._load_model(self.MODEL)
+
+        _, events = self._load_model(self.MODEL)
+
+        ready_events = [e for e in events if e["status"] == "ready"]
+        self.assertEqual(len(ready_events), 1)
+        self.assertTrue(ready_events[0]["cached"])
+
+        loading_events = [e for e in events if e["status"] == "loading"]
+        self.assertEqual(len(loading_events), 0)
+
+    def test_load_model_error(self):
+        """Loading a nonexistent model produces an error event."""
+        _, events = self._load_model("nonexistent/model-that-does-not-exist")
+
+        error_events = [e for e in events if e["status"] == "error"]
+        self.assertGreaterEqual(len(error_events), 1)
+        self.assertIn("message", error_events[0])
+
+    def test_load_model_missing_field(self):
+        """POST /load_model with no model field returns 422."""
+        import requests as req
+
+        response = req.post(f"{self.base_url}/load_model", json={}, timeout=30)
+        self.assertEqual(response.status_code, 422)
+
+    def test_load_model_event_schema(self):
+        """Every event conforms to the expected schema."""
+        _, events = self._load_model(self.MODEL)
+
+        for event in events:
+            self.assertIsInstance(event["status"], str)
+            self.assertIsInstance(event["model"], str)
+
+            if event["status"] == "loading":
+                self.assertIn("stage", event)
+                if event["stage"] in ("download", "weights") and "progress" in event:
+                    progress = event["progress"]
+                    self.assertIn("current", progress)
+                    self.assertIn("total", progress)
+                    self.assertIsInstance(progress["current"], int)
+
+            if event["status"] == "ready":
+                self.assertIn("cached", event)
+                self.assertIsInstance(event["cached"], bool)
+
+    def test_load_model_stage_ordering(self):
+        """Stages appear in the expected order."""
+        _, events = self._load_model(self.MODEL)
+
+        stages = [e["stage"] for e in events if e["status"] == "loading" and "stage" in e]
+        seen = set()
+        unique_stages = []
+        for s in stages:
+            if s not in seen:
+                seen.add(s)
+                unique_stages.append(s)
+
+        expected_order = ["processor", "config", "download", "weights"]
+        expected_present = [s for s in expected_order if s in unique_stages]
+        self.assertEqual(unique_stages, expected_present, "Stages appeared out of order")
+
+    def test_concurrent_load_same_model(self):
+        """Two concurrent /load_model requests both get events and a ready event."""
+        import concurrent.futures
+
+        results = [None, None]
+
+        def load_in_thread(index):
+            import requests as req
+
+            resp = req.post(f"{self.base_url}/load_model", json={"model": self.MODEL}, stream=True, timeout=120)
+            events = _parse_sse_events(resp)
+            results[index] = (resp.status_code, events)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(load_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            status_code, events = results[i]
+            self.assertEqual(status_code, 200, f"Caller {i} got non-200 status")
+            self.assertTrue(len(events) > 0, f"Caller {i} received no events")
+            ready_events = [e for e in events if e["status"] == "ready"]
+            self.assertEqual(len(ready_events), 1, f"Caller {i} should get exactly one ready event")
+
+    def test_concurrent_load_second_caller_gets_cached(self):
+        """If the first /load_model finishes before the second, the second gets cached: true."""
+        _, events1 = self._load_model(self.MODEL)
+        ready1 = [e for e in events1 if e["status"] == "ready"]
+        self.assertEqual(len(ready1), 1)
+        self.assertFalse(ready1[0]["cached"])
+
+        _, events2 = self._load_model(self.MODEL)
+        ready2 = [e for e in events2 if e["status"] == "ready"]
+        self.assertEqual(len(ready2), 1)
+        self.assertTrue(ready2[0]["cached"])
+
+        loading2 = [e for e in events2 if e["status"] == "loading"]
+        self.assertEqual(len(loading2), 0)
+
+    def test_load_model_weights_progress_complete(self):
+        """Weights progress should go from 1 to total, with total matching across events."""
+        _, events = self._load_model(self.MODEL)
+
+        weights_events = [e for e in events if e.get("stage") == "weights" and "progress" in e]
+        self.assertGreater(len(weights_events), 0, "No weights progress events emitted")
+
+        # All events should have the same total
+        totals = {e["progress"]["total"] for e in weights_events}
+        self.assertEqual(len(totals), 1, f"Inconsistent totals: {totals}")
+        total = totals.pop()
+        self.assertIsNotNone(total)
+        self.assertGreater(total, 0)
+
+        # First should be 1, last should be total
+        self.assertEqual(weights_events[0]["progress"]["current"], 1)
+        self.assertEqual(weights_events[-1]["progress"]["current"], total)
+
+        # Progress should be monotonically increasing
+        currents = [e["progress"]["current"] for e in weights_events]
+        self.assertEqual(currents, sorted(currents))
+
+    def test_load_model_exactly_one_ready(self):
+        """A fresh load should produce exactly one ready event as the last event."""
+        _, events = self._load_model(self.MODEL)
+
+        ready_events = [e for e in events if e["status"] == "ready"]
+        self.assertEqual(len(ready_events), 1)
+        self.assertEqual(events[-1]["status"], "ready")
+
+    def test_load_model_usable_after_load(self):
+        """After /load_model completes, the model should be usable for inference."""
+        self._load_model(self.MODEL)
+
+        client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+        resp = client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "Say hi"}],
+            max_tokens=5,
+        )
+        self.assertIsNotNone(resp.choices[0].message.content)
+        self.assertTrue(len(resp.choices[0].message.content) > 0)
+
+    def test_load_model_model_field_matches(self):
+        """The model field in every event should match the canonical model ID."""
+        _, events = self._load_model(self.MODEL)
+
+        for event in events:
+            self.assertTrue(
+                event["model"].startswith(self.MODEL),
+                f"Event model '{event['model']}' doesn't match '{self.MODEL}'",
+            )
+
+    def test_concurrent_non_streaming(self):
+        """Two concurrent non-streaming responses requests should both complete."""
+        import concurrent.futures
+
+        inputs = ["Say hello", "Say goodbye"]
+        results = [None, None]
+
+        def request_in_thread(index):
+            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            results[index] = client.responses.create(model=self.MODEL, input=inputs[index], stream=False)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(request_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            self.assertIsNotNone(results[i])
+            self.assertEqual(results[i].status, "completed")
+            self.assertTrue(len(results[i].output[0].content[0].text) > 0)
+
+    def test_concurrent_streaming(self):
+        """Two concurrent streaming responses requests should both produce complete event streams."""
+        import concurrent.futures
+
+        inputs = ["Say hello", "Say goodbye"]
+        results = [None, None]
+
+        def stream_in_thread(index):
+            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            events = list(client.responses.create(model=self.MODEL, input=inputs[index], stream=True))
+            results[index] = events
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(stream_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            types = [e.type for e in results[i]]
+            self.assertIn("response.created", types, f"Request {i} missing created event")
+            self.assertIn("response.output_text.delta", types, f"Request {i} missing delta events")
+            self.assertIn("response.completed", types, f"Request {i} missing completed event")

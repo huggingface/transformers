@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from ...utils import logging
 from .chat_completion import ChatCompletionHandler
@@ -89,6 +89,21 @@ def build_server(
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):
         return response_handler.handle_request(body, request.state.request_id)
+
+    @app.post("/load_model")
+    async def load_model(body: dict):
+        from fastapi import HTTPException
+
+        model = body.get("model")
+        if model is None:
+            raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
+        model_id = model_manager.process_model_name(model)
+        return StreamingResponse(model_manager.load_model_streaming(model_id), media_type="text/event-stream")
+
+    @app.post("/reset")
+    def reset():
+        model_manager.shutdown()
+        return JSONResponse({"status": "ok"})
 
     @app.get("/v1/models")
     @app.options("/v1/models")

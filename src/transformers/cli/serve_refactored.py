@@ -112,6 +112,7 @@ class Serve:
             force_model=force_model,
             processor_id=processor,
         )
+        self._model_manager = model_manager
 
         # Single persistent thread for all generate() calls — required for
         # torch.compile + CUDA graphs which use thread-local storage.
@@ -151,6 +152,10 @@ class Serve:
 
         self._thread = threading.Thread(target=_run, name="uvicorn-thread", daemon=False)
         self._thread.start()
+
+    def reset_loaded_models(self):
+        """Clear all loaded models from memory."""
+        self._model_manager.shutdown()
 
     def kill_server(self):
         if not self._thread or not self._thread.is_alive():

@@ -96,6 +96,115 @@ class _StreamError:
 
 
 # ---------------------------------------------------------------------------
+# Progress tracking for model loading
+# ---------------------------------------------------------------------------
+
+
+class DownloadAggregator:
+    """Aggregates byte-progress across multiple concurrent download tqdm bars.
+
+    huggingface_hub opens one tqdm bar per file shard. This class tracks them all and emits
+    a single aggregate ``{"stage": "download", "progress": {...}}`` event whenever any updates.
+    """
+
+    def __init__(self, enqueue, model_id: str):
+        self.enqueue = enqueue
+        self.model = model_id
+        self.bars: dict[int, tuple[int, int | None]] = {}
+        self.last_emitted_current: int | None = None
+
+    def register(self, bar_id: int, total: int | None):
+        self.bars[bar_id] = (0, total)
+        self._emit()
+
+    def update(self, bar_id: int, current: int, total: int | None):
+        self.bars[bar_id] = (current, total)
+        self._emit()
+
+    def close(self, bar_id: int):
+        pass  # keep the bar so totals remain correct
+
+    def _emit(self):
+        agg_current = sum(c for c, _ in self.bars.values())
+        if agg_current == self.last_emitted_current:
+            return
+        self.last_emitted_current = agg_current
+        totals = [t for _, t in self.bars.values() if t is not None]
+        agg_total = sum(totals) if totals else None
+        self.enqueue(
+            {
+                "status": "loading",
+                "model": self.model,
+                "stage": "download",
+                "progress": {"current": agg_current, "total": agg_total},
+            }
+        )
+
+
+def make_progress_tqdm_class(callback, model_id: str):
+    """Create a tqdm subclass that routes progress to a callback.
+
+    Bars with ``unit="B"`` are download bars — aggregated via ``DownloadAggregator``.
+    Other bars (e.g. "Loading weights") emit ``weights`` stage events.
+    """
+    from tqdm.auto import tqdm as base_tqdm
+
+    download_aggregator = DownloadAggregator(callback, model_id)
+
+    class ProgressTqdm(base_tqdm):
+        def __init__(self, *args, **kwargs):
+            self.sse_unit = kwargs.get("unit") or "it"
+            kwargs["disable"] = True
+            super().__init__(*args, **kwargs)
+            self.n = 0
+            self.last_emitted = -1
+            if self.sse_unit == "B":
+                self._bar_id = id(self)
+                download_aggregator.register(self._bar_id, self.total)
+
+        def update(self, n=1):
+            if n is None:
+                n = 1
+            self.n += n
+            if self.sse_unit == "B":
+                download_aggregator.update(self._bar_id, self.n, self.total)
+            elif self.n != self.last_emitted:
+                self.last_emitted = self.n
+                callback(
+                    {
+                        "status": "loading",
+                        "model": model_id,
+                        "stage": "weights",
+                        "progress": {"current": self.n, "total": self.total},
+                    }
+                )
+
+        def __iter__(self):
+            for item in self.iterable:
+                self.n += 1
+                if self.sse_unit == "B":
+                    download_aggregator.update(self._bar_id, self.n, self.total)
+                elif self.n != self.last_emitted:
+                    self.last_emitted = self.n
+                    callback(
+                        {
+                            "status": "loading",
+                            "model": model_id,
+                            "stage": "weights",
+                            "progress": {"current": self.n, "total": self.total},
+                        }
+                    )
+                yield item
+
+        def close(self):
+            if self.sse_unit == "B":
+                download_aggregator.close(self._bar_id)
+            super().close()
+
+    return ProgressTqdm
+
+
+# ---------------------------------------------------------------------------
 # Streaming
 # ---------------------------------------------------------------------------
 
