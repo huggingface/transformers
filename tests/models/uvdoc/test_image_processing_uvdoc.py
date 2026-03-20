@@ -23,7 +23,7 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 
 if is_torchvision_available():
-    from transformers import UVDocImageProcessorFast
+    from transformers import UVDocImageProcessor
 
 
 class UVDocImageProcessingTester:
@@ -75,7 +75,7 @@ class UVDocImageProcessingTester:
 @require_torch
 @require_vision
 class UVDocImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    fast_image_processing_class = UVDocImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = UVDocImageProcessor if is_torchvision_available() else None
     test_slow_image_processor = False
 
     def setUp(self):

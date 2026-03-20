@@ -22,7 +22,7 @@ from parameterized import parameterized
 
 from transformers import (
     UVDocConfig,
-    UVDocImageProcessorFast,
+    UVDocImageProcessor,
     UVDocModel,
     is_torch_available,
     is_vision_available,
@@ -193,8 +193,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = UVDocModel.from_pretrained(model_path).to(torch_device)
-        self.image_processor = UVDocImageProcessorFast() if is_vision_available() else None
-        self.image_processor.save_pretrained("uvdoc_image_processor")
+        self.image_processor = UVDocImageProcessor() if is_vision_available() else None
         self.image = Image.open(
             requests.get(
                 "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True

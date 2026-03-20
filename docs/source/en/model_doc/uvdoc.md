@@ -97,9 +97,9 @@ print(result)
 
 [[autodoc]] UVDocModel
 
-## UVDocImageProcessorFast
+## UVDocImageProcessor
 
-[[autodoc]] UVDocImageProcessorFast
+[[autodoc]] UVDocImageProcessor
 
 ## UVDocPreTrainedModel
 
