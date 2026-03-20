@@ -62,7 +62,7 @@ class JambaConfig(PreTrainedConfig):
     router_aux_loss_coef: float = 0.001
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_position_embeddings: int = 262144
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 2

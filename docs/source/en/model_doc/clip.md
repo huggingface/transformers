@@ -111,9 +111,9 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 [[autodoc]] CLIPImageProcessor
     - preprocess
 
-## CLIPImageProcessorFast
+## CLIPImageProcessorPil
 
-[[autodoc]] CLIPImageProcessorFast
+[[autodoc]] CLIPImageProcessorPil
     - preprocess
 
 ## CLIPProcessor

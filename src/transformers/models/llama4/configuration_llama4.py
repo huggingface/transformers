@@ -151,7 +151,7 @@ class Llama4TextConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 1

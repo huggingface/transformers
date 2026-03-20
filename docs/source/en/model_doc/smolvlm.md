@@ -200,9 +200,9 @@ print(generated_texts[0])
 [[autodoc]] SmolVLMImageProcessor
     - preprocess
 
-## SmolVLMImageProcessorFast
+## SmolVLMImageProcessorPil
 
-[[autodoc]] SmolVLMImageProcessorFast
+[[autodoc]] SmolVLMImageProcessorPil
     - preprocess
 
 ## SmolVLMVideoProcessor
