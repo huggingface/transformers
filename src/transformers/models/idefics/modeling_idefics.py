@@ -37,7 +37,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrai
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import is_tracing, torch_compilable_check
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
@@ -389,9 +388,10 @@ class IdeficsEmbedding(torch.nn.Module):
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
-    def forward(self, x, seq_len):
+    def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
             self.cos_cached[:seq_len].to(dtype=x.dtype),
@@ -947,7 +947,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         image_encoder_embeddings: torch.FloatTensor | None = None,
         perceiver_embeddings: torch.FloatTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
@@ -958,8 +957,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             The output of the image encoder.
         perceiver_embeddings (`torch.FloatTensor`, *optional*):
             The output of the perceiver resampler.
-        image_hidden_states (<fill_type>):
-            <fill_docstring>
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
         """
@@ -987,15 +984,17 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
             position_ids = position_ids.unsqueeze(0)
 
-        if image_hidden_states is not None:
-            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=device)
-            batch_size, num_images, image_seq_len, image_hidden_size = image_hidden_states.size()
-            image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
+        if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
+            raise ValueError(
+                "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
+            )
 
         elif pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
             batch_size, num_images = pixel_values.shape[:2]
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
+
+            # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
                 pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
             ).last_hidden_state
@@ -1004,11 +1003,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
             image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=device)
             image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
-
-        else:
-            raise ValueError(
-                "One of `image_hidden_states`, `pixel_values`, or `image_encoder_embeddings` must be provided."
-            )
 
         if self.config.use_resampler:
             if perceiver_embeddings is None:
