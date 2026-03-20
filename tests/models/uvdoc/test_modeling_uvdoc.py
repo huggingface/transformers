@@ -63,18 +63,11 @@ class UVDocModelTester:
         resnet_down=((8, 8), (8, 16), (16, 32)),
         bridge_connector=(32, 32),
         out_point_positions2D=((32, 8), (8, 2)),
-        dilation_values=(
-            (1,),
-            (2,),
-            (5,),
-            (8, 3, 2),
-            (12, 7, 4),
-            (18, 12, 6),
-        ),
         padding_mode="reflect",
         hidden_act="prelu",
-        out_features=["stage1", "stage2", "stage3"],
-        out_indices=[1, 2, 3],
+        out_features=["stage1", "stage2", "stage3", "stage4", "stage5", "stage6"],
+        out_indices=[1, 2, 3, 4, 5, 6],
+        num_hidden_layers=6,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -88,13 +81,11 @@ class UVDocModelTester:
         self.resnet_down = resnet_down
         self.bridge_connector = bridge_connector
         self.out_point_positions2D = out_point_positions2D
-        self.dilation_values = dilation_values
-        self.padding_mode = padding_mode
-        self.num_hidden_layers = len(dilation_values)
         self.padding_mode = padding_mode
         self.hidden_act = hidden_act
         self.out_features = out_features
         self.out_indices = out_indices
+        self.num_hidden_layers = num_hidden_layers
         # For test_hidden_states_output: UVDoc outputs spatial hidden states (B, C, H, W)
         # with shape[-2:] = (8, 8) for image_size=128
         self.seq_length = 8
@@ -112,7 +103,7 @@ class UVDocModelTester:
         return config, pixel_values
 
     def get_config(self) -> UVDocConfig:
-        stage_configs = (
+        resnet_configs = (
             (
                 (8, 8, 1, False),
                 (8, 8, 3, False),
@@ -134,19 +125,93 @@ class UVDocModelTester:
             ),
         )
 
+        stage_configs = (
+            (
+                (
+                    32,
+                    32,
+                    1,
+                ),
+            ),
+            (
+                (
+                    32,
+                    32,
+                    2,
+                ),
+            ),
+            (
+                (
+                    32,
+                    32,
+                    5,
+                ),
+            ),
+            (
+                (
+                    32,
+                    32,
+                    8,
+                ),
+                (
+                    32,
+                    32,
+                    3,
+                ),
+                (
+                    32,
+                    32,
+                    2,
+                ),
+            ),
+            (
+                (
+                    32,
+                    32,
+                    12,
+                ),
+                (
+                    32,
+                    32,
+                    7,
+                ),
+                (
+                    32,
+                    32,
+                    4,
+                ),
+            ),
+            (
+                (
+                    32,
+                    32,
+                    18,
+                ),
+                (
+                    32,
+                    32,
+                    12,
+                ),
+                (
+                    32,
+                    32,
+                    6,
+                ),
+            ),
+        )
+
         return UVDocConfig(
-            num_hidden_layers=self.num_hidden_layers,
             kernel_size=self.kernel_size,
             padding_mode=self.padding_mode,
             hidden_act=self.hidden_act,
             bridge_in_channels=self.bridge_in_channels,
             stage_layer_num=self.stage_layer_num,
             resnet_head=self.resnet_head,
+            resnet_configs=resnet_configs,
             stage_configs=stage_configs,
             resnet_down=self.resnet_down,
             bridge_connector=self.bridge_connector,
             out_point_positions2D=self.out_point_positions2D,
-            dilation_values=self.dilation_values,
             out_features=self.out_features,
             out_indices=self.out_indices,
         )

@@ -32,36 +32,22 @@ from ...utils import auto_docstring
 @strict(accept_kwargs=True)
 class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate
-    a UVDoc model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the UVDoc
-    [PaddlePaddle/UVDoc_safetensors](https://huggingface.co/PaddlePaddle/UVDoc_safetensors) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        kernel_size (`int`, *optional*, defaults to 5):
-            Kernel size for convolutional layers in the backbone network.
-        resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
-            Configuration for the ResNet head layers in format [in_channels, out_channels].
-        resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
-            Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
-        stage_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
-            (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False),
-            (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
-            Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
-        bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
-            Configuration for the bridge connector in format [in_channels, out_channels].
-        out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
-            Configuration for the output point positions 2D layer in format [in_channels, out_channels].
-        dilation_values (`list[list[int]] | tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
-            Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
-            rates for a single bridge block.
-        padding_mode (`str`, *optional*, defaults to `"reflect"`):
-            Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
-        hidden_act (`str`, *optional*, defaults to `"prelu"`):
-            Activation function for hidden layers.
+    kernel_size (`int`, *optional*, defaults to 5):
+        Kernel size for convolutional layers in the backbone network.
+    resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
+        Configuration for the ResNet head layers in format [in_channels, out_channels].
+    resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
+        Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
+    resnet_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
+        (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False),
+        (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
+        Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
+    bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
+        Configuration for the bridge connector in format [in_channels, out_channels].
+    out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
+        Configuration for the output point positions 2D layer in format [in_channels, out_channels].
+    padding_mode (`str`, *optional*, defaults to `"reflect"`):
+        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     """
 
     model_type = "uvdoc"
@@ -77,7 +63,7 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         (32, 32),
     )
 
-    stage_configs: Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]] = (
+    resnet_configs: Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]] = (
         (
             (32, 32, 1, False),
             (32, 32, 3, False),
@@ -99,16 +85,83 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         ),
     )
 
+    stage_configs: Sequence[Sequence[tuple[int, ...] | list[int]]] = (
+        (
+            (
+                128,
+                128,
+                1,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                2,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                5,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                8,
+            ),
+            (
+                128,
+                128,
+                3,
+            ),
+            (
+                128,
+                128,
+                2,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                12,
+            ),
+            (
+                128,
+                128,
+                7,
+            ),
+            (
+                128,
+                128,
+                4,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                18,
+            ),
+            (
+                128,
+                128,
+                12,
+            ),
+            (
+                128,
+                128,
+                6,
+            ),
+        ),
+    )
+
     bridge_connector: list[int] | tuple[int, ...] = (128, 128)
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
-    dilation_values: list[list[int]] | tuple[tuple[int, ...], ...] = (
-        (1,),
-        (2,),
-        (5,),
-        (8, 3, 2),
-        (12, 7, 4),
-        (18, 12, 6),
-    )
     padding_mode: str = "reflect"
 
     def __post_init__(self, **kwargs):

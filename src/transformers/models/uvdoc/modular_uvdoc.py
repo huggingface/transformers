@@ -14,7 +14,6 @@
 
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -44,36 +43,22 @@ from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetP
 @strict(accept_kwargs=True)
 class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UVDocModel`]. It is used to instantiate
-    a UVDoc model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the UVDoc
-    [PaddlePaddle/UVDoc_safetensors](https://huggingface.co/PaddlePaddle/UVDoc_safetensors) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        kernel_size (`int`, *optional*, defaults to 5):
-            Kernel size for convolutional layers in the backbone network.
-        resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
-            Configuration for the ResNet head layers in format [in_channels, out_channels].
-        resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
-            Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
-        stage_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
-            (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False),
-            (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
-            Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
-        bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
-            Configuration for the bridge connector in format [in_channels, out_channels].
-        out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
-            Configuration for the output point positions 2D layer in format [in_channels, out_channels].
-        dilation_values (`list[list[int]] | tuple[tuple[int, ...], ...]`, *optional*, defaults to `((1,), (2,), (5,), (8, 3, 2), (12, 7, 4), (18, 12, 6))`):
-            Dilation rates for dilated convolutional layers in bridge modules. Each inner tuple/list contains dilation
-            rates for a single bridge block.
-        padding_mode (`str`, *optional*, defaults to `"reflect"`):
-            Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
-        hidden_act (`str`, *optional*, defaults to `"prelu"`):
-            Activation function for hidden layers.
+    kernel_size (`int`, *optional*, defaults to 5):
+        Kernel size for convolutional layers in the backbone network.
+    resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
+        Configuration for the ResNet head layers in format [in_channels, out_channels].
+    resnet_down (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((32, 32), (32, 64), (64, 128))`):
+        Configuration for the ResNet downsampling stages in format [in_channels, out_channels].
+    resnet_configs (`Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]]`, *optional*, defaults to `(((32, 32, 1, False),
+        (32, 32, 3, False), (32, 32, 3, False)), ((32, 64, 1, True), (64, 64, 3, False), (64, 64, 3, False), (64, 64, 3, False)), ((64, 128, 1, True), (128, 128, 3, False), (128, 128, 3, False),
+        (128, 128, 3, False), (128, 128, 3, False), (128, 128, 3, False)))`):
+        Configuration for the ResNet stages in format [in_channels, out_channels, dilation_value, downsample].
+    bridge_connector (`list[int] | tuple[int, ...]`, *optional*, defaults to `(128, 128)`):
+        Configuration for the bridge connector in format [in_channels, out_channels].
+    out_point_positions2D (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((128, 32), (32, 2))`):
+        Configuration for the output point positions 2D layer in format [in_channels, out_channels].
+    padding_mode (`str`, *optional*, defaults to `"reflect"`):
+        Padding mode for convolutional layers. Supported modes are `"reflect"`, `"constant"`, and `"replicate"`.
     """
 
     model_type = "uvdoc"
@@ -89,7 +74,7 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         (32, 32),
     )
 
-    stage_configs: Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]] = (
+    resnet_configs: Sequence[Sequence[tuple[int, int, int, bool] | list[int | bool]]] = (
         (
             (32, 32, 1, False),
             (32, 32, 3, False),
@@ -111,16 +96,83 @@ class UVDocConfig(BackboneConfigMixin, PreTrainedConfig):
         ),
     )
 
+    stage_configs: Sequence[Sequence[tuple[int, ...] | list[int]]] = (
+        (
+            (
+                128,
+                128,
+                1,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                2,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                5,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                8,
+            ),
+            (
+                128,
+                128,
+                3,
+            ),
+            (
+                128,
+                128,
+                2,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                12,
+            ),
+            (
+                128,
+                128,
+                7,
+            ),
+            (
+                128,
+                128,
+                4,
+            ),
+        ),
+        (
+            (
+                128,
+                128,
+                18,
+            ),
+            (
+                128,
+                128,
+                12,
+            ),
+            (
+                128,
+                128,
+                6,
+            ),
+        ),
+    )
+
     bridge_connector: list[int] | tuple[int, ...] = (128, 128)
     out_point_positions2D: Sequence[list[int] | tuple[int, ...]] = ((128, 32), (32, 2))
-    dilation_values: list[list[int]] | tuple[tuple[int, ...], ...] = (
-        (1,),
-        (2,),
-        (5,),
-        (8, 3, 2),
-        (12, 7, 4),
-        (18, 12, 6),
-    )
     padding_mode: str = "reflect"
 
     def __post_init__(self, **kwargs):
@@ -342,7 +394,7 @@ class UVDocResNetStage(nn.Module):
     def __init__(self, config, stage_index):
         super().__init__()
 
-        stages = config.stage_configs[stage_index]
+        stages = config.resnet_configs[stage_index]
         self.layers = nn.ModuleList([])
         for in_channels, out_channels, dilation, downsample in stages:
             layer = UVDocResidualBlock(
@@ -380,7 +432,7 @@ class UVDocResNet(nn.Module):
             )
 
         self.resnet_down = nn.ModuleList([])
-        for stage_index in range(len(config.stage_configs)):
+        for stage_index in range(len(config.resnet_configs)):
             stage = UVDocResNetStage(config, stage_index)
             self.resnet_down.append(stage)
 
@@ -395,13 +447,18 @@ class UVDocResNet(nn.Module):
 class UVDocBridgeBlock(GradientCheckpointingLayer):
     """Bridge module with dilated convolutions for long-range dependencies."""
 
-    def __init__(self, in_channels, dilation_values):
+    def __init__(self, config, bridge_index):
         super().__init__()
         self.blocks = nn.ModuleList([])
-        for dilation in dilation_values:
+        bridge = config.stage_configs[bridge_index]
+        for in_channels, out_channels, dilation in bridge:
             self.blocks.append(UVDocConvLayer(in_channels, in_channels, padding=dilation, dilation=dilation))
 
-    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         for block in self.blocks:
             hidden_states = block(hidden_states)
         return hidden_states
@@ -457,30 +514,20 @@ class UVDocBridge(UVDocPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.bridge = nn.ModuleList([])
-        for dilation_value in config.dilation_values:
-            self.bridge.append(UVDocBridgeBlock(config.bridge_in_channels, dilation_value))
+        for bridge_index in range(len(config.stage_configs)):
+            self.bridge.append(UVDocBridgeBlock(config, bridge_index))
         self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(self, hidden_states: torch.Tensor, **kwargs) -> torch.Tensor:
-        outputs = []
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         for layer in self.bridge:
-            output = layer(hidden_states)
-            outputs.append(output)
-        hidden_states = torch.cat(outputs, dim=1)
-
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
-
-
-@dataclass
-class UVDocBackboneOutput(BackboneOutput):
-    r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-    """
-
-    last_hidden_state: torch.FloatTensor | None = None
+            feature = layer(hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=feature)
 
 
 @auto_docstring(
@@ -510,28 +557,25 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        **kwargs,
-    ) -> UVDocBackboneOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
         kwargs["output_hidden_states"] = True
         hidden_states = self.resnet(pixel_values)
         outputs = self.bridge(hidden_states, **kwargs)
-
         feature_maps = ()
         for idx, stage in enumerate(self.stage_names):
             if stage in self.out_features:
                 feature_maps += (outputs.hidden_states[idx],)
-
-        return UVDocBackboneOutput(
+        return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states,
-            last_hidden_state=outputs.last_hidden_state,
         )
 
 
 class UVDocHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_bridge_layers = len(config.dilation_values)
+        self.num_bridge_layers = len(config.stage_configs)
 
         self.bridge_connector = UVDocConvLayer(
             in_channels=config.bridge_connector[0] * self.num_bridge_layers,
@@ -547,7 +591,7 @@ class UVDocHead(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.torch.Tensor:
         hidden_states = self.bridge_connector(hidden_states)
         hidden_states = self.out_point_positions2D(hidden_states)
@@ -575,12 +619,13 @@ class UVDocModel(UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
-        outputs = self.backbone(pixel_values, **kwargs)
-        head_outputs = self.head(outputs.last_hidden_state, **kwargs)
+        backbone_outputs = self.backbone(pixel_values, **kwargs)
+        fused_outputs = torch.cat(backbone_outputs.feature_maps, dim=1)
+        last_hidden_state = self.head(fused_outputs, **kwargs)
 
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=head_outputs,
-            hidden_states=outputs.hidden_states,
+            last_hidden_state=last_hidden_state,
+            hidden_states=backbone_outputs.hidden_states,
         )
 
 
