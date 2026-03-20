@@ -43,6 +43,8 @@ from .configuration_nemotron_h import NemotronHConfig
 
 logger = logging.get_logger(__name__)
 
+is_fast_path_available = False
+
 
 class NemotronHHybridDynamicCache(Zamba2HybridDynamicCache):
     def __init__(
@@ -307,7 +309,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        if hidden_states.device.type == "cuda" and and IS_USING_KERNEL_LIB and not is_torchdynamo_compiling():
+        if is_fast_path_available and hidden_states.device.type == "cuda" and not is_torchdynamo_compiling():
             # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
             # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
             # This leads to kernel reading uninitialized memory before the data transfer is complete.
