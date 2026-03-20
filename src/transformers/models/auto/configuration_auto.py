@@ -473,6 +473,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
+        ("uvdoc", "UVDocConfig"),
+        ("uvdoc_backbone", "UVDocBackboneConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -997,6 +999,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSat"),
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
+        ("uvdoc", "UVDoc"),
+        ("uvdoc_backbone", "UVDocBackbone"),
         ("vaultgemma", "VaultGemma"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -1137,6 +1141,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("wav2vec2-bert", "wav2vec2_bert"),
         ("vibevoice_acoustic_tokenizer_encoder", "vibevoice_acoustic_tokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "vibevoice_acoustic_tokenizer"),
+        ("uvdoc_backbone", "uvdoc"),
     ]
 )
 

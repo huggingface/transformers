@@ -415,6 +415,7 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .uvdoc import *
     from .vaultgemma import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
