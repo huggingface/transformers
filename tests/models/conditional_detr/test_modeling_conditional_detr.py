@@ -40,7 +40,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDetrImageProcessor
+    from transformers import ConditionalDetrImageProcessorPil
 
 
 class ConditionalDetrModelTester:
@@ -503,7 +503,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            ConditionalDetrImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
+            ConditionalDetrImageProcessorPil.from_pretrained("microsoft/conditional-detr-resnet-50")
             if is_vision_available()
             else None
         )

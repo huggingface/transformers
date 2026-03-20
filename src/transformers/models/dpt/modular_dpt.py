@@ -15,12 +15,12 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
 
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -28,19 +28,16 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    requires_backends,
-)
-from ..beit.image_processing_beit_fast import BeitImageProcessorFast
-from .image_processing_dpt import DPTImageProcessorKwargs
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ..beit.image_processing_beit import BeitImageProcessor
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-import torchvision.transforms.v2.functional as tvF
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 def get_resize_output_image_size(
@@ -82,8 +79,28 @@ def get_resize_output_image_size(
     return SizeDict(height=new_height, width=new_width)
 
 
+class DPTImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
+        by `ensure_multiple_of` in `preprocess`.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overridden by `keep_aspect_ratio` in `preprocess`.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
+    do_reduce_labels: bool
+
+
 @auto_docstring
-class DPTImageProcessorFast(BeitImageProcessorFast):
+class DPTImageProcessor(BeitImageProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -95,6 +112,8 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
     rescale_factor = 1 / 255
     ensure_multiple_of = 1
     keep_aspect_ratio = False
+
+    # necessary for modular conversion
     crop_size = None
     do_center_crop = None
     do_reduce_labels = None
@@ -105,7 +124,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         antialias: bool = True,
         ensure_multiple_of: int | None = 1,
         keep_aspect_ratio: bool = False,
@@ -139,9 +158,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
         )
-        return BaseImageProcessorFast.resize(
-            self, image, output_size, interpolation=interpolation, antialias=antialias
-        )
+        return TorchvisionBackend.resize(self, image, output_size, resample=resample, antialias=antialias)
 
     def pad_image(
         self,
@@ -177,7 +194,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -190,7 +207,6 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         do_pad: bool,
         size_divisor: int | None,
         disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if do_reduce_labels:
@@ -204,7 +220,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
                 stacked_images = self.resize(
                     image=stacked_images,
                     size=size,
-                    interpolation=interpolation,
+                    resample=resample,
                     ensure_multiple_of=ensure_multiple_of,
                     keep_aspect_ratio=keep_aspect_ratio,
                 )
@@ -227,7 +243,8 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+
+        return processed_images
 
     def post_process_depth_estimation(
         self,
@@ -271,4 +288,4 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         return results
 
 
-__all__ = ["DPTImageProcessorFast"]
+__all__ = ["DPTImageProcessor"]

@@ -90,7 +90,7 @@ class NemotronHConfig(PreTrainedConfig):
     num_logits_to_keep: int = 1
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     num_attention_heads: int = 32
     num_key_value_heads: int = 8
     head_dim: int = 128

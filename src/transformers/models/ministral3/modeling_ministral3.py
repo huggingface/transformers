@@ -104,7 +104,7 @@ def eager_attention_forward(
 
 def get_llama_4_attn_scale(positions_ids: torch.Tensor, beta: float, max_position_embeddings: int) -> torch.Tensor:
     scaling = 1 + beta * torch.log(1 + torch.floor(positions_ids / max_position_embeddings))
-    return scaling.unsqueeze(-1)
+    return scaling[:, None, :, None]
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -130,6 +130,7 @@ class Ministral3Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
+        position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -142,10 +143,8 @@ class Ministral3Attention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        cache_position = torch.arange(query_states.shape[2], device=query_states.device) + past_seen_tokens
         query_states = query_states * get_llama_4_attn_scale(
-            cache_position,
+            position_ids,
             self.config.rope_parameters.get("llama_4_scaling_beta"),
             self.config.rope_parameters.get("original_max_position_embeddings"),
         ).to(query_states.dtype)

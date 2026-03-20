@@ -321,6 +321,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_chart2table import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
     from .pp_lcnet import *

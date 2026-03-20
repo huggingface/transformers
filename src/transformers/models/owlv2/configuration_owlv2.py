@@ -58,7 +58,7 @@ class Owlv2TextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 0
     bos_token_id: int | None = 49406
-    eos_token_id: int | None = 49407
+    eos_token_id: int | list[int] | None = 49407
 
 
 @strict(accept_kwargs=True)
