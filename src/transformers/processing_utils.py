@@ -1643,6 +1643,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
+        return_tensors: str | TensorType | None = None,
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
@@ -1854,6 +1855,7 @@ class ProcessorMixin(PushToHubMixin):
                 images=batch_images if images_exist else None,
                 videos=batch_videos if videos_exist else None,
                 audio=batch_audios if batch_audios else None,
+                return_tensors=return_tensors,
                 **processor_kwargs,
             )
 
@@ -1884,7 +1886,7 @@ class ProcessorMixin(PushToHubMixin):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
-                    out.convert_to_tensors(tensor_type=processor_kwargs.get("return_tensors"))
+                    out.convert_to_tensors(tensor_type=return_tensors)
                 return out
             else:
                 return out["input_ids"]
