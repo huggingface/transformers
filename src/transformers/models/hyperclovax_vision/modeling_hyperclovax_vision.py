@@ -572,7 +572,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor,
+        video_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -596,7 +596,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor,
+        image_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""

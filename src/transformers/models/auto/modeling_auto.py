@@ -219,7 +219,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
         ("hyperclovax", "HyperClovaXModel"),
-        ("hyperclovax_vlm", "HCXVisionForConditionalGeneration"),
+        ("hyperclovax_vlm", "HCXVisionModel"),
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),
         ("idefics2", "Idefics2Model"),
