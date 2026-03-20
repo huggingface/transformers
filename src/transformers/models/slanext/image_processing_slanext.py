@@ -19,8 +19,6 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 import torchvision.transforms.v2.functional as tvF
 
@@ -52,7 +50,6 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
     ) -> "torch.Tensor":
         batch_size, channels, height, width = image.shape
         image = image.view(batch_size * channels, height, width)
@@ -120,7 +117,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -134,12 +131,15 @@ class SLANeXtImageProcessor(TorchvisionBackend):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
+        if resample is not None:
+            raise ValueError("Resampling is not supported in SLANeXt!")
+
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self._resize(image=stacked_images, size=size, interpolation=interpolation)
+                stacked_images = self._resize(image=stacked_images, size=size)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
