@@ -93,6 +93,10 @@ print(result)
 
 [[autodoc]] UVDocConfig
 
+## UVDocBackboneConfig
+
+[[autodoc]] UVDocBackboneConfig
+
 ## UVDocModel
 
 [[autodoc]] UVDocModel
