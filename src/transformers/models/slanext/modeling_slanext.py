@@ -636,4 +636,4 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
         )
 
 
-__all__ = ["SLANeXtForTableRecognition", "SLANeXtPreTrainedModel"]
+__all__ = ["SLANeXtSLAHead", "SLANeXtForTableRecognition", "SLANeXtPreTrainedModel"]

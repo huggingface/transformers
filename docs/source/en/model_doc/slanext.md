@@ -61,14 +61,17 @@ print(result['structure_score'])
 </hfoption>
 </hfoptions>
 
+## SLANeXtConfig
+
+[[autodoc]] SLANeXtConfig
 
 ## SLANeXtForTableRecognition
 
 [[autodoc]] SLANeXtForTableRecognition
 
-## SLANeXtConfig
+## SLANeXtSLAHead
 
-[[autodoc]] SLANeXtConfig
+[[autodoc]] SLANeXtSLAHead
 
 ## SLANeXtImageProcessorFast
 

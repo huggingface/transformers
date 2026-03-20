@@ -529,6 +529,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
 __all__ = [
     "SLANeXtImageProcessor",
     "SLANeXtConfig",
+    "SLANeXtSLAHead",
     "SLANeXtForTableRecognition",
     "SLANeXtPreTrainedModel",
 ]
