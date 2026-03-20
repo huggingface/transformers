@@ -39,15 +39,15 @@ This is exactly the reason that pure code agent PRs are unhelpful to us, though 
 and generate a PR, you are acting as a pointless middleman between maintainers and the agent. There's no reason
 for you to be involved; we could simply run a code agent ourselves and save time.
 
-If you want to contribute usefully, you need to provide value beyond what an agent can do on its own. In particular,
+If you want to contribute usefully, **you need to do things that agents can't do on their own**. In particular,
 we've found the following to be very helpful:
 - Clear diagnosis of bugs. Code agents like to quickly fix problems with a workaround that often causes code bloat
 or incompatibilities with other models. Spending time to track down the exact cause of a problem, and in particular
 locating the first commit where it appeared (for example with [git bisect](https://git-scm.com/docs/git-bisect)) is valuable.
 - Minimize the diff. Check your PR to eliminate any unnecessary changes. Add comments only if they're really necessary;
-code agents love multi-line comments to draw attention to all the hard work they did. If your PR can be a 1-line fix,
+code agents love adding three new functions and multi-line comments to draw attention to all the hard work they did. If your PR can be a 1-line fix,
 make it a 1-line fix. This makes the PR much easier to review and improves the chances that it will be accepted.
-- Taking the time to reproduce the problem. Very often when a user reports an issue, the issue is actually caused by
+- Take the time to reproduce the problem. Very often when a user reports an issue, the issue is actually caused by
 environment issues on their machine, or they misdiagnose the problem and suggest an invalid solution. Many code agents
 trust the user comments too much, which results in bad solutions, sometimes for problems that 
 do not exist! Writing a simple reproducer script and running it to make sure you see the problem is valuable.
