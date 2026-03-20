@@ -135,8 +135,8 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
     # TODO: check
-    #@unittest.skip(reason="SLANeXt does not support attention")
-    #def test_retain_grad_hidden_states_attentions(self):
+    # @unittest.skip(reason="SLANeXt does not support attention")
+    # def test_retain_grad_hidden_states_attentions(self):
     #    pass
 
     @unittest.skip(reason="SLANeXt does not support train")
