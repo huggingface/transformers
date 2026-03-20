@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import math
 
 import torch
@@ -130,6 +129,22 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
         )
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+
+    def forward(
+        self,
+        hidden_states,
+        cache_params: Zamba2HybridDynamicCache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ):
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
+            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
+            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
+            # This leads to kernel reading uninitialized memory before the data transfer is complete.
+            with torch.cuda.stream(torch.cuda.default_stream(hidden_states.device)):
+                return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+
+        return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
 class NemotronHRMSNorm(LlamaRMSNorm):
@@ -309,34 +324,26 @@ class NemotronHBlock(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        if is_fast_path_available and hidden_states.device.type == "cuda" and not is_torchdynamo_compiling():
-            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
-            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
-            # This leads to kernel reading uninitialized memory before the data transfer is complete.
-            stream_context = torch.cuda.stream(torch.cuda.default_stream(hidden_states.device))
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+
+        if self.block_type == "mamba":
+            hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
+        elif self.block_type == "attention":
+            hidden_states, _ = self.mixer(
+                hidden_states=hidden_states,
+                past_key_values=past_key_values,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                user_cache=use_cache,
+                **kwargs,
+            )
         else:
-            stream_context = contextlib.nullcontext()
+            hidden_states = self.mixer(hidden_states)
 
-        with stream_context:
-            residual = hidden_states
-            hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+        hidden_states = residual + hidden_states
 
-            if self.block_type == "mamba":
-                hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-            elif self.block_type == "attention":
-                hidden_states, _ = self.mixer(
-                    hidden_states=hidden_states,
-                    past_key_values=past_key_values,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    user_cache=use_cache,
-                    **kwargs,
-                )
-            else:
-                hidden_states = self.mixer(hidden_states)
-
-            hidden_states = residual + hidden_states
-            return hidden_states
+        return hidden_states
 
 
 class NemotronHPreTrainedModel(PreTrainedModel):
