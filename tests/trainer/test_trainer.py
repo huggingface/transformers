@@ -2823,6 +2823,139 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
+    def test_compute_metrics_logits_not_tuple_for_causal_lm_eval_on_start(self):
+        config = LlamaConfig(
+            vocab_size=100,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=64,
+        )
+        tiny_llama = LlamaForCausalLM(config)
+
+        sample = torch.randint(0, config.vocab_size, (16,))
+        train_dataset = RepeatDataset(sample, length=8)
+        eval_dataset = RepeatDataset(sample, length=18)
+        seen_logits_types = []
+
+        def compute_metrics(eval_pred):
+            logits, labels = eval_pred
+            seen_logits_types.append(type(logits))
+            self.assertFalse(isinstance(logits, tuple))
+            predictions = np.argmax(logits, axis=-1)
+            return {"accuracy": float((predictions == labels).mean())}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                eval_on_start=True,
+                max_steps=1,
+                per_device_train_batch_size=2,
+                per_device_eval_batch_size=4,
+                report_to="none",
+            )
+            trainer = Trainer(
+                model=tiny_llama,
+                args=args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                compute_metrics=compute_metrics,
+            )
+            trainer.train()
+
+        self.assertGreater(len(seen_logits_types), 0)
+
+    def test_compute_metrics_logits_not_tuple_for_causal_lm_predict(self):
+        config = LlamaConfig(
+            vocab_size=100,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=64,
+        )
+        tiny_llama = LlamaForCausalLM(config)
+
+        sample = torch.randint(0, config.vocab_size, (16,))
+        train_dataset = RepeatDataset(sample, length=8)
+        eval_dataset = RepeatDataset(sample, length=18)
+        seen_logits_types = []
+
+        def compute_metrics(eval_pred):
+            logits, labels = eval_pred
+            seen_logits_types.append(type(logits))
+            self.assertFalse(isinstance(logits, tuple))
+            predictions = np.argmax(logits, axis=-1)
+            return {"accuracy": float((predictions == labels).mean())}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=1,
+                per_device_train_batch_size=2,
+                per_device_eval_batch_size=4,
+                report_to="none",
+            )
+            trainer = Trainer(
+                model=tiny_llama,
+                args=args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                compute_metrics=compute_metrics,
+            )
+            trainer.train()
+            _ = trainer.predict(eval_dataset)
+
+        self.assertGreater(len(seen_logits_types), 0)
+
+    def test_compute_metrics_with_preprocess_logits_for_metrics_for_causal_lm(self):
+        config = LlamaConfig(
+            vocab_size=100,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=64,
+        )
+        tiny_llama = LlamaForCausalLM(config)
+
+        sample = torch.randint(0, config.vocab_size, (16,))
+        train_dataset = RepeatDataset(sample, length=8)
+        eval_dataset = RepeatDataset(sample, length=18)
+        seen_logits_types = []
+        preprocess_calls = []
+
+        def preprocess_logits_for_metrics(logits, labels):
+            preprocess_calls.append(True)
+            return logits[0] if isinstance(logits, tuple) else logits
+
+        def compute_metrics(eval_pred):
+            logits, labels = eval_pred
+            seen_logits_types.append(type(logits))
+            self.assertFalse(isinstance(logits, tuple))
+            predictions = np.argmax(logits, axis=-1)
+            return {"accuracy": float((predictions == labels).mean())}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                eval_on_start=True,
+                max_steps=1,
+                per_device_train_batch_size=2,
+                per_device_eval_batch_size=4,
+                report_to="none",
+            )
+            trainer = Trainer(
+                model=tiny_llama,
+                args=args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                compute_metrics=compute_metrics,
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+            )
+            trainer.train()
+
+        self.assertGreater(len(seen_logits_types), 0)
+        self.assertGreater(len(preprocess_calls), 0)
+
     def test_evaluate_with_batch_eval_metrics(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
