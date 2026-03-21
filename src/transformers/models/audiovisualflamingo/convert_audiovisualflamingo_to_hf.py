@@ -45,8 +45,6 @@ from transformers import (
     WhisperFeatureExtractor,
 )
 
-from .utils_audiovisualflamingo import collect_encoder_boundary_tokens
-
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -199,6 +197,40 @@ def _collect_component_state(src_root: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Config construction
 # ---------------------------------------------------------------------------
+
+
+def collect_encoder_boundary_tokens(config: AudioVisualFlamingoConfig) -> list[str]:
+    token_keys = {"start_tokens", "end_tokens", "sep_tokens"}
+    collected: list[str] = []
+    seen: set[str] = set()
+
+    def _maybe_add(token):
+        if not isinstance(token, str) or token == "None" or token in seen:
+            return
+        seen.add(token)
+        collected.append(token)
+
+    def _visit(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in token_keys:
+                    _maybe_add(value)
+                _visit(value)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _visit(item)
+
+    _maybe_add("\n")
+    for attr in ("image_encoder", "video_encoder", "sound_encoder"):
+        encoder_cfg = getattr(config, attr, None)
+        if isinstance(encoder_cfg, str):
+            try:
+                encoder_cfg = json.loads(encoder_cfg)
+            except Exception:
+                continue
+        _visit(encoder_cfg)
+    return collected
+
 
 def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
     """Build an AudioVisualFlamingoConfig programmatically from the source checkpoint."""

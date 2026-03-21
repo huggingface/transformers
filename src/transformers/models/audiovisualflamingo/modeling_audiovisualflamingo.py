@@ -17,13 +17,15 @@ import copy
 import math
 import warnings
 from collections import defaultdict, deque
-from typing import Any
+from math import pi
+from typing import Any, Literal
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
+from torch import Tensor, broadcast_tensors, einsum
 
 from transformers import (
     PretrainedConfig,
@@ -42,13 +44,311 @@ from transformers.models.siglip.modeling_siglip import SiglipVisionModel
 from transformers.utils import ModelOutput
 
 from .configuration_audiovisualflamingo import IGNORE_INDEX, AudioVisualFlamingoConfig
-from .media_encoder import (
-    MaxTimeContinuousTimeRotaryEmbedding,
-    RotaryEmbedding,
-    _move_rotary_module_to_device,
-    apply_rotary_emb,
-    pool,
-)
+
+
+def _exists(val):
+    return val is not None
+
+
+def _default(val, d):
+    return val if _exists(val) else d
+
+
+def pool(x: torch.Tensor, size: int, dim: int) -> torch.Tensor:
+    if x.shape[dim] % size != 0:
+        print(
+            f"Warning: dimension {dim} with size {x.shape[dim]} is not divisible by pool size {size}, padding with mean values"
+        )
+        remainder = x.shape[dim] % size
+        pad_len = size - remainder
+        last_elements = x.narrow(dim, x.shape[dim] - remainder, remainder)
+        mean_value = last_elements.mean()
+        pad_shape = list(x.shape)
+        pad_shape[dim] = pad_len
+        padding = torch.ones(pad_shape, device=x.device, dtype=x.dtype) * mean_value
+        x = torch.cat([x, padding], dim=dim)
+
+    shape_before = x.shape[:dim]
+    shape_after = x.shape[dim + 1 :]
+    new_shape = shape_before + (-1, size) + shape_after
+    return x.view(new_shape).mean(dim + 1)
+
+
+def _rotate_half(x):
+    x = rearrange(x, "... (d r) -> ... d r", r=2)
+    x1, x2 = x.unbind(dim=-1)
+    x = torch.stack((-x2, x1), dim=-1)
+    return rearrange(x, "... d r -> ... (d r)")
+
+
+def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
+    with torch.amp.autocast(device_type="cuda", enabled=False):
+        ori_dtype = t.dtype
+        embed_dtype = torch.float64
+        t = t.to(embed_dtype)
+        if t.ndim == 3:
+            seq_len = t.shape[seq_dim]
+            freqs = freqs[-seq_len:].to(t)
+
+        rot_dim = freqs.shape[-1]
+        end_index = start_index + rot_dim
+
+        assert rot_dim <= t.shape[-1], (
+            f"feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
+        )
+
+        t_left, t, t_right = t[..., :start_index], t[..., start_index:end_index], t[..., end_index:]
+        t = (t * freqs.cos() * scale) + (_rotate_half(t) * freqs.sin() * scale)
+    return torch.cat((t_left, t, t_right), dim=-1).to(ori_dtype)
+
+
+class MaxTimeContinuousTimeRotaryEmbedding(nn.Module):
+    def __init__(self, dim, max_time, period_mode="shortest", device=None):
+        super().__init__()
+        del device
+        assert dim % 2 == 0, "RoPE embedding dimension must be even"
+
+        self.dim = dim
+        self.max_time = max_time
+        self.period_mode = period_mode
+
+        if period_mode == "shortest":
+            base = 5
+            inv_freq = 2 * math.pi / (max_time * (base ** (torch.arange(0, dim // 2).float() / (dim // 2))))
+        elif period_mode == "longest":
+            theta = max_time ** ((dim // 2) / (dim // 2 - 1))
+            inv_freq = 2 * math.pi / (theta ** (torch.arange(0, dim // 2).float() / (dim // 2)))
+        else:
+            raise ValueError(f"Invalid period mode: {period_mode}")
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, time_values: torch.Tensor):
+        time_values_exp = time_values[:, None, :]
+        freqs = (self.inv_freq[None, :, None] @ time_values_exp).transpose(1, 2)
+        return freqs
+
+    def get_axial_freqs(self, *dims):
+        colon = slice(None)
+        all_freqs = []
+
+        for ind, dim in enumerate(dims):
+            pos = torch.arange(dim, device=self.device)
+            freqs = self.forward(pos, seq_len=dim)
+            all_axis = [None] * len(dims)
+            all_axis[ind] = colon
+            new_axis_slice = (Ellipsis, *all_axis, colon)
+            all_freqs.append(freqs[new_axis_slice])
+
+        all_freqs = broadcast_tensors(*all_freqs)
+        return torch.cat(all_freqs, dim=-1)
+
+
+class RotaryEmbedding(nn.Module):
+    def __init__(
+        self,
+        dim,
+        custom_freqs: Tensor | None = None,
+        freqs_for: Literal["lang", "pixel", "constant"] = "lang",
+        theta=10000,
+        max_freq=10,
+        num_freqs=1,
+        learned_freq=False,
+        use_xpos=False,
+        xpos_scale_base=512,
+        interpolate_factor=1.0,
+        theta_rescale_factor=1.0,
+        seq_before_head_dim=False,
+        cache_if_possible=True,
+        max_time=None,
+    ):
+        super().__init__()
+
+        self.dim = dim
+        self.freqs_for = freqs_for
+        self.max_freq = max_freq
+        self.num_freqs = num_freqs
+        self.learned_freq = learned_freq
+        self.use_xpos = use_xpos
+        self.xpos_scale_base = xpos_scale_base
+        self.interpolate_factor = interpolate_factor
+        self.theta_rescale_factor = theta_rescale_factor
+        self.cache_if_possible = cache_if_possible
+        self.max_time = max_time
+
+        self._tmp_store("cached_freqs", None)
+        self._tmp_store("cached_scales", None)
+
+        if _exists(max_time) and freqs_for == "lang":
+            theta = max_time / (2 * pi)
+
+        theta *= theta_rescale_factor ** (dim / (dim - 2))
+        self.theta = theta
+
+        if _exists(custom_freqs):
+            freqs = custom_freqs
+        elif freqs_for == "lang":
+            freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+        elif freqs_for == "pixel":
+            freqs = torch.linspace(1.0, max_freq / 2, dim // 2) * pi
+        elif freqs_for == "constant":
+            freqs = torch.ones(num_freqs).float()
+
+        self.freqs = nn.Parameter(freqs, requires_grad=learned_freq)
+        self.learned_freq = learned_freq
+        self._tmp_store("dummy", torch.tensor(0))
+        self.seq_before_head_dim = seq_before_head_dim
+        self.default_seq_dim = -3 if seq_before_head_dim else -2
+        assert interpolate_factor >= 1.0
+        self.interpolate_factor = interpolate_factor
+
+        if not use_xpos:
+            self._tmp_store("scale", None)
+            return
+
+        scale = (torch.arange(0, dim, 2) + 0.4 * dim) / (1.4 * dim)
+        self.scale_base = xpos_scale_base
+        self._tmp_store("scale", scale)
+        self.apply_rotary_emb = staticmethod(apply_rotary_emb)
+
+    @property
+    def device(self):
+        return self.dummy.device
+
+    def _tmp_store(self, key, value):
+        self.register_buffer(key, value, persistent=False)
+
+    def get_seq_pos(self, seq_len, device, dtype, offset=0):
+        return (torch.arange(seq_len, device=device, dtype=dtype) + offset) / self.interpolate_factor
+
+    def rotate_queries_or_keys(self, t, seq_dim=None, offset=0):
+        seq_dim = _default(seq_dim, self.default_seq_dim)
+        assert not self.use_xpos, (
+            "you must use `.rotate_queries_and_keys` method instead and pass in both queries and keys, for length extrapolatable rotary embeddings"
+        )
+
+        device, dtype, seq_len = t.device, t.dtype, t.shape[seq_dim]
+        freqs = self.forward(
+            self.get_seq_pos(seq_len, device=device, dtype=dtype, offset=offset), seq_len=seq_len, offset=offset
+        )
+
+        if seq_dim == -3:
+            freqs = rearrange(freqs, "n d -> n 1 d")
+
+        return apply_rotary_emb(freqs, t, seq_dim=seq_dim)
+
+    def rotate_queries_with_cached_keys(self, q, k, seq_dim=None, offset=0):
+        seq_dim = _default(seq_dim, self.default_seq_dim)
+        q_len, k_len = q.shape[seq_dim], k.shape[seq_dim]
+        assert q_len <= k_len
+
+        rotated_q = self.rotate_queries_or_keys(q, seq_dim=seq_dim, offset=k_len - q_len + offset)
+        rotated_k = self.rotate_queries_or_keys(k, seq_dim=seq_dim, offset=offset)
+        return rotated_q.type(q.dtype), rotated_k.type(k.dtype)
+
+    def rotate_queries_and_keys(self, q, k, seq_dim=None):
+        seq_dim = _default(seq_dim, self.default_seq_dim)
+        assert self.use_xpos
+        device, dtype, seq_len = q.device, q.dtype, q.shape[seq_dim]
+
+        seq = self.get_seq_pos(seq_len, dtype=dtype, device=device)
+        freqs = self.forward(seq, seq_len=seq_len)
+        scale = self.get_scale(seq, seq_len=seq_len).to(dtype)
+
+        if seq_dim == -3:
+            freqs = rearrange(freqs, "n d -> n 1 d")
+            scale = rearrange(scale, "n d -> n 1 d")
+
+        rotated_q = apply_rotary_emb(freqs, q, scale=scale, seq_dim=seq_dim)
+        rotated_k = apply_rotary_emb(freqs, k, scale=scale**-1, seq_dim=seq_dim)
+        return rotated_q.type(q.dtype), rotated_k.type(k.dtype)
+
+    def get_scale(self, t: Tensor, seq_len: int | None = None, offset=0):
+        assert self.use_xpos
+
+        should_cache = self.cache_if_possible and _exists(seq_len)
+        if should_cache and _exists(self.cached_scales) and (seq_len + offset) <= self.cached_scales.shape[0]:
+            return self.cached_scales[offset : (offset + seq_len)]
+
+        scale = 1.0
+        if self.use_xpos:
+            power = (t - len(t) // 2) / self.scale_base
+            scale = self.scale ** rearrange(power, "n -> n 1")
+            scale = torch.cat((scale, scale), dim=-1)
+
+        if should_cache:
+            self._tmp_store("cached_scales", scale)
+        return scale
+
+    def get_axial_freqs(self, *dims):
+        colon = slice(None)
+        all_freqs = []
+
+        for ind, dim in enumerate(dims):
+            if self.freqs_for == "pixel":
+                pos = torch.linspace(-1, 1, steps=dim, device=self.device)
+            else:
+                pos = torch.arange(dim, device=self.device)
+
+            freqs = self.forward(pos, seq_len=dim)
+            all_axis = [None] * len(dims)
+            all_axis[ind] = colon
+            new_axis_slice = (Ellipsis, *all_axis, colon)
+            all_freqs.append(freqs[new_axis_slice])
+
+        all_freqs = broadcast_tensors(*all_freqs)
+        return torch.cat(all_freqs, dim=-1)
+
+    def forward(self, t: Tensor, seq_len=None, offset=0):
+        should_cache = (
+            self.cache_if_possible and not self.learned_freq and _exists(seq_len) and self.freqs_for != "pixel"
+        )
+        if should_cache and _exists(self.cached_freqs) and (offset + seq_len) <= self.cached_freqs.shape[0]:
+            return self.cached_freqs[offset : (offset + seq_len)].detach()
+
+        freqs = self.freqs
+        if self.max_time is not None:
+            t = t / self.max_time * (2 * pi)
+
+        freqs = einsum("..., f -> ... f", t.type(freqs.dtype), freqs)
+        freqs = repeat(freqs, "... n -> ... (n r)", r=2)
+
+        if should_cache:
+            self._tmp_store("cached_freqs", freqs.detach())
+        return freqs
+
+
+def _move_rotary_module_to_device(module: nn.Module, device: torch.device) -> nn.Module:
+    try:
+        return module.to(device)
+    except NotImplementedError as exc:
+        if "meta tensor" not in str(exc).lower():
+            raise
+
+    if isinstance(module, MaxTimeContinuousTimeRotaryEmbedding):
+        return MaxTimeContinuousTimeRotaryEmbedding(
+            dim=module.dim,
+            max_time=module.max_time,
+            period_mode=module.period_mode,
+        ).to(device)
+
+    if isinstance(module, RotaryEmbedding):
+        return RotaryEmbedding(
+            dim=module.dim,
+            freqs_for=module.freqs_for,
+            theta=module.theta,
+            max_freq=module.max_freq,
+            num_freqs=module.num_freqs,
+            learned_freq=module.learned_freq,
+            use_xpos=module.use_xpos,
+            xpos_scale_base=module.xpos_scale_base,
+            interpolate_factor=module.interpolate_factor,
+            theta_rescale_factor=1.0,
+            seq_before_head_dim=module.seq_before_head_dim,
+            cache_if_possible=module.cache_if_possible,
+            max_time=module.max_time,
+        ).to(device)
+
+    raise TypeError(f"Unsupported rotary module type for meta materialization: {type(module)}")
 
 
 def context_length_extension(config):
