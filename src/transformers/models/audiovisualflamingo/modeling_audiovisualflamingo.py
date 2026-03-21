@@ -24,7 +24,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
 from torch import Tensor, broadcast_tensors, einsum
 
 from transformers import (
@@ -74,11 +73,35 @@ def pool(x: torch.Tensor, size: int, dim: int) -> torch.Tensor:
     return x.view(new_shape).mean(dim + 1)
 
 
+def _split_last_dim_pairs(x: torch.Tensor) -> torch.Tensor:
+    return x.reshape(*x.shape[:-1], -1, 2)
+
+
+def _flatten_last_two_dims(x: torch.Tensor) -> torch.Tensor:
+    return x.reshape(*x.shape[:-2], -1)
+
+
+def _tokens_to_channel_first(x: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    batch_dims = x.shape[:-2]
+    channels = x.shape[-1]
+    x = x.reshape(*batch_dims, height, width, channels)
+    permute_dims = (*range(len(batch_dims)), len(batch_dims) + 2, len(batch_dims), len(batch_dims) + 1)
+    return x.permute(*permute_dims)
+
+
+def _channel_first_to_tokens(x: torch.Tensor) -> torch.Tensor:
+    batch_dims = x.shape[:-3]
+    channels, height, width = x.shape[-3:]
+    permute_dims = (*range(len(batch_dims)), len(batch_dims) + 1, len(batch_dims) + 2, len(batch_dims))
+    x = x.permute(*permute_dims)
+    return x.reshape(*batch_dims, height * width, channels)
+
+
 def _rotate_half(x):
-    x = rearrange(x, "... (d r) -> ... d r", r=2)
+    x = _split_last_dim_pairs(x)
     x1, x2 = x.unbind(dim=-1)
     x = torch.stack((-x2, x1), dim=-1)
-    return rearrange(x, "... d r -> ... (d r)")
+    return _flatten_last_two_dims(x)
 
 
 def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
@@ -232,7 +255,7 @@ class RotaryEmbedding(nn.Module):
         )
 
         if seq_dim == -3:
-            freqs = rearrange(freqs, "n d -> n 1 d")
+            freqs = freqs.unsqueeze(1)
 
         return apply_rotary_emb(freqs, t, seq_dim=seq_dim)
 
@@ -255,8 +278,8 @@ class RotaryEmbedding(nn.Module):
         scale = self.get_scale(seq, seq_len=seq_len).to(dtype)
 
         if seq_dim == -3:
-            freqs = rearrange(freqs, "n d -> n 1 d")
-            scale = rearrange(scale, "n d -> n 1 d")
+            freqs = freqs.unsqueeze(1)
+            scale = scale.unsqueeze(1)
 
         rotated_q = apply_rotary_emb(freqs, q, scale=scale, seq_dim=seq_dim)
         rotated_k = apply_rotary_emb(freqs, k, scale=scale**-1, seq_dim=seq_dim)
@@ -272,7 +295,7 @@ class RotaryEmbedding(nn.Module):
         scale = 1.0
         if self.use_xpos:
             power = (t - len(t) // 2) / self.scale_base
-            scale = self.scale ** rearrange(power, "n -> n 1")
+            scale = self.scale ** power.unsqueeze(-1)
             scale = torch.cat((scale, scale), dim=-1)
 
         if should_cache:
@@ -310,7 +333,7 @@ class RotaryEmbedding(nn.Module):
             t = t / self.max_time * (2 * pi)
 
         freqs = einsum("..., f -> ... f", t.type(freqs.dtype), freqs)
-        freqs = repeat(freqs, "... n -> ... (n r)", r=2)
+        freqs = freqs.repeat_interleave(2, dim=-1)
 
         if should_cache:
             self._tmp_store("cached_freqs", freqs.detach())
@@ -796,7 +819,8 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         for block_size_each_image in block_sizes:
             if block_size_each_image is None:
                 cur_features = image_features[block_cnt : block_cnt + 1]
-                cur_features = rearrange(cur_features, "1 (h w) c -> 1 c h w", h=int(cur_features.shape[1] ** 0.5))
+                spatial_size = int(cur_features.shape[1] ** 0.5)
+                cur_features = _tokens_to_channel_first(cur_features, spatial_size, spatial_size)
                 cur_features = cur_features.repeat(1, len(scales), 1, 1)
                 image_features_each_image.append(cur_features)
                 new_block_sizes.append((1, 1))
@@ -881,7 +905,8 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         B = x.shape[0]
         if x.dim() == 3:
             N = x.shape[1]
-            x = rearrange(x, "b (h w) c -> b c h w", h=int(N**0.5), w=int(N**0.5))
+            spatial_size = int(N**0.5)
+            x = _tokens_to_channel_first(x, spatial_size, spatial_size)
 
         assert B % (num_split_h * num_split_w) == 0
         b = B // (num_split_h * num_split_w)
@@ -927,9 +952,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 self.split_chessboard(x, block_size[0], block_size[1])
                 for x, block_size in zip(image_features, new_block_sizes)
             ]  # list of B * C * H * W tensors
-            image_features = torch.cat(
-                [rearrange(x, "b c h w -> b (h w) c") for x in image_features], dim=0
-            )  # B * N * C
+            image_features = torch.cat([_channel_first_to_tokens(x) for x in image_features], dim=0)  # B * N * C
         else:
             image_features = []
 
@@ -946,7 +969,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             self.merge_chessboard(x, block_size[0], block_size[1])
             for x, block_size in zip(image_features, new_block_sizes)
         ]  # list of 1 * C * H * W tensors
-        image_features = [rearrange(x, "1 c h w -> (h w) c") for x in image_features]  # list of N * C tensors
+        image_features = [_channel_first_to_tokens(x)[0] for x in image_features]  # list of N * C tensors
         if all(feature.shape[0] == image_features[0].shape[0] for feature in image_features):
             image_features = torch.stack(image_features, dim=0)
         return image_features
@@ -973,7 +996,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             self.split_chessboard(x, block_size[0], block_size[1])
             for x, block_size in zip(image_features, new_block_sizes)
         ]  # list of B * C * H * W tensors
-        image_features = torch.cat([rearrange(x, "b c h w -> b (h w) c") for x in image_features], dim=0)  # B * N * C
+        image_features = torch.cat([_channel_first_to_tokens(x) for x in image_features], dim=0)  # B * N * C
 
         image_features = self.mm_projector(image_features)
         image_features = list(
@@ -983,7 +1006,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             self.merge_chessboard(x, block_size[0], block_size[1])
             for x, block_size in zip(image_features, new_block_sizes)
         ]  # list of 1 * C * H * W tensors
-        image_features = [rearrange(x, "1 c h w -> (h w) c") for x in image_features]  # list of N * C tensors
+        image_features = [_channel_first_to_tokens(x)[0] for x in image_features]  # list of N * C tensors
         if all(feature.shape[0] == image_features[0].shape[0] for feature in image_features):
             image_features = torch.stack(image_features, dim=0)
         return image_features

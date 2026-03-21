@@ -54,7 +54,6 @@ _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE = (
 )
 
 _VIDEO_METADATA_KEYS = {"fps", "frames_indices", "total_num_frames", "video_path", "video_url"}
-_VIDEO_CONTAINER_EXTENSIONS = (".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi")
 
 def _looks_like_video_metadata(meta) -> bool:
     if meta is None:
@@ -325,11 +324,36 @@ def _extract_sound_features(
     return new_media
 
 
-def _load_audio_from_video_container(audio_path: str, sampling_rate: int) -> np.ndarray:
-    from decord import AudioReader, cpu
+def _load_audio_track_with_pyav(audio_path: str, sampling_rate: int) -> np.ndarray:
+    import av
 
-    audio_reader = AudioReader(audio_path, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
-    return audio_reader[:].asnumpy()[0].astype(np.float32, copy=False)
+    with av.open(audio_path) as container:
+        if not container.streams.audio:
+            raise ValueError(f"No audio stream found in media container: {audio_path}")
+
+        resampler = av.audio.resampler.AudioResampler(format="fltp", layout="mono", rate=sampling_rate)
+        chunks = []
+
+        for frame in container.decode(audio=0):
+            resampled_frames = resampler.resample(frame)
+            if resampled_frames is None:
+                continue
+            if not isinstance(resampled_frames, list):
+                resampled_frames = [resampled_frames]
+            for resampled_frame in resampled_frames:
+                chunks.append(resampled_frame.to_ndarray())
+
+        flushed_frames = resampler.resample(None)
+        if flushed_frames is not None:
+            if not isinstance(flushed_frames, list):
+                flushed_frames = [flushed_frames]
+            for flushed_frame in flushed_frames:
+                chunks.append(flushed_frame.to_ndarray())
+
+    if not chunks:
+        raise ValueError(f"No audio samples could be decoded from media container: {audio_path}")
+
+    return np.concatenate(chunks, axis=-1)[0].astype(np.float32, copy=False)
 
 
 def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str, float | int]]:
@@ -371,11 +395,11 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
     elif isinstance(audio_input, str):
         try:
             speech_data = load_audio(audio_input, sampling_rate=sampling_rate)
-        except Exception:
-            if audio_input.lower().endswith(_VIDEO_CONTAINER_EXTENSIONS):
-                speech_data = _load_audio_from_video_container(audio_input, sampling_rate)
-            else:
-                raise
+        except Exception as audio_error:
+            try:
+                speech_data = _load_audio_track_with_pyav(audio_input, sampling_rate)
+            except Exception:
+                raise audio_error
     else:
         raise TypeError(
             "AudioVisualFlamingo audio inputs must be a path/URL, a numpy array, or a torch tensor. "
@@ -404,6 +428,26 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
         "audio_end_sample_sec": audio_end_sample_id / sampling_rate,
     }
     return speech_data, audio_info
+
+
+def _coerce_video_frames_to_pil(video_frames) -> list[PIL.Image.Image]:
+    if isinstance(video_frames, np.ndarray):
+        if video_frames.ndim == 3:
+            video_frames = np.expand_dims(video_frames, axis=0)
+        if video_frames.ndim != 4:
+            raise TypeError(f"Expected video array with 4 dimensions, got shape {video_frames.shape}.")
+        return [PIL.Image.fromarray(frame).convert("RGB") for frame in video_frames]
+
+    if isinstance(video_frames, (list, tuple)):
+        output_frames = []
+        for frame in video_frames:
+            if isinstance(frame, PIL.Image.Image):
+                output_frames.append(frame.convert("RGB"))
+            else:
+                output_frames.append(PIL.Image.fromarray(np.asarray(frame)).convert("RGB"))
+        return output_frames
+
+    raise TypeError(f"Unsupported video payload type for frame conversion: {type(video_frames)!r}")
 
 
 def _extract_video_hf(
@@ -477,65 +521,14 @@ def _extract_video_hf(
             return meta.get(key, default)
         return getattr(meta, key, default)
 
-    def _make_legacy_uniform_indices(video_source_for_sampling):
-        def _legacy_uniform_indices(metadata, **kwargs):
-            total_num_frames = int(getattr(metadata, "total_num_frames", 0) or 0)
-            if total_num_frames <= 0:
-                return np.array([], dtype=int)
-
-            # Match legacy AudioVisualFlamingo sampling by locating the last readable frame first.
-            last_valid_frame_count = total_num_frames
-            if isinstance(video_source_for_sampling, str):
-                import cv2
-
-                video_capture = cv2.VideoCapture(video_source_for_sampling)
-                try:
-                    while last_valid_frame_count > 0:
-                        video_capture.set(cv2.CAP_PROP_POS_FRAMES, last_valid_frame_count - 1)
-                        if video_capture.grab():
-                            break
-                        last_valid_frame_count -= 1
-                finally:
-                    video_capture.release()
-
-            if last_valid_frame_count <= 0:
-                return np.array([], dtype=int)
-            return np.round(np.linspace(0, last_valid_frame_count - 1, num_frames)).astype(int)
-
-        return _legacy_uniform_indices
-
     unpacked_frames, unpacked_metadata = _unpack_video_item(video_input)
-    unpacked_source = _resolve_video_source(video_input, unpacked_metadata)
-    if unpacked_metadata is not None:
-        # Re-run AudioVisualFlamingo's native frame sampling path when source is available.
-        # This keeps parity with string-path inputs and avoids downstream drift when
-        # upstream loaders return fewer frames due terminal-frame decode failures.
-        if isinstance(unpacked_source, str) and unpacked_source:
-            try:
-                frames_array, metadata = load_video(
-                    unpacked_source,
-                    backend="opencv",
-                    sample_indices_fn=_make_legacy_uniform_indices(unpacked_source),
-                )
-                if isinstance(metadata, list):
-                    metadata = None
-            except Exception:
-                frames_array = np.asarray(unpacked_frames)
-                metadata = unpacked_metadata
-        else:
-            frames_array = np.asarray(unpacked_frames)
-            metadata = unpacked_metadata
+    if isinstance(unpacked_frames, str):
+        frames_array, metadata = load_video(unpacked_frames, num_frames=num_frames)
     else:
-        frames_array, metadata = load_video(
-            video_input,
-            backend="opencv",
-            sample_indices_fn=_make_legacy_uniform_indices(video_input if isinstance(video_input, str) else None),
-        )
-        if isinstance(metadata, list):
-            metadata = None
+        frames_array = unpacked_frames
+        metadata = unpacked_metadata
 
-    frames_array = np.asarray(frames_array)
-    if frames_array.ndim == 0:
+    if frames_array is None:
         raise TypeError(
             "Unsupported video payload for AudioVisualFlamingo video extraction: "
             f"video_input_type={type(video_input)!r}, "
@@ -543,7 +536,7 @@ def _extract_video_hf(
             f"unpacked_metadata_type={type(unpacked_metadata)!r}, "
             f"unpacked_repr={repr(unpacked_frames)[:200]}"
         )
-    output_frames = [PIL.Image.fromarray(frame).convert("RGB") for frame in frames_array]
+    output_frames = _coerce_video_frames_to_pil(frames_array)
 
     fps = float(_meta_get(metadata, "fps", None) or 1.0)
     sampled_frame_indices = _meta_get(metadata, "frames_indices", None) if metadata is not None else None
@@ -554,7 +547,11 @@ def _extract_video_hf(
 
     metadata_total_frames = _meta_get(metadata, "total_num_frames", None) if metadata is not None else None
     frame_count = int(frame_indices[-1] + 1) if frame_indices else int(metadata_total_frames or len(output_frames))
-    video_duration = float(frame_count / fps if fps > 0 else len(output_frames))
+    video_duration = _meta_get(metadata, "duration", None) if metadata is not None else None
+    if video_duration is None:
+        video_duration = float(frame_count / fps if fps > 0 else len(output_frames))
+    else:
+        video_duration = float(video_duration)
     # Keep np.float64 timestamps for parity with legacy timing dtype used by the original AudioVisualFlamingo path.
     output_frame_times = list(np.asarray(frame_indices, dtype=np.float64) / np.float64(fps if fps > 0 else 1.0))
 

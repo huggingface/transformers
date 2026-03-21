@@ -15,6 +15,7 @@
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -28,6 +29,7 @@ from transformers import (
     WhisperFeatureExtractor,
 )
 from transformers.models.audiovisualflamingo.configuration_audiovisualflamingo import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
+from transformers.models.audiovisualflamingo.processing_audiovisualflamingo import _load_audio_hf_with_info
 from transformers.testing_utils import require_torch, require_vision
 
 
@@ -165,6 +167,26 @@ class AudioVisualFlamingoProcessorTest(unittest.TestCase):
         self.assertEqual(len(inputs["media"]["sound"]), 1)
         self.assertEqual([len(sample) for sample in inputs["media"]["audio_info"]], [1])
         self.assertEqual((inputs["input_ids"] == processor.sound_token_id).sum().item(), 1)
+
+    def test_audio_loader_falls_back_to_pyav_for_media_containers(self):
+        runtime_config = SimpleNamespace(audio_sampling_rate=16_000, audio_chunk_length=120, random_audio_sample=False)
+
+        with (
+            patch(
+                "transformers.models.audiovisualflamingo.processing_audiovisualflamingo.load_audio",
+                side_effect=RuntimeError("decode failed"),
+            ) as mocked_load_audio,
+            patch(
+                "transformers.models.audiovisualflamingo.processing_audiovisualflamingo._load_audio_track_with_pyav",
+                return_value=_make_audio(1.0),
+            ) as mocked_fallback,
+        ):
+            waveform, audio_info = _load_audio_hf_with_info("dummy-video.mp4", runtime_config)
+
+        mocked_load_audio.assert_called_once_with("dummy-video.mp4", sampling_rate=16_000)
+        mocked_fallback.assert_called_once_with("dummy-video.mp4", 16_000)
+        self.assertEqual(waveform.shape[0], audio_info["new_audio_n_samples"])
+        self.assertEqual(audio_info["new_audio_chunk_length"], 30)
 
     def test_model_input_names_include_media_keys(self):
         processor = self.get_processor()
