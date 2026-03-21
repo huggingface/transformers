@@ -25,6 +25,7 @@ from .image_transforms import (
 )
 from .image_transforms import (
     convert_to_rgb,
+    divide_to_patches,  # noqa: F401 - re-exported for backward compat with image_processing_utils_fast
     get_resize_output_image_size,
     get_size_with_aspect_ratio,
     group_images_by_shape,
@@ -664,3 +665,7 @@ class PilBackend(BaseImageProcessor):
         if processor_dict.get("image_processor_type", "").endswith("Pil"):
             processor_dict["image_processor_type"] = processor_dict["image_processor_type"][:-3]
         return processor_dict
+
+
+# Backward-compatible alias: allow referring to TorchvisionBackend as BaseImageProcessorFast
+BaseImageProcessorFast = TorchvisionBackend
