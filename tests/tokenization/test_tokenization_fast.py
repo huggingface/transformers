@@ -285,5 +285,23 @@ class ReduceMutableBorrowTests(unittest.TestCase):
             return_value = [future.result() for future in futures]
             self.assertEqual(return_value, [[1, 10, 0, 8, 0, 18, 0, 0, 0, 2] for i in range(10)])
 
+    def test_bpe_tokenizer_skips_clean_up_tokenization_spaces(self):
+        """BPE tokenizers should not apply clean_up_tokenization even when the flag is True.
+
+        clean_up_tokenization strips spaces before punctuation (e.g. " ." -> "."),
+        which was designed for WordPiece tokenizers. For BPE tokenizers, spaces are
+        encoded as part of tokens and the cleanup is destructive.
+        """
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
+        tokenizer.clean_up_tokenization_spaces = True
+
+        # Encode a string with space before punctuation
+        text = "Hello world ."
+        ids = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
+
+        # The space before "." should be preserved — BPE handles spacing internally
+        self.assertIn(" .", decoded)
+
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")
