@@ -462,8 +462,8 @@ class MiniMaxModel(MixtralModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
-            if decoder_layer.layer_type == "full_attention":
+        for i, decoder_layer in enumerate(self.layers):
+            if self.config.layer_types[i] == "full_attention":
                 input_attention_mask = causal_mask
             else:
                 # lightning attention uses original attention_mask, and uses it only for the first step
