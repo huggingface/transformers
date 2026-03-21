@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Lint modeling and modular files under ``src/transformers/models`` for structural conventions.
+Lint modeling, modular, and configuration files under ``src/transformers/models`` for structural conventions.
 
 How rule registration works
 ---------------------------
@@ -38,9 +38,9 @@ How to add a new TRF rule
 
 CLI usage
 ---------
-- ``python utils/check_modeling_structure.py``: check all modeling and modular files.
+- ``python utils/check_modeling_structure.py``: check all modeling, modular, and configuration files.
 - ``python utils/check_modeling_structure.py --changed-only --base-ref origin/main``: only check files changed
-  against a git base ref, plus local staged, unstaged, and untracked modeling files.
+  against a git base ref, plus local staged, unstaged, and untracked model source files.
 - ``python utils/check_modeling_structure.py --list-rules``: print all available TRF rules and their default state.
 - ``python utils/check_modeling_structure.py --rule TRF001``: show the detailed documentation for one rule from the
   TOML file.
@@ -52,6 +52,8 @@ CLI usage
 
 import argparse
 import ast
+import hashlib
+import json
 import subprocess
 import sys
 from collections.abc import Callable
@@ -70,7 +72,7 @@ except ModuleNotFoundError:
 
 
 MODELS_ROOT = Path("src/transformers/models")
-MODELING_PATTERNS = ("modeling_*.py", "modular_*.py")
+MODELING_PATTERNS = ("modeling_*.py", "modular_*.py", "configuration_*.py")
 RULE_SPECS_PATH = Path(__file__).with_name("check_modeling_structure_rules.toml")
 
 
@@ -120,6 +122,27 @@ TRF_MODEL_DIR_ALLOWLISTS = {
     rule_id: spec["allowlist_models"] for rule_id, spec in TRF_RULE_SPECS.items() if spec["allowlist_models"]
 }
 CONSOLE = Console(stderr=True)
+CACHE_PATH = Path(__file__).with_name(".check_modeling_structure_cache.json")
+
+
+def _content_hash(text: str, enabled_rules: set[str]) -> str:
+    h = hashlib.sha256(text.encode("utf-8"))
+    h.update(",".join(sorted(enabled_rules)).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _load_cache() -> dict[str, str]:
+    try:
+        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_cache(cache: dict[str, str]) -> None:
+    try:
+        CACHE_PATH.write_text(json.dumps(cache, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 @dataclass(frozen=True)
@@ -267,7 +290,16 @@ def check_post_init(node: ast.AST, violations: list[Violation], file_path: Path)
     very important as we need to do some processing there.
     """
     # Check if it's a PreTrainedModel class definition
-    if isinstance(node, ast.ClassDef) and any(full_name(parent).endswith("PreTrainedModel") for parent in node.bases):
+    if isinstance(node, ast.ClassDef):
+        base_names = []
+        for parent in node.bases:
+            try:
+                base_names.append(full_name(parent))
+            except ValueError:
+                continue
+        if not any(base_name.endswith("PreTrainedModel") for base_name in base_names):
+            return violations
+
         for sub_node in node.body:
             # Check that we are in __init__
             if isinstance(sub_node, ast.FunctionDef) and sub_node.name == "__init__":
@@ -334,6 +366,35 @@ def _get_class_assignments(class_node: ast.ClassDef) -> dict[str, ast.AST]:
 
 def _class_methods(class_node: ast.ClassDef) -> dict[str, ast.FunctionDef]:
     return {item.name: item for item in class_node.body if isinstance(item, ast.FunctionDef)}
+
+
+def _is_direct_pretrained_config_subclass(class_node: ast.ClassDef) -> bool:
+    for base in class_node.bases:
+        try:
+            if _simple_name(full_name(base)) in {"PreTrainedConfig", "PretrainedConfig"}:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _has_strict_accept_kwargs_decorator(class_node: ast.ClassDef) -> bool:
+    for decorator in class_node.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        try:
+            decorator_name = _simple_name(full_name(decorator.func))
+        except ValueError:
+            continue
+        if decorator_name != "strict" or decorator.args:
+            continue
+
+        for keyword in decorator.keywords:
+            if keyword.arg != "accept_kwargs":
+                continue
+            return isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+
+    return False
 
 
 def trf001_check_config_class_consistency(
@@ -748,8 +809,43 @@ def trf008_check_doc_decorator_usage(
     return violations
 
 
+def trf010_check_config_strict_decorator(
+    tree: ast.Module, file_path: Path, source_lines: list[str], violations: list[Violation], rule_id: str
+) -> list[Violation]:
+    if not file_path.name.startswith(("configuration_", "modular_")):
+        return violations
+
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not _is_direct_pretrained_config_subclass(node):
+            continue
+        if _has_rule_suppression(source_lines, rule_id, node.lineno):
+            continue
+        if _has_strict_accept_kwargs_decorator(node):
+            continue
+
+        violations.append(
+            Violation(
+                file_path=file_path,
+                line_number=node.lineno,
+                rule_id=rule_id,
+                message=(
+                    f"{rule_id}: {node.name} directly inherits PreTrainedConfig but is missing "
+                    "@strict(accept_kwargs=True)."
+                ),
+            )
+        )
+
+    return violations
+
+
 def _is_modeling_candidate(path: Path) -> bool:
-    return path.suffix == ".py" and path.name.startswith(("modeling_", "modular_")) and MODELS_ROOT in path.parents
+    return (
+        path.suffix == ".py"
+        and path.name.startswith(("modeling_", "modular_", "configuration_"))
+        and MODELS_ROOT in path.parents
+    )
 
 
 def _git_name_only(command: list[str]) -> list[str]:
@@ -874,6 +970,11 @@ def parse_args() -> argparse.Namespace:
         help="Disable interactive progress animation.",
     )
     parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Ignore the lint cache and re-check every file.",
+    )
+    parser.add_argument(
         "--enable-all-trf-rules",
         action="store_true",
         help="Enable all TRF rules (defaults already enable most).",
@@ -979,13 +1080,33 @@ def main() -> int:
         else nullcontext()
     )
 
+    use_cache = not args.no_cache
+    cache = _load_cache() if use_cache else {}
+    new_cache: dict[str, str] = {}
+    skipped = 0
+
     with status_ctx:
         for file_path in modeling_files:
             try:
                 text = file_path.read_text(encoding="utf-8")
-                violations.extend(analyze_file(file_path, text, enabled_rules=enabled_rules))
+                file_key = str(file_path)
+                digest = _content_hash(text, enabled_rules)
+
+                if use_cache and cache.get(file_key) == digest:
+                    new_cache[file_key] = digest
+                    skipped += 1
+                    continue
+
+                file_violations = analyze_file(file_path, text, enabled_rules=enabled_rules)
+                violations.extend(file_violations)
+
+                if not file_violations:
+                    new_cache[file_key] = digest
             except Exception as exc:
                 violations.append(Violation(file_path=file_path, line_number=1, message=f"failed to parse ({exc})."))
+
+    if use_cache:
+        _save_cache(new_cache)
 
     if len(violations) > 0:
         violations = sorted(violations, key=lambda v: (str(v.file_path), v.line_number, v.message))

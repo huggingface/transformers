@@ -279,7 +279,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
             self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
             self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam2_vision_model"](**self.vision_config)
+            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
 
         if isinstance(self.prompt_encoder_config, dict):
             self.prompt_encoder_config = EdgeTamVideoPromptEncoderConfig(**self.prompt_encoder_config)

@@ -2207,13 +2207,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             thinker_reply_part=thinker_reply_part,
         )
 
-    def _get_initial_cache_position(self, seq_length, device, model_kwargs):
-        # Talker needs to calculate cache_position with input_ids, so pop inputs_embeds temporarily
-        inputs_embeds = model_kwargs.pop("inputs_embeds")
-        model_kwargs = super()._get_initial_cache_position(seq_length, device, model_kwargs)
-        model_kwargs["inputs_embeds"] = inputs_embeds
-        return model_kwargs
-
     # prepare inputs for talker lm generation
     def prepare_inputs_for_generation(
         self,
@@ -2238,9 +2231,9 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values,
-            attention_mask,
-            inputs_embeds,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             thinker_reply_part=thinker_reply_part,
             input_text_ids=input_text_ids,

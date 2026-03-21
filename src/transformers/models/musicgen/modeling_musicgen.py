@@ -219,7 +219,6 @@ class MusicgenAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
-        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -263,10 +262,7 @@ class MusicgenAttention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -335,7 +331,6 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -348,9 +343,6 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -360,7 +352,6 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
             hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -376,7 +367,6 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -476,7 +466,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -529,17 +518,10 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum(self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks))
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -567,7 +549,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -605,7 +586,6 @@ class MusicgenModel(MusicgenPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -647,7 +627,6 @@ class MusicgenModel(MusicgenPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -700,7 +679,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
@@ -750,7 +728,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1626,6 +1603,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
+        next_sequence_length: int | None = None,
         past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
@@ -1633,7 +1611,6 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         encoder_outputs=None,
         decoder_delay_pattern_mask=None,
         guidance_scale=None,
-        cache_position=None,
         **kwargs,
     ):
         # Overwritten -- MusicGen has custom processing
@@ -1655,15 +1632,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
         if past_key_values is not None:
-            if cache_position[-1] >= decoder_input_ids.shape[1]:
-                decoder_input_ids = decoder_input_ids[:, -cache_position.shape[0] :]
-            elif (
-                decoder_input_ids.shape[1] != cache_position.shape[0]
-            ):  # Default case (the "else", a no op, is Exception 2)
-                decoder_input_ids = decoder_input_ids[:, cache_position]
-            else:
-                # Default to old behavior: keep only final ID
-                decoder_input_ids = decoder_input_ids[:, -1:]
+            decoder_input_ids = (
+                decoder_input_ids[:, -next_sequence_length:] if next_sequence_length is not None else decoder_input_ids
+            )
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

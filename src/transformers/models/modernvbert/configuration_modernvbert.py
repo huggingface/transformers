@@ -65,6 +65,7 @@ class ModernVBertConfig(PreTrainedConfig):
     classifier_pooling: Literal["cls", "mean"] = "cls"
     classifier_dropout: float = 0.0
     classifier_bias: bool = False
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.text_config is None:

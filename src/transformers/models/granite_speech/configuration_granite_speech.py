@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
+@auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
 @strict(accept_kwargs=True)
 class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
@@ -68,7 +68,7 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
     conv_expansion_factor: int = 2
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
+@auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
 @strict(accept_kwargs=True)
 class GraniteSpeechConfig(PreTrainedConfig):
     r"""

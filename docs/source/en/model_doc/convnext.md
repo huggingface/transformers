@@ -64,9 +64,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] ConvNextImageProcessor
     - preprocess
 
-## ConvNextImageProcessorFast
+## ConvNextImageProcessorPil
 
-[[autodoc]] ConvNextImageProcessorFast
+[[autodoc]] ConvNextImageProcessorPil
     - preprocess
 
 ## ConvNextModel

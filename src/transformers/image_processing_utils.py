@@ -14,15 +14,38 @@
 
 import math
 from collections.abc import Iterable
+from copy import deepcopy
+from functools import partial
+from typing import Any
 
 import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension, ImageInput, get_image_size
+from .image_utils import (
+    ChannelDimension,
+    ImageInput,
+    SizeDict,
+    get_image_size,
+    make_flat_list_of_images,
+    validate_preprocess_arguments,
+)
 from .processing_utils import ImagesKwargs, Unpack
-from .utils import logging
-from .utils.import_utils import requires
+from .utils import (
+    auto_docstring,
+    is_torchvision_available,
+    is_vision_available,
+    logging,
+)
+
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -34,23 +57,364 @@ INIT_SERVICE_KWARGS = [
 ]
 
 
-@requires(backends=("vision",))
 class BaseImageProcessor(ImageProcessingMixin):
+    r"""
+    Base class for image processors with an inheritance-based backend architecture.
+
+    This class defines the preprocessing pipeline: kwargs validation, input preparation, and dispatching to the
+    backend's `_preprocess` method. Backend subclasses (`TorchvisionBackend`, `PilBackend`) inherit from this class
+    and implement the actual image operations (resize, crop, rescale, normalize, etc.). Model-specific image
+    processors then inherit from the appropriate backend class.
+
+    Architecture Overview
+    ---------------------
+
+    The class hierarchy is:
+
+        BaseImageProcessor (this class)
+        ├── TorchvisionBackend    (GPU-accelerated, torch.Tensor)
+        │   └── ModelImageProcessor (e.g. LlavaNextImageProcessor)
+        └── PilBackend            (portable CPU, np.ndarray)
+            └── ModelImageProcessorPil (e.g. CLIPImageProcessorPil)
+
+    The preprocessing flow is:
+
+        __call__() → preprocess() → _preprocess_image_like_inputs() → _prepare_image_like_inputs()
+                                                                       (calls process_image per image)
+                                                                     → _preprocess()
+                                                                       (batch operations: resize, crop, etc.)
+
+    - `process_image`: Implemented by backends. Converts a single raw input (PIL, NumPy, or Tensor) to the
+      backend's working format (torch.Tensor or np.ndarray), handles RGB conversion and channel reordering.
+    - `_preprocess`: Implemented by backends. Performs the actual batch processing (resize, center crop, rescale,
+      normalize, pad) and returns a `BatchFeature`.
+
+    Basic Implementation
+    --------------------
+
+    For processors that only need standard operations (resize, center crop, rescale, normalize), inherit from
+    a backend and define class attributes:
+
+        from transformers.image_processing_backends import PilBackend
+
+        class MyImageProcessorPil(PilBackend):
+            resample = PILImageResampling.BILINEAR
+            image_mean = IMAGENET_DEFAULT_MEAN
+            image_std = IMAGENET_DEFAULT_STD
+            size = {"height": 224, "width": 224}
+            do_resize = True
+            do_rescale = True
+            do_normalize = True
+
+    The backend's `_preprocess` method handles the standard pipeline automatically.
+
+    Custom Processing
+    -----------------
+
+    For processors that need custom logic (e.g., patch-based processing, multiple input types), override
+    `_preprocess` in your model-specific processor. The `_preprocess` method receives already-prepared images
+    (converted to the backend format with channels-first ordering) and performs the actual processing:
+
+        class MyImageProcessor(TorchvisionBackend):
+            def _preprocess(self, images, do_resize, size, do_normalize, image_mean, image_std, **kwargs):
+                # Group images by shape for efficient batched operations
+                grouped_images, grouped_images_index = group_images_by_shape(images)
+                processed_groups = {}
+                for shape, stacked_images in grouped_images.items():
+                    if do_resize:
+                        stacked_images = self.resize(stacked_images, size=size)
+                    if do_normalize:
+                        stacked_images = self.normalize(stacked_images, mean=image_mean, std=image_std)
+                    processed_groups[shape] = stacked_images
+                processed_images = reorder_images(processed_groups, grouped_images_index)
+                return BatchFeature(data={"pixel_values": processed_images})
+
+    For processors handling multiple input types (e.g., images + segmentation maps), override
+    `_preprocess_image_like_inputs`:
+
+        def _preprocess_image_like_inputs(
+            self,
+            images: ImageInput,
+            segmentation_maps: ImageInput | None = None,
+            **kwargs,
+        ) -> BatchFeature:
+            images = self._prepare_image_like_inputs(images, **kwargs)
+            batch_feature = self._preprocess(images, **kwargs)
+
+            if segmentation_maps is not None:
+                maps = self._prepare_image_like_inputs(segmentation_maps, **kwargs)
+                batch_feature["labels"] = self._preprocess(maps, **kwargs).pixel_values
+
+            return batch_feature
+
+    Extending Backend Behavior
+    --------------------------
+
+    To customize operations for a specific backend, subclass the backend and override its methods:
+
+        from transformers.image_processing_backends import TorchvisionBackend, PilBackend
+
+        class MyTorchvisionProcessor(TorchvisionBackend):
+            def resize(self, image, size, **kwargs):
+                # Custom resize logic for torchvision
+                return super().resize(image, size, **kwargs)
+
+        class MyPilProcessor(PilBackend):
+            def resize(self, image, size, **kwargs):
+                # Custom resize logic for PIL
+                return super().resize(image, size, **kwargs)
+
+    Custom Parameters
+    -----------------
+
+    To add parameters beyond `ImagesKwargs`, create a custom kwargs class and set it as `valid_kwargs`:
+
+        class MyImageProcessorKwargs(ImagesKwargs):
+            custom_param: int | None = None
+
+        class MyImageProcessor(TorchvisionBackend):
+            valid_kwargs = MyImageProcessorKwargs
+            custom_param = 10  # default value
+
+    Key Notes
+    ---------
+
+    - Backend selection is done at the class level: inherit from `TorchvisionBackend` or `PilBackend`
+    - Backends receive images as `torch.Tensor` (Torchvision) or `np.ndarray` (PIL), always channels-first
+    - All images have channel dimension first during processing, regardless of backend
+    - Arguments not provided by users default to class attribute values
+    - Backend classes encapsulate backend-specific logic (resize, normalize, etc.) and can be overridden
+    """
+
     valid_kwargs = ImagesKwargs
 
-    @property
-    def is_fast(self) -> bool:
-        """
-        `bool`: Whether or not this image processor is a fast processor (backed by PyTorch and TorchVision).
-        """
-        return False
+    default_to_square = True
+    rescale_factor = 1 / 255
+    model_input_names = ["pixel_values"]
+
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        super().__init__(**kwargs)
+        # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
+        # We call it instead in the backend subclasses' __init__ methods.
+
+    def _set_attributes(self, **kwargs):
+        """Resolve and set instance attributes from kwargs and class-level defaults for all valid kwargs."""
+        attributes = {}
+        for key in self.valid_kwargs.__annotations__:
+            kwarg = kwargs.pop(key, None)
+            if kwarg is not None:
+                attributes[key] = kwarg
+            else:
+                attributes[key] = deepcopy(getattr(self, key, None))
+        attributes = self._standardize_kwargs(**attributes)
+        for key, value in attributes.items():
+            setattr(self, key, value)
+
+        self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""
         return self.preprocess(images, *args, **kwargs)
 
-    def preprocess(self, images, **kwargs) -> BatchFeature:
-        raise NotImplementedError("Each image processor must implement its own preprocess method")
+    def process_image(self, *args, **kwargs):
+        """
+        Process a single raw image into the backend's working format.
+
+        Implemented by backend subclasses (`TorchvisionBackend`, `PilBackend`). Converts a raw input
+        (PIL Image, NumPy array, or torch Tensor) to the backend's internal format (`torch.Tensor` for
+        Torchvision, `np.ndarray` for PIL), handles RGB conversion and ensures channels-first ordering.
+        """
+        raise NotImplementedError
+
+    def _preprocess(self, *args, **kwargs):
+        """
+        Perform the actual batch image preprocessing (resize, center crop, rescale, normalize, pad).
+
+        Implemented by backend subclasses (`TorchvisionBackend`, `PilBackend`). Receives a list of
+        already-prepared images (in the backend's format, channels-first) and applies the configured
+        preprocessing operations. Returns a `BatchFeature` with the processed pixel values.
+
+        Model-specific processors can override this method to implement custom preprocessing logic
+        (e.g., patch-based processing in LLaVA-NeXT).
+        """
+        raise NotImplementedError
+
+    def _prepare_images_structure(
+        self,
+        images: ImageInput,
+        expected_ndims: int = 3,
+    ) -> ImageInput:
+        """
+        Prepare the images structure for processing.
+
+        Args:
+            images (`ImageInput`):
+                The input images to process.
+
+        Returns:
+            `ImageInput`: The images with a valid nesting.
+        """
+        images = self.fetch_images(images)
+        return make_flat_list_of_images(images, expected_ndims=expected_ndims)
+
+    def _prepare_image_like_inputs(
+        self,
+        images: ImageInput,
+        *args,
+        expected_ndims: int = 3,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> list[Any]:
+        """
+        Prepare image-like inputs for processing by converting each image via `process_image`.
+
+        Flattens the input structure and applies `process_image` (implemented by the backend) to each
+        individual image, converting raw inputs (PIL, NumPy, Tensor) into the backend's working format
+        with channels-first ordering.
+
+        Args:
+            images (`ImageInput`):
+                The image-like inputs to process.
+            expected_ndims (`int`, *optional*, defaults to 3):
+                The expected number of dimensions for the images.
+
+        Returns:
+            `list[torch.Tensor]` or `list[np.ndarray]`: The prepared images in the backend's format,
+            with channels-first ordering.
+        """
+        images = self._prepare_images_structure(images, expected_ndims=expected_ndims)
+
+        process_image_partial = partial(self.process_image, *args, **kwargs)
+
+        has_nested_structure = len(images) > 0 and isinstance(images[0], list | tuple)
+
+        if has_nested_structure:
+            processed_images = [[process_image_partial(img) for img in nested_list] for nested_list in images]
+        else:
+            processed_images = [process_image_partial(img) for img in images]
+
+        return processed_images
+
+    def _preprocess_image_like_inputs(
+        self,
+        images: ImageInput,
+        *args,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> BatchFeature:
+        """
+        Preprocess image-like inputs by preparing them and dispatching to `_preprocess`.
+
+        This method first calls `_prepare_image_like_inputs` to convert raw inputs into the backend's
+        format, then calls `_preprocess` for the actual batch processing. Override this method in
+        model-specific processors that need to handle multiple image-like input types (e.g., images
+        and segmentation maps) or need custom orchestration of the preprocessing pipeline.
+        """
+        images = self._prepare_image_like_inputs(images, **kwargs)
+        return self._preprocess(images, *args, **kwargs)
+
+    def _standardize_kwargs(
+        self,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        crop_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        pad_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Standardize kwargs to canonical format before validation.
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if kwargs is None:
+            kwargs = {}
+        if size is not None and not isinstance(size, SizeDict):
+            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+        if crop_size is not None and not isinstance(crop_size, SizeDict):
+            crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+        if pad_size is not None and not isinstance(pad_size, SizeDict):
+            pad_size = SizeDict(**get_size_dict(size=pad_size, param_name="pad_size"))
+        if isinstance(image_mean, list):
+            image_mean = tuple(image_mean)
+        if isinstance(image_std, list):
+            image_std = tuple(image_std)
+
+        kwargs["size"] = size
+        kwargs["crop_size"] = crop_size
+        kwargs["pad_size"] = pad_size
+        kwargs["image_mean"] = image_mean
+        kwargs["image_std"] = image_std
+
+        return kwargs
+
+    def _validate_preprocess_kwargs(
+        self,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | tuple[float] | None = None,
+        image_std: float | tuple[float] | None = None,
+        do_resize: bool | None = None,
+        size: SizeDict | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: SizeDict | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        **kwargs,
+    ):
+        """
+        Validate the kwargs for the preprocess method.
+        """
+        validate_preprocess_arguments(
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+        )
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images.
+        """
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
+        # Set default kwargs from self
+        for kwarg_name in self._valid_kwargs_names:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+
+        # Update kwargs that need further processing before being validated
+        kwargs = self._standardize_kwargs(**kwargs)
+
+        # Validate kwargs
+        self._validate_preprocess_kwargs(**kwargs)
+
+        return self._preprocess_image_like_inputs(images, *args, **kwargs)
+
+    def to_dict(self) -> dict[str, Any]:
+        processor_dict = super().to_dict()
+
+        # Filter out None values that are class defaults
+        filtered_dict = {}
+        for key, value in processor_dict.items():
+            if isinstance(value, SizeDict):
+                value = dict(value)
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
+
+        filtered_dict.pop("_valid_processor_keys", None)
+        filtered_dict.pop("_valid_kwargs_names", None)
+        return filtered_dict
 
     def rescale(
         self,
@@ -84,6 +448,7 @@ class BaseImageProcessor(ImageProcessingMixin):
         """
         return rescale(image, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
 
+    # The next methods are kept for backwards compatibility with remote code, but are overriden by backends.
     def normalize(
         self,
         image: np.ndarray,
@@ -160,11 +525,6 @@ class BaseImageProcessor(ImageProcessingMixin):
             **kwargs,
         )
 
-    def to_dict(self):
-        encoder_dict = super().to_dict()
-        encoder_dict.pop("_valid_processor_keys", None)
-        return encoder_dict
-
 
 VALID_SIZE_DICT_KEYS = (
     {"height", "width"},
@@ -233,9 +593,9 @@ def get_size_dict(
       is set, it is added to the dict as `{"longest_edge": max_size}`.
 
     Args:
-        size (`Union[int, Iterable[int], dict[str, int]]`, *optional*):
+        size (`int | Iterable[int] | dict[str, int]`, *optional*):
             The `size` parameter to be cast into a size dictionary.
-        max_size (`Optional[int]`, *optional*):
+        max_size (`int | None`, *optional*):
             The `max_size` parameter to be cast into a size dictionary.
         height_width_order (`bool`, *optional*, defaults to `True`):
             If `size` is a tuple, whether it's in (height, width) or (width, height) order.

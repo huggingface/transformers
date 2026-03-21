@@ -271,7 +271,6 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma2MLP(config)
         self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -370,10 +369,10 @@ class Gemma2Model(GemmaModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,

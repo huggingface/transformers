@@ -180,7 +180,6 @@ class VivitImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    # Copied from transformers.models.efficientnet.image_processing_efficientnet.EfficientNetImageProcessor.rescale
     def rescale(
         self,
         image: np.ndarray,
