@@ -966,8 +966,8 @@ class EmbeddingParallel(TensorParallelLayer):
         if self.embedding_dim_sharding == 0 and hasattr(mod, "_input_mask"):
             input_mask = mod._input_mask
             # Use multiplication instead of in-place assignment to preserve gradients
-            mask_expanded = input_mask.unsqueeze(-1).expand_as(outputs)
-            outputs = outputs * (~mask_expanded).to(outputs.dtype)
+            mask = input_mask.unsqueeze(-1)
+            outputs = outputs * (~mask).to(outputs.dtype)
             del mod._input_mask
 
         return all_reduce_forward(outputs, device_mesh)

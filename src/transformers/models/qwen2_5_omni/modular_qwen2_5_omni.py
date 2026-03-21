@@ -1758,22 +1758,22 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             special_audio_mask = input_ids == self.config.audio_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
 
-        special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
     @can_return_tuple
@@ -3696,7 +3696,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         embeds_to_talker = thinker_result.hidden_states[0][0].clone().to(input_ids.device)
         if thinker_kwargs.get("input_features") is not None:
             audio_ids_mask = input_ids == self.config.thinker_config.audio_token_index
-            audio_mask = audio_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
+            audio_mask = audio_ids_mask.unsqueeze(-1)
             audio_mask_tensor = torch.zeros(
                 [audio_ids_mask.sum(), embeds_to_talker.shape[-1]],
                 dtype=embeds_to_talker.dtype,
@@ -3705,7 +3705,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             embeds_to_talker.masked_scatter_(audio_mask, audio_mask_tensor)
         if thinker_kwargs.get("pixel_values") is not None:
             image_ids_mask = input_ids == self.config.thinker_config.image_token_index
-            image_mask = image_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
+            image_mask = image_ids_mask.unsqueeze(-1)
             image_mask_tensor = torch.zeros(
                 [image_ids_mask.sum(), embeds_to_talker.shape[-1]],
                 dtype=embeds_to_talker.dtype,
@@ -3714,7 +3714,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             embeds_to_talker.masked_scatter_(image_mask, image_mask_tensor)
         if thinker_kwargs.get("pixel_values_videos") is not None:
             video_ids_mask = input_ids == self.config.thinker_config.video_token_index
-            video_mask = video_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
+            video_mask = video_ids_mask.unsqueeze(-1)
             video_mask_tensor = torch.zeros(
                 [video_ids_mask.sum(), embeds_to_talker.shape[-1]],
                 dtype=embeds_to_talker.dtype,

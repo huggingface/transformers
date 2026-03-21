@@ -209,7 +209,7 @@ class InstructBlipVideoModel(InstructBlipModel):
             )
             special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
@@ -324,7 +324,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         else:
             special_image_mask = input_ids == self.config.video_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple

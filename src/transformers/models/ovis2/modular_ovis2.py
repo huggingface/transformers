@@ -332,11 +332,7 @@ class Ovis2Model(LlavaModel):
                     mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
 
                 if mask.any():
-                    inputs_embeds[mask] = (
-                        visual_indicator_features[i]
-                        .expand_as(inputs_embeds[mask])
-                        .to(inputs_embeds.device, inputs_embeds.dtype)
-                    )
+                    inputs_embeds[mask] = visual_indicator_features[i].to(inputs_embeds.device, inputs_embeds.dtype)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
