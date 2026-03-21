@@ -22,11 +22,15 @@ limitations under the License.
 >The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
 >code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
 >**we ask that new users do not submit pure code agent PRs** at this time. 
->You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous "OpenClaw"-like agents
+>You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous agents
 >not to open any PRs or issues for the moment.
 >
 >PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
 >repeatedly or maliciously.
+
+<details>
+
+<summary> Our code agent philosophy in detail </summary>
 
 We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
 However, it's important to realize that **if you simply run a code agent
@@ -66,6 +70,7 @@ for the software industry as a whole. We will likely be rapidly updating these g
 dealing effectively with code agents. Have patience with us if reviews are slower than normal, or if some
 PRs are closed without review!
 
+</details>
 
 ## Welcome to the 🤗 Transformers community!
 
