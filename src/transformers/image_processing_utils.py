@@ -547,8 +547,13 @@ def is_valid_size_dict(size_dict):
 
 
 def convert_to_size_dict(
-    size, max_size: int | None = None, default_to_square: bool = True, height_width_order: bool = True
-):
+    size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+    max_size: int | None = None,
+    default_to_square: bool = True,
+    height_width_order: bool = True,
+) -> dict[str, int]:
+    if isinstance(size, SizeDict):
+        return dict(size)
     # By default, if size is an int we assume it represents a tuple of (size, size).
     if isinstance(size, int) and default_to_square:
         if max_size is not None:
@@ -575,7 +580,7 @@ def convert_to_size_dict(
 
 
 def get_size_dict(
-    size: int | Iterable[int] | dict[str, int] | None = None,
+    size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
     max_size: int | None = None,
     height_width_order: bool = True,
     default_to_square: bool = True,
@@ -593,7 +598,7 @@ def get_size_dict(
       is set, it is added to the dict as `{"longest_edge": max_size}`.
 
     Args:
-        size (`int | Iterable[int] | dict[str, int]`, *optional*):
+        size (`int | Iterable[int] | dict[str, int] | SizeDict`, *optional*):
             The `size` parameter to be cast into a size dictionary.
         max_size (`int | None`, *optional*):
             The `max_size` parameter to be cast into a size dictionary.
