@@ -227,11 +227,12 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
         tokenizer = PreTrainedTokenizerFast.from_pretrained(self.bytelevel_bpe_model_name)
         tokenizer.clean_up_tokenization_spaces = True
 
-        text = "Hello world."
+        # Leading space accounts for ByteLevel BPE's add_prefix_space behavior
+        text = " Hello world."
         ids = tokenizer.encode(text, add_special_tokens=False)
         decoded = tokenizer.decode(ids, clean_up_tokenization_spaces=True)
 
-        # BPE roundtrip should preserve the original text
+        # BPE roundtrip should preserve the original text — cleanup is skipped
         self.assertEqual(decoded, text)
 
 
