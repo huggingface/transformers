@@ -145,11 +145,24 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.video_token_id] = 2
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+            input_ids = text_inputs["input_ids"]
+            if isinstance(input_ids, list) and input_ids and isinstance(input_ids[0], list):
+                # Batch input: process each sequence individually to support ragged (unpadded) batches
+                mm_token_type_ids = []
+                for ids in input_ids:
+                    arr = np.array(ids)
+                    type_ids = np.zeros(len(ids), dtype=np.int64)
+                    type_ids[arr == self.image_token_id] = 1
+                    type_ids[arr == self.video_token_id] = 2
+                    mm_token_type_ids.append(type_ids.tolist())
+            else:
+                # Single sequence
+                array_ids = np.array(input_ids)
+                mm_token_type_ids = np.zeros(len(input_ids), dtype=np.int64)
+                mm_token_type_ids[array_ids == self.image_token_id] = 1
+                mm_token_type_ids[array_ids == self.video_token_id] = 2
+                mm_token_type_ids = mm_token_type_ids.tolist()
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
