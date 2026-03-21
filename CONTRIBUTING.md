@@ -57,8 +57,7 @@ fixing a bug, it's valuable to see if the bug exists in other models. If your PR
 because it tells us that the fix is likely to be correct and compatible with the rest of the codebase. Code agents often
 look at the code "narrowly", and make a fix that causes models to diverge from the rest of the codebase.
 - Avoid small or "busywork" PRs. In the past, we used to accept these, but given the current flood, we simply don't
-have time for small style changes or typo fixes in comments. Please do not ask your code agent to "find issues and fix them" or anything
-like that, because the things it finds are usually trivial or invalid like this. You can provide value beyond a code
+have time for small style changes or typo fixes in comments. You can provide value beyond a code
 agent simply by having good taste about what's really important.
 - Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
 see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
