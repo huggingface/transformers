@@ -42,7 +42,13 @@ from transformers.models.siglip.modeling_siglip import SiglipVisionModel
 from transformers.utils import ModelOutput
 
 from .configuration_audiovisualflamingo import IGNORE_INDEX, AudioVisualFlamingoConfig
-from .media_encoder import BasicImageEncoder, BasicSoundEncoder, TSPVideoEncoder
+from .media_encoder import (
+    MaxTimeContinuousTimeRotaryEmbedding,
+    RotaryEmbedding,
+    _move_rotary_module_to_device,
+    apply_rotary_emb,
+    pool,
+)
 
 
 def context_length_extension(config):
@@ -286,18 +292,7 @@ class AudioVisualFlamingoPretrainedModel(PreTrainedModel):
         self.vocab_size = self.llm.config.vocab_size
         self.update_vocab_size = lambda: setattr(self, "vocab_size", self.llm.config.vocab_size)
 
-        image_encoder_config = dict(self.config.image_encoder)
-        video_encoder_config = dict(self.config.video_encoder)
-        sound_encoder_config = dict(self.config.sound_encoder)
-        image_encoder_config.pop("_target_", None)
-        video_encoder_config.pop("_target_", None)
-        sound_encoder_config.pop("_target_", None)
-
-        self.encoders = {
-            "image": BasicImageEncoder(parent=self, **image_encoder_config),
-            "video": TSPVideoEncoder(parent=self, **video_encoder_config),
-            "sound": BasicSoundEncoder(parent=self, **sound_encoder_config),
-        }
+        self._init_media_encoders()
 
         self.post_config()
 
@@ -333,6 +328,86 @@ class AudioVisualFlamingoPretrainedModel(PreTrainedModel):
                 "populated on the config."
             )
         return media_token_ids
+
+    def _init_media_encoders(self):
+        """Parse encoder configs and initialise time-embedding modules."""
+
+        def _parse_tokens(cfg, default_end="\n"):
+            start = cfg.get("start_tokens")
+            end = cfg.get("end_tokens", default_end)
+            end = None if end == "None" else end
+            sep = cfg.get("sep_tokens")
+            return start, end, sep
+
+        img_cfg = dict(self.config.image_encoder)
+        vid_cfg = dict(self.config.video_encoder)
+        snd_cfg = dict(self.config.sound_encoder)
+        for d in (img_cfg, vid_cfg, snd_cfg):
+            d.pop("_target_", None)
+
+        # Image encoder boundary tokens
+        self._image_start_tokens, self._image_end_tokens, _ = _parse_tokens(img_cfg)
+
+        # Video encoder: boundary tokens + pooling config
+        self._video_start_tokens, self._video_end_tokens, self._video_sep_tokens = _parse_tokens(vid_cfg)
+        self._video_pool_sizes = vid_cfg.get("pool_sizes", [[1, 1, 1]])
+
+        # Sound encoder boundary tokens
+        self._sound_start_tokens, self._sound_end_tokens, _ = _parse_tokens(snd_cfg)
+
+        # Time-embedding modules (plain dict so they stay out of state_dict)
+        self._time_embeddings: dict = {}
+
+        # Video time embedding
+        _ve = vid_cfg.get("embed_time", "False")
+        self._video_embed_time = _ve in ("True", True)
+        if self._video_embed_time:
+            self._video_time_embed_type = vid_cfg.get("time_embed_type", "pixel")
+            self._video_period_fix, self._video_max_time = self._create_time_embedding("video", vid_cfg)
+
+        # Sound time embedding
+        _se = snd_cfg.get("embed_time", "False")
+        self._sound_embed_time = _se in ("True", True)
+        if self._sound_embed_time:
+            self._sound_time_embed_type = snd_cfg.get("time_embed_type", "pixel")
+            self._sound_period_fix, self._sound_max_time = self._create_time_embedding("sound", snd_cfg)
+
+    def _create_time_embedding(self, key: str, cfg: dict):
+        """Build a rotary / MTCT time-embedding and store it in ``self._time_embeddings``."""
+        trope_dim = cfg.get("trope_dim", 128)
+        trope_theta = cfg.get("trope_theta", 50000)
+        max_time = cfg.get("max_time")
+        time_embed_type = cfg.get("time_embed_type", "pixel")
+        period_fix = cfg.get("period_fix", False)
+
+        period_mode = None
+        if isinstance(period_fix, str) and period_fix in ("shortest", "longest"):
+            period_mode = period_fix
+            period_fix = "MTCT"
+
+        if period_fix == "MTCT":
+            kw = {"dim": trope_dim, "max_time": max_time}
+            if period_mode is not None:
+                kw["period_mode"] = period_mode
+            self._time_embeddings[key] = MaxTimeContinuousTimeRotaryEmbedding(**kw)
+        elif key == "video":
+            if time_embed_type == "lang":
+                self._time_embeddings[key] = RotaryEmbedding(
+                    dim=trope_dim, freqs_for="lang", theta=trope_theta, max_time=max_time
+                )
+            elif time_embed_type == "pixel":
+                self._time_embeddings[key] = RotaryEmbedding(dim=trope_dim, freqs_for="pixel", max_freq=256)
+            elif time_embed_type == "learned_embed":
+                self._time_embeddings[key] = self.mm_projector.time_embed
+        elif key == "sound":
+            if time_embed_type in ("pixel", "lang"):
+                self._time_embeddings[key] = RotaryEmbedding(
+                    dim=trope_dim, freqs_for=time_embed_type, max_freq=256, max_time=max_time
+                )
+            elif time_embed_type == "learned_embed":
+                self._time_embeddings[key] = self.sound_mm_projector.time_embed
+
+        return period_fix, max_time
 
     def _get_padding_side(self) -> str:
         return getattr(self.config, "padding_side", "left")
@@ -619,6 +694,289 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
 
         return audio_features
 
+    # ------------------------------------------------------------------
+    # Media feature embedding (replaces the former encoder wrapper classes)
+    # ------------------------------------------------------------------
+
+    def _embed_image_features(
+        self, images: list[torch.Tensor], config: dict[str, Any], mm_info: dict
+    ) -> list[torch.Tensor]:
+        """Encode images and wrap with boundary tokens."""
+        images = torch.stack(images, dim=0)
+        features = self.encode_images(images, block_sizes=config.get("block_sizes"))
+        start_embeds = self.embed_text_tokens(self._image_start_tokens)
+        end_embeds = self.embed_text_tokens(self._image_end_tokens)
+        result = []
+        for f in features:
+            if start_embeds is not None:
+                f = torch.cat([start_embeds, f], dim=0)
+            if end_embeds is not None:
+                f = torch.cat([f, end_embeds], dim=0)
+            result.append(f)
+        return result
+
+    def _embed_video_features(
+        self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict
+    ) -> list[torch.Tensor]:
+        """Encode video with temporal-spatial pooling and optional time embeddings."""
+        num_frames = [v.shape[0] for v in videos]
+        features = self.encode_video(videos, mm_info=mm_info, num_frames=num_frames)
+        features = torch.split(features, num_frames)
+
+        start_embeds = self.embed_text_tokens(self._video_start_tokens)
+        end_embeds = self.embed_text_tokens(self._video_end_tokens)
+        sep_embeds = self.embed_text_tokens(self._video_sep_tokens)
+
+        if not self._video_embed_time:
+            return [self._tsp_process(f, start_embeds, end_embeds, sep_embeds) for f in features]
+
+        bs = len(mm_info["video_info"])
+        device = features[0].device
+
+        # Learned-embed pre-pass: collect and batch times
+        new_time_embeds = None
+        if self._video_time_embed_type == "learned_embed":
+            times_list, vid_idx = [], 0
+            for i in range(bs):
+                _video_info = mm_info["video_info"][i]
+                if _video_info is None:
+                    continue
+                for j in range(len(_video_info)):
+                    _feature = features[vid_idx]
+                    if _video_info[j] == "dummy":
+                        times = torch.zeros(_feature.shape[0], device=device, dtype=_feature.dtype)
+                    else:
+                        times = torch.tensor(_video_info[j]["video_frame_times"]).to(device)
+                    for ps in self._video_pool_sizes:
+                        tp = ps[0]
+                        if tp != 1:
+                            if len(times) % tp != 0:
+                                r = len(times) % tp
+                                times = torch.cat([times, times[-r:].mean().expand(tp - r)])
+                            times = pool(times, tp, 0)
+                    times_list.append(times)
+                    vid_idx += 1
+            ori_lens = [len(t) for t in times_list]
+            max_len = max(ori_lens)
+            for i in range(len(times_list)):
+                if len(times_list[i]) < max_len:
+                    times_list[i] = torch.cat(
+                        [times_list[i], torch.zeros(max_len - len(times_list[i])).to(times_list[i].device)]
+                    )
+            times_t = torch.stack(times_list, dim=0)
+            time_embeds_all = self._time_embeddings["video"](times_t, dtype=features[0].dtype)
+            new_time_embeds = []
+            for i in range(len(times_list)):
+                new_time_embeds.append(
+                    time_embeds_all[i][: ori_lens[i]].unsqueeze(1).expand(-1, features[0].shape[1], -1)
+                )
+            new_time_embeds[0] = new_time_embeds[0] + 0 * time_embeds_all.mean()
+
+        new_features, vid_idx = [], 0
+        for i in range(bs):
+            _video_info = mm_info["video_info"][i]
+            if _video_info is None:
+                continue
+            for j in range(len(_video_info)):
+                _feature = features[vid_idx]
+                if _video_info[j] == "dummy":
+                    times = torch.zeros(_feature.shape[0], device=device, dtype=_feature.dtype)
+                else:
+                    times = torch.tensor(_video_info[j]["video_frame_times"]).to(device)
+                if self._video_time_embed_type == "learned_embed":
+                    _feature = self._tsp_process(
+                        _feature, start_embeds, end_embeds, sep_embeds, time_embed=new_time_embeds[vid_idx]
+                    )
+                else:
+                    _feature = self._tsp_process(_feature, start_embeds, end_embeds, sep_embeds, times=times)
+                new_features.append(_feature)
+                vid_idx += 1
+
+        assert vid_idx == len(features), f"vid_idx: {vid_idx}, fea_count: {len(features)}"
+        return new_features
+
+    def _tsp_process(
+        self,
+        inputs: torch.Tensor,
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
+        sep_token_embeds: torch.Tensor | None,
+        times: torch.Tensor | None = None,
+        time_embed: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Temporal-spatial pooling + time embedding + boundary tokens for one video."""
+        nt, ns = inputs.shape[:2]
+        nl = int(ns**0.5)
+        outputs = []
+        for pool_size in self._video_pool_sizes:
+            features = inputs.view(nt, nl, nl, -1)
+            for dim, p in enumerate(pool_size):
+                features = pool(features, p, dim=dim)
+            features = features.flatten(1, 2)
+
+            if self._video_embed_time:
+                device = features.device
+                if self._video_time_embed_type in ("pixel", "lang"):
+                    tp = pool_size[0]
+                    if tp != 1:
+                        _t = times
+                        if len(_t) % tp != 0:
+                            r = len(_t) % tp
+                            _t = torch.cat([_t, _t[-r:].mean().expand(tp - r)])
+                        new_times = pool(_t, tp, 0)
+                    else:
+                        new_times = times
+
+                    pos_emb = _move_rotary_module_to_device(self._time_embeddings["video"], device)
+                    self._time_embeddings["video"] = pos_emb
+
+                    if self._video_period_fix == "True":
+                        angle = (
+                            new_times.to(device) / self._video_max_time * 2 * np.pi
+                            if self._video_max_time is not None
+                            else new_times.to(device)
+                        )
+                    elif self._video_period_fix == "MTCT":
+                        nt_v = new_times.unsqueeze(0) if new_times.ndim == 1 else new_times
+                        freqs = pos_emb(nt_v.float()).squeeze(0).unsqueeze(1)
+                        features = apply_rotary_emb(freqs, features, seq_dim=0)
+                    else:
+                        angle = (-new_times * 2 * np.pi).to(device)
+
+                    if self._video_period_fix != "MTCT":
+                        freqs = pos_emb.get_axial_freqs(new_times.shape[0], features.shape[-2]).to(device)
+                        angle_exp = (
+                            angle.unsqueeze(1)
+                            .unsqueeze(2)
+                            .expand(new_times.shape[0], features.shape[-2], freqs.shape[-1])
+                        )
+                        features = apply_rotary_emb(freqs * angle_exp, features)
+                elif self._video_time_embed_type == "learned_embed":
+                    features = features + time_embed
+
+            # Per-frame boundary tokens then flatten
+            if start_token_embeds is not None:
+                features = torch.cat(
+                    [start_token_embeds.unsqueeze(0).expand(features.shape[0], -1, -1), features], dim=1
+                )
+            if end_token_embeds is not None:
+                features = torch.cat(
+                    [features, end_token_embeds.unsqueeze(0).expand(features.shape[0], -1, -1)], dim=1
+                )
+            features = features.flatten(0, 1)
+
+            if sep_token_embeds is not None:
+                features = torch.cat([features, sep_token_embeds], dim=0)
+            outputs.append(features)
+        return torch.cat(outputs, dim=0)
+
+    def _embed_sound_features(
+        self, sounds: list[torch.Tensor], config: dict[str, Any], mm_info: dict
+    ) -> list[torch.Tensor]:
+        """Encode audio features with optional time embeddings."""
+        features = self.encode_sound(sounds, mm_info=mm_info)
+        start_embeds = self.embed_text_tokens(self._sound_start_tokens)
+        end_embeds = self.embed_text_tokens(self._sound_end_tokens)
+
+        if not self._sound_embed_time:
+            return [self._process_sound_feature(f, start_embeds, end_embeds) for f in features]
+
+        device = features[0].device
+        fea_count = len(features)
+        bs = len(mm_info["audio_info"])
+
+        # Learned-embed pre-pass
+        time_embeds_all = None
+        if self._sound_time_embed_type == "learned_embed":
+            times_list, aud_idx = [], 0
+            for i in range(bs):
+                _audio_info = mm_info["audio_info"][i]
+                if _audio_info is None:
+                    continue
+                for j in range(len(_audio_info)):
+                    _feature = features[aud_idx]
+                    if _audio_info[j] == "dummy":
+                        t = torch.zeros(_feature.shape[0], device=device, dtype=_feature.dtype)
+                    else:
+                        acl = _audio_info[j]["new_audio_chunk_length"]
+                        spe = acl / _feature.shape[0]
+                        ast = _audio_info[j]["audio_start_sec"]
+                        t = torch.tensor([ast + k * spe + spe / 2 for k in range(_feature.shape[0])]).to(device)
+                    times_list.append(t)
+                    aud_idx += 1
+            times_t = torch.stack(times_list, dim=0)
+            time_embeds_all = self._time_embeddings["sound"](times_t, dtype=features[0].dtype)
+
+        new_features, aud_idx = [], 0
+        for i in range(bs):
+            _audio_info = mm_info["audio_info"][i]
+            if _audio_info is None:
+                continue
+            for j in range(len(_audio_info)):
+                _feature = features[aud_idx]
+                if _audio_info[j] == "dummy":
+                    times = torch.zeros(_feature.shape[0], device=device, dtype=_feature.dtype)
+                else:
+                    acl = _audio_info[j]["new_audio_chunk_length"]
+                    spe = acl / _feature.shape[0]
+                    ast = _audio_info[j]["audio_start_sec"]
+                    times = torch.tensor([ast + k * spe + spe / 2 for k in range(_feature.shape[0])]).to(device)
+                if self._sound_time_embed_type == "learned_embed":
+                    _feature = self._process_sound_feature(
+                        _feature, start_embeds, end_embeds, time_embed=time_embeds_all[aud_idx]
+                    )
+                else:
+                    _feature = self._process_sound_feature(_feature, start_embeds, end_embeds, times=times)
+                new_features.append(_feature)
+                aud_idx += 1
+
+        assert aud_idx == fea_count, f"aud_idx: {aud_idx}, fea_count: {fea_count}"
+        return new_features
+
+    def _process_sound_feature(
+        self,
+        features: torch.Tensor,
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
+        times: torch.Tensor | None = None,
+        time_embed: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Apply time embedding and boundary tokens to a single sound feature."""
+        features = features.to(self.device)
+        device = features.device
+
+        if self._sound_embed_time:
+            if self._sound_time_embed_type in ("pixel", "lang"):
+                new_times = times.unsqueeze(0)
+                pos_emb = _move_rotary_module_to_device(self._time_embeddings["sound"], device)
+                self._time_embeddings["sound"] = pos_emb
+
+                if self._sound_period_fix == "True":
+                    angle = (
+                        new_times.to(device) / self._sound_max_time * 2 * np.pi
+                        if self._sound_max_time is not None
+                        else new_times.to(device)
+                    )
+                elif self._sound_period_fix == "MTCT":
+                    freqs = pos_emb(new_times.float()).squeeze(0)
+                    features = apply_rotary_emb(freqs, features)
+                else:
+                    angle = (-new_times * 2 * np.pi).to(device)
+
+                if self._sound_period_fix != "MTCT":
+                    freqs = pos_emb.get_axial_freqs(new_times.shape[0], features.shape[-2]).to(device)
+                    angle_exp = angle.unsqueeze(2).expand(new_times.shape[0], features.shape[-2], freqs.shape[-1])
+                    freqs = (freqs * angle_exp).squeeze(0)
+                    features = apply_rotary_emb(freqs, features)
+            elif self._sound_time_embed_type == "learned_embed":
+                features = features + time_embed
+
+        if start_token_embeds is not None:
+            features = torch.cat([start_token_embeds, features], dim=0)
+        if end_token_embeds is not None:
+            features = torch.cat([features, end_token_embeds], dim=0)
+        return features
+
     def _embed(
         self,
         input_ids: torch.Tensor,
@@ -659,15 +1017,13 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
 
         # Based on segment_aud_indices_list and segment_vis_indices_list, get interleaved vis-aud embeddings for video
         video_sound_embeds_idx = 0
-        sep_embed = self.encoders["video"].embed_tokens("\n")
+        sep_embed = self.embed_text_tokens("\n")
         llm_embed_dtype = self.llm_model_embed_tokens.weight.dtype
         text_embeds = text_embeds.to(llm_embed_dtype)
         sep_embed = sep_embed.to(text_embeds.dtype)
 
         if video_info is not None and self.config.load_audio_in_video and self.config.interleaved_vis_aud_in_video:
-            assert self.encoders["video"].end_tokens is None, (
-                "end_tokens must be None for interleaved vis-aud in video"
-            )
+            assert self._video_end_tokens is None, "end_tokens must be None for interleaved vis-aud in video"
             new_video_embeds = deque()
             video_embeds_idx = 0
             for k in range(len(video_info)):
@@ -805,10 +1161,13 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         mm_info,
     ) -> dict[str, list[torch.Tensor]]:
         embeds = defaultdict(deque)
+        _embed_fn = {
+            "image": self._embed_image_features,
+            "video": self._embed_video_features,
+            "sound": self._embed_sound_features,
+        }
 
         for name in media:
-            _encoder = self.encoders[name]
-
             if name == "sound":
                 sound_media = media.get(name, [])
                 if len(sound_media) == 0:
@@ -823,7 +1182,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                     )
 
             if len(media[name]) > 0:
-                embeds[name] = deque(_encoder(media[name], media_config[name], mm_info))
+                embeds[name] = deque(_embed_fn[name](media[name], media_config[name], mm_info))
         return embeds
 
     def __truncate_sequence(
