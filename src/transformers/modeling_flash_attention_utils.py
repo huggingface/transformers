@@ -519,6 +519,8 @@ def _is_packed_sequence(position_ids, batch_size):
     """
     if position_ids is None:
         return False
+    if position_ids.dim() > 2:
+        return False
 
     increasing_position_sequences = (
         torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
