@@ -13,18 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import random
 from collections import defaultdict
+from types import SimpleNamespace
 
 import numpy as np
 import PIL.Image
 import torch
-from torch.nn.utils.rnn import pad_sequence
 
 from transformers import WhisperFeatureExtractor
-from transformers.audio_utils import load_audio
+from transformers.audio_utils import load_audio, make_list_of_audio
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -55,41 +53,37 @@ _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE = (
     "{% if add_generation_prompt %}{{ '<|im_start|>assistant\\n' }}{% endif %}"
 )
 
+_VIDEO_METADATA_KEYS = {"fps", "frames_indices", "total_num_frames", "video_path", "video_url"}
+_VIDEO_CONTAINER_EXTENSIONS = (".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi")
 
-def _collect_encoder_boundary_tokens(config) -> list[str]:
-    token_keys = {"start_tokens", "end_tokens", "sep_tokens"}
-    collected = []
-    seen = set()
+def _looks_like_video_metadata(meta) -> bool:
+    if meta is None:
+        return False
+    if isinstance(meta, dict):
+        return bool(_VIDEO_METADATA_KEYS & set(meta.keys()))
+    return any(hasattr(meta, key) for key in _VIDEO_METADATA_KEYS)
 
-    def _maybe_add(token):
-        if not isinstance(token, str) or token == "None" or token in seen:
-            return
-        seen.add(token)
-        collected.append(token)
 
-    def _visit(node):
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key in token_keys:
-                    _maybe_add(value)
-                _visit(value)
-        elif isinstance(node, (list, tuple)):
-            for item in node:
-                _visit(item)
+def _is_packed_media_item(item) -> bool:
+    return isinstance(item, (tuple, list)) and len(item) == 2 and _looks_like_video_metadata(item[1])
 
-    # Encoder implementations default `end_tokens` to "\n" when the config omits it.
-    _maybe_add("\n")
 
-    for attr in ("image_encoder", "video_encoder", "sound_encoder"):
-        encoder_config = getattr(config, attr, None)
-        if isinstance(encoder_config, str):
-            try:
-                encoder_config = json.loads(encoder_config)
-            except Exception:
-                continue
-        _visit(encoder_config)
+def _is_audio_like(value) -> bool:
+    return isinstance(value, (str, np.ndarray, torch.Tensor))
 
-    return collected
+
+def _merge_media_config(target: defaultdict, source: defaultdict) -> None:
+    for modality, config in source.items():
+        for key, value in config.items():
+            if isinstance(value, list):
+                target[modality].setdefault(key, []).extend(value)
+            elif key not in target[modality]:
+                target[modality][key] = value
+            elif target[modality][key] != value:
+                raise ValueError(
+                    f"Conflicting `{modality}` media config for key `{key}`: "
+                    f"{target[modality][key]!r} != {value!r}"
+                )
 
 
 def _expand2square(pil_img, background_color):
@@ -175,15 +169,9 @@ def _dynamic_s2_preprocess(image, s2_scales: list[int] | None = None, max_num=12
     return processed_images, (target_aspect_ratio[1], target_aspect_ratio[0])
 
 
-def _process_image(image_file, data_args, image_folder, enable_dynamic_s2=False):
+def _process_image(image_input, data_args, enable_dynamic_s2=False):
     processor = data_args.image_processor
-    if isinstance(image_file, str):
-        if image_folder is not None:
-            image = load_image(os.path.join(image_folder, image_file))
-        else:
-            image = load_image(image_file)
-    else:
-        image = image_file
+    image = load_image(image_input) if isinstance(image_input, str) else image_input
     image = image.convert("RGB")
     crop_size = getattr(data_args.image_processor, "crop_size", None)
     if crop_size is None:
@@ -211,7 +199,7 @@ def _process_image(image_file, data_args, image_folder, enable_dynamic_s2=False)
 def _process_images(images, image_processor, model_cfg):
     """Process a batch of images using the model image processor."""
     model_cfg.image_processor = image_processor
-    new_images = [_process_image(image, model_cfg, None) for image in images]
+    new_images = [_process_image(image, model_cfg) for image in images]
 
     if not all(x.shape == new_images[0].shape for x in new_images):
         raise ValueError("The shape of images in new_images is different!")
@@ -232,34 +220,6 @@ def _add_mm_bos_eos_tokens(text: str) -> str:
             text_parts[-1] = _eos + text_parts[-1]
             text = _media_token.join(text_parts)
     return text
-
-
-def _pad_fn(input_ids_list: list[torch.Tensor], padding_value=0, target_len=None, padding_side="left") -> torch.Tensor:
-    if not input_ids_list:
-        raise ValueError("input_ids_list must not be empty")
-
-    sequences = [ids.squeeze(0) for ids in input_ids_list]
-
-    if padding_side == "right":
-        padded = pad_sequence(sequences, batch_first=True, padding_value=padding_value)
-    elif padding_side == "left":
-        reversed_sequences = [torch.flip(ids, dims=[0]) for ids in sequences]
-        padded = pad_sequence(reversed_sequences, batch_first=True, padding_value=padding_value)
-        padded = torch.flip(padded, dims=[1])
-    else:
-        raise ValueError(f"Unsupported padding_side: {padding_side}")
-
-    if target_len is not None:
-        assert target_len >= padded.shape[1], "target_len must be greater than or equal to max_len"
-        if target_len > padded.shape[1]:
-            pad_width = target_len - padded.shape[1]
-            pad_tensor = padded.new_full((padded.shape[0], pad_width), padding_value)
-            if padding_side == "right":
-                padded = torch.cat((padded, pad_tensor), dim=1)
-            else:
-                padded = torch.cat((pad_tensor, padded), dim=1)
-
-    return padded
 
 
 def _pad_or_trim_audio(audio: np.ndarray, length: int) -> np.ndarray:
@@ -365,6 +325,13 @@ def _extract_sound_features(
     return new_media
 
 
+def _load_audio_from_video_container(audio_path: str, sampling_rate: int) -> np.ndarray:
+    from decord import AudioReader, cpu
+
+    audio_reader = AudioReader(audio_path, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
+    return audio_reader[:].asnumpy()[0].astype(np.float32, copy=False)
+
+
 def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str, float | int]]:
     sampling_rate = config.audio_sampling_rate
     audio_chunk_length = config.audio_chunk_length
@@ -397,28 +364,34 @@ def _load_audio_hf_with_info(audio_input, config) -> tuple[np.ndarray, dict[str,
         audio_end_sample_id = audio_start_sample_id + target_samples
         return audio_start_sample_id, audio_end_sample_id
 
-    if isinstance(audio_input, np.ndarray):
-        speech_data = audio_input.astype(np.float32, copy=False)
-        ori_n_samples = int(speech_data.shape[0])
-        audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
-        ori_audio_duration = ori_n_samples / sampling_rate
-        speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
-    elif isinstance(audio_input, str) and audio_input.lower().endswith(".mp4"):
-        from decord import AudioReader, cpu
-
-        audio_reader = AudioReader(audio_input, ctx=cpu(0), sample_rate=sampling_rate, mono=True)
-        ori_n_samples = int(audio_reader.shape[1])
-        audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
-        ori_audio_duration = ori_n_samples / sampling_rate
-        speech_data = (
-            audio_reader[audio_start_sample_id:audio_end_sample_id].asnumpy()[0].astype(np.float32, copy=False)
-        )
+    if isinstance(audio_input, torch.Tensor):
+        speech_data = audio_input.detach().cpu().float().numpy()
+    elif isinstance(audio_input, np.ndarray):
+        speech_data = audio_input
+    elif isinstance(audio_input, str):
+        try:
+            speech_data = load_audio(audio_input, sampling_rate=sampling_rate)
+        except Exception:
+            if audio_input.lower().endswith(_VIDEO_CONTAINER_EXTENSIONS):
+                speech_data = _load_audio_from_video_container(audio_input, sampling_rate)
+            else:
+                raise
     else:
-        speech_data = load_audio(audio_input, sampling_rate=sampling_rate).astype(np.float32, copy=False)
-        ori_n_samples = int(speech_data.shape[0])
-        audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
-        ori_audio_duration = ori_n_samples / sampling_rate
-        speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
+        raise TypeError(
+            "AudioVisualFlamingo audio inputs must be a path/URL, a numpy array, or a torch tensor. "
+            f"Got {type(audio_input)!r}."
+        )
+
+    speech_data = np.asarray(speech_data, dtype=np.float32)
+    if speech_data.ndim != 1:
+        speech_data = np.squeeze(speech_data)
+    if speech_data.ndim != 1:
+        raise ValueError(f"Expected mono waveform for sound input, got shape {speech_data.shape}.")
+
+    ori_n_samples = int(speech_data.shape[0])
+    audio_start_sample_id, audio_end_sample_id = _resolve_window(ori_n_samples)
+    ori_audio_duration = ori_n_samples / sampling_rate
+    speech_data = speech_data[audio_start_sample_id:audio_end_sample_id]
 
     audio_n_samples = int(np.ceil(speech_data.shape[0] / (sampling_rate * 30)) * (sampling_rate * 30))
     speech_data = _pad_or_trim_audio(speech_data, length=audio_n_samples)
@@ -440,15 +413,6 @@ def _extract_video_hf(
     | tuple[list[PIL.Image.Image], np.ndarray | None, dict[str, object]]
 ):
     num_frames = config.num_video_frames
-
-    def _looks_like_video_metadata(meta) -> bool:
-        if meta is None:
-            return False
-        if isinstance(meta, dict):
-            return bool({"fps", "frames_indices", "total_num_frames", "video_path", "video_url"} & set(meta.keys()))
-        return any(
-            hasattr(meta, key) for key in ("fps", "frames_indices", "total_num_frames", "video_path", "video_url")
-        )
 
     def _unpack_video_item(video_item):
         frames_obj = video_item
@@ -673,7 +637,9 @@ def _extract_video_hf(
 class AudioVisualFlamingoProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
+            "padding": True,
+            "padding_side": "left",
+            "return_tensors": "pt",
         },
     }
 
@@ -748,18 +714,18 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
         self.padding_side = padding_side
         if tokenizer is not None:
             self.tokenizer.padding_side = padding_side
+            self.image_token_id = self.tokenizer.convert_tokens_to_ids(self.image_token)
+            self.video_token_id = self.tokenizer.convert_tokens_to_ids(self.video_token)
+            self.sound_token_id = self.tokenizer.convert_tokens_to_ids(self.sound_token)
             self.pad_token_id = self.tokenizer("<|endoftext|>").input_ids[0]
             self.eos_token_id = self.tokenizer.eos_token_id
         else:
+            self.image_token_id = 0
+            self.video_token_id = 0
+            self.sound_token_id = 0
             self.pad_token_id = 0
             self.eos_token_id = 0
         super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
-
-    def __repr__(self):
-        return (
-            f"AudioVisualFlamingoProcessor(image_processor=SigLip, feature_extractor={self.feature_extractor}, "
-            f"tokenizer={self.tokenizer})"
-        )
 
     def __call__(
         self,
@@ -771,25 +737,65 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
     ) -> BatchFeature:
         if text is None:
             raise ValueError("`text` is required.")
-        if not isinstance(text, str) and not (
-            isinstance(text, (list, tuple)) and (len(text) == 0 or isinstance(text[0], str))
-        ):
+        if isinstance(text, str):
+            text = [text]
+        elif not (isinstance(text, (list, tuple)) and (len(text) == 0 or isinstance(text[0], str))):
             raise ValueError("`text` must be a string or a list/tuple of strings.")
-        return self._call_native(text=text, images=images, videos=videos, audio=audio, **kwargs)
+        else:
+            text = list(text)
+
+        processor_kwargs = {name: kwargs.pop(name) for name in self.valid_kwargs if name in kwargs}
+        output_kwargs = self._merge_kwargs(
+            AudioVisualFlamingoProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if self.tokenizer is not None else None,
+            **kwargs,
+        )
+        runtime_config = self._get_runtime_config(output_kwargs, **processor_kwargs)
+        return self._call_native(
+            text=text,
+            images=images,
+            videos=videos,
+            audio=audio,
+            runtime_config=runtime_config,
+            text_kwargs=output_kwargs["text_kwargs"],
+        )
+
+    def _get_runtime_config(self, output_kwargs: dict[str, dict], **overrides) -> SimpleNamespace:
+        runtime_kwargs = {
+            "audio_chunk_length": self.audio_chunk_length,
+            "audio_hop_length": self.audio_hop_length,
+            "audio_sampling_rate": self.audio_sampling_rate,
+            "feature_extractor": self.feature_extractor,
+            "image_aspect_ratio": self.image_aspect_ratio,
+            "image_processor": self.image_processor,
+            "interleaved_video_segment_duration": self.interleaved_video_segment_duration,
+            "interleaved_vis_aud_in_video": self.interleaved_vis_aud_in_video,
+            "load_audio_in_video": self.load_audio_in_video,
+            "max_tiles": self.max_tiles,
+            "mm_use_bos_eos_tokens": self.mm_use_bos_eos_tokens,
+            "num_video_frames": self.num_video_frames,
+            "padding_side": self.padding_side,
+            "random_audio_sample": getattr(self, "random_audio_sample", False),
+            "s2_scales": self.s2_scales,
+            "sound_tower_cfg": getattr(self, "sound_tower_cfg", None),
+        }
+        runtime_kwargs.update(
+            {
+                "audio_chunk_length": output_kwargs["audio_kwargs"].get("chunk_length", runtime_kwargs["audio_chunk_length"]),
+                "audio_hop_length": output_kwargs["audio_kwargs"].get("hop_length", runtime_kwargs["audio_hop_length"]),
+                "audio_sampling_rate": output_kwargs["audio_kwargs"].get(
+                    "sampling_rate", runtime_kwargs["audio_sampling_rate"]
+                ),
+                "num_video_frames": output_kwargs["videos_kwargs"].get("num_frames", runtime_kwargs["num_video_frames"]),
+                "padding_side": output_kwargs["text_kwargs"].get("padding_side", runtime_kwargs["padding_side"]),
+            }
+        )
+        runtime_kwargs.update(overrides)
+        if isinstance(runtime_kwargs["s2_scales"], str):
+            runtime_kwargs["s2_scales"] = [int(scale) for scale in runtime_kwargs["s2_scales"].split(",")]
+        return SimpleNamespace(**runtime_kwargs)
 
     def _normalize_nested_media(self, values, batch_size: int) -> list[list]:
-        def _is_packed_media_item(item) -> bool:
-            if not isinstance(item, (tuple, list)) or len(item) != 2:
-                return False
-            meta = item[1]
-            if isinstance(meta, dict):
-                return bool(
-                    {"fps", "frames_indices", "total_num_frames", "video_path", "video_url"} & set(meta.keys())
-                )
-            return any(
-                hasattr(meta, key) for key in ("fps", "frames_indices", "total_num_frames", "video_path", "video_url")
-            )
-
         if values is None:
             return [[] for _ in range(batch_size)]
 
@@ -818,58 +824,109 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
                 normalized.append([item])
         return normalized
 
-    def _single_native_call(
+    def _normalize_audio_sample(self, sample_audio) -> list:
+        if sample_audio is None:
+            return []
+        if _is_audio_like(sample_audio):
+            return [sample_audio]
+        if isinstance(sample_audio, (list, tuple)):
+            if not sample_audio:
+                return []
+            if all(_is_audio_like(item) for item in sample_audio):
+                if all(isinstance(item, (np.ndarray, torch.Tensor)) for item in sample_audio):
+                    return list(make_list_of_audio(list(sample_audio)))
+                return list(sample_audio)
+        raise ValueError(f"Unsupported audio sample type: {type(sample_audio)!r}")
+
+    def _normalize_audio_batches(self, audio, prompts: list[str]) -> list[list]:
+        batch_size = len(prompts)
+        if audio is None:
+            return [[] for _ in range(batch_size)]
+
+        if batch_size == 1:
+            return [self._normalize_audio_sample(audio)]
+
+        if (
+            isinstance(audio, (list, tuple))
+            and len(audio) == batch_size
+            and all(
+                item is None
+                or _is_audio_like(item)
+                or (isinstance(item, (list, tuple)) and all(_is_audio_like(sub_item) for sub_item in item))
+                for item in audio
+            )
+        ):
+            return [self._normalize_audio_sample(sample_audio) for sample_audio in audio]
+
+        flat_audio = self._normalize_audio_sample(audio)
+        audio_counts = [prompt.count(self.sound_token) for prompt in prompts]
+        if sum(audio_counts) != len(flat_audio):
+            raise ValueError(
+                "Batched audio inputs must either be grouped per sample or match the number of `<sound>` tokens in "
+                f"the prompts. Got {len(flat_audio)} audio inputs for token counts {audio_counts}."
+            )
+
+        audio_batches = []
+        cursor = 0
+        for audio_count in audio_counts:
+            audio_batches.append(flat_audio[cursor : cursor + audio_count])
+            cursor += audio_count
+        return audio_batches
+
+    def _prepare_sample(
         self,
         text: str,
+        runtime_config: SimpleNamespace,
         images: list | None = None,
         videos: list | None = None,
         audio: list | None = None,
-    ) -> BatchFeature:
+    ) -> tuple[str, defaultdict, defaultdict]:
         media = defaultdict(list)
         media_config = defaultdict(dict)
         raw_sounds = []
         video_infos = []
 
         if images:
-            if len(images) == 1 and self.image_aspect_ratio == "dynamic_s2":
-                if isinstance(self.s2_scales, str):
-                    self.s2_scales = list(map(int, self.s2_scales.split(",")))
-                image_tensor, block_sizes = _process_image(images[0], self, None, enable_dynamic_s2=True)
+            if len(images) == 1 and runtime_config.image_aspect_ratio == "dynamic_s2":
+                image_tensor, block_sizes = _process_image(images[0], runtime_config, enable_dynamic_s2=True)
                 media["image"] = list(image_tensor.half())
                 media_config["image"]["block_sizes"] = [block_sizes]
             else:
-                media["image"] = list(_process_images(images, self.image_processor, self).half())
+                media["image"] = list(_process_images(images, runtime_config.image_processor, runtime_config).half())
 
         audio_info_list = []
         if videos:
             for video in videos:
-                if self.load_audio_in_video:
-                    frames, audio_waveform, video_info = _extract_video_hf(video, self)
+                if runtime_config.load_audio_in_video:
+                    frames, audio_waveform, video_info = _extract_video_hf(video, runtime_config)
                     if audio_waveform is not None:
                         raw_sounds.append(audio_waveform)
                         audio_info_list.append(video_info["audio_info"])
                 else:
-                    frames, video_info = _extract_video_hf(video, self)
-                media["video"].append(_process_images(frames, self.image_processor, self).half())
+                    frames, video_info = _extract_video_hf(video, runtime_config)
+                media["video"].append(_process_images(frames, runtime_config.image_processor, runtime_config).half())
                 video_infos.append(video_info)
             media["video_info"] = [video_infos]
 
         explicit_audio_count = len(audio) if audio else 0
         if audio:
             for audio_item in audio:
-                audio_waveform, audio_info = _load_audio_hf_with_info(audio_item, self)
+                audio_waveform, audio_info = _load_audio_hf_with_info(audio_item, runtime_config)
                 raw_sounds.append(audio_waveform)
                 audio_info_list.append(audio_info)
 
         if raw_sounds:
             media["sound"] = _extract_sound_features(
-                raw_sounds, audio_info_list, self, feature_extractor=self.feature_extractor
+                raw_sounds,
+                audio_info_list,
+                runtime_config,
+                feature_extractor=runtime_config.feature_extractor,
             )
 
         if audio_info_list:
             media["audio_info"] = [audio_info_list]
 
-        if video_infos and self.load_audio_in_video:
+        if video_infos and runtime_config.load_audio_in_video:
             expected_sound_tokens = explicit_audio_count + sum(
                 1 for video_info in video_infos if video_info.get("has_audio", False)
             )
@@ -890,80 +947,58 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
                 rebuilt.append(text[cursor:])
                 text = "".join(rebuilt)
 
-        if self.mm_use_bos_eos_tokens:
+        if runtime_config.mm_use_bos_eos_tokens:
             text = _add_mm_bos_eos_tokens(text)
 
-        tokenized = self.tokenizer(text, return_tensors="pt")
-        input_ids = tokenized.input_ids
-        attention_mask = tokenized.attention_mask.to(dtype=torch.bool)
+        return text, media, media_config
 
-        return BatchFeature(
-            data={
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "media": media,
-                "media_config": media_config,
-            }
-        )
-
-    def _call_native(self, text, images=None, videos=None, audio=None, **kwargs) -> BatchFeature:
-        texts = [text] if isinstance(text, str) else list(text)
-        if not texts:
+    def _call_native(
+        self,
+        text: list[str],
+        runtime_config: SimpleNamespace,
+        text_kwargs: dict,
+        images=None,
+        videos=None,
+        audio=None,
+    ) -> BatchFeature:
+        if not text:
             raise ValueError("`text` must contain at least one prompt.")
 
-        image_batches = self._normalize_nested_media(images, len(texts))
-        video_batches = self._normalize_nested_media(videos, len(texts))
+        image_batches = self._normalize_nested_media(images, len(text))
+        video_batches = self._normalize_nested_media(videos, len(text))
+        audio_batches = self._normalize_audio_batches(audio, text)
 
-        if audio is None:
-            audio_batches = [[] for _ in range(len(texts))]
-        elif len(texts) == 1:
-            audio_batches = [[audio]] if not isinstance(audio, (list, tuple)) else [list(audio)]
-        else:
-            raise ValueError(
-                "Batched `audio` with native `apply_chat_template(tokenize=True)` is not supported in AudioVisualFlamingoProcessor yet."
-            )
-
-        padding_side = kwargs.get("padding_side", self.padding_side)
-        input_ids_list = []
+        processed_text = []
         media = defaultdict(list)
         media_config = defaultdict(dict)
 
         for prompt, sample_images, sample_videos, sample_audio in zip(
-            texts, image_batches, video_batches, audio_batches
+            text, image_batches, video_batches, audio_batches
         ):
-            feat = self._single_native_call(prompt, images=sample_images, videos=sample_videos, audio=sample_audio)
-            input_ids_list.append(feat.input_ids)
-            for name in feat.media:
-                media[name] += feat.media[name]
-            for name in feat.media_config:
-                media_config[name].update(feat.media_config[name])
+            sample_text, sample_media, sample_media_config = self._prepare_sample(
+                prompt,
+                runtime_config=runtime_config,
+                images=sample_images,
+                videos=sample_videos,
+                audio=sample_audio,
+            )
+            processed_text.append(sample_text)
+            for name in sample_media:
+                media[name].extend(sample_media[name])
+            _merge_media_config(media_config, sample_media_config)
 
-        input_ids = _pad_fn(input_ids_list, padding_value=self.pad_token_id, padding_side=padding_side)
-        attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
-        attention_mask[input_ids == self.pad_token_id] = False
+        text_inputs = self.tokenizer(processed_text, **text_kwargs)
+        if "attention_mask" in text_inputs and isinstance(text_inputs["attention_mask"], torch.Tensor):
+            text_inputs["attention_mask"] = text_inputs["attention_mask"].to(dtype=torch.bool)
+        self._check_special_mm_tokens(processed_text, text_inputs, modalities=["image", "video", "sound"])
 
         return BatchFeature(
             data={
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
+                **text_inputs,
                 "media": media,
                 "media_config": media_config,
             }
         )
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     def post_process_image_text_to_text(self, generated_outputs):
         """
@@ -988,7 +1023,11 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
         feature_extractor_input_names = (
             self.feature_extractor.model_input_names if self.feature_extractor is not None else []
         )
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + feature_extractor_input_names))
+        return list(
+            dict.fromkeys(
+                tokenizer_input_names + image_processor_input_names + feature_extractor_input_names + ["media", "media_config"]
+            )
+        )
 
 
 __all__ = [

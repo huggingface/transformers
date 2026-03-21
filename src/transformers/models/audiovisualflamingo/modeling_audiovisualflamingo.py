@@ -468,6 +468,24 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         self._init_audiovisualflamingo_components(*args, **kwargs)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.llm.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.llm.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.llm.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.llm.set_output_embeddings(new_embeddings)
+
+    def set_decoder(self, decoder):
+        self.llm.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.llm.get_decoder()
+
     def merge_features_for_dynamic_s2(self, image_features, block_sizes):
         scales = self.vision_tower.scales
         resize_output_to_scale_idx = self.vision_tower.resize_output_to_scale_idx
