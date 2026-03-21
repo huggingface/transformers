@@ -552,6 +552,8 @@ def convert_to_size_dict(
     default_to_square: bool = True,
     height_width_order: bool = True,
 ) -> dict[str, int]:
+    if isinstance(size, dict):
+        return size
     if isinstance(size, SizeDict):
         return dict(size)
     # By default, if size is an int we assume it represents a tuple of (size, size).
