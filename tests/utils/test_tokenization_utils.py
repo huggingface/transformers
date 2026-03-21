@@ -209,8 +209,11 @@ class TokenizersBackendTest(unittest.TestCase):
         decoded_no_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
         self.assertEqual(decoded_no_cleanup, "Hello , how are you ? I 'm here .")
 
+        # GPT-2 is a BPE tokenizer — clean_up_tokenization is skipped because it
+        # was designed for WordPiece and is destructive for BPE (strips legitimate
+        # spaces before punctuation). The text should be preserved as-is.
         decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
-        self.assertEqual(decoded_with_cleanup, "Hello, how are you? I'm here.")
+        self.assertEqual(decoded_with_cleanup, "Hello , how are you ? I 'm here .")
 
 
 class TrieTest(unittest.TestCase):
