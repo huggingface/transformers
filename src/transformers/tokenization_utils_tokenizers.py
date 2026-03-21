@@ -1015,7 +1015,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
+            # Skip cleanup for BPE tokenizers — the cleanup was designed for
+            # WordPiece tokenizers and is destructive for BPE (it strips
+            # legitimate spaces before punctuation).
+            if type(self.backend_tokenizer.model).__name__ == "BPE":
+                logger.warning_once(
+                    "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer"
+                    f" {self.__class__.__name__}. The clean_up_tokenization post-processing"
+                    " step is designed for WordPiece tokenizers and is destructive for BPE"
+                    " (it strips spaces before punctuation). Set"
+                    " clean_up_tokenization_spaces=False to suppress this warning."
+                )
+            else:
+                text = self.clean_up_tokenization(text)
 
         return text
 
