@@ -235,6 +235,16 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 recordable_keys["output_mask_decoder_attentions"] = kwargs.get(
                     "output_attentions", getattr(self.config, "output_attentions", False)
                 )
+            # Pop the output_* flags from kwargs so they do not leak into internal
+            # sub-module calls via **kwargs.  The @capture_outputs decorator captures
+            # these outputs through forward hooks, so the underlying forward function
+            # does not need to receive them.  Leaking them (e.g. output_hidden_states)
+            # into vision-model blocks or attention modules causes incorrect behaviour
+            # such as garbled generation when output_hidden_states=True.
+            for k in capturable_flags:
+                kwargs.pop(f"output_{k}", None)
+            if "cross_attentions" in capturable_flags or "mask_decoder_attentions" in capturable_flags:
+                kwargs.pop("output_attentions", None)
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
             # Make sure hooks are installed if we need to collect outputs
