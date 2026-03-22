@@ -519,10 +519,10 @@ def _is_packed_sequence(position_ids, batch_size):
     """
     if position_ids is None:
         return False
-    
+
     # Extract the temporal dimension to support multi-dimensional RoPE
     t_position_ids = position_ids[0] if position_ids.dim() > 2 else position_ids
-    
+
     return batch_size == 1 and (t_position_ids[:, 1:] - t_position_ids[:, :-1] < 0).sum().bool()
 
 
