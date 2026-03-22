@@ -112,6 +112,9 @@ class Mxfp4QuantizerTest(unittest.TestCase):
     def setUp(self):
         gc.collect()
         _empty_accelerator_cache()
+        from transformers.utils.logging import warning_once
+
+        warning_once.cache_clear()
 
     def test_quantizer_validation_no_torch(self):
         """Test quantizer validation when torch is not available"""
@@ -247,6 +250,102 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 
         # MXFP4 is not trainable
         self.assertFalse(quantizer.is_trainable)
+
+    @require_torch_gpu
+    def test_warning_missing_kernels_only(self):
+        """When triton is available but kernels is not, warning should mention kernels specifically."""
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        with (
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
+            self.assertLogs("transformers", level="WARNING") as cm,
+        ):
+            quantizer.validate_environment()
+
+        warning_text = " ".join(cm.output)
+        self.assertIn("kernels", warning_text.lower())
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+    @require_torch_gpu
+    def test_warning_missing_triton_only(self):
+        """When kernels is available but triton is not, warning should mention triton specifically."""
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+        quantizer.pre_quantized = True
+
+        with (
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
+            self.assertLogs("transformers", level="WARNING") as cm,
+        ):
+            quantizer.validate_environment()
+
+        warning_text = " ".join(cm.output)
+        self.assertIn("triton", warning_text.lower())
+        self.assertTrue(quantizer.quantization_config.dequantize)
+
+    @require_torch_gpu
+    def test_error_missing_kernels_not_prequantized(self):
+        """When quantizing without kernels, should raise ValueError mentioning kernels."""
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+        quantizer.pre_quantized = False
+
+        with (
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=True),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=False),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                quantizer.validate_environment()
+
+        self.assertIn("kernels", str(ctx.exception).lower())
+
+    @require_torch_gpu
+    def test_error_missing_triton_not_prequantized(self):
+        """When quantizing without triton, should raise ValueError mentioning triton."""
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+
+        config = Mxfp4Config()
+        quantizer = Mxfp4HfQuantizer(config)
+        quantizer.pre_quantized = False
+
+        with (
+            patch("transformers.quantizers.quantizer_mxfp4.is_triton_available", return_value=False),
+            patch("transformers.quantizers.quantizer_mxfp4.is_kernels_available", return_value=True),
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                quantizer.validate_environment()
+
+        self.assertIn("triton", str(ctx.exception).lower())
+
+    def test_is_kernels_available_with_na_version(self):
+        """is_kernels_available should return False when version is N/A, not crash."""
+        from transformers.utils.import_utils import is_kernels_available
+
+        is_kernels_available.cache_clear()
+        with patch("transformers.utils.import_utils._is_package_available", return_value=(True, "N/A")):
+            result = is_kernels_available()
+        self.assertFalse(result)
+        is_kernels_available.cache_clear()
+
+    def test_is_triton_available_with_na_version(self):
+        """is_triton_available should return False when version is N/A, not crash."""
+        from transformers.utils.import_utils import is_triton_available
+
+        is_triton_available.cache_clear()
+        with patch("transformers.utils.import_utils._is_package_available", return_value=(True, "N/A")):
+            result = is_triton_available()
+        self.assertFalse(result)
+        is_triton_available.cache_clear()
 
 
 class Mxfp4IntegrationTest(unittest.TestCase):
