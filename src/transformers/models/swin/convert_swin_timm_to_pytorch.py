@@ -141,7 +141,7 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
+    image_processor = AutoImageProcessor.from_pretrained(f"microsoft/{swin_name.replace('_', '-')}")
     with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")

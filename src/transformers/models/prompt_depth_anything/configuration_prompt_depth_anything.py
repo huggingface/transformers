@@ -17,46 +17,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
+@auto_docstring(checkpoint="LiheYoung/depth-anything-small-hf")
+@strict(accept_kwargs=True)
 class PromptDepthAnythingConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PromptDepthAnythingModel`]. It is used to instantiate a PromptDepthAnything
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the PromptDepthAnything
-    [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Dinov2Config()`):
-            The configuration of the backbone model.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size of the patches to extract from the backbone features.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        reassemble_hidden_size (`int`, *optional*, defaults to 384):
-            The number of input channels of the reassemble layers.
-        reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
-            The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
-            The hidden sizes to project to for the feature maps of the backbone.
-        fusion_hidden_size (`int`, *optional*, defaults to 64):
-            The number of channels before fusion.
-        head_in_index (`int`, *optional*, defaults to -1):
-            The index of the features to use in the depth estimation head.
-        head_hidden_size (`int`, *optional*, defaults to 32):
-            The number of output channels in the second convolution of the depth estimation head.
-        depth_estimation_type (`str`, *optional*, defaults to `"relative"`):
-            The type of depth estimation to use. Can be one of `["relative", "metric"]`.
-        max_depth (`float`, *optional*):
-            The maximum depth to use for the "metric" depth estimation head. 20 should be used for indoor models
-            and 80 for outdoor models. For "relative" depth estimation, this value is ignored.
+    reassemble_hidden_size (`int`, *optional*, defaults to 384):
+        The number of input channels of the reassemble layers.
+    reassemble_factors (`list[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
+        The up/downsampling factors of the reassemble layers.
+    neck_hidden_sizes (`list[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        The hidden sizes to project to for the feature maps of the backbone.
+    fusion_hidden_size (`int`, *optional*, defaults to 64):
+        The number of channels before fusion.
+    head_in_index (`int`, *optional*, defaults to -1):
+        The index of the features to use in the depth estimation head.
+    head_hidden_size (`int`, *optional*, defaults to 32):
+        The number of output channels in the second convolution of the depth estimation head.
+    depth_estimation_type (`str`, *optional*, defaults to `"relative"`):
+        The type of depth estimation to use. Can be one of `["relative", "metric"]`.
+    max_depth (`float`, *optional*):
+        The maximum depth to use for the "metric" depth estimation head. 20 should be used for indoor models
+        and 80 for outdoor models. For "relative" depth estimation, this value is ignored.
 
     Example:
 
@@ -76,23 +65,21 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
     model_type = "prompt_depth_anything"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config=None,
-        patch_size=14,
-        initializer_range=0.02,
-        reassemble_hidden_size=384,
-        reassemble_factors=[4, 2, 1, 0.5],
-        neck_hidden_sizes=[48, 96, 192, 384],
-        fusion_hidden_size=64,
-        head_in_index=-1,
-        head_hidden_size=32,
-        depth_estimation_type="relative",
-        max_depth=None,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    patch_size: int | list[int] | tuple[int, int] = 14
+    initializer_range: float = 0.02
+    reassemble_hidden_size: int = 384
+    reassemble_factors: list[int | float] | tuple[int | float, ...] = (4, 2, 1, 0.5)
+    neck_hidden_sizes: list[int] | tuple[int, ...] = (48, 96, 192, 384)
+    fusion_hidden_size: int = 64
+    head_in_index: int = -1
+    head_hidden_size: int = 32
+    depth_estimation_type: str = "relative"
+    max_depth: int | None = None
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="dinov2",
             default_config_kwargs={
                 "image_size": 518,
@@ -104,21 +91,13 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.reassemble_hidden_size = reassemble_hidden_size
-        self.patch_size = patch_size
-        self.initializer_range = initializer_range
-        self.reassemble_factors = reassemble_factors
-        self.neck_hidden_sizes = neck_hidden_sizes
-        self.fusion_hidden_size = fusion_hidden_size
-        self.head_in_index = head_in_index
-        self.head_hidden_size = head_hidden_size
-        if depth_estimation_type not in ["relative", "metric"]:
-            raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
-        self.depth_estimation_type = depth_estimation_type
-        self.max_depth = max_depth if max_depth else 1
+        self.max_depth = self.max_depth if self.max_depth else 1
+        super().__post_init__(**kwargs)
 
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.depth_estimation_type not in ["relative", "metric"]:
+            raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
 
 
 __all__ = ["PromptDepthAnythingConfig"]

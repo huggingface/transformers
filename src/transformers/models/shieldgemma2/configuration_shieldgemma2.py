@@ -13,42 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="google/shieldgemma-2-4b-it")
+@strict(accept_kwargs=True)
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ShieldGemma2ForImageClassification`]. It is used to instantiate an
-    ShieldGemma2ForImageClassification according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the shieldgemma-2-4b-it.
-
-    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[ShieldGemma2TextConfig, dict]`, *optional*):
-            The config object of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*):
-            Custom vision config or dict.
-        mm_tokens_per_image (`int`, *optional*, defaults to 256):
-            The number of tokens per image embedding.
-        boi_token_index (`int`, *optional*, defaults to 255999):
-            The begin-of-image token index to wrap the image prompt.
-        eoi_token_index (`int`, *optional*, defaults to 256000):
-            The end-of-image token index to wrap the image prompt.
-        image_token_index (`int`, *optional*, defaults to 262144):
-            The image token index to encode the image prompt.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
-
+    mm_tokens_per_image (`int`, *optional*, defaults to 256):
+        The number of tokens per image embedding.
+    boi_token_index (`int`, *optional*, defaults to 255999):
+        The begin-of-image token index to wrap the image prompt.
+    eoi_token_index (`int`, *optional*, defaults to 256000):
+        The end-of-image token index to wrap the image prompt.
+    tie_word_embeddings (`bool`, *optional*):
+            Whether to tie the word embeddings. Defaults to the value of `text_config.tie_word_embeddings` if not set.
     Example:
 
     ```python
@@ -78,40 +62,30 @@ class ShieldGemma2Config(PreTrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        mm_tokens_per_image: int = 256,
-        boi_token_index: int = 255_999,
-        eoi_token_index: int = 256_000,
-        image_token_index: int = 262_144,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["siglip_vision_model"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    mm_tokens_per_image: int = 256
+    boi_token_index: int = 255_999
+    eoi_token_index: int = 256_000
+    image_token_index: int = 262_144
+    initializer_range: float = 0.02
 
-        self.vision_config = vision_config
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "gemma3_text")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["gemma3_text"]()
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "gemma3_text")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["gemma3_text"]()
+        if kwargs.get("tie_word_embeddings") is None:
+            self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", True)
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.image_token_index = image_token_index
-        self.initializer_range = initializer_range
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ShieldGemma2Config"]

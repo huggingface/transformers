@@ -110,10 +110,7 @@ class SiglipOutput(ModelOutput):
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 class SiglipVisionEmbeddings(nn.Module):
@@ -507,7 +504,7 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
         )
 

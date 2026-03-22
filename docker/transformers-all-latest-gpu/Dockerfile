@@ -9,12 +9,12 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.9.0'
+ARG PYTORCH='2.10.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu126'
 
 # This needs to be compatible with the above `PYTORCH`.
-ARG TORCHCODEC='0.8.0'
+ARG TORCHCODEC='0.10.0'
 
 ARG FLASH_ATTN='false'
 
@@ -80,7 +80,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 # For bettertransformer
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 # For kernels
-RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/kernels@main#egg=kernels
+RUN python3 -m pip install --no-cache-dir kernels
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir av
@@ -108,8 +108,8 @@ RUN python3 -m pip install --no-cache-dir g2p-en
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
 
-# For Some tests with `@require_liger_kernel`
-RUN python3 -m pip install --no-cache-dir liger-kernel
+# For `VibeVoice` (added in PR #40546)
+RUN python3 -m pip install --no-cache-dir diffusers
 
 # `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
 RUN python3 -m pip uninstall -y kernels

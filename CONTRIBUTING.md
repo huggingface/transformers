@@ -137,13 +137,15 @@ python utils/modular_model_converter.py <model_name>
 
 This will generate the separate files (`modeling_*.py`, `configuration_*.py`, etc.) from your modular file. The CI will enforce that these generated files match your modular file.
 
-☐ **2. Add a fast image processor (for image models)**
+☐ **2. Add image processors (for image models)**
 
-If your model processes images, implement a fast image processor that uses `torch` and `torchvision` instead of PIL/numpy for better inference performance:
+If your model processes images, implement both a torchvision-backed processor (the default, GPU-accelerated) and a PIL-backed processor (the alternative):
 
-- See the detailed guide in [#36978](https://github.com/huggingface/transformers/issues/36978)
-- Fast processors inherit from `BaseImageProcessorFast`
-- Examples: `LlavaOnevisionImageProcessorFast`, `Idefics2ImageProcessorFast`
+- The torchvision backend processor (`<Model>ImageProcessor`) inherits from `TorchvisionBackend` and lives in `image_processing_<model>.py`
+- The PIL backend processor (`<Model>ImageProcessorPil`) inherits from `PilBackend` and lives in `image_processing_pil_<model>.py`
+- Both are imported from `image_processing_backends`; the PIL kwargs class is defined in the torchvision file and imported by the PIL file
+- See the detailed guide in [IMAGE_PROCESSOR_REFACTORING_GUIDE.md](https://github.com/huggingface/transformers/blob/main/IMAGE_PROCESSOR_REFACTORING_GUIDE.md)
+- Examples: `CLIPImageProcessor` / `CLIPImageProcessorPil`, `DonutImageProcessor` / `DonutImageProcessorPil`
 
 ☐ **3. Create a weight conversion script**
 
@@ -225,7 +227,7 @@ Here's a condensed version maintainers can copy into PRs:
 Please ensure your PR completes all following items. See the [full checklist](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#vision-language-model-contribution-checklist) for details.
 
 - [ ] **Modular file**: `modular_<model_name>.py` implemented and verified with `python utils/modular_model_converter.py <model_name>`
-- [ ] **Fast image processor**: Implemented using `BaseImageProcessorFast` (see [#36978](https://github.com/huggingface/transformers/issues/36978))
+- [ ] **Image processors**: Torchvision backend (`<Model>ImageProcessor` from `TorchvisionBackend`) and PIL backend (`<Model>ImageProcessorPil` from `PilBackend`) both implemented (see [IMAGE_PROCESSOR_REFACTORING_GUIDE.md](https://github.com/huggingface/transformers/blob/main/IMAGE_PROCESSOR_REFACTORING_GUIDE.md))
 - [ ] **Conversion script**: `convert_<model_name>_to_hf.py` added with usage examples
 - [ ] **Integration tests**: End-to-end tests with exact output matching (text or logits)
 - [ ] **Documentation**: Model docs added/updated in `docs/source/en/model_doc/`
@@ -239,6 +241,15 @@ Please ensure your PR completes all following items. See the [full checklist](ht
 We're always looking for improvements to the documentation that make it more clear and accurate. Please let us know how the documentation can be improved such as typos and any content that is missing, unclear or inaccurate. We'll be happy to make the changes or help you make a contribution if you're interested!
 
 For more details about how to generate, build, and write the documentation, take a look at the documentation [README](https://github.com/huggingface/transformers/tree/main/docs).
+
+## Coding with AI agents
+
+This repository keeps AI-agent configuration in `.ai/` and exposes local agent files via symlinks.
+
+Skills can be exposed to agents by running `make codex` or `make claude`
+
+Cursor reads `AGENTS.md` and reads skills from Claude or Codex paths, so setting up the repository
+for Claude or Codex will work for Claude.
 
 ## Create a Pull Request
 
@@ -371,6 +382,18 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    too! So everyone can see the changes in the pull request, work in your local
    branch and push the changes to your fork. They will automatically appear in
    the pull request.
+
+### AI-assisted and agentic contributions
+
+AI-assisted contributions are welcome, but they must be coordinated, scoped, and verified to keep review load manageable.
+
+- Do not submit "pure agent" PRs. The human submitter is responsible for reviewing all changed lines, validating behavior end-to-end, and running relevant tests.
+- If AI tools were used, disclose this in the PR description and include: coordination link, differentiation from existing PRs (if applicable), and test commands/results.
+- Avoid one-off "busywork" PRs (single typo, isolated style cleanup, one mutable default fix, etc.). Bundle mechanical cleanups into a clear, systematic scope.
+- Coordinate on issues before opening a PRs, review similar PRs, and wait for approval. 
+
+> [!WARNING] 
+> These topics are outlined for agents in `AGENTS.MD` with instruction for how to autonomously implement them. 
 
 ### Pull request checklist
 

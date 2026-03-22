@@ -369,10 +369,18 @@ class ImageProcessingMixin(PushToHubMixin):
         image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
         image_processor = cls(**image_processor_dict)
 
-        # Remove kwargs that are used to initialize the image processor attributes
-        for key in list(kwargs):
-            if hasattr(image_processor, key):
-                kwargs.pop(key)
+        # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
+        extra_keys = []
+        for key in reversed(list(kwargs.keys())):
+            if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
+                setattr(image_processor, key, kwargs.pop(key, None))
+                extra_keys.append(key)
+        if extra_keys:
+            logger.warning_once(
+                f"Image processor {cls.__name__}: kwargs {extra_keys} were applied for backward compatibility. "
+                f"To avoid this warning, add them to valid_kwargs: create a custom TypedDict extending "
+                f"ImagesKwargs with these keys and set it as the `valid_kwargs` class attribute."
+            )
 
         logger.info(f"Image processor {image_processor}")
         if return_unused_kwargs:
@@ -469,7 +477,7 @@ class ImageProcessingMixin(PushToHubMixin):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(image_url_or_urls, list):
+        if isinstance(image_url_or_urls, (list, tuple)):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
             return load_image(image_url_or_urls)

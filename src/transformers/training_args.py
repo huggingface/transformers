@@ -44,6 +44,7 @@ from .utils import (
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
+    is_torch_neuron_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tf32_available,
@@ -601,13 +602,19 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
             You should only specify `label_names` if you're using custom label names or if your model's `forward` consumes multiple label tensors (e.g., extractive QA).
-        group_by_length (`bool`, *optional*, defaults to `False`):
-            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
-            padding applied and be more efficient). Only useful if applying dynamic padding.
+        train_sampling_strategy (`str`, *optional*, defaults to `"random"`):
+            The sampler to use for the training dataloader. Possible values are:
+
+                - `"random"`: Uses `RandomSampler` (default).
+                - `"sequential"`: Uses `SequentialSampler`.
+                - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
+                  together (to minimize padding and be more efficient).
+
+            Note: When using an `IterableDataset`, this argument is ignored.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
-            instance of `Dataset`.
+            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"` and the dataset
+            is an instance of `Dataset`.
 
         > DDP (DistributedDataParallel)
 
@@ -890,7 +897,7 @@ class TrainingArguments:
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
-            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20% slower training."
+            "help": "Enable gradient checkpointing to trade compute for memory. Reduces memory at the cost of ~20%% slower training."
         },
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
@@ -919,7 +926,7 @@ class TrainingArguments:
     use_liger_kernel: bool = field(
         default=False,
         metadata={
-            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20% and reduces memory by ~60%."
+            "help": "Enable Liger Kernel optimizations. Increases throughput by ~20%% and reduces memory by ~60%%."
         },
     )
     liger_kernel_config: dict[str, bool] | None = field(
@@ -945,7 +952,7 @@ class TrainingArguments:
     torch_empty_cache_steps: int | None = field(
         default=None,
         metadata={
-            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10% slower performance. If None, cache will not be emptied."
+            "help": "Number of steps to wait before calling `torch.<device>.empty_cache()`. Helps avoid CUDA OOM at a cost of ~10%% slower performance. If None, cache will not be emptied."
         },
     )
     auto_find_batch_size: bool = field(
@@ -1300,15 +1307,18 @@ class TrainingArguments:
     label_names: list[str] | None = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-    group_by_length: bool = field(
-        default=False,
+    train_sampling_strategy: str = field(
+        default="random",
         metadata={
-            "help": "Whether or not to group samples of roughly the same length together when batching. Only useful if applying dynamic padding."
+            "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
+            "choices": ["random", "sequential", "group_by_length"],
         },
     )
     length_column_name: str = field(
         default="length",
-        metadata={"help": "Column name for precomputed lengths. Ignored unless `group_by_length` is True."},
+        metadata={
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+        },
     )
 
     # --- DDP ---
@@ -1433,12 +1443,6 @@ class TrainingArguments:
             "help": "When using torch.distributed.launch (Deprecated), it will pass `local_rank` in the script, so we need this for the parser. To get the local rank, prefer using the property `local_process_index`"
         },
     )
-    place_model_on_device: bool | None = field(
-        default=None,
-        metadata={
-            "help": "Whether to automatically place the model on the device. When `None` (default), the Trainer decides."
-        },
-    )
 
     def __post_init__(self):
         # ── 1. Defaults & Normalization ──
@@ -1506,16 +1510,28 @@ class TrainingArguments:
                 )
 
         if (
-            self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            self.load_best_model_at_end
+            or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            or self.lr_scheduler_type == SchedulerType.GREEDY
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = not self.metric_for_best_model.endswith("loss")
 
-        if self.report_to == "none" or self.report_to == ["none"]:
+        if self.report_to == "all" or self.report_to == ["all"]:
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
+
+        # Auto-enable Kubeflow integration when running inside a Kubeflow TrainJob
+        from .integrations import is_kubeflow_available
+
+        if is_kubeflow_available() and "kubeflow" not in self.report_to:
+            self.report_to = list(self.report_to) + ["kubeflow"]
 
         # ── 4. Validation ──
         self._validate_args()
@@ -1694,6 +1710,10 @@ class TrainingArguments:
             if not is_torch_available():
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
 
+        if self.lr_scheduler_type == SchedulerType.GREEDY:
+            if self.eval_strategy == IntervalStrategy.NO:
+                raise ValueError("lr_scheduler_type greedy requires an eval strategy")
+
         if self.warmup_steps < 0:
             raise ValueError("warmup_steps must be an integer or a float")
 
@@ -1805,6 +1825,7 @@ class TrainingArguments:
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
+
         if is_torch_xla_available():
             device = self.distributed_state.device
             self._n_gpu = 0
@@ -1830,6 +1851,9 @@ class TrainingArguments:
             elif is_torch_hpu_available():
                 device = torch.device("hpu:0")
                 torch.hpu.set_device(device)
+            elif is_torch_neuron_available():
+                device = torch.device("neuron:0")
+                torch.neuron.set_device(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
@@ -1973,6 +1997,13 @@ class TrainingArguments:
         log_level_main_node = logging.get_verbosity() if log_level == -1 else log_level
         log_level_replica_node = logging.get_verbosity() if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
+
+    @property
+    def place_model_on_device(self) -> bool | None:
+        """
+        Can be subclassed and overridden for some specific integrations.
+        """
+        return None
 
     @property
     def _no_sync_in_gradient_accumulation(self):
@@ -2721,9 +2752,10 @@ class TrainingArguments:
             )
 
             fsdp_plugin_args = {}
+            fsdp_sharding = None
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
-                    fsdp_plugin_args["sharding_strategy"] = fsdp_option
+                    fsdp_sharding = fsdp_option
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     fsdp_plugin_args["cpu_offload"] = True
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
@@ -2739,16 +2771,20 @@ class TrainingArguments:
             fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             if fsdp_version == 2:
+                # full_shard → True (reshard after forward), shard_grad_op → False
+                default_reshard = fsdp_sharding != "shard_grad_op" if fsdp_sharding else True
                 fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
-                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                    str(self.fsdp_config.get("reshard_after_forward", default_reshard)).lower()
                 )
             else:
                 fsdp_plugin_args["forward_prefetch"] = str_to_bool(
                     str(self.fsdp_config.get("forward_prefetch", "false")).lower()
                 )
                 fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                # Pass sharding strategy as reshard_after_forward (accelerate converts it to ShardingStrategy)
+                default_reshard = fsdp_sharding.upper() if fsdp_sharding else "FULL_SHARD"
                 fsdp_plugin_args["reshard_after_forward"] = str(
-                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                    self.fsdp_config.get("reshard_after_forward", default_reshard)
                 ).lower()
                 fsdp_plugin_args["use_orig_params"] = str_to_bool(
                     str(self.fsdp_config.get("use_orig_params", "true")).lower()

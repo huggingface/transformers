@@ -16,13 +16,14 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import is_grouped_mm_available, logging
+from ...utils import auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -42,91 +43,18 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
+@strict(accept_kwargs=True)
 class DeepseekV2Config(LlamaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekV2Model`]. It is used to instantiate a DeepSeek
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of DeepSeek-V2-Lite" [deepseek-ai/DeepSeek-V2-Lite"](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite").
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    first_k_dense_replace (`int`, *optional*, defaults to 0):
+        Number of dense layers in the shallow layers before switching to MoE layers.
+    n_group (`int`, *optional*):
+        Number of groups for routed experts.
+    topk_method (`str`, *optional*, defaults to `"greedy"`):
+        The method used for selecting top-k experts in the routed gate mechanism.
 
-    Args:
-        vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the DeepSeek model. Defines the number of different tokens that can be represented by the
-            `input_ids` passed when calling [`DeepseekV2Model`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
-            The number of key-value heads used to implement Grouped Query Attention (GQA). If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi-Head Attention (MHA). If
-            `num_key_value_heads=1`, the model will use Multi-Query Attention (MQA). Otherwise, GQA is used.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon value used by the RMS normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/value attentions (useful for inference optimization).
-        pad_token_id (`int`, *optional*):
-            Padding token ID.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning-of-sequence token ID.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End-of-sequence token ID.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie input and output embeddings.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value, and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability applied to attention weights.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias term in the MLP layers.
-        first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers in the shallow layers before switching to MoE layers.
-        kv_lora_rank (`int`, *optional*, defaults to 512):
-            Rank of the LoRA decomposition for key-value projections.
-        q_lora_rank (`int`, *optional*, defaults to 1536):
-            Rank of the LoRA decomposition for query projections.
-            Specifically, it determines the dimensionality to which the query (q) vectors are compressed before being expanded back to their original size.
-            It reduces computational overhead while maintaining model performance.
-        n_group (`int`, *optional*):
-            Number of groups for routed experts.
-        n_routed_experts (`int`, *optional*, defaults to 64):
-            Number of routed experts (None indicates a dense model).
-        n_shared_experts (`int`, *optional*, defaults to 2):
-            Number of shared experts (None indicates a dense model).
-        qk_nope_head_dim (`int`, *optional*, defaults to 128):
-            The head dimension for the QK (query-key) projections when using NOPE (Neural Operator Position Encoding).
-        qk_rope_head_dim (`int`, *optional*, defaults to 64):
-            The head dimension for QK projections when using RoPE.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor for routed experts in MoE models.
-        topk_group (`int`, *optional*):
-            Number of selected groups per token for expert selection.
-        topk_method (`str`, *optional*, defaults to `"greedy"`):
-            The method used for selecting top-k experts in the routed gate mechanism.
-        norm_topk_prob (`bool`, *optional*, defaults to `False`):
-            Whether to renormalize the router probabilities when `top_k > 1`. This flag is kept for backward
-            compatibility with previously released checkpoints and runtimes relying on the legacy DeepSeek config.
-        v_head_dim (`int`, *optional*, defaults to 128):
-            The dimension of value projections in the attention layers.
-        num_experts_per_tok (`int`, *optional*):
-            The number of experts selected per token. If `None`, the model behaves as a dense Transformer.
-        moe_intermediate_size (`int`, *optional*, defaults to 1407):
-            Dimension of the MoE (Mixture of Experts) representations.
+    Example:
 
     ```python
     >>> from transformers import DeepseekV2Model, DeepseekV2Config
@@ -140,75 +68,62 @@ class DeepseekV2Config(LlamaConfig):
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.q_a_proj": "colwise",
         "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     model_type = "deepseek_v2"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32000,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        first_k_dense_replace: int | None = 0,
-        kv_lora_rank: int | None = 512,
-        q_lora_rank: int | None = 1536,
-        n_group: int | None = None,
-        n_routed_experts: int | None = 64,
-        n_shared_experts: int | None = 2,
-        qk_nope_head_dim: int | None = 128,
-        qk_rope_head_dim: int | None = 64,
-        routed_scaling_factor: float | None = 1.0,
-        topk_group: int | None = None,
-        topk_method: str | None = "greedy",
-        norm_topk_prob: bool | None = False,
-        v_head_dim: int | None = 128,
-        num_experts_per_tok: int | None = None,
-        moe_intermediate_size: int | None = 1407,
-        **kwargs,
-    ):
-        self.first_k_dense_replace = first_k_dense_replace
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.n_group = n_group
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.routed_scaling_factor = routed_scaling_factor
-        self.topk_group = topk_group
-        self.topk_method = topk_method
-        self.norm_topk_prob = norm_topk_prob
-        self.v_head_dim = v_head_dim
-        self.num_experts_per_tok = num_experts_per_tok
-        self.moe_intermediate_size = moe_intermediate_size
+    vocab_size: int = 32000
+    hidden_size: int = 4096
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | None = 0.0
+    mlp_bias: bool = False
+    first_k_dense_replace: int = 0
+    kv_lora_rank: int = 512
+    q_lora_rank: int | None = 1536
+    n_group: int | None = None
+    n_routed_experts: int = 64
+    n_shared_experts: int = 2
+    qk_nope_head_dim: int = 128
+    qk_rope_head_dim: int = 64
+    routed_scaling_factor: float = 1.0
+    topk_group: int | None = None
+    topk_method: str | None = "greedy"
+    norm_topk_prob: bool | None = False
+    v_head_dim: int = 128
+    num_experts_per_tok: int | None = None
+    moe_intermediate_size: int = 1407
 
-        super().__init__(**kwargs)
-
-        self.head_dim = qk_rope_head_dim
-        del self.pretraining_tp
+    def __post_init__(self, **kwargs):
+        self.head_dim = self.qk_rope_head_dim
+        super().__post_init__(**kwargs)
 
 
 def apply_rotary_emb(
@@ -363,7 +278,6 @@ class DeepseekV2Attention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -384,6 +298,7 @@ class DeepseekV2Attention(nn.Module):
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
@@ -391,9 +306,7 @@ class DeepseekV2Attention(nn.Module):
         key_states = torch.cat((k_nope, k_pe), dim=-1)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
@@ -433,10 +346,6 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = (
-        is_grouped_mm_available()
-    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
-
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

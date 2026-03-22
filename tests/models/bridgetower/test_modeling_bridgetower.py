@@ -57,7 +57,7 @@ class BridgeTowerTextModelTester:
         parent,
         hidden_act="gelu",
         hidden_size=64,
-        initializer_factor=1,
+        initializer_factor=1e-10,
         layer_norm_eps=1e-05,
         num_attention_heads=4,
         num_hidden_layers=2,
@@ -108,7 +108,7 @@ class BridgeTowerImageModelTester:
         self,
         parent,
         hidden_size=64,
-        initializer_factor=1,
+        initializer_factor=1e-10,
         layer_norm_eps=1e-05,
         num_hidden_layers=2,
         init_layernorm_from_vision_encoder=False,
@@ -329,7 +329,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=32, vocab_size=99)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -549,7 +549,7 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=32, vocab_size=99)
 
     def _prepare_inputs_for_training(self, model_class):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

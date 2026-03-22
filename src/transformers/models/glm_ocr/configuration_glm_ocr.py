@@ -18,143 +18,60 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict(accept_kwargs=True)
 class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrVisionConfig`]. It is used to instantiate a
-    GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
+    out_hidden_size (`int`, *optional*, defaults to 4096):
+        The output hidden size of the vision model.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    Example:
 
-    Args:
-        depth (`int`, *optional*, defaults to 24):
-            Number of layers (depth) in the model.
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"silu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        num_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer architecture.
-        in_channels (`int`, *optional*, defaults to 3):
-            Number of input channels.
-        image_size (`int` or `list[int]`, *optional*, defaults to 336):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The size used for patches along the temporal dimension.
-        out_hidden_size (`int`, *optional*, defaults to 1536):
-            The output hidden size of the vision model.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-    """
+    ```python
+    >>> from transformers import GlmOcrVisionConfig, GlmOcrVisionModel
+
+    >>> # Initializing a GlmOcrVisionConfig GLM-4.1V-9B style configuration
+    >>> configuration = GlmOcrVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+    >>> model = GlmOcrVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "glm_ocr_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=24,
-        hidden_size=1024,
-        hidden_act="silu",
-        attention_bias=True,
-        attention_dropout=0.0,
-        num_heads=16,
-        in_channels=3,
-        image_size=336,
-        patch_size=14,
-        rms_norm_eps=1e-05,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=1536,
-        intermediate_size=4096,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
-        self.out_hidden_size = out_hidden_size
-        self.intermediate_size = intermediate_size
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
+    depth: int = 24
+    hidden_size: int = 1024
+    hidden_act: str = "silu"
+    attention_bias: bool = True
+    attention_dropout: float | int = 0.0
+    num_heads: int = 16
+    in_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 336
+    patch_size: int | list[int] | tuple[int, int] = 14
+    rms_norm_eps: float = 1e-05
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    out_hidden_size: int = 1536
+    intermediate_size: int = 4096
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict(accept_kwargs=True)
 class GlmOcrTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrTextConfig`]. It is used to instantiate a
-    GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 59392):
-            Vocabulary size of the GlmOcr model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GlmOcrModel`]
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 16):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        pad_token_id (`int`, *optional*):
-            The id of the padding token.
+    Example:
 
     ```python
     >>> from transformers import GlmOcrTextModel, GlmOcrConfig
@@ -186,77 +103,42 @@ class GlmOcrTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 59392,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 4096,
-        num_hidden_layers: int | None = 16,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 131072,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 59392
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 16
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: bool = True
+    attention_dropout: float | int = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    pad_token_id: int | None = None
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="zai-org/GLM-OCR")
+@strict(accept_kwargs=True)
 class GlmOcrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
-    GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmOcrTextConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmOcrVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 59280):
-            The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 59281):
-            The video token index to encode the image prompt.
-        image_start_token_id (`int`, *optional*, defaults to 59256):
-            The image start token index to encode the start of image.
-        image_end_token_id (`int`, *optional*, defaults to 59257):
-            The image end token index to encode the end of image.
-        video_start_token_id (`int`, *optional*, defaults to 59258):
-            The video start token index to encode the start of video.
-        video_end_token_id (`int`, *optional*, defaults to 59259):
-            The video end token index to encode the end of video.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+    image_start_token_id (`int`, *optional*, defaults to 59256):
+        The image start token index to encode the start of image.
+    image_end_token_id (`int`, *optional*, defaults to 59257):
+        The image end token index to encode the end of image.
+    video_start_token_id (`int`, *optional*, defaults to 59258):
+        The video start token index to encode the start of video.
+    video_end_token_id (`int`, *optional*, defaults to 59259):
+        The video end token index to encode the end of video.
 
     ```python
     >>> from transformers import GlmOcrForConditionalGeneration, GlmOcrConfig
@@ -275,38 +157,29 @@ class GlmOcrConfig(PreTrainedConfig):
     sub_configs = {"vision_config": GlmOcrVisionConfig, "text_config": GlmOcrTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=59280,
-        video_token_id=59281,
-        image_start_token_id=59256,
-        image_end_token_id=59257,
-        video_start_token_id=59258,
-        video_end_token_id=59259,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
+    image_token_id: int = 59280
+    video_token_id: int = 59281
+    image_start_token_id: int = 59256
+    image_end_token_id: int = 59257
+    video_start_token_id: int = 59258
+    video_end_token_id: int = 59259
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
+
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["GlmOcrConfig", "GlmOcrTextConfig", "GlmOcrVisionConfig"]

@@ -13,35 +13,22 @@
 # limitations under the License.
 """VitPose model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="usyd-community/vitpose-base-simple")
+@strict(accept_kwargs=True)
 class VitPoseConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VitPoseForPoseEstimation`]. It is used to instantiate a
-    VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the VitPose
-    [usyd-community/vitpose-base-simple](https://huggingface.co/usyd-community/vitpose-base-simple) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `VitPoseBackboneConfig()`):
-            The configuration of the backbone model. Currently, only `backbone_config` with `vitpose_backbone` as `model_type` is supported.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        scale_factor (`int`, *optional*, defaults to 4):
-            Factor to upscale the feature maps coming from the ViT backbone.
-        use_simple_decoder (`bool`, *optional*, defaults to `True`):
-            Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
-
+    scale_factor (`int`, *optional*, defaults to 4):
+        Factor to upscale the feature maps coming from the ViT backbone.
+    use_simple_decoder (`bool`, *optional*, defaults to `True`):
+        Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
 
     Example:
 
@@ -61,27 +48,20 @@ class VitPoseConfig(PreTrainedConfig):
     model_type = "vitpose"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config: PreTrainedConfig | None = None,
-        initializer_range: float = 0.02,
-        scale_factor: int = 4,
-        use_simple_decoder: bool = True,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+    scale_factor: int = 4
+    use_simple_decoder: bool = True
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="vitpose_backbone",
             default_config_kwargs={"out_indices": [4]},
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.initializer_range = initializer_range
-        self.scale_factor = scale_factor
-        self.use_simple_decoder = use_simple_decoder
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VitPoseConfig"]

@@ -13,10 +13,12 @@
 # limitations under the License.
 from __future__ import annotations
 
+import inspect
 import os
 from typing import TYPE_CHECKING
 
 from ..utils import is_torch_available, strtobool
+from ..utils.quantization_config import QuantizationMethod
 
 
 if TYPE_CHECKING:
@@ -51,3 +53,40 @@ def is_fsdp_enabled():
         )
 
     return False
+
+
+def get_fsdp_ckpt_kwargs():
+    """
+    Returns checkpoint kwargs for FSDP model saving.
+
+    Checks if the `adapter_only` parameter is supported by `save_fsdp_model` from accelerate
+    and returns the appropriate kwargs.
+    """
+    from accelerate.utils import save_fsdp_model
+
+    if "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
+        return {"adapter_only": True}
+    else:
+        return {}
+
+
+def update_fsdp_plugin_peft(model, accelerator):
+    """
+    Updates the FSDP plugin for PEFT LoRA/QLoRA compatibility.
+
+    When using FSDP with PEFT LoRA, the auto wrap policy needs to be updated to additionally wrap
+    LoRA trainable layers separately. When using FSDP with QLoRA, the mixed precision policy needs
+    to be updated to use the quantization storage data type.
+    """
+    from peft import PeftConfig
+    from peft.utils.other import fsdp_auto_wrap_policy
+
+    if isinstance(model.active_peft_config, PeftConfig):
+        accelerator.state.fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(model)
+    if (
+        getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+        and model.hf_quantizer.quantization_config.bnb_4bit_quant_storage.is_floating_point
+    ):
+        accelerator.state.fsdp_plugin.set_mixed_precision(
+            model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
+        )

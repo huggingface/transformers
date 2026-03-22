@@ -15,58 +15,25 @@
 
 from typing import Any
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaImageConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FlavaImageModel`]. It is used to instantiate an
-    FLAVA model according to the specified arguments, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
-    [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        mask_token (`bool`, *optional*, defaults to `True`):
-            Whether to use a mask token or not. Used in MIM (Masked Image Modeling) loss for FLAVA.
-        vocab_size (`int`, *optional*, defaults to 8192):
-            Vocabulary size of the [`FlavaImageCodebook`] used in conjunction with [`FlavaImageModel`] for MIM (Masked
-            Image Modeling) loss for FLAVA.
+    num_blocks_per_group (`int`, *optional*, defaults to 2):
+        Number of conv-based blocks per group.
+    freeze (`bool`, defaults to `True`):
+        Whether to freeze the weights of the model.
+    mask_token (`bool`, *optional*, defaults to `True`):
+        Whether to use a mask token or not. Used in MIM (Masked Image Modeling) loss for FLAVA.
 
     Example:
 
@@ -86,95 +53,27 @@ class FlavaImageConfig(PreTrainedConfig):
     model_type = "flava_image_model"
     base_config_key = "image_config"
 
-    def __init__(
-        self,
-        hidden_size: int = 768,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 12,
-        intermediate_size: int = 3072,
-        hidden_act: int = "gelu",
-        hidden_dropout_prob: float = 0.0,
-        attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-12,
-        image_size: int = 224,
-        patch_size: int = 16,
-        num_channels: int = 3,
-        qkv_bias: bool = True,
-        mask_token: bool = True,
-        vocab_size: int = 8192,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.mask_token = mask_token
-        self.vocab_size = vocab_size
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    qkv_bias: bool = True
+    mask_token: bool = True
+    vocab_size: int = 8192
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FlavaTextModel`]. It is used to instantiate an
-    FLAVA model according to the specified arguments, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
-    [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`FlavaTextModel`].
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`FlavaTextModel`]. Note that even though
-            text encoder allows `token_type_ids`'s value as 2, for text-only pretraining and fine-tuning, only 1 is
-            used similar to RoBERTa.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048). For VL, max_length passed to model is 77.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-
     Example:
 
     ```python
@@ -193,79 +92,28 @@ class FlavaTextConfig(PreTrainedConfig):
     model_type = "flava_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size: int = 30522,
-        type_vocab_size: int = 2,
-        max_position_embeddings: int = 512,
-        hidden_size: int = 768,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 12,
-        intermediate_size: int = 3072,
-        hidden_act: str = "gelu",
-        hidden_dropout_prob: float = 0.0,
-        attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-12,
-        pad_token_id: int = 0,
-        qkv_bias: bool = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.type_vocab_size = type_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.pad_token_id = pad_token_id
+    vocab_size: int = 30522
+    type_vocab_size: int = 2
+    max_position_embeddings: int = 512
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    qkv_bias: bool = True
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FlavaMultimodalModel`]. It is used to instantiate
-    an FLAVA model according to the specified arguments, defining the model architecture.
-
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
-    [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        use_cls_token (`bool`, *optional*, defaults to `True`):
-            Whether to use an extra CLS token for multimodal settings. Usually needed by the FLAVA model.
-
+    use_cls_token (`bool`, *optional*, defaults to `True`):
+        Whether to use an extra CLS token for multimodal settings. Usually needed by the FLAVA model.
 
     Example:
 
@@ -285,67 +133,30 @@ class FlavaMultimodalConfig(PreTrainedConfig):
     model_type = "flava_multimodal_model"
     base_config_key = "multimodal_config"
 
-    def __init__(
-        self,
-        hidden_size: int = 768,
-        num_hidden_layers: int = 6,
-        num_attention_heads: int = 12,
-        intermediate_size: int = 3072,
-        hidden_act: int = "gelu",
-        hidden_dropout_prob: int = 0.0,
-        attention_probs_dropout_prob: int = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-12,
-        qkv_bias: bool = True,
-        use_cls_token: bool = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.use_cls_token = use_cls_token
+    hidden_size: int = 768
+    num_hidden_layers: int = 6
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    qkv_bias: bool = True
+    use_cls_token: bool = True
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaImageCodebookConfig(PreTrainedConfig):
-    model_type = "flava_image_codebook"
-    base_config_key = "image_codebook_config"
-
     r"""
-    [`FlavaImageCodebookConfig`] is the configuration class to store the configuration of a [`FlavaImageCodebook`]. It
-    is used to instantiate an FLAVA model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
-    [facebook/flava-image-codebook](https://huggingface.co/facebook/flava-image-codebook) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        num_groups (`int`, *optional*, defaults to 4):
-            Number of groups to be created. This parameter as of now doesn't affect the model and is used for some
-            internal calculation and estimations.
-        input_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the image to be passed.
-        num_blocks_per_group (`int`, *optional*, defaults to 2):
-            Number of conv-based blocks per group.
-        hidden_size (`int`, *optional*, defaults to 256):
-            Size of hidden dim for the blocks.
-        vocab_size (`int`, *optional*, defaults to 8192):
-            Size of the output vocabulary for the codebook.
-        freeze (`bool`, defaults to `True`):
-            Whether to freeze the weights of the model.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    num_groups (`int`, *optional*, defaults to 4):
+        Number of groups to be created. This parameter as of now doesn't affect the model and is used for some
+        internal calculation and estimations.
+    num_blocks_per_group (`int`, *optional*, defaults to 2):
+        Number of conv-based blocks per group.
+    freeze (`bool`, defaults to `True`):
+        Whether to freeze the weights of the model.
 
     Example:
 
@@ -362,77 +173,50 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     ```
     """
 
-    def __init__(
-        self,
-        num_groups: int = 4,
-        input_channels: int = 3,
-        num_blocks_per_group: int = 2,
-        hidden_size: int = 256,
-        vocab_size: int = 8192,
-        freeze: int = True,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.num_groups = num_groups
-        self.input_channels = input_channels
-        self.num_blocks_per_group = num_blocks_per_group
-        self.hidden_size = hidden_size
-        self.vocab_size = vocab_size
-        self.freeze = freeze
-        self.initializer_range = initializer_range
+    num_groups: int = 4
+    input_channels: int = 3
+    num_blocks_per_group: int = 2
+    hidden_size: int = 256
+    vocab_size: int = 8192
+    freeze: bool = True
+    initializer_range: float = 0.02
 
 
+@auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaConfig(PreTrainedConfig):
     r"""
-    [`FlavaConfig`] is the configuration class to store the configuration of a [`FlavaModel`]. It is used to
-    instantiate FLAVA model according to the specified arguments, defining the text model, image model, image codebook
-    and multimodal model configs. Instantiating a configuration with the defaults will yield a similar configuration to
-    that of the FLAVA [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`FlavaTextConfig`].
-        image_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`FlavaImageConfig`].
-        multimodal_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`FlavaMultimodalConfig`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of text and image projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The initial value of the *logit_scale* parameter. Default is used as per the original FLAVA/CLIP
-            implementation.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        ce_ignore_index (`int`, *optional*, defaults to -100):
-            Cross entropy index to ignore.
-        mim_weight (`float`, *optional*, defaults to 1.0):
-            Weight to be assigned to MIM (Masked Image Modeling) unimodal loss
-        mlm_weight (`float`, *optional*, defaults to 1.0):
-            Weight to be assigned to MLM (Masked Language Modeling) unimodal loss
-        global_contrastive_weight (`float`, *optional*, defaults to 1.0):
-            Weight to be assigned to global contrastive cross-alignment loss.
-        itm_weight (`float`, *optional*, defaults to 1.0):
-            Weight to be assigned to image-text matching multimodal loss.
-        mmm_image_weight (`float`, *optional*, defaults to 1.0):
-            Weight to be assigned to MMM loss's image part.
-        mmm_text_weight (`float`, *optional*, defaults to 1.0):
-            Weight to be assigned to MMM loss's text part.
-        global_backprop_contrastive (`bool`, *optional*, defaults to `True`):
-            Whether to use global backpropgation through all workers in contrastive loss.
-        skip_unmasked_multimodal_encoder (`bool`, *optional*, defaults to `True`):
-            Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
-        return_loss (`bool`, *optional*, defaults to `True`):
-            Whether to return loss or not
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+    image_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`FlavaImageConfig`].
+    multimodal_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`FlavaMultimodalConfig`].
+    logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
+        The initial value of the *logit_scale* parameter. Default is used as per the original FLAVA/CLIP
+        implementation.
+    ce_ignore_index (`int`, *optional*, defaults to -100):
+        Cross entropy index to ignore.
+    mim_weight (`float`, *optional*, defaults to 1.0):
+        Weight to be assigned to MIM (Masked Image Modeling) unimodal loss
+    mlm_weight (`float`, *optional*, defaults to 1.0):
+        Weight to be assigned to MLM (Masked Language Modeling) unimodal loss
+    global_contrastive_weight (`float`, *optional*, defaults to 1.0):
+        Weight to be assigned to global contrastive cross-alignment loss.
+    itm_weight (`float`, *optional*, defaults to 1.0):
+        Weight to be assigned to image-text matching multimodal loss.
+    mmm_image_weight (`float`, *optional*, defaults to 1.0):
+        Weight to be assigned to MMM loss's image part.
+    mmm_text_weight (`float`, *optional*, defaults to 1.0):
+        Weight to be assigned to MMM loss's text part.
+    global_backprop_contrastive (`bool`, *optional*, defaults to `True`):
+        Whether to use global backpropgation through all workers in contrastive loss.
+    skip_unmasked_multimodal_encoder (`bool`, *optional*, defaults to `True`):
+        Whether to skip running unmasked multimodal encoder whose outputs are not used by FLAVA losses.
+    return_loss (`bool`, *optional*, defaults to `True`):
+        Whether to return loss or not
+    image_codebook_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`FlavaCodebookConfig`].
+    init_codebook (`bool`, *optional*, defaults to `True`):
+        Whether to initialize the codebook
 
     Example:
 
@@ -460,34 +244,65 @@ class FlavaConfig(PreTrainedConfig):
         "image_codebook_config": FlavaImageCodebookConfig,
     }
 
-    def __init__(
-        self,
-        image_config: dict[str, Any] | None = None,
-        text_config: dict[str, Any] | None = None,
-        multimodal_config: dict[str, Any] | None = None,
-        image_codebook_config: dict[str, Any] | None = None,
-        hidden_size: int = 768,
-        layer_norm_eps: float = 1e-12,
-        projection_dim: int = 768,
-        init_codebook: bool = True,
-        logit_scale_init_value: float = 2.6592,
-        initializer_range: float = 0.02,
-        ce_ignore_index: int = -100,
-        mim_weight: float = 1.0,
-        mlm_weight: float = 1.0,
-        global_contrastive_weight: float = 1.0,
-        itm_weight: float = 1.0,
-        mmm_image_weight: float = 1.0,
-        mmm_text_weight: float = 1.0,
-        global_backprop_contrastive: bool = True,
-        skip_unmasked_multimodal_encoder: bool = True,
-        return_loss: bool = True,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
+    image_config: dict[str, Any] | PreTrainedConfig | None = None
+    text_config: dict[str, Any] | PreTrainedConfig | None = None
+    multimodal_config: dict[str, Any] | PreTrainedConfig | None = None
+    image_codebook_config: dict[str, Any] | PreTrainedConfig | None = None
+    hidden_size: int = 768
+    layer_norm_eps: float = 1e-12
+    projection_dim: int = 768
+    init_codebook: bool = True
+    logit_scale_init_value: float = 2.6592
+    initializer_range: float = 0.02
+    ce_ignore_index: int = -100
+    mim_weight: float = 1.0
+    mlm_weight: float = 1.0
+    global_contrastive_weight: float = 1.0
+    itm_weight: float = 1.0
+    mmm_image_weight: float = 1.0
+    mmm_text_weight: float = 1.0
+    global_backprop_contrastive: bool = True
+    skip_unmasked_multimodal_encoder: bool = True
+    return_loss: bool = True
+    tie_word_embeddings: bool = True
+    initializer_factor: float = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `FlavaTextConfig` with default values.")
+        elif isinstance(self.text_config, FlavaTextConfig):
+            text_config = self.text_config.to_dict()
+        else:
+            text_config = self.text_config
+
+        if self.image_config is None:
+            image_config = {}
+            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
+        elif isinstance(self.image_config, FlavaImageConfig):
+            image_config = self.image_config.to_dict()
+        else:
+            image_config = self.image_config
+
+        if self.multimodal_config is None:
+            multimodal_config = {}
+            logger.info("`multimodal_config` is `None`. Initializing the `FlavaMultimodalConfig` with default values.")
+        elif isinstance(self.multimodal_config, FlavaMultimodalConfig):
+            multimodal_config = self.multimodal_config.to_dict()
+        else:
+            multimodal_config = self.multimodal_config
+
+        if self.image_codebook_config is None:
+            image_codebook_config = {}
+            logger.info(
+                "`image_codebook_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values."
+            )
+        elif isinstance(self.image_codebook_config, FlavaImageCodebookConfig):
+            image_codebook_config = self.image_codebook_config.to_dict()
+        else:
+            image_codebook_config = self.image_codebook_config
+
         # If `_config_dict` exist, we use them for the backward compatibility.
-        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
-        # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         image_config_dict = kwargs.pop("image_config_dict", None)
         multimodal_config_dict = kwargs.pop("multimodal_config_dict", None)
@@ -497,9 +312,6 @@ class FlavaConfig(PreTrainedConfig):
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
         if text_config_dict is not None:
-            if text_config is None:
-                text_config = {}
-
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = FlavaTextConfig(**text_config_dict).to_dict()
 
@@ -524,9 +336,6 @@ class FlavaConfig(PreTrainedConfig):
             text_config.update(_text_config_dict)
 
         if image_config_dict is not None:
-            if image_config is None:
-                image_config = {}
-
             # This is the complete result when using `image_config_dict`.
             _image_config_dict = FlavaImageConfig(**image_config_dict).to_dict()
             # convert keys to string instead of integer
@@ -556,9 +365,6 @@ class FlavaConfig(PreTrainedConfig):
             image_config.update(_image_config_dict)
 
         if multimodal_config_dict is not None:
-            if multimodal_config is None:
-                multimodal_config = {}
-
             # This is the complete result when using `multimodal_config_dict`.
             _multimodal_config_dict = FlavaMultimodalConfig(**multimodal_config_dict).to_dict()
 
@@ -584,9 +390,6 @@ class FlavaConfig(PreTrainedConfig):
             multimodal_config.update(_multimodal_config_dict)
 
         if image_codebook_config_dict is not None:
-            if image_codebook_config is None:
-                image_codebook_config = {}
-
             # This is the complete result when using `image_codebook_config_dict`.
             _image_codebook_config_dict = FlavaImageCodebookConfig(**image_codebook_config_dict).to_dict()
 
@@ -616,55 +419,13 @@ class FlavaConfig(PreTrainedConfig):
             # Update all values in `image_codebook_config` with the ones in `_image_codebook_config_dict`.
             image_codebook_config.update(_image_codebook_config_dict)
 
-        if text_config is None:
-            text_config = FlavaTextConfig()
-            logger.info("`text_config` is `None`. initializing the `FlavaTextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = FlavaTextConfig(**text_config)
+        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
+        self.text_config = FlavaTextConfig(**text_config)
+        self.image_config = FlavaImageConfig(**image_config)
+        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
+        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
 
-        if image_config is None:
-            image_config = FlavaImageConfig()
-            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
-        elif isinstance(image_config, dict):
-            image_config = FlavaImageConfig(**image_config)
-
-        if multimodal_config is None:
-            multimodal_config = FlavaMultimodalConfig()
-            logger.info("`image_config` is `None`. initializing the `FlavaMultimodalConfig` with default values.")
-        elif isinstance(multimodal_config, dict):
-            multimodal_config = FlavaMultimodalConfig(**multimodal_config)
-
-        if image_codebook_config is None:
-            image_codebook_config = FlavaImageCodebookConfig()
-            logger.info("`image_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values.")
-        elif isinstance(image_codebook_config, dict):
-            image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
-
-        self.text_config = text_config
-        self.image_config = image_config
-        self.multimodal_config = multimodal_config
-        self.image_codebook_config = image_codebook_config
-
-        self.projection_dim = projection_dim
-        self.init_codebook = init_codebook
-
-        self.hidden_size = hidden_size
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
-        self.ce_ignore_index = ce_ignore_index
-        self.mim_weight = mim_weight
-        self.mlm_weight = mlm_weight
-        self.global_contrastive_weight = global_contrastive_weight
-        self.itm_weight = itm_weight
-        self.mmm_image_weight = mmm_image_weight
-        self.mmm_text_weight = mmm_text_weight
-        self.global_backprop_contrastive = global_backprop_contrastive
-        self.skip_unmasked_multimodal_encoder = skip_unmasked_multimodal_encoder
-        self.return_loss = return_loss
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["FlavaConfig", "FlavaImageCodebookConfig", "FlavaImageConfig", "FlavaMultimodalConfig", "FlavaTextConfig"]

@@ -36,7 +36,12 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttenti
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    torch_compilable_check,
+)
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deformable_detr import DeformableDetrConfig
@@ -703,7 +708,7 @@ class DeformableDetrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 

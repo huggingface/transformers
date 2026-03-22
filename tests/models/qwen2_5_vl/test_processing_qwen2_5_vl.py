@@ -41,6 +41,10 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(model_id, patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28, **kwargs)
 
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
+
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -185,7 +189,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask", "mm_token_type_ids"])
 
         # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {

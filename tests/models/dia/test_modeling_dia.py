@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_soundfile_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -133,14 +133,14 @@ class DiaModelTester:
             vocab_size=self.vocab_size,
             hidden_act=self.hidden_act,
             num_channels=self.num_channels,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
         )
 
         config = DiaConfig(
             encoder_config=encoder_config,
             decoder_config=decoder_config,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
             delay_pattern=self.delay_pattern,
         )
 
@@ -504,7 +504,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
+            assert_similar_generate_outputs(outputs, outputs_cached)
             self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
     @pytest.mark.generate

@@ -15,6 +15,7 @@
 PyTorch-independent utilities for the Trainer class.
 """
 
+import contextlib
 import copy
 import functools
 import gc
@@ -26,10 +27,10 @@ import re
 import shutil
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from functools import partial
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeGuard
 
 import numpy as np
 
@@ -319,7 +320,7 @@ def sort_checkpoints(
     if use_mtime and len(checkpoints_sorted) > 1:
         mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
         if mtime_diff < 1.0:
-            logger.warning("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            logger.warning_once("mtime may not be reliable on this filesystem, falling back to numerical ordering")
             return sort_checkpoints(
                 output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
             )
@@ -571,6 +572,7 @@ class SchedulerType(ExplicitEnum):
        - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
        - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
        - "warmup_stable_decay" = [`get_wsd_schedule`]
+       - "greedy" = [`get_greedy_schedule`]
     """
 
     LINEAR = "linear"
@@ -584,6 +586,7 @@ class SchedulerType(ExplicitEnum):
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
     COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
+    GREEDY = "greedy"
 
 
 class TrainerMemoryTracker:
@@ -612,6 +615,7 @@ class TrainerMemoryTracker:
         "__init__": "init",
         "train": "train",
         "_inner_training_loop": "train",
+        "_finalize_training": "train",
         "evaluate": "eval",
         "predict": "test",
     }
@@ -890,7 +894,7 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
-def has_length(dataset):
+def has_length(dataset: Any) -> TypeGuard[Sized]:
     """
     Checks if the dataset implements __len__() and it doesn't raise an error
     """
@@ -1062,7 +1066,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
         strict (`bool`, *optional*, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
-        prefer_safe (`bool`, *optional*, defaults to `False`):
+        prefer_safe (`bool`, *optional*, defaults to `True`):
             If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
             safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
 
@@ -1103,7 +1107,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_missing_keys}."
         if len(unexpected_keys) > 0:
             str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
-            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+            error_message += f"\nUnexpected key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
     if load_safe:
@@ -1122,3 +1126,129 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
 
     # Return the same thing as PyTorch load_state_dict function.
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
+
+
+def compare_trainer_and_checkpoint_args(training_args, trainer_state):
+    """
+    Compare training arguments with those stored in a checkpoint's trainer state.
+
+    Logs a warning if there are mismatches between the current training arguments
+    and the ones saved in the checkpoint.
+
+    Args:
+        training_args: The current training arguments.
+        trainer_state: The trainer state loaded from a checkpoint.
+    """
+    attributes_map = {
+        "logging_steps": "logging_steps",
+        "eval_steps": "eval_steps",
+        "save_steps": "save_steps",
+    }
+
+    has_warning = False
+    warning_str = "Warning: The following arguments do not match the ones in the `trainer_state.json` within the checkpoint directory: "
+    for arg_attr, state_attr in attributes_map.items():
+        arg_value = getattr(training_args, arg_attr, None)
+        state_value = getattr(trainer_state, state_attr, None)
+
+        if arg_value is not None and state_value is not None and arg_value != state_value:
+            warning_str += f"\n\t{arg_attr}: {arg_value} (from args) != {state_value} (from trainer_state.json)"
+            has_warning = True
+
+    # train bs is special as we need to account for multi-GPU
+    train_bs_args = training_args.per_device_train_batch_size
+    train_bs_state = trainer_state.train_batch_size // max(1, training_args.n_gpu)
+
+    if train_bs_args != train_bs_state:
+        warning_str += f"\n\tper_device_train_batch_size: {train_bs_args} (from args) != {train_bs_state} (from trainer_state.json)"
+        has_warning = True
+
+    if has_warning:
+        logger.warning_once(warning_str)
+
+
+def align_special_tokens(model, processing_class):
+    """
+    Aligns the special tokens of the tokenizer with the model configs.
+
+    A new tokens may be defined in the tokenizer for fine-tuning purposes, e.g. an "end of turn" token may be
+    added on chat models. In that case, we want the model configs to be aligned with the tokenizer, so that all
+    downstream uses work as expected. This alignment should happen before training, to ensure the prediction step
+    uses the new tokens as well.
+    """
+    from .processing_utils import ProcessorMixin
+    from .tokenization_utils_base import PreTrainedTokenizerBase
+
+    if isinstance(processing_class, ProcessorMixin):
+        tokenizer: PreTrainedTokenizerBase = processing_class.tokenizer
+    else:
+        tokenizer = processing_class
+    model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
+    updated_tokens = {}
+
+    # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
+    # token.
+    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
+    if model_has_generation_config:
+        # `generation_config.eos_token_id` is None: direct comparison
+        if model.generation_config.eos_token_id is None:
+            tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
+        else:
+            # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
+            if isinstance(model.generation_config.eos_token_id, int):
+                model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
+            # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
+            tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
+
+    if tokenizer_has_new_eos:
+        updated_tokens["eos_token_id"] = tokenizer.eos_token_id
+        model.config.eos_token_id = tokenizer.eos_token_id
+        # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
+        # EOS tokens defined here will halt generation.
+        if model_has_generation_config:
+            all_eos_tokens = [tokenizer.eos_token_id]
+            if model.generation_config.eos_token_id is not None:
+                all_eos_tokens += list(model.generation_config.eos_token_id)
+            model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+
+    # 2 - Align BOS
+    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
+    if model_has_generation_config:
+        tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
+
+    if tokenizer_has_new_bos:
+        updated_tokens["bos_token_id"] = tokenizer.bos_token_id
+        model.config.bos_token_id = tokenizer.bos_token_id
+        if model_has_generation_config:
+            model.generation_config.bos_token_id = tokenizer.bos_token_id
+
+    # 3 - Align PAD
+    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
+    if model_has_generation_config:
+        tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
+
+    if tokenizer_has_new_pad:
+        updated_tokens["pad_token_id"] = tokenizer.pad_token_id
+        model.config.pad_token_id = tokenizer.pad_token_id
+        if model_has_generation_config:
+            model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+    # 4 - Warn users about the changes
+    if len(updated_tokens) > 0:
+        logger.warning(
+            "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "
+            "The model config and generation config were aligned accordingly, being updated with the tokenizer's "
+            f"values. Updated tokens: {updated_tokens}."
+        )
+
+
+@contextlib.contextmanager
+def suppress_progress_bars():
+    """Context manager that suppresses huggingface_hub progress bars."""
+    import huggingface_hub.utils as hf_hub_utils
+
+    hf_hub_utils.disable_progress_bars()
+    try:
+        yield
+    finally:
+        hf_hub_utils.enable_progress_bars()

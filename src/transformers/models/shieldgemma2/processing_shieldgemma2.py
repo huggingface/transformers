@@ -64,7 +64,7 @@ class ShieldGemma2Processor(Gemma3Processor):
         """A processor for the ShieldGemma 2 model.
 
         Args:
-            image_processor: The image processor to use, typically a `Gemma3ImageProcessorFast` instance.
+            image_processor: The image processor to use, typically a `Gemma3ImageProcessor` instance.
             tokenizer: The tokenizer to use, typically a `GemmaTokenizerFast` instance.
             chat_template: The chat template to use with this processor. Typically, this is unset as the processor
                 configuration on Hugging Face Hub includes this value already.

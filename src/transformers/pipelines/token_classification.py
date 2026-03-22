@@ -63,9 +63,6 @@ class AggregationStrategy(ExplicitEnum):
     r"""
         ignore_labels (`list[str]`, defaults to `["O"]`):
             A list of labels to ignore.
-        grouped_entities (`bool`, *optional*, defaults to `False`):
-            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
-            same entity together in the predictions or not.
         stride (`int`, *optional*):
             If stride is provided, the pipeline is applied on all the text. The text is split into chunks of size
             model_max_length. Works only with fast tokenizers and `aggregation_strategy` different from `NONE`. The

@@ -489,7 +489,7 @@ class ConditionalDetrDecoderSelfAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -575,7 +575,7 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
         config: ConditionalDetrConfig,
         hidden_size: int,
         num_attention_heads: int,
-        dropout: float = 0.0,
+        dropout: float | int = 0.0,
     ):
         super().__init__()
         self.config = config
@@ -749,7 +749,7 @@ class ConditionalDetrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -1127,7 +1127,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 

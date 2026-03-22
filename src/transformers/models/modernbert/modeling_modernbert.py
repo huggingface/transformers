@@ -465,7 +465,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if not isinstance(attention_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": hidden_states,
+                "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
             }
             attention_mask_mapping = {

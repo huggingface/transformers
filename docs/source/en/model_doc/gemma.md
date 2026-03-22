@@ -78,13 +78,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "LLMs generate text through a process known as" | transformers run --task text-generation --model google/gemma-2b --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
@@ -134,7 +127,7 @@ visualizer("LLMs generate text through a process known as")
 
 ## Notes
 
-- The original Gemma models support standard kv-caching used in many transformer-based language models. You can use use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.
+- The original Gemma models support standard kv-caching used in many transformer-based language models. You can use the default [`DynamicCache`] instance or a tuple of tensors for past key values during generation. This makes it compatible with typical autoregressive generation workflows.
 
    ```py
    import torch

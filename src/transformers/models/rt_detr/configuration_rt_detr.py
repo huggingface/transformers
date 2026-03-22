@@ -13,137 +13,94 @@
 # limitations under the License.
 """RT-DETR model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="PekingU/rtdetr_r50vd")
+@strict(accept_kwargs=True)
 class RTDetrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a
-    RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the RT-DETR
-    [PekingU/rtdetr_r50vd](https://huggingface.co/PekingU/rtdetr_r50vd) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrResNetConfig()`):
-            The configuration of the backbone model.
-        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
-            Whether to freeze the batch normalization layers in the backbone.
-        encoder_hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension of the layers in hybrid encoder.
-        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
-            Multi level features input for encoder.
-        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
-            Strides used in each feature map.
-        encoder_layers (`int`, *optional*, defaults to 1):
-            Total of layers to be used by the encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
-        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
-            into account the stride.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
-        hidden_expansion (`float`, *optional*, defaults to 1.0):
-            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers exclude hybrid encoder.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries.
-        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-            Multi level features dimension for decoder
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of input feature levels.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_denoising (`int`, *optional*, defaults to 100):
-            The total number of denoising tasks or queries to be used for contrastive denoising.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale or magnitude of noise to be added to the bounding boxes.
-        learn_initial_query (`bool`, *optional*, defaults to `False`):
-            Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`tuple[int, int]`, *optional*):
-            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
-        with_box_refine (`bool`, *optional*, defaults to `True`):
-            Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
-            based on the predictions from the previous layer.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the architecture has an encoder decoder structure.
-        matcher_alpha (`float`, *optional*, defaults to 0.25):
-            Parameter alpha used by the Hungarian Matcher.
-        matcher_gamma (`float`, *optional*, defaults to 2.0):
-            Parameter gamma used by the Hungarian Matcher.
-        matcher_class_cost (`float`, *optional*, defaults to 2.0):
-            The relative weight of the class loss used by the Hungarian Matcher.
-        matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
-            The relative weight of the bounding box loss used by the Hungarian Matcher.
-        matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-            The relative weight of the giou loss of used by the Hungarian Matcher.
-        use_focal_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if focal focal should be used.
-        auxiliary_loss (`bool`, *optional*, defaults to `True`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-        focal_loss_alpha (`float`, *optional*, defaults to 0.75):
-            Parameter alpha used to compute the focal loss.
-        focal_loss_gamma (`float`, *optional*, defaults to 2.0):
-            Parameter gamma used to compute the focal loss.
-        weight_loss_vfl (`float`, *optional*, defaults to 1.0):
-            Relative weight of the varifocal loss in the object detection loss.
-        weight_loss_bbox (`float`, *optional*, defaults to 5.0):
-            Relative weight of the L1 bounding box loss in the object detection loss.
-        weight_loss_giou (`float`, *optional*, defaults to 2.0):
-            Relative weight of the generalized IoU loss in the object detection loss.
-        eos_coefficient (`float`, *optional*, defaults to 0.0001):
-            Relative classification weight of the 'no-object' class in the object detection loss.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
+        Strides used in each feature map.
+    encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
+        Indexes of the projected layers to be used in the encoder.
+    positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+        The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+        feed-forward modules.
+    hidden_expansion (`float`, *optional*, defaults to 1.0):
+        Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of input feature levels.
+    decoder_n_points (`int`, *optional*, defaults to 4):
+        The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    num_denoising (`int`, *optional*, defaults to 100):
+        The total number of denoising tasks or queries to be used for contrastive denoising.
+    label_noise_ratio (`float`, *optional*, defaults to 0.5):
+        The fraction of denoising labels to which random noise should be added.
+    box_noise_scale (`float`, *optional*, defaults to 1.0):
+        Scale or magnitude of noise to be added to the bounding boxes.
+    learn_initial_query (`bool`, *optional*, defaults to `False`):
+        Indicates whether the initial query embeddings for the decoder should be learned during training
+    anchor_image_size (`tuple[int, int]`, *optional*):
+        Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
+    disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+        Whether to disable custom kernels.
+    with_box_refine (`bool`, *optional*, defaults to `True`):
+        Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
+        based on the predictions from the previous layer.
+    matcher_alpha (`float`, *optional*, defaults to 0.25):
+        Parameter alpha used by the Hungarian Matcher.
+    matcher_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used by the Hungarian Matcher.
+    matcher_class_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the class loss used by the Hungarian Matcher.
+    matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
+        The relative weight of the bounding box loss used by the Hungarian Matcher.
+    matcher_giou_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the giou loss of used by the Hungarian Matcher.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal focal should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
+    weight_loss_vfl (`float`, *optional*, defaults to 1.0):
+        Relative weight of the varifocal loss in the object detection loss.
+    weight_loss_bbox (`float`, *optional*, defaults to 5.0):
+        Relative weight of the L1 bounding box loss in the object detection loss.
+    weight_loss_giou (`float`, *optional*, defaults to 2.0):
+        Relative weight of the generalized IoU loss in the object detection loss.
+    eos_coefficient (`float`, *optional*, defaults to 0.0001):
+        Relative classification weight of the 'no-object' class in the object detection loss.
 
     Examples:
 
@@ -168,131 +125,67 @@ class RTDetrConfig(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        initializer_range=0.01,
-        initializer_bias_prior_prob=None,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        # backbone
-        backbone_config=None,
-        freeze_backbone_batch_norms=True,
-        # encoder HybridEncoder
-        encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        hidden_expansion=1.0,
-        # decoder RTDetrTransformer
-        d_model=256,
-        num_queries=300,
-        decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=100,
-        label_noise_ratio=0.5,
-        box_noise_scale=1.0,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        disable_custom_kernels=True,
-        with_box_refine=True,
-        is_encoder_decoder=True,
-        # Loss
-        matcher_alpha=0.25,
-        matcher_gamma=2.0,
-        matcher_class_cost=2.0,
-        matcher_bbox_cost=5.0,
-        matcher_giou_cost=2.0,
-        use_focal_loss=True,
-        auxiliary_loss=True,
-        focal_loss_alpha=0.75,
-        focal_loss_gamma=2.0,
-        weight_loss_vfl=1.0,
-        weight_loss_bbox=5.0,
-        weight_loss_giou=2.0,
-        eos_coefficient=1e-4,
-        **kwargs,
-    ):
-        self.initializer_range = initializer_range
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
+    initializer_range: float = 0.01
+    initializer_bias_prior_prob: float | None = None
+    layer_norm_eps: float = 1e-5
+    batch_norm_eps: float = 1e-5
+    backbone_config: dict | PreTrainedConfig | None = None
+    freeze_backbone_batch_norms: bool = True
+    encoder_hidden_dim: int = 256
+    encoder_in_channels: list[int] | tuple[int, ...] = (512, 1024, 2048)
+    feat_strides: list[int] | tuple[int, ...] = (8, 16, 32)
+    encoder_layers: int = 1
+    encoder_ffn_dim: int = 1024
+    encoder_attention_heads: int = 8
+    dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    encode_proj_layers: list[int] | tuple[int, ...] = (2,)
+    positional_encoding_temperature: int = 10000
+    encoder_activation_function: str = "gelu"
+    activation_function: str = "silu"
+    eval_size: int | None = None
+    normalize_before: bool = False
+    hidden_expansion: float = 1.0
+    d_model: int = 256
+    num_queries: int = 300
+    decoder_in_channels: list[int] | tuple[int, ...] = (256, 256, 256)
+    decoder_ffn_dim: int = 1024
+    num_feature_levels: int = 3
+    decoder_n_points: int = 4
+    decoder_layers: int = 6
+    decoder_attention_heads: int = 8
+    decoder_activation_function: str = "relu"
+    attention_dropout: float | int = 0.0
+    num_denoising: int = 100
+    label_noise_ratio: float = 0.5
+    box_noise_scale: float = 1.0
+    learn_initial_query: bool = False
+    anchor_image_size: int | list[int] | None = None
+    disable_custom_kernels: bool = True
+    with_box_refine: bool = True
+    is_encoder_decoder: bool = True
+    matcher_alpha: float = 0.25
+    matcher_gamma: float = 2.0
+    matcher_class_cost: float = 2.0
+    matcher_bbox_cost: float = 5.0
+    matcher_giou_cost: float = 2.0
+    use_focal_loss: bool = True
+    auxiliary_loss: bool = True
+    focal_loss_alpha: float = 0.75
+    focal_loss_gamma: float = 2.0
+    weight_loss_vfl: float = 1.0
+    weight_loss_bbox: float = 5.0
+    weight_loss_giou: float = 2.0
+    eos_coefficient: float = 1e-4
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="rt_detr_resnet",
-            default_config_kwargs={
-                "out_indices": [2, 3, 4],
-            },
+            default_config_kwargs={"out_indices": [2, 3, 4]},
             **kwargs,
         )
-
-        self.backbone_config = backbone_config
-        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        # encoder
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = encoder_in_channels
-        self.feat_strides = feat_strides
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = encode_proj_layers
-        self.encoder_layers = encoder_layers
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.eval_size = eval_size
-        self.normalize_before = normalize_before
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.hidden_expansion = hidden_expansion
-        # decoder
-        self.d_model = d_model
-        self.num_queries = num_queries
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_in_channels = decoder_in_channels
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = anchor_image_size
-        self.auxiliary_loss = auxiliary_loss
-        self.disable_custom_kernels = disable_custom_kernels
-        self.with_box_refine = with_box_refine
-        # Loss
-        self.matcher_alpha = matcher_alpha
-        self.matcher_gamma = matcher_gamma
-        self.matcher_class_cost = matcher_class_cost
-        self.matcher_bbox_cost = matcher_bbox_cost
-        self.matcher_giou_cost = matcher_giou_cost
-        self.use_focal_loss = use_focal_loss
-        self.focal_loss_alpha = focal_loss_alpha
-        self.focal_loss_gamma = focal_loss_gamma
-        self.weight_loss_vfl = weight_loss_vfl
-        self.weight_loss_bbox = weight_loss_bbox
-        self.weight_loss_giou = weight_loss_giou
-        self.eos_coefficient = eos_coefficient
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["RTDetrConfig"]
