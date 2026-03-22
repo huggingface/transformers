@@ -123,19 +123,23 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             # Build a minimal tokenizer (empty vocab/merges) to cheaply extract post_processor,
             # padding and truncation as Rust objects — avoids parsing the full vocab via from_file.
-            minimal_tokenizer_json = dict(tokenizer_json)
-            minimal_model = dict(tokenizer_json["model"])
-            model_type = minimal_model["type"]
-            if model_type == "BPE":
-                minimal_model["vocab"] = {}
-                minimal_model["merges"] = []
-            elif model_type in ("WordPiece", "WordLevel"):
-                minimal_model["vocab"] = {}
-            elif model_type == "Unigram":
-                minimal_model["vocab"] = []
-            minimal_tokenizer_json["model"] = minimal_model
-            minimal_tokenizer_json["added_tokens"] = []
-            tok_from_file = TokenizerFast.from_str(json.dumps(minimal_tokenizer_json))
+            # Fall back to from_file if the model type is missing (older tokenizer.json formats).
+            model_type = tokenizer_json.get("model", {}).get("type")
+            if model_type is not None:
+                minimal_tokenizer_json = dict(tokenizer_json)
+                minimal_model = dict(tokenizer_json["model"])
+                if model_type == "BPE":
+                    minimal_model["vocab"] = {}
+                    minimal_model["merges"] = []
+                elif model_type in ("WordPiece", "WordLevel"):
+                    minimal_model["vocab"] = {}
+                elif model_type == "Unigram":
+                    minimal_model["vocab"] = []
+                minimal_tokenizer_json["model"] = minimal_model
+                minimal_tokenizer_json["added_tokens"] = []
+                tok_from_file = TokenizerFast.from_str(json.dumps(minimal_tokenizer_json))
+            else:
+                tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
 
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
