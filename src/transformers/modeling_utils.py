@@ -1324,6 +1324,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if no_split := getattr(module, "_no_split_modules", None):
                 self._no_split_modules.update(no_split)
 
+        # Preserve the current no-tie scope on this instance so only the model
+        # being initialized in that scope skips tie_weights().
+        self._no_tie_weights_scope = init.get_no_tie_weights_scope()
+
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
@@ -2517,6 +2521,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `source` is missing in the checkpoint while `target` exists, we *swap* source and target so we can still
         tie everything to the parameter that actually exists.
         """
+        if init.should_skip_tie_weights(self):
+            return
+
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
         if not recompute_mapping:
             tied_keys = self.all_tied_weights_keys

@@ -15,6 +15,7 @@ import math
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 import torch
 
@@ -37,6 +38,27 @@ TORCH_INIT_FUNCTIONS = {
     "orthogonal_": torch.nn.init.orthogonal_,
     "sparse_": torch.nn.init.sparse_,
 }
+
+# Track the current no-tie scope per execution context so concurrent model loads
+# do not leak tie_weights suppression across threads.
+_NO_TIE_WEIGHTS_STATE: ContextVar[object | None] = ContextVar("_NO_TIE_WEIGHTS_STATE", default=None)
+
+
+def are_tie_weights_disabled() -> bool:
+    return _NO_TIE_WEIGHTS_STATE.get() is not None
+
+
+def get_no_tie_weights_scope() -> object | None:
+    return _NO_TIE_WEIGHTS_STATE.get()
+
+
+def should_skip_tie_weights(model) -> bool:
+    scope = get_no_tie_weights_scope()
+    if scope is None:
+        return False
+
+    # Only skip tying for the model instance created inside the active scope.
+    return getattr(model, "_no_tie_weights_scope", None) is scope
 
 
 def uniform_(
@@ -287,16 +309,10 @@ def no_tie_weights():
     weights in the state_dict during `from_pretrained`, and otherwise tying them would remove them from it, as it's
     called in `post_init` when instantiating.
     """
-    from .modeling_utils import PreTrainedModel
-
-    def empty_func(*args, **kwargs):
-        pass
-
+    # Use an opaque scope token so nested or concurrent loads can identify only
+    # the models instantiated under this context manager.
+    state_token = _NO_TIE_WEIGHTS_STATE.set(object())
     try:
-        original_tie_weights = PreTrainedModel.tie_weights
-        PreTrainedModel.tie_weights = empty_func
-
         yield
     finally:
-        # Set back the original
-        PreTrainedModel.tie_weights = original_tie_weights
+        _NO_TIE_WEIGHTS_STATE.reset(state_token)
