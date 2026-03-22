@@ -115,6 +115,9 @@ def with_flush_memory(func):
 
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     def test_generation_step_uses_thread_local_capture_mode_for_cuda_graphs(self):
+        # Regress the dual-manager case: captures created in one thread must not
+        # use PyTorch's default global error mode, which can invalidate a second
+        # manager running concurrently on another device.
         calls = []
 
         @contextmanager
