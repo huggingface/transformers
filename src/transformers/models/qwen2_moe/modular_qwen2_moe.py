@@ -217,7 +217,6 @@ class Qwen2MoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen2MoeTopKRouter, index=0),
         "moe_routing": OutputRecorder(Qwen2MoeTopKRouter, index=2),
-        "selected_experts": OutputRecorder(Qwen2MoeTopKRouter, index=2),
         "hidden_states": Qwen2MoeDecoderLayer,
         "attentions": Qwen2MoeAttention,
     }
@@ -410,8 +409,6 @@ class Qwen2MoeForCausalLM(MixtralForCausalLM, GenerationMixin):
             router_logits=outputs.router_logits,
             moe_routing=outputs.moe_routing if hasattr(outputs, "moe_routing") else None,
         )
-        if hasattr(outputs, "selected_experts"):
-            causal_lm_output["selected_experts"] = outputs.selected_experts
         return causal_lm_output
 
 
