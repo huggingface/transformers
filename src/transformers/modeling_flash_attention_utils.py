@@ -519,13 +519,11 @@ def _is_packed_sequence(position_ids, batch_size):
     """
     if position_ids is None:
         return False
-    if position_ids.dim() > 2:
-        return False
-
-    increasing_position_sequences = (
-        torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
-    )
-    return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
+    
+    # Extract the temporal dimension to support multi-dimensional RoPE
+    t_position_ids = position_ids[0] if position_ids.dim() > 2 else position_ids
+    
+    return batch_size == 1 and (t_position_ids[:, 1:] - t_position_ids[:, :-1] < 0).sum().bool()
 
 
 def fa_peft_integration_check(
