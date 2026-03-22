@@ -142,7 +142,6 @@ class CodeGenAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
     ) -> (
         tuple[torch.Tensor, tuple[torch.Tensor]]
         | tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]
@@ -191,13 +190,7 @@ class CodeGenAttention(nn.Module):
         # Note that this cast is quite ugly, but is not implemented before ROPE as k_rot in the original codebase is always in fp32.
         # Reference: https://github.com/salesforce/CodeGen/blob/f210c3bb1216c975ad858cd4132c0fdeabf4bfc2/codegen1/jaxformer/hf/codegen/modeling_codegen.py#L38
         if layer_past is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_dim,
-                "cache_position": cache_position,
-            }
-            key, value = layer_past.update(key.to(hidden_states.dtype), value, self.layer_idx, cache_kwargs)
+            key, value = layer_past.update(key.to(hidden_states.dtype), value, self.layer_idx)
 
         # compute self-attention: V x Softmax(QK^T)
         attn_output, attn_weights = self._attn(query, key, value, attention_mask)
@@ -246,7 +239,7 @@ class CodeGenBlock(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -257,7 +250,6 @@ class CodeGenBlock(GradientCheckpointingLayer):
             position_ids=position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
@@ -317,7 +309,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -350,18 +341,15 @@ class CodeGenModel(CodeGenPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         seq_length = inputs_embeds.shape[1]
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -389,7 +377,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
                 position_ids=position_ids,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -446,7 +433,6 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -473,7 +459,6 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]

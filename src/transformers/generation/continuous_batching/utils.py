@@ -33,7 +33,7 @@ class CudaGraphBuffer:
     def __del__(self) -> None:
         original_max_size = self.max_size
         self.max_size = 1  # 0 would cause an infinite loop, 1 is enough to clear all graphs
-        self.plan_for_new_graph()
+        self.plan_for_new_graph(silent=True)
         self.max_size = original_max_size
 
     def get_graph(self, q_len: int, kv_len: int) -> torch.cuda.CUDAGraph | None:
@@ -42,15 +42,17 @@ class CudaGraphBuffer:
             self._storage.move_to_end((q_len, kv_len))
         return graph
 
-    def plan_for_new_graph(self) -> None:
+    def plan_for_new_graph(self, silent: bool = False) -> None:
         while len(self._storage) >= self.max_size:
             evicted_key, evicted_graph = self._storage.popitem(last=False)
-            logger.info(f"Evicting graph for {evicted_key = }")
+            if not silent:
+                logger.info(f"Evicting graph for {evicted_key = }")
             evicted_graph.reset()
 
     def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
         # In our use case, this should not have any effect because we plan for a new graph before it is captured
         self.plan_for_new_graph()
+        logger.info(f"Setting graph for {q_len = }, {kv_len = }")
         self._storage[(q_len, kv_len)] = graph
 
 

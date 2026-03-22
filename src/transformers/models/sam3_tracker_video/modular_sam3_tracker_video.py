@@ -329,7 +329,7 @@ class Sam3TrackerVideoSegmentationOutput(Sam2VideoSegmentationOutput):
 
 
 class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
-    pass
+    base_model_prefix = "tracker_model"
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):

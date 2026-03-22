@@ -66,9 +66,9 @@ The original code can be found [here](https://github.com/google-research/pix2str
 [[autodoc]] Pix2StructImageProcessor
     - preprocess
 
-## Pix2StructImageProcessorFast
+## Pix2StructImageProcessorPil
 
-[[autodoc]] Pix2StructImageProcessorFast
+[[autodoc]] Pix2StructImageProcessorPil
     - preprocess
 
 ## Pix2StructTextModel
