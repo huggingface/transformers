@@ -1326,7 +1326,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Preserve the current no-tie scope on this instance so only the model
         # being initialized in that scope skips tie_weights().
-        self._no_tie_weights_scope = init.get_no_tie_weights_scope()
+        self._no_tie_weights_scope = init._get_no_tie_weights_scope()
 
         # Maybe initialize the weights and tie the keys
         self.init_weights()
@@ -2521,7 +2521,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         `source` is missing in the checkpoint while `target` exists, we *swap* source and target so we can still
         tie everything to the parameter that actually exists.
         """
-        if init.should_skip_tie_weights(self):
+        if init._should_skip_tie_weights(self):
             return
 
         # In this case, the keys stored in `all_tied_weights_keys` are already correct
