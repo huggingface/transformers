@@ -123,8 +123,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             # Build a minimal tokenizer (empty vocab/merges) to cheaply extract post_processor,
             # padding and truncation as Rust objects — avoids parsing the full vocab via from_file.
-            # Only applies to BPE/WordPiece/WordLevel; fall back to from_file for Unigram (requires
-            # non-empty vocab) and for older tokenizer.json formats that omit the "type" field.
+            # This optimization applies to BPE, WordPiece, and WordLevel only:
+            # - Unigram (SentencePiece) requires a non-empty vocab to initialize correctly in Rust
+            #   (e.g. AlbertTokenizer, CamembertTokenizer, LlamaTokenizer, T5Tokenizer); passing an
+            #   empty vocab causes "Unable to load vocab EmptyVocabulary". TODO: investigate if keeping
+            #   just the UNK token is sufficient to make Unigram work with a minimal vocab.
+            # - Older tokenizer.json formats (e.g. XLNetTokenizer, DistilBertTokenizer) omit the
+            #   "type" field in the "model" section, so we cannot determine the model type from JSON.
+            # In both cases we fall back to the original from_file path (no performance improvement).
             model_type = tokenizer_json.get("model", {}).get("type")
             if model_type in ("BPE", "WordPiece", "WordLevel"):
                 minimal_tokenizer_json = dict(tokenizer_json)
