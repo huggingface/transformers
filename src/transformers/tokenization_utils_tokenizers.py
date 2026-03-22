@@ -123,18 +123,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
             # Build a minimal tokenizer (empty vocab/merges) to cheaply extract post_processor,
             # padding and truncation as Rust objects — avoids parsing the full vocab via from_file.
-            # Fall back to from_file if the model type is missing (older tokenizer.json formats).
+            # Only applies to BPE/WordPiece/WordLevel; fall back to from_file for Unigram (requires
+            # non-empty vocab) and for older tokenizer.json formats that omit the "type" field.
             model_type = tokenizer_json.get("model", {}).get("type")
-            if model_type is not None:
+            if model_type in ("BPE", "WordPiece", "WordLevel"):
                 minimal_tokenizer_json = dict(tokenizer_json)
                 minimal_model = dict(tokenizer_json["model"])
                 if model_type == "BPE":
                     minimal_model["vocab"] = {}
                     minimal_model["merges"] = []
-                elif model_type in ("WordPiece", "WordLevel"):
+                else:
                     minimal_model["vocab"] = {}
-                elif model_type == "Unigram":
-                    minimal_model["vocab"] = []
                 minimal_tokenizer_json["model"] = minimal_model
                 minimal_tokenizer_json["added_tokens"] = []
                 tok_from_file = TokenizerFast.from_str(json.dumps(minimal_tokenizer_json))
