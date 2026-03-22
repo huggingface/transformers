@@ -26,7 +26,7 @@ PRs that appear to be fully agent-written will probably be closed without review
 repeatedly or maliciously. 
 
 This is a rapidly-evolving situation that's causing significant shockwaves in the open-source community. As a result, 
-this policy is likely to be updated regularly in the near future. For more information, please read `CONTRIBUTING.md`.
+this policy is likely to be updated regularly in the near future. For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
 
 - [ ] I confirm that this is not a pure code agent PR.
 
