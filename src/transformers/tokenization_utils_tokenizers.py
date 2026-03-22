@@ -118,7 +118,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab/merges and pass decoder/pre_tokenizer/post_processor
             # from the file so the reconstructed tokenizer matches the tokenizer.json
-            tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
+            with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
+                tokenizer_json = json.load(tokenizer_handle)
+
+            # Build a minimal tokenizer (empty vocab/merges) to cheaply extract post_processor,
+            # padding and truncation as Rust objects — avoids parsing the full vocab via from_file.
+            minimal_tokenizer_json = dict(tokenizer_json)
+            minimal_model = dict(tokenizer_json["model"])
+            model_type = minimal_model["type"]
+            if model_type == "BPE":
+                minimal_model["vocab"] = {}
+                minimal_model["merges"] = []
+            elif model_type in ("WordPiece", "WordLevel"):
+                minimal_model["vocab"] = {}
+            elif model_type == "Unigram":
+                minimal_model["vocab"] = []
+            minimal_tokenizer_json["model"] = minimal_model
+            minimal_tokenizer_json["added_tokens"] = []
+            tok_from_file = TokenizerFast.from_str(json.dumps(minimal_tokenizer_json))
+
             local_kwargs["post_processor"] = tok_from_file.post_processor
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
@@ -129,9 +147,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["_json_truncation"] = tok_from_file.truncation
             if tok_from_file.padding is not None:
                 local_kwargs["_json_padding"] = tok_from_file.padding
-
-            with open(fast_tokenizer_file, encoding="utf-8") as tokenizer_handle:
-                tokenizer_json = json.load(tokenizer_handle)
 
             # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
