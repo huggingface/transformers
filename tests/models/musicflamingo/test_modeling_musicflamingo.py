@@ -110,6 +110,8 @@ class MusicFlamingoModelTester:
             text_config=self.text_config,
             audio_config=self.audio_config,
             audio_token_id=self.audio_token_id,
+            audio_rotary_dim=8,
+            rope_parameters={"rope_type": "default", "rope_theta": 2048},
         )
 
     def prepare_config_and_inputs(self):
@@ -132,6 +134,9 @@ class MusicFlamingoModelTester:
         config, input_features_values, input_features_mask = self.prepare_config_and_inputs()
         # Every window has same T_mel here
         num_audio_tokens_per_sample = self._post_pool_tokens_per_window(input_features_values.shape[-1])
+        rote_timestamps = (
+            torch.arange(num_audio_tokens_per_sample, dtype=torch.float32, device=torch_device)[None, :] * 0.04
+        ).repeat(self.batch_size, 1)
 
         # Build token ids with valid range and K <sound> tokens
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
@@ -144,6 +149,7 @@ class MusicFlamingoModelTester:
         inputs_dict = {
             "input_features": input_features_values,
             "input_features_mask": input_features_mask,
+            "rote_timestamps": rote_timestamps,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }

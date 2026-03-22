@@ -587,7 +587,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration:
+        if is_first_iteration or not model_inputs.get("use_cache", False):
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:

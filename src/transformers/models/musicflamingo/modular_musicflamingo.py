@@ -50,6 +50,8 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
+    audio_rotary_dim (`int`, *optional*, defaults to 256):
+        Number of audio encoder channels used by MusicFlamingo rotary time embeddings per axis.
 
     Example:
 
@@ -74,7 +76,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
 
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
-    head_dim: int = 256
+    audio_rotary_dim: int = 256
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
@@ -283,6 +285,16 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         position_angles = self._compute_position_angles(self.inv_freq)
         self.register_buffer("position_angles", position_angles, persistent=False)
 
+    @staticmethod
+    def compute_default_rope_parameters(config=None, device=None, seq_len=None):
+        del seq_len
+        dim = config.audio_rotary_dim
+        inv_freq = 1.0 / (
+            config.rope_parameters["rope_theta"]
+            ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, 1.0
+
     def _compute_position_angles(self, inv_freq):
         positions = torch.arange(int(self.max_seq_len_cached), device=inv_freq.device, dtype=inv_freq.dtype)
         positions = positions / self.max_seq_len_cached * (2 * pi)
@@ -292,19 +304,29 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
 
     @torch.no_grad()
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
-        """Compute 2D axial rotary embeddings for batch and time dimensions."""
+        """Compute 2D axial rotary embeddings for window and time dimensions."""
 
-        # Compute frequencies for the window axis
-        batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        batch_positions = batch_positions / self.max_seq_len_cached
-        batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
-        batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
+        # Compute frequencies for the window axis. This axis should reset for
+        # each audio sample, so derive it from the chunk start timestamps rather
+        # than the flattened row index.
+        window_starts = timestamps[:, 0].to(device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        if seq_len > 1:
+            frame_step = (timestamps[0, 1] - timestamps[0, 0]).to(self.inv_freq)
+            window_duration = frame_step * seq_len
+        else:
+            unique_starts = torch.unique(window_starts)
+            window_duration = (
+                torch.diff(unique_starts).min() if unique_starts.numel() > 1 else window_starts.new_tensor(1.0)
+            )
+        window_positions = torch.round(window_starts / window_duration) / self.max_seq_len_cached
+        window_freqs = window_positions.unsqueeze(-1) * self.inv_freq
+        window_freqs = torch.repeat_interleave(window_freqs, 2, dim=-1)
 
         # Broadcasting and apply time-based angle modulation
-        batch_freqs = batch_freqs[:, None, :]
+        window_freqs = window_freqs[:, None, :]
         time_freqs = self.position_angles[:seq_len][None, :, :]
-        batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
-        freqs = torch.cat((batch_freqs, time_freqs), dim=-1)
+        window_freqs, time_freqs = broadcast_tensors(window_freqs, time_freqs)
+        freqs = torch.cat((window_freqs, time_freqs), dim=-1)
         angle = (-timestamps * 2 * pi).to(freqs)
         freqs = freqs * angle.unsqueeze(-1)
         return freqs.cos(), freqs.sin()
@@ -475,7 +497,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration:
+        if is_first_iteration or not model_inputs.get("use_cache", False):
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
