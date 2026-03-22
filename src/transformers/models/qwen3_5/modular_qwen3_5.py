@@ -152,6 +152,15 @@ class Qwen3_5Config(Qwen3VLConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
 
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        # Propagate num_labels/id2label/label2id to text_config when explicitly
+        # passed (e.g. AutoConfig.from_pretrained(model, num_labels=N)), so that
+        # Qwen3_5ForSequenceClassification uses the correct label count.
+        if "num_labels" in kwargs or "id2label" in kwargs:
+            self.text_config.id2label = self.id2label
+            self.text_config.label2id = self.label2id
+
 
 class Qwen3_5DynamicCache(Qwen3NextDynamicCache):
     pass

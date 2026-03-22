@@ -186,6 +186,12 @@ class Qwen3_5Config(PreTrainedConfig):
             self.text_config = self.sub_configs["text_config"]()
 
         super().__post_init__(**kwargs)
+        # Propagate num_labels/id2label/label2id to text_config when explicitly
+        # passed (e.g. AutoConfig.from_pretrained(model, num_labels=N)), so that
+        # Qwen3_5ForSequenceClassification uses the correct label count.
+        if "num_labels" in kwargs or "id2label" in kwargs:
+            self.text_config.id2label = self.id2label
+            self.text_config.label2id = self.label2id
 
 
 __all__ = ["Qwen3_5Config", "Qwen3_5TextConfig"]
