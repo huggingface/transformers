@@ -63,7 +63,7 @@ class RemBertConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 312
-    eos_token_id: int | None = 313
+    eos_token_id: int | list[int] | None = 313
     is_decoder: bool = False
     add_cross_attention: bool = False
     tie_word_embeddings: bool = False

@@ -148,7 +148,7 @@ class WhisperConfig(PreTrainedConfig):
     max_target_positions: int = 448
     pad_token_id: int | None = 50256
     bos_token_id: int | None = 50256
-    eos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
     suppress_tokens: list | None = None
     begin_suppress_tokens: list[int] | tuple[int, ...] | None = (220, 50256)
     use_weighted_layer_sum: bool = False

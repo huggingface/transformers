@@ -236,6 +236,8 @@ class ImagesKwargs(TypedDict, total=False):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
+        default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
+            Whether to default to a square when resizing, if size is an int.
         crop_size (`dict[str, int]`, *optional*):
             Desired output size when applying center-cropping.
         resample (`PILImageResampling`, *optional*):
@@ -261,13 +263,13 @@ class ImagesKwargs(TypedDict, total=False):
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format for the input image.
         device (`Union[str, torch.Tensor]`, *optional*):
-            The device to use for processing (e.g. "cpu", "cuda"), only relevant for fast image processing.
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for torchvision backend.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
         disable_grouping (`bool`, *optional*):
-            Whether to group images by shapes when processing or not, only relevant for fast image processing.
+            Whether to group images by shapes when processing or not, only relevant for torchvision backend.
         image_seq_length (`int`, *optional*):
             The number of image tokens to be used for each image in the input.
             Added for backward compatibility but this should be set as a processor attribute in future models.
@@ -276,6 +278,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_convert_rgb: bool | None
     do_resize: bool | None
     size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    default_to_square: bool | None
     crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
     resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
     do_rescale: bool | None

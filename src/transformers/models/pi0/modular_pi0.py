@@ -36,14 +36,14 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
-from ..siglip.image_processing_siglip_fast import SiglipImageProcessorFast
+from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-class PI0ImageProcessorFast(SiglipImageProcessorFast):
+class PI0ImageProcessor(SiglipImageProcessor):
     size = {"max_height": 224, "max_width": 224}
     pad_size = {"height": 224, "width": 224}
     do_pad = True
@@ -504,16 +504,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+        state (`torch.Tensor`, *optional*):
+            Current robot state.
+        noise (`torch.Tensor`, *optional*):
+            Random noise at current timestep that needs to be denoised
+        timestep (`torch.Tensor`, *optional*):
+            Current denoising timestep.
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
-        state  (`torch.Tensor`, *optional*):
-            Current robot state.
-        noise  (`torch.Tensor`, *optional*):
-            Random noise at current timestep that needs to be denoised
-        timestep  (`torch.Tensor`, *optional*):
-            Current denoising timestep.
+        actions (`torch.Tensor`, *optional*):
+            Input actions that need to be predicted. Used only when training to compiute loss.
         """
         batch_size = state.shape[0]
 
@@ -645,4 +645,5 @@ __all__ = [
     "PI0Model",
     "PI0ForConditionalGeneration",
     "PI0Processor",
+    "PI0ImageProcessor",
 ]
