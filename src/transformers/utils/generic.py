@@ -757,6 +757,8 @@ class TransformersKwargs(TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
+        output_moe_routing (`Optional[bool]`, *optional*):
+            For MoE models, this allows returning the exact selected experts used by each sparse layer.
         cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
         cu_seq_lens_k (`torch.LongTensor`, *optional*)
@@ -775,6 +777,7 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: bool | None
     output_attentions: bool | None
     output_router_logits: bool | None
+    output_moe_routing: bool | None
     cu_seq_lens_q: torch.LongTensor | None
     cu_seq_lens_k: torch.LongTensor | None
     max_length_q: int | None
