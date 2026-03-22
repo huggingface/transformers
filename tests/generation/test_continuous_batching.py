@@ -15,6 +15,8 @@
 import functools
 import gc
 import itertools
+from contextlib import contextmanager
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -112,6 +114,82 @@ def with_flush_memory(func):
 
 
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_generation_step_uses_thread_local_capture_mode_for_cuda_graphs(self):
+        calls = []
+
+        @contextmanager
+        def fake_stream(stream):
+            self.assertEqual(stream, "compute-stream")
+            yield
+
+        @contextmanager
+        def fake_graph(*args, **kwargs):
+            self.assertEqual(args, ("graph-object",))
+            calls.append(dict(kwargs))
+            yield
+
+        class FakeInputsAndOutputs:
+            def __init__(self) -> None:
+                self.use_block_table = False
+                self.compute_stream = "compute-stream"
+                self.stored_graph = None
+                self.retrieve_called = False
+
+            def get_model_kwargs(self, use_padding: bool):
+                self.use_padding = use_padding
+                return {"input_ids": torch.tensor([[1]], dtype=torch.long)}
+
+            def get_cb_kwargs(self):
+                return (
+                    torch.tensor([0], dtype=torch.int32),
+                    torch.tensor([0], dtype=torch.int32),
+                    torch.tensor([0], dtype=torch.int32),
+                )
+
+            def get_graph(self):
+                return None
+
+            def set_graph(self, graph) -> None:
+                self.stored_graph = graph
+
+            def retrieve_device_outputs(self) -> None:
+                self.retrieve_called = True
+
+        inputs_and_outputs = FakeInputsAndOutputs()
+        forward_calls = []
+
+        def fake_forward_fn(model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids):
+            del model, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
+            forward_calls.append(batch_data["input_ids"].clone())
+
+        processor = SimpleNamespace(
+            inputs_and_outputs=inputs_and_outputs,
+            _compiled_decode=None,
+            _compiled_varlen=None,
+            _forward_process_and_sample=fake_forward_fn,
+            use_cuda_graph=True,
+            graph_pool="graph-pool",
+            _pad_inputs=True,
+        )
+
+        with (
+            patch("transformers.generation.continuous_batching.continuous_api.torch.cuda.stream", fake_stream),
+            patch("transformers.generation.continuous_batching.continuous_api.torch.cuda.graph", fake_graph),
+            patch(
+                "transformers.generation.continuous_batching.continuous_api.torch.cuda.CUDAGraph",
+                return_value="graph-object",
+            ),
+        ):
+            ContinuousBatchProcessor._generation_step(processor, object(), LogitsProcessorList(), False)
+
+        self.assertEqual(len(forward_calls), 2)  # warmup + capture
+        self.assertEqual(
+            calls,
+            [{"stream": "compute-stream", "pool": "graph-pool", "capture_error_mode": "thread_local"}],
+        )
+        self.assertEqual(inputs_and_outputs.stored_graph, "graph-object")
+        self.assertTrue(inputs_and_outputs.retrieve_called)
+
     @parameterized.expand(
         [
             (None, None, "0"),
