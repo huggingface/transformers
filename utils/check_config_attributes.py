@@ -139,11 +139,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "LwDetrConfig": True,
     "NemotronHConfig": True,
     "RfDetrConfig": True,
+    # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
+    "PPChart2TableConfig": True,
+    "PPChart2TableVisionConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
     # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
     "chunk_size_feed_forward",
     "dtype",
     "id2label",
