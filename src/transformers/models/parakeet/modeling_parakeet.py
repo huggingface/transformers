@@ -32,11 +32,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -664,6 +667,19 @@ class ParakeetCTCGenerateOutput(ModelOutput):
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
+@dataclass
+class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
+    """
+    Deprecated alias for ParakeetCTCGenerateOutput. Use ParakeetCTCGenerateOutput instead.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        logger.warning_once(
+            "`ParakeetGenerateOutput` is deprecated and removed starting from version 5.5.0; please use `ParakeetCTCGenerateOutput` instead.",
+        )
+
+
 @auto_docstring(
     custom_intro="""
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
@@ -709,6 +725,8 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         >>> print(outputs.loss)
         ```"""
 
+        if labels is not None:
+            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -720,11 +738,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_features, dtype=torch.long)
-            )
-            input_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
+            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
 
             # assuming that padded tokens are filled with pad_token_id when not being attended to
             labels_mask = labels != self.config.pad_token_id
@@ -738,7 +752,7 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
                 loss = nn.functional.ctc_loss(
                     log_probs,
                     flattened_targets,
-                    input_lengths,
+                    encoder_lengths,
                     target_lengths,
                     blank=self.config.pad_token_id,
                     reduction=self.config.ctc_loss_reduction,
@@ -829,20 +843,13 @@ class ParakeetTDTDecoder(nn.Module):
         cell_state: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         input_ids = input_ids.to(self.decoder_projector.weight.device)
-        if hidden_state is None or cell_state is None:
-            hidden_state = torch.zeros(
-                self.config.num_decoder_layers,
-                input_ids.shape[0],
-                self.config.decoder_hidden_size,
-                device=self.decoder_projector.weight.device,
-                dtype=self.decoder_projector.weight.dtype,
-            )
-            cell_state = torch.zeros_like(hidden_state)
-        hidden_state = hidden_state.to(self.decoder_projector.weight.device)
-        cell_state = cell_state.to(self.decoder_projector.weight.device)
+        if hidden_state is not None and cell_state is not None:
+            hidden_cell_states = (hidden_state, cell_state)
+        else:
+            hidden_cell_states = None
 
         embeddings = self.embedding(input_ids)
-        lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, (hidden_state, cell_state))
+        lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
         decoder_output = self.decoder_projector(lstm_output)
         return decoder_output, hidden_state, cell_state
 
@@ -854,8 +861,9 @@ class ParakeetTDTJointNetwork(nn.Module):
         super().__init__()
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.token_head = nn.Linear(config.decoder_hidden_size, config.vocab_size)
-        self.duration_head = nn.Linear(config.decoder_hidden_size, len(config.durations))
+        # Combined head outputs both token logits and duration logits
+        self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
+        self.vocab_size = config.vocab_size
 
     def forward(
         self,
@@ -868,7 +876,10 @@ class ParakeetTDTJointNetwork(nn.Module):
                 raise ValueError("Either encoder_output or projected_encoder_output must be provided.")
             projected_encoder_output = self.encoder_projector(encoder_output)
         joint_output = self.activation(projected_encoder_output + decoder_output)
-        return self.token_head(joint_output), self.duration_head(joint_output)
+        logits = self.head(joint_output)
+        token_logits = logits[..., : self.vocab_size]
+        duration_logits = logits[..., self.vocab_size :]
+        return token_logits, duration_logits
 
 
 @dataclass
@@ -1061,6 +1072,7 @@ def tdt_loss(
 )
 class ParakeetForTDT(ParakeetPreTrainedModel):
     config: ParakeetTDTConfig
+    _no_split_modules = ["ParakeetTDTDecoder"]
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
@@ -1098,6 +1110,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         >>> outputs = model(**inputs)
         ```
         """
+        if labels is not None:
+            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -1106,13 +1120,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         loss, logits = None, None
         if labels is not None:
-            # Compute encoder output lengths
-            attention_mask = (
-                attention_mask
-                if attention_mask is not None
-                else torch.ones(input_features.shape[:-1], dtype=torch.long, device=input_features.device)
-            )
-            encoder_lengths = self._get_subsampling_output_length(attention_mask.sum(-1))
+            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
 
             # Prepare labels for TDT loss
             target_lengths = (labels != self.config.pad_token_id).sum(-1)
@@ -1127,7 +1135,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 decoder_output=decoder_output.unsqueeze(1),
                 encoder_output=encoder_outputs.last_hidden_state.unsqueeze(2),
             )
-            logits = torch.cat([token_logits, duration_logits], dim=-1)
 
             loss = self.loss_function(
                 token_logits=token_logits.float(),
@@ -1139,6 +1146,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 durations=self.config.durations,
                 reduction="mean",
             )
+            logits = torch.cat([token_logits, duration_logits], dim=-1)
 
         return ParakeetTDTOutput(
             loss=loss,
@@ -1212,9 +1220,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             valid_lengths = torch.full((batch_size,), sequence_length, dtype=torch.int, device=device)
 
         # Initialization
-        hidden_state, cell_state = None, None
         prev_tokens = torch.full((batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device)
-        decoder_output, hidden_state, cell_state = self.decoder(prev_tokens, hidden_state, cell_state)
+        decoder_output, hidden_state, cell_state = self.decoder(prev_tokens)
         decoder_output = decoder_output.to(device)
         hidden_state = hidden_state.to(device)
         cell_state = cell_state.to(device)
@@ -1251,7 +1258,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             )
             token_logits = token_logits.squeeze(1).to(device)
             duration_logits = duration_logits.squeeze(1).to(device)
-
             tokens = token_logits.argmax(dim=-1)
             durations = duration_logits.argmax(dim=-1)
 
@@ -1278,7 +1284,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 )
                 token_logits = token_logits.squeeze(1).to(device)
                 duration_logits = duration_logits.squeeze(1).to(device)
-
                 more_tokens = token_logits.argmax(dim=-1)
                 more_durations = duration_logits.argmax(dim=-1)
                 tokens = torch.where(advance_mask, more_tokens, tokens)

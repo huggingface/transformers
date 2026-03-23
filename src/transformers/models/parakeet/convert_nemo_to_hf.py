@@ -55,6 +55,7 @@ NEMO_TDT_WEIGHT_MAPPING = {
     r"decoder\.prediction\.dec_rnn\.lstm\.": r"decoder.lstm.",
     r"joint\.enc\.": r"joint.encoder_projector.",
     r"joint\.pred\.": r"decoder.decoder_projector.",
+    r"joint\.joint_net\.2\.": r"joint.head.",
 }
 
 
@@ -338,22 +339,6 @@ def load_and_convert_tdt_state_dict(model_files, vocab_size):
     for key, value in state_dict.items():
         if key.endswith("featurizer.window") or key.endswith("featurizer.fb"):
             print(f"Skipping preprocessing weight: {key}")
-            continue
-
-        if key == "joint.joint_net.2.weight":
-            token_weight = value[:vocab_size, :]
-            duration_weight = value[vocab_size:, :]
-            converted_state_dict["joint.token_head.weight"] = token_weight
-            converted_state_dict["joint.duration_head.weight"] = duration_weight
-            print(f"Split combined weight: token_head {token_weight.shape}, duration_head {duration_weight.shape}")
-            continue
-
-        if key == "joint.joint_net.2.bias":
-            token_bias = value[:vocab_size]
-            duration_bias = value[vocab_size:]
-            converted_state_dict["joint.token_head.bias"] = token_bias
-            converted_state_dict["joint.duration_head.bias"] = duration_bias
-            print(f"Split combined bias: token_head {token_bias.shape}, duration_head {duration_bias.shape}")
             continue
 
         converted_key = convert_key(key, all_mappings)
