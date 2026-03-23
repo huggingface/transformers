@@ -1,6 +1,6 @@
 ---
 name: add-or-fix-type-checking
-description: Fixes broken typing checks detected by ty, make style, or make check-repo. Use when typing errors appear in local runs, CI, or PR logs.
+description: Fixes broken typing checks detected by ty, make typing, or make check-repo. Use when typing errors appear in local runs, CI, or PR logs.
 ---
 
 # Add Or Fix Type Checking
@@ -8,15 +8,15 @@ description: Fixes broken typing checks detected by ty, make style, or make chec
 ## Input
 
 - `<target>`: module or directory to type-check (if known).
-- Optional `make style` or CI output showing typing failures.
+- Optional `make typing` or CI output showing typing failures.
 
 ## Workflow
 
 1. **Identify scope from the failing run**:
-   - If you already have `make style` or CI output, extract the failing file/module paths.
+   - If you already have `make typing` or CI output, extract the failing file/module paths.
    - If not, run:
      ```bash
-     make style
+     make typing
      ```
    - Choose the narrowest target that covers the failures.
 
@@ -207,7 +207,7 @@ description: Fixes broken typing checks detected by ty, make style, or make chec
 
 7. **Verify and close the PR loop**:
    - Re-run `ty check` on the same `<target>`
-   - Re-run `make style` to confirm the full style/type step passes
+   - Re-run `make typing` to confirm the type/model-rules step passes
    - If working toward merge readiness, run `make check-repo`
    - Ensure runtime behavior did not change and run relevant tests
 

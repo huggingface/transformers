@@ -174,7 +174,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
     summary_first_dropout: float | int = 0.1
     use_cache: bool = True
     bos_token_id: int | None = 8192
-    eos_token_id: int | None = 8193
+    eos_token_id: int | list[int] | None = 8193
     pad_token_id: int | None = None
     feature_size: int = 80
     use_attention_bias: bool = True

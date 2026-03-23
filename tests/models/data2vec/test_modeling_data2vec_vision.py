@@ -51,7 +51,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitImageProcessor
+    from transformers import BeitImageProcessorPil
 
 
 class Data2VecVisionModelTester:
@@ -313,7 +313,9 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
+            BeitImageProcessorPil.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
         )
 
     @slow
@@ -350,7 +352,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+        processor = BeitImageProcessorPil.from_pretrained("facebook/data2vec-vision-base-ft1k")
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 

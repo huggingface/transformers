@@ -216,9 +216,9 @@ print(generated_text[0])
 [[autodoc]] Kosmos2_5ImageProcessor
     - preprocess
 
-## Kosmos2_5ImageProcessorFast
+## Kosmos2_5ImageProcessorPil
 
-[[autodoc]] Kosmos2_5ImageProcessorFast
+[[autodoc]] Kosmos2_5ImageProcessorPil
     - preprocess
 
 ## Kosmos2_5Processor
