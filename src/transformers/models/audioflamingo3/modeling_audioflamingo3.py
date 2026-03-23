@@ -448,6 +448,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
+        input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -560,6 +561,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             audio_embeds = self.get_audio_features(
                 input_features,
                 input_features_mask,
+                input_ids=input_ids,
                 return_dict=True,
             ).pooler_output
 

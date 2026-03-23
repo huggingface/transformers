@@ -477,6 +477,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
             audio_embeds = self.get_audio_features(
                 input_features,
                 input_features_mask,
+                input_ids=input_ids,
                 return_dict=True,
             ).pooler_output
 
