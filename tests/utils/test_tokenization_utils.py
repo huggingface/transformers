@@ -205,13 +205,15 @@ class TokenizersBackendTest(unittest.TestCase):
 
         # GPT-2 is a BPE tokenizer — clean_up_tokenization is skipped because it
         # was designed for WordPiece and is destructive for BPE (strips legitimate
-        # spaces before punctuation). BPE roundtrip preserves original text.
-        text = "Hello, how are you? I'm here."
+        # spaces before punctuation).
+        # Use text with spaces before punctuation that cleanup would strip if applied.
+        text = "x != y"
         token_ids = tokenizer.encode(text)
 
         decoded_no_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
         self.assertEqual(decoded_no_cleanup, text)
 
+        # With BPE guard, cleanup=True also preserves the text
         decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
         self.assertEqual(decoded_with_cleanup, text)
 
