@@ -328,6 +328,31 @@ loss_fn = TDTLossNumba(
     reduction="none",   
 )
 
+# Create wrapper to adapt NeMo loss to Transformers signature
+def nemo_loss_wrapper(token_logits, duration_logits, targets, logit_lengths, target_lengths, **kwargs):
+    """Adapter function that converts Transformers loss signature to NeMo signature."""
+    # Concatenate token and duration logits (NeMo expects combined logits)
+    acts = torch.cat([token_logits, duration_logits], dim=-1)
+    
+    # Use actual tensor shape for act_lens (NeMo requires T dimension to match max(act_lens))
+    # The logit_lengths may not exactly match due to padding/masking edge cases
+    batch_size, T, U = acts.shape[:3]
+    act_lens = torch.full((batch_size,), T, dtype=torch.long, device=acts.device)
+    
+    # NeMo requires float32 (Numba doesn't support float16/bfloat16) and int64
+    per_sample_losses = nemo_loss_fn(
+        acts=acts.float(),
+        labels=targets.long(),
+        act_lens=act_lens,
+        label_lens=target_lengths.long(),
+    )
+    
+    # Normalize by target lengths and take mean across batch
+    return (per_sample_losses / target_lengths.float()).mean()
+
+# Monkey-patch the model's loss function
+model.loss_function = nemo_loss_wrapper
+
 # Load dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -338,26 +363,10 @@ text_samples = ds["text"][:NUM_SAMPLES]
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(device=model.device, dtype=model.dtype)
 
-# Forward pass without computing loss
-outputs = model(**inputs, compute_loss=False)
-
-# Prepare inputs for NeMo TDT loss
-# -- NOTE: convert to float32 for NeMo loss since Numba doesn't support float16/bfloat16, but keep labels as integers
-encoder_lengths = torch.full((outputs.last_hidden_state.shape[0],), outputs.last_hidden_state.shape[1], dtype=torch.long, device=model.device)
-labels = inputs["labels"]
-target_lengths = (labels != model.config.pad_token_id).sum(-1)
-losses = loss_fn(
-    acts=outputs.logits.float(),
-    labels=labels.long(),
-    act_lens=encoder_lengths.long(),
-    label_lens=target_lengths.long(),
-)
-
-# Normalize by target lengths
-loss = (losses / target_lengths.float()).mean()
+# Forward and backward
+outputs = model(**inputs)
+loss = outputs.loss
 print(f"Loss (NeMo TDTLossNumba): {loss.item():.6f}")
-
-# Backward pass
 loss.backward()
 print("\n✓ Successfully computed loss and gradients using NeMo's fast TDT loss!")
 ```

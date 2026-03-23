@@ -915,6 +915,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = ParakeetTDTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
+        self.loss_function = tdt_loss
 
         self.post_init()
 
@@ -925,17 +926,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        compute_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTOutput:
         r"""
-        Args:
-            compute_loss (`bool`, *optional*, defaults to `False`):
-                Whether to compute the loss when the `labels` argument is provided. If `False`, the model will compute
-                the joint token and duration logits but will not compute the TDT loss, even if `labels` are provided.
-                This can be useful for cases where you want to compute the loss separately, e.g. with NeMo's TDT loss
-                implementation.
-
         Example:
 
         ```python
@@ -961,9 +954,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         loss, logits = None, None
         if labels is not None:
-            if compute_loss is None:
-                compute_loss = True
-
             # Compute encoder output lengths
             attention_mask = (
                 attention_mask
@@ -987,17 +977,16 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             )
             logits = torch.cat([token_logits, duration_logits], dim=-1)
 
-            if compute_loss:
-                loss = tdt_loss(
-                    token_logits=token_logits.float(),
-                    duration_logits=duration_logits.float(),
-                    targets=labels.to(token_logits.device).int(),
-                    logit_lengths=encoder_lengths.to(token_logits.device).int(),
-                    target_lengths=target_lengths.to(token_logits.device).int(),
-                    blank_token_id=self.config.blank_token_id,
-                    durations=self.config.durations,
-                    reduction="mean",
-                )
+            loss = self.loss_function(
+                token_logits=token_logits.float(),
+                duration_logits=duration_logits.float(),
+                targets=labels.to(token_logits.device).int(),
+                logit_lengths=encoder_lengths.to(token_logits.device).int(),
+                target_lengths=target_lengths.to(token_logits.device).int(),
+                blank_token_id=self.config.blank_token_id,
+                durations=self.config.durations,
+                reduction="mean",
+            )
 
         return ParakeetTDTOutput(
             loss=loss,
