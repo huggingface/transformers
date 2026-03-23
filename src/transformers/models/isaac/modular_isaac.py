@@ -1607,9 +1607,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=dim)
         return input_ids, model_kwargs
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.model.get_input_embeddings()
-
 
 __all__ = [
     "IsaacConfig",
