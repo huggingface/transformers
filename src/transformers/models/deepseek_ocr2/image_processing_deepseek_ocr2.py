@@ -527,7 +527,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
             else:
                 num_local_patches.append(0)
 
-            # Global view size: crop_to_patches=True → base size, False → tile_size
+            # Global view size: crop_to_patches=True uses base size, False uses tile_size
             global_target_size = size["height"] if crop_to_patches else self.tile_size
 
             # --- Global view ---

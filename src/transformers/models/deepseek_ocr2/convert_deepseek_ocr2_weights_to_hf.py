@@ -27,7 +27,6 @@ from safetensors import safe_open
 
 from transformers import DeepseekOcr2Config, DeepseekOcr2ForConditionalGeneration, PreTrainedTokenizerFast
 
-
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # SAM vision encoder
@@ -165,7 +164,7 @@ def fuse_moe_experts(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Ten
     return state_dict
 
 
-def convert_weights(input_dir: str, output_dir: str, push_to_hub: bool = False):
+def convert_weights(input_dir: str, output_dir: str, hub_repo_id: str | None = None):
     os.makedirs(output_dir, exist_ok=True)
 
     # Config
@@ -228,11 +227,11 @@ def convert_weights(input_dir: str, output_dir: str, push_to_hub: bool = False):
     tokenizer.save_pretrained(output_dir)
     print("Tokenizer saved.")
 
-    if push_to_hub:
-        print("Pushing to hub ...")
+    if hub_repo_id:
+        print(f"Pushing to hub ({hub_repo_id}) ...")
         model = DeepseekOcr2ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16)
-        model.push_to_hub("deepseek-ai/DeepSeek-OCR-2-hf")
-        tokenizer.push_to_hub("deepseek-ai/DeepSeek-OCR-2-hf")
+        model.push_to_hub(hub_repo_id)
+        tokenizer.push_to_hub(hub_repo_id)
 
     print("Done.")
 
@@ -290,12 +289,6 @@ def main():
     """
     Convert DeepSeek-OCR-2 weights from HF Hub custom-code format to native transformers format.
 
-    The original DeepSeek-OCR-2 model on HF Hub (deepseek-ai/DeepSeek-OCR-2) uses custom modeling
-    code that requires `trust_remote_code=True` and depends on an older version of transformers
-    (e.g. `LlamaFlashAttention2` which was removed in newer versions). This makes it incompatible
-    with the current transformers library. You must download the checkpoint locally first, then
-    run this script to convert it.
-
     Usage:
         # Step 1: Download the original checkpoint
         huggingface-cli download deepseek-ai/DeepSeek-OCR-2 --local-dir /path/to/DeepSeek-OCR-2
@@ -314,11 +307,11 @@ def main():
     parser = argparse.ArgumentParser(description=main.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input_dir", type=str, required=True, help="Path to the downloaded DeepSeek-OCR-2 checkpoint.")
     parser.add_argument("--output_dir", type=str, required=True, help="Path to write the converted model.")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push converted model to the HF Hub.")
+    parser.add_argument("--hub_repo_id", type=str, default=None, help="Push converted model to this HF Hub repo (e.g. 'my-org/DeepSeek-OCR-2-hf').")
     parser.add_argument("--test", action="store_true", help="Run inference test after conversion.")
     args = parser.parse_args()
 
-    convert_weights(args.input_dir, args.output_dir, push_to_hub=args.push_to_hub)
+    convert_weights(args.input_dir, args.output_dir, hub_repo_id=args.hub_repo_id)
 
     if args.test:
         test(args.output_dir)
