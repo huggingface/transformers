@@ -111,16 +111,6 @@ def _build_checkpoint_conversion_mapping():
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
-        "timm_wrapper": [
-            # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
-            # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
-            # Note: we don't add `timm_model` when it is part of a bigger VLM, because they already have `timm_model`
-            # saved in state dict keys. Thus the look behind check
-            WeightRenaming(
-                source_patterns=r"^(?!(?:model\.|backbone\.|tower\.))(.+)$",
-                target_patterns=r"timm_model.\1",
-            )
-        ],
         "pi0": [
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
             WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),

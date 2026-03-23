@@ -149,10 +149,6 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
-
     @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_can_init_all_missing_weights(self):
         pass
@@ -330,10 +326,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
 
     @unittest.skip(reason="PeVideoModel does not have usual input embeddings")
     def test_model_get_set_embeddings(self):

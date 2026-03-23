@@ -225,10 +225,6 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
-
     @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
