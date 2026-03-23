@@ -23,6 +23,7 @@ import tempfile
 from concurrent import futures
 from pathlib import Path
 from typing import TypedDict
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
@@ -95,6 +96,32 @@ SESSION_ID = uuid4().hex
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
+
+
+def is_remote_url(url_or_filename):
+    parsed = urlparse(url_or_filename)
+    return parsed.scheme in ("http", "https")
+
+
+def download_url(url, proxies=None):
+    """
+    Downloads a given url in a temporary file. Not safe for multi-process use. Mainly here so that
+    users can pass a raw config URL to from_pretrained() and have it just work.
+
+    Args:
+        url (`str`): The url of the file to download.
+        proxies (`dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint.
+
+    Returns:
+        `str`: The location of the temporary file where the url was downloaded.
+    """
+    tmp_fd, tmp_file = tempfile.mkstemp()
+    with os.fdopen(tmp_fd, "wb") as f:
+        resp = httpx.get(url, follow_redirects=True)
+        resp.raise_for_status()
+        f.write(resp.content)
+    return tmp_file
 
 
 def _get_cache_file_to_return(
