@@ -335,6 +335,9 @@ def _iter_manual_plan_targets(model, pattern, name_to_module, already_sharded_na
 
 
 def _parse_fsdp_plan_mode(fsdp_plan: dict[str, Any]) -> Literal["auto", "manual"]:
+    if isinstance(fsdp_plan, str):
+        fsdp_plan = {"mode": fsdp_plan}
+
     if not isinstance(fsdp_plan, dict):
         raise ValueError(f"fsdp_plan must be a dict with a 'mode' key, got {type(fsdp_plan)}")
 
@@ -355,14 +358,18 @@ def _get_manual_plan_modules(fsdp_plan: dict[str, Any]) -> dict[str, list[str]]:
 def apply_fsdp2(
     model,
     device_mesh,
-    fsdp_plan: dict[str, Any] | None,
+    fsdp_plan: dict[str, Any] | str | None,
 ):
     """
     Apply FSDP2 (fully_shard) to a model following TorchTitan's approach.
     fsdp_plan:
-        Explicit FSDP config dict with a required "mode" key.
+        Explicit FSDP config dict with a required "mode" key, or a string
+        shorthand such as "auto" or "manual".
 
         Auto mode:
+        fsdp_plan = "auto"
+
+        Auto mode (equivalent):
         fsdp_plan = {"mode": "auto"}
 
         Auto mode with optional policies:
@@ -388,6 +395,9 @@ def apply_fsdp2(
 
     if device_mesh is None:
         raise ValueError("device_mesh is required for FSDP2")
+
+    if isinstance(fsdp_plan, str):
+        fsdp_plan = {"mode": fsdp_plan}
 
     input_embed = getattr(model, "get_input_embeddings", lambda: None)()
     output_embed = getattr(model, "get_output_embeddings", lambda: None)()
@@ -515,6 +525,7 @@ def save_fsdp_model(model, save_directory):
             enable_consolidation=True,
         ),
     )
+
 
 # ========================= PEFT compatibility =========================
 # TODO(3outeille): make sure new FSDP works with PEFT
