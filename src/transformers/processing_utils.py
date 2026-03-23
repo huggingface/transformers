@@ -472,6 +472,7 @@ class ProcessingKwargs(TypedDict, total=False):
 
 class TokenizerChatTemplateKwargs(TypedDict, total=False):
     """
+    NOTE: `TokenizerChatTemplateKwargs` is deprecated and will be removed in future versions
     Keyword arguments for tokenizer's `apply_chat_template`, when it is called from within a processor.
 
     tools (`list[Dict]`, *optional*):
@@ -516,6 +517,8 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
 
 class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     """
+    NOTE: `ProcessorChatTemplateKwargs` is deprecated and will be removed in future versions
+
     Keyword arguments for processor's `apply_chat_template`.
 
     tokenize (`bool`, *optional*, defaults to `False`):
@@ -533,6 +536,8 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
 
 
 class AllKwargsForChatTemplate(TypedDict, total=False):
+    "NOTE: `AllKwargsForChatTemplate` is deprecated and will be removed in future versions"
+
     processor_kwargs: ProcessingKwargs
     template_kwargs: ProcessorChatTemplateKwargs
 

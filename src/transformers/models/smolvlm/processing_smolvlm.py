@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
@@ -293,7 +293,7 @@ class SmolVLMProcessor(ProcessorMixin):
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         chat_template: str | None = None,
         processor_kwargs: dict | None = None,
-        **kwargs: Unpack[AllKwargsForChatTemplate],
+        **kwargs,
     ) -> str:
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
