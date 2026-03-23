@@ -162,6 +162,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             `float16` weights.
     """
 
+    # Class attributes that we don't want to save or have in `self.__dict__`
+    # They are not supposed to be set/changed by users. Each field is set when
+    # creating a model class
     base_config_key: ClassVar[str] = ""
     sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
     has_no_defaults_at_init: ClassVar[bool] = False
@@ -172,10 +175,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
 
-    # Attributes set for all models internally when saving
+    # Attributes set internally when saving and used to infer model
+    # class for `Auto` mapping
     model_type: ClassVar[str] = ""
-    transformers_version: ClassVar[str | None] = None
-    architectures: ClassVar[list[str] | None] = None
+    transformers_version: str | None = None
+    architectures: list[str] | None = None
 
     # Common attributes for all models
     output_hidden_states: bool | None = False
