@@ -1313,7 +1313,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         """,
     )
     @can_return_tuple
-    @merge_with_config_defaults
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
