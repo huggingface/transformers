@@ -132,7 +132,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             #   "type" field in the "model" section, so we cannot determine the model type from JSON.
             # In both cases we fall back to the original from_file path (no performance improvement).
             model_type = tokenizer_json.get("model", {}).get("type")
-            if model_type != "Unigram":
+            if model_type not in (None, "Unigram"):
                 minimal_tokenizer_json = dict(tokenizer_json)
                 minimal_model = dict(tokenizer_json["model"])
                 minimal_model["vocab"] = {}
