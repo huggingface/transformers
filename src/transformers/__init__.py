@@ -828,10 +828,21 @@ else:
         _target = f".models.{_model}.{_module}"
         _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
         # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
-        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = lambda name, t=_target: getattr(
-            importlib.import_module(t, __name__), name.removesuffix("Fast")
-        )
+        def getattr_factory(target):
+            def _getattr(name):
+                new_name = name.removesuffix("Fast")
+                logger.warning(
+                    "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
+                    "different and this alias will be removed in future versions.",
+                    name,
+                    target,
+                    new_name,
+                )
+                return getattr(importlib.import_module(target, __name__), new_name)
 
+            return _getattr
+
+        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = getattr_factory(_target)
 
 if not is_torch_available():
     logger.warning_advice(
