@@ -20,7 +20,6 @@
 # limitations under the License.
 
 
-import contextlib
 import math
 from collections.abc import Callable
 from typing import Any
@@ -220,6 +219,9 @@ def segment_sum(input_tensor):
     mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=0)
     tensor_segsum = tensor_segsum.masked_fill(~mask, -torch.inf)
     return tensor_segsum
+
+
+is_fast_path_available = False
 
 
 class NemotronHMamba2Mixer(nn.Module):
@@ -677,7 +679,11 @@ class NemotronHMamba2Mixer(nn.Module):
         **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
+            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
+            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
+            # This leads to kernel reading uninitialized memory before the data transfer is complete.
+            with torch.cuda.stream(torch.cuda.default_stream(hidden_states.device)):
+                return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
@@ -1036,34 +1042,26 @@ class NemotronHBlock(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        if hidden_states.device.type == "cuda":
-            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
-            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
-            # This leads to kernel reading uninitialized memory before the data transfer is complete.
-            stream_context = torch.cuda.stream(torch.cuda.default_stream(hidden_states.device))
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+
+        if self.block_type == "mamba":
+            hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
+        elif self.block_type == "attention":
+            hidden_states, _ = self.mixer(
+                hidden_states=hidden_states,
+                past_key_values=past_key_values,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                user_cache=use_cache,
+                **kwargs,
+            )
         else:
-            stream_context = contextlib.nullcontext()
+            hidden_states = self.mixer(hidden_states)
 
-        with stream_context:
-            residual = hidden_states
-            hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+        hidden_states = residual + hidden_states
 
-            if self.block_type == "mamba":
-                hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-            elif self.block_type == "attention":
-                hidden_states, _ = self.mixer(
-                    hidden_states=hidden_states,
-                    past_key_values=past_key_values,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    user_cache=use_cache,
-                    **kwargs,
-                )
-            else:
-                hidden_states = self.mixer(hidden_states)
-
-            hidden_states = residual + hidden_states
-            return hidden_states
+        return hidden_states
 
 
 class NemotronHPreTrainedModel(PreTrainedModel):
@@ -1083,7 +1081,6 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
     ]
-    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     @torch.no_grad()
@@ -1247,7 +1244,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
 class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
 
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__(config)
         self.model = NemotronHModel(config)
         self.vocab_size = config.vocab_size
