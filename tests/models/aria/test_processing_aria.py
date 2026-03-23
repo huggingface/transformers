@@ -239,7 +239,7 @@ And who is that?<|im_end|>
             processor_kwargs={
                 "padding": "max_length",
                 "max_length": 50,
-            }
+            },
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 50)
 
@@ -247,8 +247,7 @@ And who is that?<|im_end|>
             messages,
             add_generation_prompt=True,
             tokenize=True,
-            truncation=True,
-            processor_kwargs={"max_length": 5},
+            processor_kwargs={"max_length": 5, "truncation": True},
         )
         self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
 

@@ -292,6 +292,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         chat_template: str | None = None,
+        processor_kwargs: dict | None = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
@@ -336,10 +337,15 @@ class SmolVLMProcessor(ProcessorMixin):
             # re-assign to the correct default template for BC, if user is not requesting their own template
             chat_template = DEFAULT_CHAT_TEMPLATE
 
-        kwargs.setdefault("num_frames", self.video_processor.num_frames)
-        kwargs.setdefault("fps", self.video_processor.fps)
+        # Users might be passing processor kwargs simply as `**kwargs`
+        if processor_kwargs:
+            processor_kwargs.setdefault("num_frames", self.video_processor.num_frames)
+            processor_kwargs.setdefault("fps", self.video_processor.fps)
+        else:
+            kwargs.setdefault("num_frames", self.video_processor.num_frames)
+            kwargs.setdefault("fps", self.video_processor.fps)
 
-        return super().apply_chat_template(conversation, chat_template, **kwargs)
+        return super().apply_chat_template(conversation, chat_template, processor_kwargs=processor_kwargs, **kwargs)
 
 
 __all__ = ["SmolVLMProcessor"]

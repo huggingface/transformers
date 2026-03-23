@@ -1848,6 +1848,10 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 processor_kwargs["do_sample_frames"] = True
 
+            # Set only is user passes a non-None value. Otherwise wa want to use each processor's own defaults
+            if return_tensors:
+                processor_kwargs["return_tensors"] = return_tensors
+
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
@@ -1855,7 +1859,6 @@ class ProcessorMixin(PushToHubMixin):
                 images=batch_images if images_exist else None,
                 videos=batch_videos if videos_exist else None,
                 audio=batch_audios if batch_audios else None,
-                return_tensors=return_tensors,
                 **processor_kwargs,
             )
 
