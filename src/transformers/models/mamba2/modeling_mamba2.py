@@ -256,7 +256,7 @@ class Mamba2Mixer(nn.Module):
         ) // 2
 
         # Single step calculations via cache
-        if cache_params is not None and cache_params[self.layer_idx].has_previous_state:
+        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
                 [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
@@ -412,7 +412,7 @@ class Mamba2Mixer(nn.Module):
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
 
-        is_decoding = cache_params is not None and cache_params[self.layer_idx].has_previous_state
+        is_decoding = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 2. Convolution sequence transformation
         if is_decoding:

@@ -953,6 +953,25 @@ class Cache:
 
         return self.layers[layer_idx].get_seq_length()
 
+    def has_previous_state(self, layer_idx: int = -1) -> bool:
+        """Returns whether the Mamba layer at index `layer_idx` has previous state or not."""
+        if layer_idx >= len(self.layers):
+            return False
+
+        # In this case, use last Mamba layer
+        if layer_idx == -1:
+            try:
+                layer_idx = next(
+                    idx for idx in range(len(self) - 1, -1, -1) if isinstance(self.layers[idx], CacheLayerMixin)
+                )
+            except StopIteration:
+                raise ValueError(
+                    "`has_previous_state` can only be called on Mamba layers, and the current Cache seem to only contain "
+                    "Attention layers."
+                )
+
+        return self.layers[layer_idx].has_previous_state
+
     def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         """
         Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
