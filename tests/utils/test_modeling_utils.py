@@ -218,6 +218,31 @@ if is_torch_available():
         def forward(self, x):
             return self.linear_2(self.linear(x))
 
+    class DummyModelWithTiedEmbeddings(PreTrainedModel):
+        config_class = PreTrainedConfig
+        _tied_weights_keys = {"lm_head.weight": "embed_tokens.weight"}
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+            self.post_init()
+
+        def get_input_embeddings(self):
+            return self.embed_tokens
+
+        def set_input_embeddings(self, value):
+            self.embed_tokens = value
+
+        def get_output_embeddings(self):
+            return self.lm_head
+
+        def set_output_embeddings(self, value):
+            self.lm_head = value
+
+        def forward(self, input_ids):
+            return self.lm_head(self.embed_tokens(input_ids))
+
     class ModelWithHead(PreTrainedModel):
         base_model_prefix = "base"
         config_class = PreTrainedConfig
@@ -413,6 +438,23 @@ class ModelUtilsTest(TestCasePlus):
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
+
+    def _build_missing_tied_embeddings_checkpoint(self, tmp_dir):
+        reference_model = DummyModelWithTiedEmbeddings(
+            PreTrainedConfig(vocab_size=11, hidden_size=7, tie_word_embeddings=True)
+        )
+        reference_model.config.save_pretrained(tmp_dir)
+
+        state_dict = reference_model.state_dict()
+        del state_dict["lm_head.weight"]
+        safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
+        return reference_model
+
+    def _assert_tied_embeddings_load_succeeded(self, model, reference_model):
+        self.assertIs(model.lm_head.weight, model.embed_tokens.weight, msg="Weights are not tied!")
+        for name, value in model.state_dict().items():
+            self.assertNotEqual(value.device.type, "meta", msg=f"{name} is still on meta!")
+        compare_state_dicts(reference_model.state_dict(), model.state_dict())
 
     @require_torch
     def test_get_total_byte_count_does_not_require_process_group(self):
@@ -1602,46 +1644,76 @@ class ModelUtilsTest(TestCasePlus):
             model = LlamaForCausalLM._from_config(copy.deepcopy(config))
             self.assertTrue(model.lm_head.weight is not model.model.embed_tokens.weight)
 
-    def test_no_tie_weights_is_thread_local(self):
-        # Regress the old global monkey patch: another thread must continue to
-        # observe the original tie_weights method while this context is active.
-        original_tie_weights = PreTrainedModel.tie_weights
-        context_entered = threading.Event()
-        release_context = threading.Event()
-        observed_methods: list[object] = []
+    def test_no_tie_weights_is_thread_local_during_concurrent_from_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            reference_model = self._build_missing_tied_embeddings_checkpoint(tmp_dir)
+            first_loader_initialized = threading.Event()
+            release_first_loader = threading.Event()
+            first_loader_lock = threading.Lock()
+            results = []
+            errors = []
+            first_loader_claimed = False
+            original_init = DummyModelWithTiedEmbeddings.__init__
 
-        def worker():
+            def instrumented_init(model_self, config):
+                original_init(model_self, config)
+
+                nonlocal first_loader_claimed
+                with first_loader_lock:
+                    should_block = not first_loader_claimed
+                    if should_block:
+                        first_loader_claimed = True
+
+                if should_block:
+                    first_loader_initialized.set()
+                    if not release_first_loader.wait(timeout=10):
+                        raise TimeoutError("Timed out waiting for the first loader to resume.")
+
+            def worker():
+                try:
+                    model, loading_info = DummyModelWithTiedEmbeddings.from_pretrained(
+                        tmp_dir, output_loading_info=True
+                    )
+                    results.append((model, loading_info))
+                except Exception as error:
+                    errors.append(error)
+
+            first_thread = threading.Thread(target=worker)
+            second_thread = threading.Thread(target=worker)
+
+            try:
+                with patch.object(DummyModelWithTiedEmbeddings, "__init__", new=instrumented_init):
+                    first_thread.start()
+                    self.assertTrue(first_loader_initialized.wait(timeout=10))
+
+                    second_thread.start()
+                    second_thread.join(timeout=20)
+                    self.assertFalse(second_thread.is_alive())
+            finally:
+                release_first_loader.set()
+                first_thread.join(timeout=20)
+                second_thread.join(timeout=20)
+
+            self.assertFalse(first_thread.is_alive())
+            self.assertFalse(second_thread.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(len(results), 2)
+
+            for model, loading_info in results:
+                self.assertSetEqual(loading_info["missing_keys"], set())
+                self._assert_tied_embeddings_load_succeeded(model, reference_model)
+
+    def test_no_tie_weights_is_model_specific_during_nested_from_pretrained(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            reference_model = self._build_missing_tied_embeddings_checkpoint(tmp_dir)
+
+            # `from_pretrained` uses its own no-tie scope while instantiating. An
+            # outer active scope must not suppress the final tie_weights() call.
             with init.no_tie_weights():
-                context_entered.set()
-                release_context.wait(timeout=5)
+                model, load_info = DummyModelWithTiedEmbeddings.from_pretrained(tmp_dir, output_loading_info=True)
 
-        thread = threading.Thread(target=worker)
-        thread.start()
-
-        self.assertTrue(context_entered.wait(timeout=5))
-        observed_methods.append(PreTrainedModel.tie_weights)
-        release_context.set()
-        thread.join(timeout=5)
-
-        self.assertIs(observed_methods[0], original_tie_weights)
-        self.assertIs(PreTrainedModel.tie_weights, original_tie_weights)
-
-    def test_no_tie_weights_is_model_specific(self):
-        # The no-tie scope should only affect models created inside that scope;
-        # existing models must still be able to tie normally.
-        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=16, tie_word_embeddings=True)
-
-        with init.no_tie_weights():
-            first_model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-
-        self.assertTrue(first_model.lm_head.weight is not first_model.model.embed_tokens.weight)
-
-        with init.no_tie_weights():
-            second_model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-            first_model.tie_weights()
-
-            self.assertTrue(second_model.lm_head.weight is not second_model.model.embed_tokens.weight)
-            self.assertTrue(first_model.lm_head.weight is first_model.model.embed_tokens.weight)
+                self.assertSetEqual(load_info["missing_keys"], set())
+                self._assert_tied_embeddings_load_succeeded(model, reference_model)
 
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
