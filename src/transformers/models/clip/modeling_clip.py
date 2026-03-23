@@ -495,7 +495,7 @@ class CLIPEncoder(nn.Module):
                 [What are attention masks?](../glossary#attention-mask)
         """
         hidden_states = inputs_embeds
-        all_hidden_states = [hidden_states] if  self.config.output_hidden_states else None
+        all_hidden_states = [hidden_states] if self.config.output_hidden_states else None
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
@@ -506,8 +506,7 @@ class CLIPEncoder(nn.Module):
                 all_hidden_states.append(hidden_states)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None
+            last_hidden_state=hidden_states, hidden_states=tuple(all_hidden_states) if all_hidden_states else None
         )
 
 
