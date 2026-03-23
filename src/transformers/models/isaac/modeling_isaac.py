@@ -1516,7 +1516,7 @@ class IsaacModel(PreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(scatter_mask, image_features)
 
         if isinstance(attention_mask, dict):
-            attention_mask = attention_mask.get("full_attention", next(iter(attention_mask.values())))
+            attention_mask = attention_mask["full_attention"]
 
         position_ids = self.compute_3d_position_ids(
             input_ids=input_ids,
