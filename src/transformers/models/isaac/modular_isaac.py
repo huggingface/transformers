@@ -20,7 +20,7 @@ import re
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
-from ... import initialization as init
+from ... import initialization as init, TorchvisionBackend
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
@@ -202,7 +202,7 @@ class IsaacTextConfig(Qwen3Config):
         super().__init__(ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"}, **super_kwargs)
 
 
-class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
+class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`int`, *optional*):
         Side length (in pixels) for square patches extracted from resized images.
@@ -221,7 +221,7 @@ class IsaacImageProcessorFastKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class IsaacImageProcessorFast(BaseImageProcessorFast):
+class IsaacImageProcessor(TorchvisionBackend):
     MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
 
     resample = PILImageResampling.BILINEAR
