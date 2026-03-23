@@ -22,8 +22,12 @@ from unittest.mock import patch
 
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.append(os.path.join(git_repo_path, "utils"))
+if git_repo_path not in sys.path:
+    sys.path.insert(0, git_repo_path)
 
 import check_modeling_structure as cms  # noqa: E402
+
+from utils.mlinter import trf011 as _trf011_mod  # noqa: E402
 
 
 TEST_PP_PLAN_MODULES = {"foo": {"embed_tokens", "final_layer_norm", "layers", "norm"}}
@@ -296,7 +300,7 @@ class FooCompatConfig(FooConfig):
 
     # --- TRF011: PP-safe forward (no submodule attribute access) ---
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_flags_layer_attr_access_in_forward_loop(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -317,7 +321,7 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(len(trf011), 1)
         self.assertIn("decoder_layer.attention_type", trf011[0].message)
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_flags_enumerate_loop_variant(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -336,7 +340,7 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(len(trf011), 1)
         self.assertIn("layer.layer_type", trf011[0].message)
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_flags_sliced_layers_loop(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -354,7 +358,7 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(len(trf011), 1)
         self.assertIn("layer.is_sliding", trf011[0].message)
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", {"foo": {"blocks"}})
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", {"foo": {"blocks"}})
     def test_trf011_flags_non_layers_pp_loop(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -373,7 +377,7 @@ class FooModel(FooPreTrainedModel):
         self.assertIn("block.layer_type", trf011[0].message)
         self.assertIn("self.blocks", trf011[0].message)
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_flags_embedding_attr_access(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -390,7 +394,7 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(len(trf011), 1)
         self.assertIn("self.embed_tokens.padding_idx", trf011[0].message)
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_flags_final_norm_attr_access(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -406,7 +410,7 @@ class FooModel(FooPreTrainedModel):
         self.assertEqual(len(trf011), 1)
         self.assertIn("self.final_layer_norm.weight", trf011[0].message)
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_allows_config_based_lookup(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -426,7 +430,7 @@ class FooModel(FooPreTrainedModel):
         trf011 = [v for v in violations if v.rule_id == cms.TRF011]
         self.assertEqual(trf011, [])
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_allows_nn_module_attrs(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -444,7 +448,7 @@ class FooModel(FooPreTrainedModel):
         trf011 = [v for v in violations if v.rule_id == cms.TRF011]
         self.assertEqual(trf011, [])
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_allows_nn_module_attrs_on_direct_pp_submodule(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -473,12 +477,12 @@ class FooModel(FooPreTrainedModel):
         return hidden_states
 """
         file_path = Path("src/transformers/models/no_pp_model/modeling_no_pp_model.py")
-        with patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", {}):
+        with patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", {}):
             violations = cms.analyze_file(file_path, source, enabled_rules={cms.TRF011})
         trf011 = [v for v in violations if v.rule_id == cms.TRF011]
         self.assertEqual(trf011, [])
 
-    @patch.object(cms, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
+    @patch.object(_trf011_mod, "_PP_PLAN_MODULES_BY_MODEL_DIR", TEST_PP_PLAN_MODULES)
     def test_trf011_suppression_works(self):
         source = """
 class FooPreTrainedModel(PreTrainedModel):
@@ -509,7 +513,7 @@ class _LazyConfigMapping(OrderedDict[str, str]):
         violations = cms.analyze_file(file_path, source)
         self.assertEqual(violations, [])
 
-    @patch("check_modeling_structure.subprocess.run")
+    @patch("utils.mlinter.mlinter.subprocess.run")
     def test_get_changed_modeling_files_includes_configuration_files(self, mock_run):
         mock_run.side_effect = [
             subprocess.CompletedProcess(
@@ -537,7 +541,7 @@ class _LazyConfigMapping(OrderedDict[str, str]):
             },
         )
 
-    @patch("check_modeling_structure.subprocess.run")
+    @patch("utils.mlinter.mlinter.subprocess.run")
     def test_get_changed_modeling_files_includes_uncommitted_worktree_changes(self, mock_run):
         mock_run.side_effect = [
             subprocess.CompletedProcess(args=["git", "diff"], returncode=0, stdout="", stderr=""),
