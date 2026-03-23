@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/wav2vec2-base-960h")
-@strict(accept_kwargs=True)
+@strict
 class Wav2Vec2Config(PreTrainedConfig):
     r"""
     num_codevectors_per_group (`int`, *optional*, defaults to 320):

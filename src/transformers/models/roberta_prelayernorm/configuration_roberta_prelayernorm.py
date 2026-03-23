@@ -20,7 +20,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="andreasmadsen/efficient_mlm_m0.40")
 # Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
 class RobertaPreLayerNormConfig(PreTrainedConfig):

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hubert-base-ls960")
-@strict(accept_kwargs=True)
+@strict
 class HubertConfig(PreTrainedConfig):
     r"""
     final_dropout (`float`, *optional*, defaults to 0.1):

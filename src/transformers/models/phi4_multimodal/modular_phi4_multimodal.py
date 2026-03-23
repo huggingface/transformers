@@ -65,7 +65,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     r"""
     crop_size (`int`, *optional*, defaults to 448):
@@ -96,7 +96,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     num_blocks (`int`, *optional*, defaults to 24):
@@ -188,7 +188,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
-@strict(accept_kwargs=True)
+@strict
 class Phi4MultimodalConfig(Phi3Config):
     r"""
     original_max_position_embeddings (`int`, *optional*, defaults to 4096):

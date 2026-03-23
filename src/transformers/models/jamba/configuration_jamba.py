@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ai21labs/Jamba-v0.1")
-@strict(accept_kwargs=True)
+@strict
 class JambaConfig(PreTrainedConfig):
     r"""
     expert_layer_period (`int`, *optional*, defaults to 2):

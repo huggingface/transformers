@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/unispeech-large-1500h-cv")
-@strict(accept_kwargs=True)
+@strict
 class UniSpeechConfig(PreTrainedConfig):
     r"""
     feat_proj_dropout (`float`, *optional*, defaults to 0.0):

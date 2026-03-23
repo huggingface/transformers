@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/led-base-16384")
-@strict(accept_kwargs=True)
+@strict
 class LEDConfig(PreTrainedConfig):
     r"""
     attention_window (`int` or `list[int]`, *optional*, defaults to 512):

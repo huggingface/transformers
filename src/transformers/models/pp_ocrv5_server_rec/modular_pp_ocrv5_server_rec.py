@@ -57,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_rec_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPOCRV5ServerRecConfig(PreTrainedConfig):
     r"""
     head_out_channels (`int`, *optional*, defaults to 18385):

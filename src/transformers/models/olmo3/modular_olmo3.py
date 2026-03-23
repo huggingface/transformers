@@ -40,7 +40,7 @@ from ..olmo2.modeling_olmo2 import (
 
 
 @auto_docstring(checkpoint="allenai/Olmo-3-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Olmo3Config(Olmo2Config):
     r"""
     Example:

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/m2m100_418M")
-@strict(accept_kwargs=True)
+@strict
 class M2M100Config(PreTrainedConfig):
     r"""
     Example:
