@@ -626,11 +626,11 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                self_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                self_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 **kwargs,
             )
@@ -855,11 +855,11 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
         # dropout
         hidden_states = self.dropout(hidden_states)
 
-        for layer_module in self.layers[: self.config.num_hidden_layers]:
+        for i, layer_module in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = layer_module(
                 hidden_states,
-                position_embeddings[layer_module.attention_type],
-                merged_attn_mask_mapping[layer_module.attention_type],
+                position_embeddings[self.config.layer_types[i]],
+                merged_attn_mask_mapping[self.config.layer_types[i]],
                 position_ids,
                 past_key_values,
                 use_cache,
