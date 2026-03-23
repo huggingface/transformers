@@ -599,7 +599,9 @@ class ContinuousBatchingAsyncIOs:
             raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
-        self.io_pairs = [HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, return_logprobs) for _ in range(2)]
+        self.io_pairs = [
+            HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, return_logprobs) for _ in range(2)
+        ]
         # CUDA streams
         self.h2d_stream = torch.cuda.Stream(device=device)
         self.d2h_stream = torch.cuda.Stream(device=device)

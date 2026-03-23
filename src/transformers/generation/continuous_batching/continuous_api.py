@@ -459,24 +459,17 @@ class ContinuousBatchProcessor:
                 # compute_stream.wait_stream(torch.cuda.current_stream())
                 # Warmup
                 with torch.cuda.stream(compute_stream):
-                    forward_fn(
-                        model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids
-                    )
+                    forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
                 # torch.cuda.current_stream().wait_stream(compute_stream)
                 # Capture
                 graph = torch.cuda.CUDAGraph()
-                # Continuous batching can run multiple manager threads concurrently in one process.
-                # PyTorch's default capture mode ("global") errors on CUDA actions from other threads,
-                # which invalidates unrelated captures even when each manager uses a different device.
+                # Continuous batching can run multiple manager threads concurrently in one process, but PyTorch's
+                # default capture mode ("global") errors on CUDA actions from other threads. This means capture can be
+                # invalidated even when each manager uses a different device. To avoid this, we use "thread_local" mode.
                 with torch.cuda.graph(
-                    graph,
-                    stream=compute_stream,
-                    pool=self.graph_pool,
-                    capture_error_mode="thread_local",
+                    graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"
                 ):
-                    forward_fn(
-                        model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids
-                    )
+                    forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
                 # Store
                 self.inputs_and_outputs.set_graph(graph)
 
