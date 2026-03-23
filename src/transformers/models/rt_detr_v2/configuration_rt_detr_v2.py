@@ -17,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
@@ -24,6 +26,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="PekingU/rtdetr_r18vd")
+@strict(accept_kwargs=True)
 class RTDetrV2Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
@@ -134,142 +137,70 @@ class RTDetrV2Config(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        initializer_range=0.01,
-        initializer_bias_prior_prob=None,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        # backbone
-        backbone_config=None,
-        freeze_backbone_batch_norms=True,
-        # encoder HybridEncoder
-        encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        hidden_expansion=1.0,
-        # decoder RTDetrV2Transformer
-        d_model=256,
-        num_queries=300,
-        decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=100,
-        label_noise_ratio=0.5,
-        box_noise_scale=1.0,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        with_box_refine=True,
-        is_encoder_decoder=True,
-        # Loss
-        matcher_alpha=0.25,
-        matcher_gamma=2.0,
-        matcher_class_cost=2.0,
-        matcher_bbox_cost=5.0,
-        matcher_giou_cost=2.0,
-        use_focal_loss=True,
-        auxiliary_loss=True,
-        focal_loss_alpha=0.75,
-        focal_loss_gamma=2.0,
-        weight_loss_vfl=1.0,
-        weight_loss_bbox=5.0,
-        weight_loss_giou=2.0,
-        eos_coefficient=1e-4,
-        decoder_n_levels=3,  # default value
-        decoder_offset_scale=0.5,  # default value
-        decoder_method="default",
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.initializer_range = initializer_range
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
+    initializer_range: float = 0.01
+    initializer_bias_prior_prob: float | None = None
+    layer_norm_eps: float = 1e-5
+    batch_norm_eps: float = 1e-5
+    backbone_config: dict | PreTrainedConfig | None = None
+    freeze_backbone_batch_norms: bool = True
+    encoder_hidden_dim: int = 256
+    encoder_in_channels: list[int] | tuple[int, ...] = (512, 1024, 2048)
+    feat_strides: list[int] | tuple[int, ...] = (8, 16, 32)
+    encoder_layers: int = 1
+    encoder_ffn_dim: int = 1024
+    encoder_attention_heads: int = 8
+    dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    encode_proj_layers: list[int] | tuple[int, ...] = (2,)
+    positional_encoding_temperature: int = 10000
+    encoder_activation_function: str = "gelu"
+    activation_function: str = "silu"
+    eval_size: int | None = None
+    normalize_before: bool = False
+    hidden_expansion: float = 1.0
+    d_model: int = 256
+    num_queries: int = 300
+    decoder_in_channels: list[int] | tuple[int, ...] = (256, 256, 256)
+    decoder_ffn_dim: int = 1024
+    num_feature_levels: int = 3
+    decoder_n_points: int = 4
+    decoder_layers: int = 6
+    decoder_attention_heads: int = 8
+    decoder_activation_function: str = "relu"
+    attention_dropout: float | int = 0.0
+    num_denoising: int = 100
+    label_noise_ratio: float = 0.5
+    box_noise_scale: float = 1.0
+    learn_initial_query: bool = False
+    anchor_image_size: int | list[int] | None = None
+    with_box_refine: bool = True
+    is_encoder_decoder: bool = True
+    matcher_alpha: float = 0.25
+    matcher_gamma: float = 2.0
+    matcher_class_cost: float = 2.0
+    matcher_bbox_cost: float = 5.0
+    matcher_giou_cost: float = 2.0
+    use_focal_loss: bool = True
+    auxiliary_loss: bool = True
+    focal_loss_alpha: float = 0.75
+    focal_loss_gamma: float = 2.0
+    weight_loss_vfl: float = 1.0
+    weight_loss_bbox: float = 5.0
+    weight_loss_giou: float = 2.0
+    eos_coefficient: float = 1e-4
+    decoder_n_levels: int = 3
+    decoder_offset_scale: float = 0.5
+    decoder_method: str = "default"
+    tie_word_embeddings: bool = True
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="rt_detr_resnet",
-            default_config_kwargs={
-                "out_indices": [2, 3, 4],
-            },
+            default_config_kwargs={"out_indices": [2, 3, 4]},
             **kwargs,
         )
-
-        self.backbone_config = backbone_config
-        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        # encoder
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = encoder_in_channels
-        self.feat_strides = feat_strides
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = encode_proj_layers
-        self.encoder_layers = encoder_layers
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.eval_size = eval_size
-        self.normalize_before = normalize_before
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.hidden_expansion = hidden_expansion
-        self.num_queries = num_queries
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_in_channels = decoder_in_channels
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = anchor_image_size
-        self.auxiliary_loss = auxiliary_loss
-        self.with_box_refine = with_box_refine
-        # Loss
-        self.matcher_alpha = matcher_alpha
-        self.matcher_gamma = matcher_gamma
-        self.matcher_class_cost = matcher_class_cost
-        self.matcher_bbox_cost = matcher_bbox_cost
-        self.matcher_giou_cost = matcher_giou_cost
-        self.use_focal_loss = use_focal_loss
-        self.focal_loss_alpha = focal_loss_alpha
-        self.focal_loss_gamma = focal_loss_gamma
-        self.weight_loss_vfl = weight_loss_vfl
-        self.weight_loss_bbox = weight_loss_bbox
-        self.weight_loss_giou = weight_loss_giou
-        self.eos_coefficient = eos_coefficient
-
-        if not hasattr(self, "d_model"):
-            self.d_model = d_model
-
-        if not hasattr(self, "encoder_attention_heads"):
-            self.encoder_attention_heads = encoder_attention_heads
-        # add the new attributes with the given values or defaults
-        self.decoder_n_levels = decoder_n_levels
-        self.decoder_offset_scale = decoder_offset_scale
-        self.decoder_method = decoder_method
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["RTDetrV2Config"]

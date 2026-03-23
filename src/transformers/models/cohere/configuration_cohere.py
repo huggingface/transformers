@@ -18,15 +18,15 @@
 # limitations under the License.
 """Cohere model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
+@strict(accept_kwargs=True)
 class CohereConfig(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):
@@ -62,58 +62,32 @@ class CohereConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    vocab_size: int = 256000
+    hidden_size: int = 8192
+    intermediate_size: int = 22528
+    logit_scale: float | None = 0.0625
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 64
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    layer_norm_eps: float | None = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 5
+    eos_token_id: int | list[int] | None = 255001
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
+    use_qk_norm: bool | None = False
 
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 8192,
-        intermediate_size: int | None = 22528,
-        logit_scale: float | None = 0.0625,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 64,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 5,
-        eos_token_id: int | None = 255001,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        use_qk_norm: bool | None = False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.logit_scale = logit_scale
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.use_qk_norm = use_qk_norm
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["CohereConfig"]

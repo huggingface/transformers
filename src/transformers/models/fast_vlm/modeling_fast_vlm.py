@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 import torch
@@ -98,8 +99,6 @@ class FastVlmModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class FastVlmModel(FastVlmPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -122,7 +121,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -180,7 +179,7 @@ class FastVlmModel(FastVlmPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FastVlmModelOutputWithPast:
@@ -263,7 +262,6 @@ class FastVlmCausalLMOutputWithPast(ModelOutput):
     """
 )
 class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: FastVlmConfig):
@@ -285,7 +283,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -306,7 +304,7 @@ class FastVlmForConditionalGeneration(FastVlmPreTrainedModel, GenerationMixin):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,

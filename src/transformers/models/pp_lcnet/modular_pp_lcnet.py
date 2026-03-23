@@ -13,20 +13,19 @@
 # limitations under the License.
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, BackboneMixin, filter_output_hidden_states
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import (
-    SizeDict,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -46,9 +45,10 @@ from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ..resnet.modeling_resnet import ResNetConvLayer
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
+@strict(accept_kwargs=True)
+class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
+    r"""
     scale (`float`, *optional*, defaults to 1.0):
         The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
         without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
@@ -69,36 +69,23 @@ from ..resnet.modeling_resnet import ResNetConvLayer
     divisor (`int`, *optional*, defaults to 8):
         The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
         multiples of this value, promoting efficient model implementation and resource utilization.
-    """,
-)
-class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
+    """
+
     model_type = "pp_lcnet"
 
-    def __init__(
-        self,
-        scale: float = 1.0,
-        block_configs: list | None = None,
-        stem_channels: int = 16,
-        stem_stride: int = 2,
-        reduction: int = 4,
-        class_expand: int = 1280,
-        divisor: int = 8,
-        hidden_act: str | None = "hardswish",
-        out_features: list | None = None,
-        out_indices: list | None = None,
-        hidden_dropout_prob: float = 0.2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.scale = scale
-        self.hidden_act = hidden_act
-        self.stem_channels = stem_channels
-        self.stem_stride = stem_stride
-        self.reduction = reduction
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.class_expand = class_expand
-        self.divisor = divisor
+    scale: float | int = 1.0
+    block_configs: list | None = None
+    stem_channels: int = 16
+    stem_stride: int = 2
+    reduction: int = 4
+    class_expand: int = 1280
+    divisor: int = 8
+    hidden_act: str = "hardswish"
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    hidden_dropout_prob: float = 0.2
 
+    def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNet
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
         self.block_configs = (
@@ -121,14 +108,21 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
                 # Stage 5 (blocks6)
                 [[5, 256, 512, 2, True], [5, 512, 512, 1, True]],
             ]
-            if block_configs is None
-            else block_configs
+            if self.block_configs is None
+            else self.block_configs
         )
-        if len(self.block_configs) != 5:
-            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
+
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if len(self.block_configs) != 5:
+            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
 
 
 class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
@@ -145,7 +139,7 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
 
 @auto_docstring
 @requires(backends=("torch",))
-class PPLCNetImageProcessorFast(BaseImageProcessorFast):
+class PPLCNetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
     image_std = [0.225, 0.224, 0.229]
@@ -164,6 +158,9 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resize_short: int,
+        size_divisor: int,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -172,55 +169,53 @@ class PPLCNetImageProcessorFast(BaseImageProcessorFast):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
-        interpolation: Optional["tvF.InterpolationMode"],
+        disable_grouping: bool | None = False,
         **kwargs,
     ) -> BatchFeature:
-        data = {}
-        resize_images = []
-        if do_resize:
-            for image in images:
-                # Unlike BaseImageProcessorFast, which resizes to a fixed target,
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                # Unlike TorchvisionBackend, which resizes to a fixed target,
                 # this implementation first calculates the target size dynamically to preserve
                 # the aspect ratio, using the shorter edge as a reference.
+                resize_size = size
                 if self.resize_short is not None:
-                    size = self.get_image_size(
-                        image, target_short_edge=self.resize_short, size_divisor=self.size_divisor
+                    resize_size = self.get_image_size(
+                        stacked_images[0], target_short_edge=resize_short, size_divisor=size_divisor
                     )
+                stacked_images = self.resize(stacked_images, size=resize_size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-                image = self.resize(image, size=size, interpolation=interpolation)
-                resize_images.append(image)
-            images = resize_images
-
-        crop_images = []
-        if do_center_crop:
-            for image in images:
-                image = self.center_crop(image, crop_size)
-                crop_images.append(image)
-            images = crop_images
-
-        processed_images = []
-        for image in images:
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            processed_images.append(image)
-        images = processed_images
+        # Group images by size for further processing
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # RGB -> BGR
-        images = [image[[2, 1, 0], :, :] for image in images]
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-
-        return BatchFeature(data, tensor_type=return_tensors)
+        images = [image[[2, 1, 0], :, :] for image in processed_images]
+        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
     def get_image_size(
         self,
         image: "torch.Tensor",
         target_short_edge: int | None,
-        size_divisor: int | None = None,
+        size_divisor: int | None,
     ) -> tuple[SizeDict, torch.Tensor]:
         _, height, width = image.shape
         resize_scale = target_short_edge / min(height, width)
         resized_height = round(height * resize_scale)
         resized_width = round(width * resize_scale)
-        if self.size_divisor is not None:
+        if size_divisor is not None:
             resized_height = math.ceil(resized_height / size_divisor) * size_divisor
             resized_width = math.ceil(resized_width / size_divisor) * size_divisor
 
@@ -539,7 +534,7 @@ class PPLCNetForImageClassification(PPLCNetPreTrainedModel):
 __all__ = [
     "PPLCNetBackbone",
     "PPLCNetForImageClassification",
-    "PPLCNetImageProcessorFast",
+    "PPLCNetImageProcessor",
     "PPLCNetConfig",
     "PPLCNetPreTrainedModel",
 ]

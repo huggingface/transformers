@@ -16,6 +16,7 @@ from __future__ import annotations
 import inspect
 import os
 from collections.abc import Mapping
+from dataclasses import fields
 from functools import lru_cache
 from pathlib import Path
 from types import UnionType
@@ -561,6 +562,55 @@ class ProcessorArgs:
 
 
 class ConfigArgs:
+    output_hidden_states = {
+        "description": """
+    Whether or not the model should return all hidden-states.
+    """,
+    }
+
+    chunk_size_feed_forward = {
+        "description": """
+    The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
+    (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
+    model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
+    `float16` weights.
+    """,
+    }
+
+    dtype = {
+        "description": """
+    The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
+    the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
+    sequence_length embeddings at a time. For more information on feed forward chunking, see [How does Feed
+    Forward Chunking work?](../glossary.html#feed-forward-chunking).
+    """,
+    }
+
+    id2label = {
+        "description": """
+    A map from index (for instance prediction index, or target index) to label.
+    """,
+    }
+
+    label2id = {
+        "description": """
+    A map from label to index for the model.
+    """,
+    }
+
+    problem_type = {
+        "description": """
+    Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
+            `"single_label_classification"` or `"multi_label_classification"`.
+    """,
+    }
+
+    tokenizer_class = {
+        "description": """
+    The class name of model's tokenizer.
+    """,
+    }
+
     vocab_size = {
         "description": """
     Vocabulary size of the model. Defines the number of different tokens that can be represented by the `input_ids`.
@@ -1979,15 +2029,6 @@ class ModelArgs:
         "shape": None,
     }
 
-    cache_position = {
-        "description": """
-    Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-    this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-    the complete sequence length.
-    """,
-        "shape": "of shape `(sequence_length)`",
-    }
-
     hidden_states = {
         "description": """ input to the layer of shape `(batch, seq_len, embed_dim)""",
         "shape": None,
@@ -2461,10 +2502,6 @@ class ClassDocstring:
     The {model_name} Model for causal language modeling.
     """
 
-    ImageProcessorFast = r"""
-    Constructs a fast {model_name} image processor.
-    """
-
     Backbone = r"""
     The {model_name} backbone.
     """
@@ -2530,6 +2567,7 @@ class ClassAttrs:
 
 
 ARGS_TO_IGNORE = {"self", "kwargs", "args", "deprecated_arguments"}
+ARGS_TO_RENAME = {"_out_features": "out_features", "_out_indices": "out_indices"}
 
 
 def get_indent_level(func):
@@ -2807,6 +2845,8 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
+        if isinstance(value, dict) and placeholder == "image_processor_class":
+            value = value.get("torchvision", value.get("pil", None))
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
@@ -3206,7 +3246,15 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
 
 
 def _process_regular_parameters(
-    sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+    sig,
+    func,
+    class_name,
+    documented_params,
+    indent_level,
+    undocumented_parameters,
+    source_args_dict,
+    parent_class,
+    allowed_params=None,
 ):
     """
     Process all regular parameters (not kwargs parameters) from the function signature.
@@ -3240,6 +3288,12 @@ def _process_regular_parameters(
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
             continue
+
+        # When a filter is active (e.g. config classes: only own annotations), skip inherited params
+        if allowed_params is not None and param_name not in allowed_params:
+            continue
+
+        param_name = ARGS_TO_RENAME.get(param_name, param_name)
 
         # Process parameter type and optional status
         param_type, optional = _process_parameter_type(param)
@@ -3716,7 +3770,15 @@ def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level
 
 
 def _process_parameters_section(
-    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
+    func_documentation,
+    sig,
+    func,
+    class_name,
+    model_name_lowercase,
+    parent_class,
+    indent_level,
+    source_args_dict,
+    allowed_params,
 ):
     """
     Process the parameters section of the docstring.
@@ -3742,7 +3804,15 @@ def _process_parameters_section(
 
     # Process regular parameters
     param_docstring, missing_args = _process_regular_parameters(
-        sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+        sig,
+        func,
+        class_name,
+        documented_params,
+        indent_level,
+        undocumented_parameters,
+        source_args_dict,
+        parent_class,
+        allowed_params,
     )
     docstring += param_docstring
 
@@ -4007,7 +4077,13 @@ def _process_example_section(
 
 
 def auto_method_docstring(
-    func, parent_class=None, custom_intro=None, custom_args=None, checkpoint=None, source_args_dict=None
+    func,
+    parent_class=None,
+    custom_intro=None,
+    custom_args=None,
+    checkpoint=None,
+    source_args_dict=None,
+    allowed_params=None,
 ):
     """
     Wrapper that automatically generates docstring.
@@ -4020,10 +4096,6 @@ def auto_method_docstring(
     # Get model information
     model_name_lowercase, class_name, config_class = _get_model_info(func, parent_class)
     func_documentation = func.__doc__
-
-    # Temporary workaround for config classes until #41250 is merged. We usually add docs at class-lvl
-    if func_documentation is None and parent_class and parent_class.__name__.endswith("Config"):
-        func_documentation = parent_class.__doc__
 
     if custom_args is not None and func_documentation is not None:
         func_documentation = "\n" + set_min_indent(custom_args.strip("\n"), 0) + "\n" + func_documentation
@@ -4040,7 +4112,15 @@ def auto_method_docstring(
 
     # Process Parameters section
     docstring += _process_parameters_section(
-        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
+        func_documentation,
+        sig,
+        func,
+        class_name,
+        model_name_lowercase,
+        parent_class,
+        indent_level,
+        source_args_dict,
+        allowed_params,
     )
 
     # Process Returns section
@@ -4079,6 +4159,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
 
     is_dataclass = False
     is_processor = False
+    is_config = False
     is_image_processor = False
     docstring_init = ""
     docstring_args = ""
@@ -4118,12 +4199,26 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             source_args_dict=get_args_doc_from_source(ImageProcessorArgs),
         ).__doc__
     elif "PreTrainedConfig" in (x.__name__ for x in cls.__mro__):
+        is_config = True
+        doc_class = cls.__doc__
+        if custom_args is None and doc_class:
+            custom_args = doc_class
+
+        # `fields(cls)` returns only the annotations defined on cls exclduing `ClassVar`
+        # (e.g. model_type). Also exclude two quasi-ClassVar fields which can `setattr` and
+        # saved in config. These do not act as class attributes and thus cannot be `ClassVar`
+        # in its general sense.
+        own_config_params = {
+            field.name for field in fields(cls) if field.name not in ["transformers_version", "architectures"]
+        }
+        allowed_params = own_config_params if own_config_params else None
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
             custom_args=custom_args,
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source([ConfigArgs]),
+            allowed_params=allowed_params,
         ).__doc__
 
     indent_level = get_indent_level(cls)
@@ -4152,7 +4247,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             f"`{cls.__name__}` is not registered in the auto doc. Here are the available classes: {ClassDocstring.__dict__.keys()}.\n"
             "Add a `custom_intro` to the decorator if you want to use `auto_docstring` on a class not registered in the auto doc."
         )
-    if name != [] or custom_intro is not None or is_dataclass or is_processor or is_image_processor:
+    if name != [] or custom_intro is not None or is_config or is_dataclass or is_processor or is_image_processor:
         name = name[0] if name else None
         formatting_kwargs = {"model_name": model_name_title}
         if name == "Config":
@@ -4183,7 +4278,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         # Add the __init__ docstring
         if docstring_init:
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
-        elif is_dataclass:
+        elif is_dataclass or is_config:
             # No init function, we have a data class
             docstring += docstring_args if docstring_args else "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)

@@ -18,14 +18,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/Not_yet_released",
-    custom_args=r"""
+@auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
+@strict(accept_kwargs=True)
+class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
+    r"""
     scale (`float`, *optional*, defaults to 1.0):
         The scaling factor for the model's channel dimensions, used to adjust the model size and computational cost
         without changing the overall architecture (e.g., 0.25, 0.5, 1.0, 1.5).
@@ -50,32 +54,23 @@ from ...utils import auto_docstring
         The number of kxk convolution branches in the learnable reparameterization layer, used to enhance feature
         extraction capability through multi-branch architecture during training while enabling efficient inference
         via structural reparameterization.
-    """,
-)
-class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
+    """
+
     model_type = "pp_lcnet_v3"
 
-    def __init__(
-        self,
-        scale: float = 1.0,
-        hidden_act: str | None = "hardswish",
-        out_features: list | None = None,
-        out_indices: list | None = None,
-        stem_channels: int = 16,
-        stem_stride: int = 2,
-        block_configs: list | None = None,
-        reduction: int = 4,
-        divisor: int = 8,
-        conv_symmetric_num: int = 4,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.scale = scale
-        self.hidden_act = hidden_act
-        self.stem_channels = stem_channels
-        self.stem_stride = stem_stride
-        self.reduction = reduction
-        self.divisor = divisor
+    scale: float | int = 1.0
+    block_configs: list | None = None
+    stem_channels: int = 16
+    stem_stride: int = 2
+    reduction: int = 4
+    divisor: int = 8
+    hidden_act: str = "hardswish"
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+
+    conv_symmetric_num: int = 4
+
+    def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNetV3
         # Each tuple: (kernel_size, in_channels, out_channels, stride, use_squeeze_excitation)
         self.block_configs = (
@@ -97,15 +92,20 @@ class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
                 # Stage 5 (blocks6)
                 [[5, 256, 512, 2, True], [5, 512, 512, 1, True], [5, 512, 512, 1, False], [5, 512, 512, 1, False]],
             ]
-            if block_configs is None
-            else block_configs
+            if self.block_configs is None
+            else self.block_configs
         )
-        if len(self.block_configs) != 5:
-            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
         self.depths = [len(blocks) for blocks in self.block_configs]
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.block_configs) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
-        self.conv_symmetric_num = conv_symmetric_num
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if len(self.block_configs) != 5:
+            raise ValueError(f"block_configs must have 5 stages, but got {len(self.block_configs)}")
 
 
 __all__ = ["PPLCNetV3Config"]

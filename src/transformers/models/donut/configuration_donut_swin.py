@@ -13,14 +13,14 @@
 # limitations under the License.
 """Donut Swin Transformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="naver-clova-ix/donut-base")
+@strict(accept_kwargs=True)
 class DonutSwinConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 7): Size of windows.
@@ -47,48 +47,29 @@ class DonutSwinConfig(PreTrainedConfig):
         "num_hidden_layers": "num_layers",
     }
 
-    def __init__(
-        self,
-        image_size=224,
-        patch_size=4,
-        num_channels=3,
-        embed_dim=96,
-        depths=[2, 2, 6, 2],
-        num_heads=[3, 6, 12, 24],
-        window_size=7,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        use_absolute_embeddings=False,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 4
+    num_channels: int = 3
+    embed_dim: int = 96
+    depths: list[int] | tuple[int, ...] = (2, 2, 6, 2)
+    num_heads: list[int] | tuple[int, ...] = (3, 6, 12, 24)
+    window_size: int = 7
+    mlp_ratio: float = 4.0
+    qkv_bias: bool = True
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    drop_path_rate: float = 0.1
+    hidden_act: str = "gelu"
+    use_absolute_embeddings: bool = False
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
 
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.depths = depths
-        self.num_layers = len(depths)
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+    def __post_init__(self, **kwargs):
+        self.num_layers = len(self.depths)
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
-        self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+        self.hidden_size = int(self.embed_dim * 2 ** (len(self.depths) - 1))
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DonutSwinConfig"]

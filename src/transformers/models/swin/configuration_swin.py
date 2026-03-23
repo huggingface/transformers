@@ -13,15 +13,15 @@
 # limitations under the License.
 """Swin Transformer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/swin-tiny-patch4-window7-224")
+@strict(accept_kwargs=True)
 class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
@@ -55,54 +55,36 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
         "num_hidden_layers": "num_layers",
     }
 
-    def __init__(
-        self,
-        image_size=224,
-        patch_size=4,
-        num_channels=3,
-        embed_dim=96,
-        depths=[2, 2, 6, 2],
-        num_heads=[3, 6, 12, 24],
-        window_size=7,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        use_absolute_embeddings=False,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        encoder_stride=32,
-        out_features=None,
-        out_indices=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 4
+    num_channels: int = 3
+    embed_dim: int = 96
+    depths: list[int] | tuple[int, ...] = (2, 2, 6, 2)
+    num_heads: list[int] | tuple[int, ...] = (3, 6, 12, 24)
+    window_size: int = 7
+    mlp_ratio: float | int = 4.0
+    qkv_bias: bool = True
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    drop_path_rate: float = 0.1
+    hidden_act: str = "gelu"
+    use_absolute_embeddings: bool = False
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    encoder_stride: int = 32
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
 
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.depths = depths
-        self.num_layers = len(depths)
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.encoder_stride = encoder_stride
+    def __post_init__(self, **kwargs):
+        self.num_layers = len(self.depths)
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
-        self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+        self.hidden_size = int(self.embed_dim * 2 ** (len(self.depths) - 1))
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["SwinConfig"]

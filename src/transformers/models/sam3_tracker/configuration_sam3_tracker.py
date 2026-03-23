@@ -18,12 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -36,30 +40,19 @@ class Sam3TrackerPromptEncoderConfig(PreTrainedConfig):
 
     base_config_key = "prompt_encoder_config"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        image_size=1008,
-        patch_size=14,
-        mask_input_channels=16,
-        num_point_embeddings=4,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        scale=1,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.mask_input_channels = mask_input_channels
-        self.num_point_embeddings = num_point_embeddings
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.scale = scale
+    hidden_size: int = 256
+
+    image_size: int | list[int] | tuple[int, int] = 1008
+    patch_size: int | list[int] | tuple[int, int] = 14
+    mask_input_channels: int = 16
+    num_point_embeddings: int = 4
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    scale: int = 1
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -82,42 +75,22 @@ class Sam3TrackerMaskDecoderConfig(PreTrainedConfig):
 
     base_config_key = "mask_decoder_config"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        hidden_act="gelu",
-        mlp_dim=2048,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        attention_downsample_rate=2,
-        num_multimask_outputs=3,
-        iou_head_depth=3,
-        iou_head_hidden_dim=256,
-        dynamic_multimask_via_stability=True,
-        dynamic_multimask_stability_delta=0.05,
-        dynamic_multimask_stability_thresh=0.98,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_multimask_outputs = num_multimask_outputs
-        self.hidden_act = hidden_act
-        self.iou_head_depth = iou_head_depth
-        self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.dynamic_multimask_via_stability = dynamic_multimask_via_stability
-        self.dynamic_multimask_stability_delta = dynamic_multimask_stability_delta
-        self.dynamic_multimask_stability_thresh = dynamic_multimask_stability_thresh
-
-        # TwoWayTransformer configuration
-        self.num_hidden_layers = num_hidden_layers
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
-        self.mlp_dim = mlp_dim
-        self.attention_downsample_rate = attention_downsample_rate
+    hidden_size: int = 256
+    hidden_act: str = "gelu"
+    mlp_dim: int = 2048
+    num_hidden_layers: int = 2
+    num_attention_heads: int = 8
+    attention_downsample_rate: int = 2
+    num_multimask_outputs: int = 3
+    iou_head_depth: int = 3
+    iou_head_hidden_dim: int = 256
+    dynamic_multimask_via_stability: bool = True
+    dynamic_multimask_stability_delta: float = 0.05
+    dynamic_multimask_stability_thresh: float = 0.98
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3TrackerConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
@@ -161,36 +134,31 @@ class Sam3TrackerConfig(PreTrainedConfig):
         "mask_decoder_config": Sam3TrackerMaskDecoderConfig,
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        prompt_encoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        vision_config = (
-            vision_config
-            if vision_config is not None
-            else {"backbone_feature_sizes": [[288, 288], [144, 144], [72, 72]]}
-        )
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
+    vision_config: dict | PreTrainedConfig | None = None
+    prompt_encoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "sam3_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        if isinstance(prompt_encoder_config, Sam3TrackerPromptEncoderConfig):
-            prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, Sam3TrackerMaskDecoderConfig):
-            mask_decoder_config = mask_decoder_config.to_dict()
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "sam3_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["sam3_vision_model"](
+                backbone_feature_sizes=[[288, 288], [144, 144], [72, 72]]
+            )
 
-        self.vision_config = vision_config
-        self.prompt_encoder_config = Sam3TrackerPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = Sam3TrackerMaskDecoderConfig(**mask_decoder_config)
+        if isinstance(self.prompt_encoder_config, dict):
+            self.prompt_encoder_config = Sam3TrackerPromptEncoderConfig(**self.prompt_encoder_config)
+        elif self.prompt_encoder_config is None:
+            self.prompt_encoder_config = Sam3TrackerPromptEncoderConfig()
 
-        self.initializer_range = initializer_range
-        super().__init__(**kwargs)
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = Sam3TrackerMaskDecoderConfig(**self.mask_decoder_config)
+        elif self.mask_decoder_config is None:
+            self.mask_decoder_config = Sam3TrackerMaskDecoderConfig()
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Sam3TrackerConfig", "Sam3TrackerPromptEncoderConfig", "Sam3TrackerMaskDecoderConfig"]

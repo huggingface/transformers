@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
@@ -25,6 +27,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV3_safetensors")
+@strict(accept_kwargs=True)
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
@@ -117,66 +120,55 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        initializer_range=0.01,
-        initializer_bias_prior_prob=None,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        tie_word_embeddings=True,
-        # backbone
-        backbone_config=None,
-        freeze_backbone_batch_norms=True,
-        # encoder PPDocLayoutV3HybridEncoder
-        encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        hidden_expansion=1.0,
-        mask_feature_channels=[64, 64],
-        x4_feat_dim=128,
-        # decoder PPDocLayoutV3Transformer
-        d_model=256,
-        num_prototypes=32,
-        label_noise_ratio=0.4,
-        box_noise_scale=0.4,
-        mask_enhanced=True,
-        num_queries=300,
-        decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=100,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        disable_custom_kernels=True,
-        is_encoder_decoder=True,
-        global_pointer_head_size=64,
-        gp_dropout_value=0.1,
-        **kwargs,
-    ):
-        self.initializer_range = initializer_range
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.tie_word_embeddings = tie_word_embeddings
+    initializer_range: float = 0.01
+    initializer_bias_prior_prob: float | None = None
+    layer_norm_eps: float = 1e-5
+    batch_norm_eps: float = 1e-5
+    tie_word_embeddings: bool = True
+    backbone_config: dict | PreTrainedConfig | None = None
+    freeze_backbone_batch_norms: bool = True
+    encoder_hidden_dim: int = 256
+    encoder_in_channels: list[int] | tuple[int, ...] = (512, 1024, 2048)
+    feat_strides: list[int] | tuple[int, ...] = (8, 16, 32)
+    encoder_layers: int = 1
+    encoder_ffn_dim: int = 1024
+    encoder_attention_heads: int = 8
+    dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    encode_proj_layers: list[int] | tuple[int, ...] = (2,)
+    positional_encoding_temperature: int = 10000
+    encoder_activation_function: str = "gelu"
+    activation_function: str = "silu"
+    eval_size: int | None = None
+    normalize_before: bool = False
+    hidden_expansion: float = 1.0
+    mask_feature_channels: list[int] | tuple[int, ...] = (64, 64)
+    x4_feat_dim: int = 128
+    d_model: int = 256
+    num_prototypes: int = 32
+    label_noise_ratio: float = 0.4
+    box_noise_scale: float = 0.4
+    mask_enhanced: bool = True
+    num_queries: int = 300
+    decoder_in_channels: list[int] | tuple[int, ...] = (256, 256, 256)
+    decoder_ffn_dim: int = 1024
+    num_feature_levels: int = 3
+    decoder_n_points: int = 4
+    decoder_layers: int = 6
+    decoder_attention_heads: int = 8
+    decoder_activation_function: str = "relu"
+    attention_dropout: float | int = 0.0
+    num_denoising: int = 100
+    learn_initial_query: bool = False
+    anchor_image_size: int | None = None
+    disable_custom_kernels: bool = True
+    is_encoder_decoder: bool = True
+    global_pointer_head_size: int = 64
+    gp_dropout_value: float = 0.1
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="hgnet_v2",
             default_config_kwargs={
                 "arch": "L",
@@ -190,51 +182,13 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-
-        # ---- encoder ----
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = list(encoder_in_channels)
-        self.feat_strides = list(feat_strides)
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = list(encode_proj_layers)
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.eval_size = list(eval_size) if eval_size is not None else None
-        self.normalize_before = normalize_before
-        self.hidden_expansion = hidden_expansion
-        self.mask_feature_channels = mask_feature_channels
-        self.x4_feat_dim = x4_feat_dim
-
-        # ---- decoder ----
-        self.d_model = d_model
-        self.num_queries = num_queries
-        self.num_prototypes = num_prototypes
-        self.decoder_in_channels = list(decoder_in_channels)
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.mask_enhanced = mask_enhanced
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
-        self.disable_custom_kernels = disable_custom_kernels
-        self.global_pointer_head_size = global_pointer_head_size
-        self.gp_dropout_value = gp_dropout_value
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.encoder_in_channels = list(self.encoder_in_channels)
+        self.feat_strides = list(self.feat_strides)
+        self.encode_proj_layers = list(self.encode_proj_layers)
+        self.eval_size = list(self.eval_size) if self.eval_size is not None else None
+        self.decoder_in_channels = list(self.decoder_in_channels)
+        self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PPDocLayoutV3Config"]

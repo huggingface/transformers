@@ -16,12 +16,15 @@
 # limitations under the License.
 """DiffLlama model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="kajuma/DiffLlama-0.3B-handcut")
+@strict(accept_kwargs=True)
 class DiffLlamaConfig(PreTrainedConfig):
     r"""
     lambda_std_dev (`float`, *optional*, defaults to 0.1):
@@ -43,57 +46,34 @@ class DiffLlamaConfig(PreTrainedConfig):
     model_type = "diffllama"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32000,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int | None = 16,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        lambda_std_dev: float | None = 0.1,
-        head_dim: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 32000
+    hidden_size: int = 2048
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 16
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
+    lambda_std_dev: float | None = 0.1
+    head_dim: int | None = None
 
+    def __post_init__(self, **kwargs):
         # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.lambda_std_dev = lambda_std_dev
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DiffLlamaConfig"]

@@ -13,6 +13,8 @@
 # limitations under the License.s
 
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="kyutai/stt-2.6b-en-trfs")
+@strict(accept_kwargs=True)
 class KyutaiSpeechToTextConfig(PreTrainedConfig):
     r"""
     codebook_vocab_size (`int`, *optional*, defaults to 2049):
@@ -58,77 +61,49 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"codec_config": AutoConfig}
 
-    def __init__(
-        self,
-        codebook_vocab_size: int | None = 2049,
-        vocab_size: int | None = 4001,
-        hidden_size: int | None = 2048,
-        num_hidden_layers: int | None = 48,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        max_position_embeddings: int | None = 750,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        hidden_act: str | None = "silu",
-        head_dim: int | None = None,
-        initializer_range: float | None = 0.02,
-        use_cache: bool | None = True,
-        sliding_window: int | None = 375,
-        attention_dropout: float | None = 0.0,
-        ffn_dim: int | None = 11264,
-        rms_norm_eps: int | None = 1e-8,
-        num_codebooks: int | None = 32,
-        audio_bos_token_id: int | None = 2048,
-        audio_pad_token_id: int | None = 69569,
-        tie_word_embeddings: bool | None = False,
-        pad_token_id: int | None = 3,
-        bos_token_id: int | None = 48000,
-        eos_token_id: int | None = None,
-        codec_config: dict | None = None,
-        **kwargs,
-    ):
-        if codec_config is None:
+    codebook_vocab_size: int = 2049
+    vocab_size: int = 4001
+    hidden_size: int = 2048
+    num_hidden_layers: int = 48
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    max_position_embeddings: int = 750
+    rope_parameters: RopeParameters | dict | None = None
+    hidden_act: str = "silu"
+    head_dim: int | None = None
+    initializer_range: float = 0.02
+    use_cache: bool = True
+    sliding_window: int = 375
+    attention_dropout: float | int = 0.0
+    ffn_dim: int = 11264
+    rms_norm_eps: float = 1e-8
+    num_codebooks: int = 32
+    audio_bos_token_id: int | None = 2048
+    audio_pad_token_id: int | None = 69569
+    tie_word_embeddings: bool = False
+    pad_token_id: int | None = 3
+    bos_token_id: int | None = 48000
+    eos_token_id: int | list[int] | None = None
+    codec_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.codec_config is None:
             self.codec_config = AutoConfig.for_model("mimi")
             logger.info("codec_config is None, using default audio encoder config.")
-        elif isinstance(codec_config, dict):
-            self.codec_config = AutoConfig.for_model(**codec_config)
-        elif isinstance(codec_config, PreTrainedConfig):
-            self.codec_config = codec_config
+        elif isinstance(self.codec_config, dict):
+            self.codec_config = AutoConfig.for_model(**self.codec_config)
 
-        self.num_codebooks = num_codebooks
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
         self.frame_size = self.codec_config.frame_size
+        self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
 
-        self.audio_bos_token_id = audio_bos_token_id
-        self.audio_pad_token_id = audio_pad_token_id
-        self.codebook_vocab_size = codebook_vocab_size
-
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        if ffn_dim % 2 == 1:
-            raise ValueError(f"`ffn_dim={ffn_dim}` must be even.")
-        self.ffn_dim = ffn_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.sliding_window = sliding_window
-        self.rope_parameters = rope_parameters
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.ffn_dim % 2 == 1:
+            raise ValueError(f"`ffn_dim={self.ffn_dim}` must be even.")
 
 
 __all__ = ["KyutaiSpeechToTextConfig"]

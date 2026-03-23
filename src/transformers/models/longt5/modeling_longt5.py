@@ -1262,7 +1262,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
@@ -1506,7 +1506,7 @@ class LongT5Model(LongT5PreTrainedModel):
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1671,7 +1671,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1805,7 +1805,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         >>> outputs = model(input_ids=input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         encoder_outputs = self.encoder(
             input_ids=input_ids,

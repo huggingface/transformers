@@ -15,6 +15,8 @@
 
 import os
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
+@strict(accept_kwargs=True)
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     use_rotary_embedding (`bool`, *optional*, defaults to `True`):
@@ -50,46 +53,23 @@ class ClvpEncoderConfig(PreTrainedConfig):
     model_type = "clvp_encoder"
     base_config_key = ["text_config", "speech_config"]
 
-    def __init__(
-        self,
-        vocab_size=256,
-        hidden_size=768,
-        intermediate_size=1536,
-        projection_dim=768,
-        num_hidden_layers=20,
-        num_attention_heads=12,
-        hidden_act="gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.1,
-        dropout=0.1,
-        use_rotary_embedding=True,
-        use_attention_bias=False,
-        summary_type="mean",
-        initializer_factor=1.0,
-        bos_token_id=255,
-        eos_token_id=0,
-        pad_token_id=None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.dropout = dropout
-        self.use_rotary_embedding = use_rotary_embedding
-        self.use_attention_bias = use_attention_bias
-        self.summary_type = summary_type
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-
-        super().__init__(**kwargs)
+    vocab_size: int = 256
+    hidden_size: int = 768
+    intermediate_size: int = 1536
+    projection_dim: int = 768
+    num_hidden_layers: int = 20
+    num_attention_heads: int = 12
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float | int = 0.1
+    dropout: float | int = 0.1
+    use_rotary_embedding: bool = True
+    use_attention_bias: bool = False
+    summary_type: str = "mean"
+    initializer_factor: float = 1.0
+    bos_token_id: int | None = 255
+    eos_token_id: int | list[int] | None = 0
+    pad_token_id: int | None = None
 
     @classmethod
     def from_pretrained(
@@ -118,6 +98,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
+@strict(accept_kwargs=True)
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -172,72 +153,38 @@ class ClvpDecoderConfig(PreTrainedConfig):
     model_type = "clvp_decoder"
     base_config_key = "decoder_config"
 
-    def __init__(
-        self,
-        vocab_size=8194,
-        max_position_embeddings=608,
-        max_text_tokens=404,
-        hidden_size=1024,
-        num_hidden_layers=30,
-        num_attention_heads=16,
-        n_inner=None,
-        num_mel_attn_blocks=6,
-        activation_function="gelu_new",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attention_dropout=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
-        use_cache=True,
-        bos_token_id=8192,
-        eos_token_id=8193,
-        pad_token_id=None,
-        feature_size=80,
-        use_attention_bias=True,
-        initializer_factor=1.0,
-        decoder_fixing_codes=[83, 45, 45, 248],
-        add_cross_attention=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.max_text_tokens = max_text_tokens
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.n_inner = n_inner
-        self.num_mel_attn_blocks = num_mel_attn_blocks
-        self.activation_function = activation_function
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attention_dropout = attention_dropout
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
-        self.use_cache = use_cache
-        self.feature_size = feature_size
-        self.use_attention_bias = use_attention_bias
-        self.initializer_factor = initializer_factor
-        self.decoder_fixing_codes = decoder_fixing_codes
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.add_cross_attention = add_cross_attention
-
-        super().__init__(**kwargs)
+    vocab_size: int = 8194
+    max_position_embeddings: int = 608
+    max_text_tokens: int = 404
+    hidden_size: int = 1024
+    num_hidden_layers: int = 30
+    num_attention_heads: int = 16
+    n_inner: int | None = None
+    num_mel_attn_blocks: int = 6
+    activation_function: str = "gelu_new"
+    resid_pdrop: float = 0.1
+    embd_pdrop: float = 0.1
+    attention_dropout: float | int = 0.1
+    layer_norm_epsilon: float = 1e-5
+    initializer_range: float = 0.02
+    summary_type: str = "cls_index"
+    summary_use_proj: bool = True
+    summary_activation: str | None = None
+    summary_proj_to_labels: bool = True
+    summary_first_dropout: float | int = 0.1
+    use_cache: bool = True
+    bos_token_id: int | None = 8192
+    eos_token_id: int | list[int] | None = 8193
+    pad_token_id: int | None = None
+    feature_size: int = 80
+    use_attention_bias: bool = True
+    initializer_factor: float = 1.0
+    decoder_fixing_codes: list[int] | tuple[int, ...] = (83, 45, 45, 248)
+    add_cross_attention: bool = False
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
+@strict(accept_kwargs=True)
 class ClvpConfig(PreTrainedConfig):
     r"""
     speech_config (`dict`, *optional*):
@@ -277,42 +224,33 @@ class ClvpConfig(PreTrainedConfig):
         "decoder_config": ClvpDecoderConfig,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        speech_config=None,
-        decoder_config=None,
-        projection_dim=768,
-        logit_scale_init_value=2.6592,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = ClvpEncoderConfig()
+    text_config: dict | PreTrainedConfig | None = None
+    speech_config: dict | PreTrainedConfig | None = None
+    decoder_config: dict | PreTrainedConfig | None = None
+    projection_dim: int = 768
+    logit_scale_init_value: float = 2.6592
+    initializer_factor: float = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = ClvpEncoderConfig()
             logger.info("`text_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = ClvpEncoderConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = ClvpEncoderConfig(**self.text_config)
 
-        if speech_config is None:
-            speech_config = ClvpEncoderConfig()
+        if self.speech_config is None:
+            self.speech_config = ClvpEncoderConfig()
             logger.info("`speech_config` is `None`. initializing the `ClvpEncoderConfig` with default values.")
-        elif isinstance(speech_config, dict):
-            speech_config = ClvpEncoderConfig(**speech_config)
+        elif isinstance(self.speech_config, dict):
+            self.speech_config = ClvpEncoderConfig(**self.speech_config)
 
-        if decoder_config is None:
-            decoder_config = ClvpDecoderConfig()
+        if self.decoder_config is None:
+            self.decoder_config = ClvpDecoderConfig()
             logger.info("`image_config` is `None`. initializing the `ClvpDecoderConfig` with default values.")
-        elif isinstance(decoder_config, dict):
-            decoder_config = ClvpDecoderConfig(**decoder_config)
+        elif isinstance(self.decoder_config, dict):
+            self.decoder_config = ClvpDecoderConfig(**self.decoder_config)
 
-        self.text_config = text_config
-        self.speech_config = speech_config
-        self.decoder_config = decoder_config
-
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = initializer_factor
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ClvpConfig", "ClvpDecoderConfig", "ClvpEncoderConfig"]

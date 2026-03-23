@@ -52,7 +52,7 @@ class ParakeetEncoderModelTester:
         num_attention_heads=4,
         intermediate_size=256,
         hidden_act="silu",
-        dropout=0,  # so gradient checkpointing doesn't fail
+        dropout=0.0,  # so gradient checkpointing doesn't fail
         conv_kernel_size=9,
         subsampling_factor=8,
         subsampling_conv_channels=32,
@@ -207,7 +207,7 @@ class ParakeetForCTCModelTester:
         return config, input_features, attention_mask
 
     def get_config(self):
-        return ParakeetCTCConfig.from_encoder_config(
+        return ParakeetCTCConfig(
             encoder_config=self.encoder_model_tester.get_config(),
             vocab_size=self.vocab_size,
             pad_token_id=self.pad_token_id,

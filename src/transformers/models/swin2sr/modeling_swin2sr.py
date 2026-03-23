@@ -773,7 +773,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         _, _, height, width = pixel_values.shape
 
@@ -1017,7 +1017,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
          >>> # you can visualize `output` with `Image.fromarray`
          ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:

@@ -17,12 +17,13 @@ import math
 from typing import Literal, Optional
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -34,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -48,6 +49,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="answerdotai/ModernBERT-base")
+@strict(accept_kwargs=True)
 class ModernBertConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
@@ -102,107 +104,52 @@ class ModernBertConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
-    def __setattr__(self, name, value):
-        if name == "reference_compile" and value is not None:
-            logger.warning_once(
-                "The `reference_compile` argument is deprecated and will be removed in `transformers v5.2.0`"
-                "Use `torch.compile()` directly on the model instead."
-            )
-            value = None
-        super().__setattr__(name, value)
+    vocab_size: int = 50368
+    hidden_size: int = 768
+    intermediate_size: int = 1152
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 12
+    hidden_activation: str = "gelu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    initializer_cutoff_factor: float = 2.0
+    norm_eps: float = 1e-5
+    norm_bias: bool = False
+    pad_token_id: int | None = 50283
+    eos_token_id: int | list[int] | None = 50282
+    bos_token_id: int | None = 50281
+    cls_token_id: int | None = 50281
+    sep_token_id: int | None = 50282
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    layer_types: list[str] | None = None
+    rope_parameters: dict[Literal["full_attention", "sliding_attention"], dict] | None = None
+    local_attention: int = 128
+    embedding_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    mlp_dropout: float | int = 0.0
+    decoder_bias: bool = True
+    classifier_pooling: Literal["cls", "mean"] = "cls"
+    classifier_dropout: float | int = 0.0
+    classifier_bias: bool = False
+    classifier_activation: str = "gelu"
+    deterministic_flash_attn: bool = False
+    sparse_prediction: bool = False
+    sparse_pred_ignore_index: int = -100
+    tie_word_embeddings: bool = True
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50368,
-        hidden_size: int | None = 768,
-        intermediate_size: int | None = 1152,
-        num_hidden_layers: int | None = 22,
-        num_attention_heads: int | None = 12,
-        hidden_activation: str | None = "gelu",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: float | None = 1e-5,
-        norm_bias: bool | None = False,
-        pad_token_id: int | None = 50283,
-        eos_token_id: int | None = 50282,
-        bos_token_id: int | None = 50281,
-        cls_token_id: int | None = 50281,
-        sep_token_id: int | None = 50282,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        layer_types: list[str] | None = None,
-        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
-        local_attention: int | None = 128,
-        embedding_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        mlp_dropout: float | None = 0.0,
-        decoder_bias: bool | None = True,
-        classifier_pooling: Literal["cls", "mean"] = "cls",
-        classifier_dropout: float | None = 0.0,
-        classifier_bias: bool | None = False,
-        classifier_activation: str | None = "gelu",
-        deterministic_flash_attn: bool | None = False,
-        sparse_prediction: bool | None = False,
-        sparse_pred_ignore_index: int | None = -100,
-        reference_compile: bool | None = None,  # Deprecated
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.cls_token_id = cls_token_id
-        self.sep_token_id = sep_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_cutoff_factor = initializer_cutoff_factor
-        self.norm_eps = norm_eps
-        self.norm_bias = norm_bias
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.local_attention = local_attention
-        self.embedding_dropout = embedding_dropout
-        self.mlp_bias = mlp_bias
-        self.mlp_dropout = mlp_dropout
-        self.decoder_bias = decoder_bias
-        self.classifier_pooling = classifier_pooling
-        self.classifier_dropout = classifier_dropout
-        self.classifier_bias = classifier_bias
-        self.classifier_activation = classifier_activation
-        self.deterministic_flash_attn = deterministic_flash_attn
-        self.sparse_prediction = sparse_prediction
-        self.sparse_pred_ignore_index = sparse_pred_ignore_index
-        self.reference_compile = reference_compile
-
-        if self.classifier_pooling not in ["cls", "mean"]:
-            raise ValueError(
-                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
-            )
-
-        self.layer_types = layer_types
-
+    def __post_init__(self, **kwargs):
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
-        self.global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
-
+        global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
         if self.layer_types is None:
             self.layer_types = [
-                "sliding_attention" if bool(i % self.global_attn_every_n_layers) else "full_attention"
+                "sliding_attention" if bool(i % global_attn_every_n_layers) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -230,7 +177,6 @@ class ModernBertConfig(PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
     def to_dict(self):

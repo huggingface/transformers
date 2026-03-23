@@ -21,7 +21,6 @@ import math
 from typing import Optional
 
 import torch
-import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
@@ -33,10 +32,14 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings
+from ...utils import TensorType, add_start_docstrings, is_torchvision_available
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_video_llama_3 import smart_resize
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -107,28 +110,20 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
 
         super().__init__(size=size, **kwargs)
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
         size: SizeDict | None = None,
         min_pixels: int | None = None,
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
-        """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
-        """
         if min_pixels is not None and max_pixels is not None:
-            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
-        elif size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("dictionary `size` must contain 'shortest_edge' and 'longest_edge' keys.")
-            min_pixels = size["shortest_edge"]
-            max_pixels = size["longest_edge"]
-        else:
-            size = {**self.size}
-
-        return super()._further_process_kwargs(size=size, **kwargs)
+            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
+        kwargs = super()._standardize_kwargs(size=size, **kwargs)
+        size = kwargs.get("size", self.size)
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+        return kwargs
 
     def sample_frames(
         self,
@@ -206,7 +201,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -237,7 +232,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
                 stacked_videos = self.resize(
                     image=stacked_videos,
                     size=SizeDict(height=resized_height, width=resized_width),
-                    interpolation=interpolation,
+                    resample=resample,
                 )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)

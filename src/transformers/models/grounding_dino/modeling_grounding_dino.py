@@ -1525,7 +1525,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=vision_features.device)
 
@@ -1676,7 +1676,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -2074,7 +2074,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
 
@@ -2500,7 +2500,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
         Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)

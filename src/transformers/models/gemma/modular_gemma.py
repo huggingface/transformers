@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -38,18 +39,15 @@ from ..llama.modeling_llama import (
 )
 
 
-if TYPE_CHECKING:
-    pass
-
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 SPIECE_UNDERLINE = "▁"
-
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-7b")
+@strict(accept_kwargs=True)
 class GemmaConfig(PreTrainedConfig):
     r"""
     use_bidirectional_attention (`bool`, *optional*):
@@ -82,52 +80,26 @@ class GemmaConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 256000,
-        hidden_size: int | None = 3072,
-        intermediate_size: int | None = 24576,
-        num_hidden_layers: int | None = 28,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 16,
-        head_dim: int | None = 256,
-        hidden_act: str | None = "gelu_pytorch_tanh",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-6,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        use_bidirectional_attention: bool | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.use_bidirectional_attention = use_bidirectional_attention
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
+    vocab_size: int = 256000
+    hidden_size: int = 3072
+    intermediate_size: int = 24576
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    head_dim: int = 256
+    hidden_act: str = "gelu_pytorch_tanh"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    bos_token_id: int | None = 2
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    use_bidirectional_attention: bool | None = None
 
 
 class GemmaTextScaledWordEmbedding(nn.Embedding):

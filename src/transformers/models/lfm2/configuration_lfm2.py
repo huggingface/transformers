@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM2-1.2B")
+@strict(accept_kwargs=True)
 class Lfm2Config(PreTrainedConfig):
     r"""
     conv_bias (`bool`, *optional*, defaults to `False`):
@@ -51,66 +55,41 @@ class Lfm2Config(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
 
-    def __init__(
-        self,
-        vocab_size: int | None = 65536,
-        hidden_size: int | None = 2560,
-        intermediate_size: int | None = 12288,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 8,
-        max_position_embeddings: int | None = 128_000,
-        initializer_range: float | None = 0.02,
-        norm_eps: float | None = 0.00001,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 0,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        conv_bias: bool | None = False,
-        conv_L_cache: int | None = 3,
-        block_multiple_of: int | None = 256,
-        block_ffn_dim_multiplier: float | None = 1.0,
-        block_auto_adjust_ff_dim: bool | None = True,
-        full_attn_idxs: list[int] | None = None,
-        layer_types: list[str] | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.max_position_embeddings = max_position_embeddings
-        self.use_cache = use_cache
-        self.norm_eps = norm_eps
-        self.initializer_range = initializer_range
+    vocab_size: int = 65536
+    hidden_size: int = 2560
+    intermediate_size: int = 12288
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    max_position_embeddings: int = 128_000
+    initializer_range: float = 0.02
+    norm_eps: float = 0.00001
+    use_cache: bool = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = True
+    rope_parameters: RopeParameters | dict | None = None
+    conv_bias: bool = False
+    conv_L_cache: int = 3
+    block_multiple_of: int = 256
+    block_ffn_dim_multiplier: float = 1.0
+    block_auto_adjust_ff_dim: bool = True
+    full_attn_idxs: list[int] | None = None
+    layer_types: list[str] | None = None
 
-        # attn operator config
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-
-        # custom operator config
-        self.conv_bias = conv_bias
-        self.conv_L_cache = conv_L_cache
-
-        # MLP config
-        self.intermediate_size = kwargs.get("block_ff_dim", intermediate_size)  # to fit original config keys
-        self.block_multiple_of = block_multiple_of
-        self.block_ffn_dim_multiplier = block_ffn_dim_multiplier
-        self.block_auto_adjust_ff_dim = block_auto_adjust_ff_dim
-
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            full_attn_idxs = full_attn_idxs if full_attn_idxs is not None else list(range(num_hidden_layers))
-            self.layer_types = ["full_attention" if i in full_attn_idxs else "conv" for i in range(num_hidden_layers)]
+            self.full_attn_idxs = (
+                self.full_attn_idxs if self.full_attn_idxs is not None else list(range(self.num_hidden_layers))
+            )
+            self.layer_types = [
+                "full_attention" if i in self.full_attn_idxs else "conv" for i in range(self.num_hidden_layers)
+            ]
 
-        self.rope_parameters = rope_parameters
-        tie_word_embeddings = kwargs.get("tie_embedding", tie_word_embeddings)  # to fit original config keys
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        self.tie_word_embeddings = kwargs.pop("tie_embedding", self.tie_word_embeddings)
+        self.intermediate_size = kwargs.pop("block_ff_dim", self.intermediate_size)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Lfm2Config"]

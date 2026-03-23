@@ -14,11 +14,14 @@
 # limitations under the License.
 """ALBERT model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="albert/albert-xxlarge-v2")
+@strict(accept_kwargs=True)
 class AlbertConfig(PreTrainedConfig):
     r"""
     inner_group_num (`int`, *optional*, defaults to 1):
@@ -50,52 +53,26 @@ class AlbertConfig(PreTrainedConfig):
 
     model_type = "albert"
 
-    def __init__(
-        self,
-        vocab_size=30000,
-        embedding_size=128,
-        hidden_size=4096,
-        num_hidden_layers=12,
-        num_hidden_groups=1,
-        num_attention_heads=64,
-        intermediate_size=16384,
-        inner_group_num=1,
-        hidden_act="gelu_new",
-        hidden_dropout_prob=0,
-        attention_probs_dropout_prob=0,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        classifier_dropout_prob=0.1,
-        pad_token_id=0,
-        bos_token_id=2,
-        eos_token_id=3,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_hidden_groups = num_hidden_groups
-        self.num_attention_heads = num_attention_heads
-        self.inner_group_num = inner_group_num
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.classifier_dropout_prob = classifier_dropout_prob
+    vocab_size: int = 30000
+    embedding_size: int = 128
+    hidden_size: int = 4096
+    num_hidden_layers: int = 12
+    num_hidden_groups: int = 1
+    num_attention_heads: int = 64
+    intermediate_size: int = 16384
+    inner_group_num: int = 1
+    hidden_act: str = "gelu_new"
+    hidden_dropout_prob: int | float = 0.0
+    attention_probs_dropout_prob: int | float = 0.0
+    max_position_embeddings: int = 512
+    type_vocab_size: int = 2
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    classifier_dropout_prob: int | float = 0.1
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 3
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["AlbertConfig"]

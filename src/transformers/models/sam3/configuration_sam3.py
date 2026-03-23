@@ -13,6 +13,8 @@
 # limitations under the License.
 """SAM3 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from transformers import CLIPTextConfig
 
 from ...configuration_utils import PreTrainedConfig
@@ -21,6 +23,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3ViTConfig(PreTrainedConfig):
     r"""
     rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -38,51 +41,32 @@ class Sam3ViTConfig(PreTrainedConfig):
     base_config_key = "backbone_config"
     model_type = "sam3_vit_model"
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        intermediate_size=4736,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=1008,
-        patch_size=14,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        rope_theta=10000.0,
-        window_size=24,
-        global_attn_indexes=None,
-        layer_scale_init_value=None,
-        pretrain_image_size=336,
-        hidden_dropout=0.0,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        if global_attn_indexes is None:
-            global_attn_indexes = [7, 15, 23, 31]
+    hidden_size: int = 1024
+    intermediate_size: int = 4736
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 16
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 1008
+    patch_size: int | list[int] | tuple[int, int] = 14
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
+    rope_theta: float = 10000.0
+    window_size: int = 24
+    global_attn_indexes: list[int] | None = None
+    layer_scale_init_value: float | None = None
+    pretrain_image_size: int | list[int] | tuple[int, int] = 336
+    hidden_dropout: float | int = 0.0
+    initializer_range: float = 0.02
 
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.rope_theta = rope_theta
-        self.window_size = window_size
-        self.global_attn_indexes = global_attn_indexes
-        self.layer_scale_init_value = layer_scale_init_value
-        self.pretrain_image_size = pretrain_image_size
-        self.hidden_dropout = hidden_dropout
-        self.initializer_range = initializer_range
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.global_attn_indexes is None:
+            self.global_attn_indexes = [7, 15, 23, 31]
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3VisionConfig(PreTrainedConfig):
     r"""
     fpn_hidden_size (`int`, *optional*, defaults to 256):
@@ -99,38 +83,26 @@ class Sam3VisionConfig(PreTrainedConfig):
         "backbone_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        fpn_hidden_size=256,
-        backbone_feature_sizes=None,
-        scale_factors=None,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        scale_factors = [4.0, 2.0, 1.0, 0.5] if scale_factors is None else scale_factors
-        if backbone_feature_sizes is None:
-            backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
+    backbone_config: dict | PreTrainedConfig | None = None
+    fpn_hidden_size: int = 256
+    backbone_feature_sizes: list | None = None
+    scale_factors: list[float] | None = None
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
-        if isinstance(backbone_config, dict):
-            backbone_config["model_type"] = backbone_config.get("model_type", "sam3_vit_model")
-            backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif backbone_config is None:
-            backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
+    def __post_init__(self, **kwargs):
+        self.scale_factors = [4.0, 2.0, 1.0, 0.5] if self.scale_factors is None else self.scale_factors
+        if self.backbone_feature_sizes is None:
+            self.backbone_feature_sizes = [[288, 288], [144, 144], [72, 72]]
 
-        self.backbone_config = backbone_config
+        if isinstance(self.backbone_config, dict):
+            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "sam3_vit_model")
+            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
+        elif self.backbone_config is None:
+            self.backbone_config = CONFIG_MAPPING["sam3_vit_model"]()
 
-        # Neck
-        self.fpn_hidden_size = fpn_hidden_size
-        self.scale_factors = scale_factors
-        self.backbone_feature_sizes = backbone_feature_sizes
-
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):
@@ -144,6 +116,7 @@ class Sam3VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3GeometryEncoderConfig(PreTrainedConfig):
     r"""
     roi_size (`int`, *optional*, defaults to 7):
@@ -152,34 +125,20 @@ class Sam3GeometryEncoderConfig(PreTrainedConfig):
 
     model_type = "sam3_geometry_encoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=3,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        dropout=0.1,
-        hidden_act="relu",
-        hidden_dropout=0.0,
-        layer_norm_eps=1e-6,
-        roi_size=7,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.roi_size = roi_size
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_layers: int = 3
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    dropout: float | int = 0.1
+    hidden_act: str = "relu"
+    hidden_dropout: float | int = 0.0
+    layer_norm_eps: float = 1e-6
+    roi_size: int = 7
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3DETREncoderConfig(PreTrainedConfig):
     r"""
     hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -188,32 +147,19 @@ class Sam3DETREncoderConfig(PreTrainedConfig):
 
     model_type = "sam3_detr_encoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=6,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        dropout=0.1,
-        hidden_act="relu",
-        hidden_dropout=0.0,
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_layers: int = 6
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    dropout: float | int = 0.1
+    hidden_act: str = "relu"
+    hidden_dropout: float | int = 0.0
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3DETRDecoderConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 200):
@@ -222,34 +168,20 @@ class Sam3DETRDecoderConfig(PreTrainedConfig):
 
     model_type = "sam3_detr_decoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_layers=6,
-        num_queries=200,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        dropout=0.1,
-        hidden_act="relu",
-        hidden_dropout=0.0,
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_queries = num_queries
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_layers: int = 6
+    num_queries: int = 200
+    num_attention_heads: int = 8
+    intermediate_size: int = 2048
+    dropout: float | int = 0.1
+    hidden_act: str = "relu"
+    hidden_dropout: float | int = 0.0
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3MaskDecoderConfig(PreTrainedConfig):
     r"""
     num_upsampling_stages (`int`, *optional*, defaults to 3):
@@ -258,26 +190,16 @@ class Sam3MaskDecoderConfig(PreTrainedConfig):
 
     model_type = "sam3_mask_decoder"
 
-    def __init__(
-        self,
-        hidden_size=256,
-        num_upsampling_stages=3,
-        layer_norm_eps=1e-6,
-        dropout=0.0,
-        num_attention_heads=8,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_upsampling_stages = num_upsampling_stages
-        self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
+    hidden_size: int = 256
+    num_upsampling_stages: int = 3
+    layer_norm_eps: float = 1e-6
+    dropout: float | int = 0.0
+    num_attention_heads: int = 8
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3Config(PreTrainedConfig):
     r"""
     geometry_encoder_config (`dict` or `Sam3GeometryEncoderConfig`, *optional*):
@@ -315,76 +237,57 @@ class Sam3Config(PreTrainedConfig):
         "mask_decoder_config": Sam3MaskDecoderConfig,
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        geometry_encoder_config=None,
-        detr_encoder_config=None,
-        detr_decoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        # Vision config
-        if vision_config is None:
-            vision_config = {}
-        if isinstance(vision_config, dict):
-            self.vision_config = Sam3VisionConfig(**vision_config)
-        else:
-            self.vision_config = vision_config
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    geometry_encoder_config: dict | PreTrainedConfig | None = None
+    detr_encoder_config: dict | PreTrainedConfig | None = None
+    detr_decoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
 
-        # Text config (CLIPTextModelWithProjection defaults)
-        if text_config is None:
-            text_config = {
-                "vocab_size": 49408,
-                "hidden_size": 1024,
-                "intermediate_size": 4096,  # hidden_size * mlp_ratio (1024 * 4)
-                "projection_dim": 512,  # CLIP's internal projection dimension
-                "num_hidden_layers": 24,
-                "num_attention_heads": 16,
-                "max_position_embeddings": 32,
-                "hidden_act": "gelu",
-            }
-        if isinstance(text_config, dict):
-            self.text_config = CLIPTextConfig(**text_config)
-        else:
-            self.text_config = text_config
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = Sam3VisionConfig()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Sam3VisionConfig(**self.vision_config)
 
-        # Geometry encoder config
-        if geometry_encoder_config is None:
-            geometry_encoder_config = {}
-        if isinstance(geometry_encoder_config, dict):
-            self.geometry_encoder_config = Sam3GeometryEncoderConfig(**geometry_encoder_config)
-        else:
-            self.geometry_encoder_config = geometry_encoder_config
+        if self.text_config is None:
+            self.text_config = CLIPTextConfig(
+                **{
+                    "vocab_size": 49408,
+                    "hidden_size": 1024,
+                    "intermediate_size": 4096,  # hidden_size * mlp_ratio (1024 * 4)
+                    "projection_dim": 512,  # CLIP's internal projection dimension
+                    "num_hidden_layers": 24,
+                    "num_attention_heads": 16,
+                    "max_position_embeddings": 32,
+                    "hidden_act": "gelu",
+                }
+            )
+        if isinstance(self.text_config, dict):
+            self.text_config = CLIPTextConfig(**self.text_config)
 
-        # DETR encoder config
-        if detr_encoder_config is None:
-            detr_encoder_config = {}
-        if isinstance(detr_encoder_config, dict):
-            self.detr_encoder_config = Sam3DETREncoderConfig(**detr_encoder_config)
-        else:
-            self.detr_encoder_config = detr_encoder_config
+        if self.geometry_encoder_config is None:
+            self.geometry_encoder_config = Sam3GeometryEncoderConfig()
+        if isinstance(self.geometry_encoder_config, dict):
+            self.geometry_encoder_config = Sam3GeometryEncoderConfig(**self.geometry_encoder_config)
 
-        # DETR decoder config
-        if detr_decoder_config is None:
-            detr_decoder_config = {}
-        if isinstance(detr_decoder_config, dict):
-            self.detr_decoder_config = Sam3DETRDecoderConfig(**detr_decoder_config)
-        else:
-            self.detr_decoder_config = detr_decoder_config
+        if self.detr_encoder_config is None:
+            self.detr_encoder_config = Sam3DETREncoderConfig()
+        if isinstance(self.detr_encoder_config, dict):
+            self.detr_encoder_config = Sam3DETREncoderConfig(**self.detr_encoder_config)
 
-        # Mask decoder config
-        if mask_decoder_config is None:
-            mask_decoder_config = {}
-        if isinstance(mask_decoder_config, dict):
-            self.mask_decoder_config = Sam3MaskDecoderConfig(**mask_decoder_config)
-        else:
-            self.mask_decoder_config = mask_decoder_config
+        if self.detr_decoder_config is None:
+            self.detr_decoder_config = Sam3DETRDecoderConfig()
+        if isinstance(self.detr_decoder_config, dict):
+            self.detr_decoder_config = Sam3DETRDecoderConfig(**self.detr_decoder_config)
 
-        self.initializer_range = initializer_range
-        super().__init__(**kwargs)
+        if self.mask_decoder_config is None:
+            self.mask_decoder_config = Sam3MaskDecoderConfig()
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = Sam3MaskDecoderConfig(**self.mask_decoder_config)
+
+        super().__post_init__(**kwargs)
 
     @property
     def image_size(self):

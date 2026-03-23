@@ -13,15 +13,15 @@
 # limitations under the License.
 """Starcoder2 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="bigcode/starcoder2-7b")
+@strict(accept_kwargs=True)
 class Starcoder2Config(PreTrainedConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `True`):
@@ -57,54 +57,27 @@ class Starcoder2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 49152,
-        hidden_size: int | None = 3072,
-        intermediate_size: int | None = 12288,
-        num_hidden_layers: int | None = 30,
-        num_attention_heads: int | None = 24,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "gelu_pytorch_tanh",
-        max_position_embeddings: int | None = 4096,
-        initializer_range: float | None = 0.018042,
-        norm_epsilon: int | None = 1e-5,
-        use_cache: bool | None = True,
-        bos_token_id: int | None = 50256,
-        eos_token_id: int | None = 50256,
-        pad_token_id: int | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        sliding_window: int | None = None,
-        attention_dropout: float | None = 0.0,
-        residual_dropout: float | None = 0.0,
-        embedding_dropout: float | None = 0.0,
-        use_bias: bool | None = True,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-        self.use_bias = use_bias
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.norm_epsilon = norm_epsilon
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.residual_dropout = residual_dropout
-        self.embedding_dropout = embedding_dropout
-        self.rope_parameters = rope_parameters
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+    vocab_size: int = 49152
+    hidden_size: int = 3072
+    intermediate_size: int = 12288
+    num_hidden_layers: int = 30
+    num_attention_heads: int = 24
+    num_key_value_heads: int = 2
+    hidden_act: str = "gelu_pytorch_tanh"
+    max_position_embeddings: int = 4096
+    initializer_range: float = 0.018042
+    norm_epsilon: float = 1e-5
+    use_cache: bool = True
+    bos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
+    pad_token_id: int | None = None
+    rope_parameters: RopeParameters | dict | None = None
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    residual_dropout: float | int = 0.0
+    embedding_dropout: float | int = 0.0
+    use_bias: bool = True
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["Starcoder2Config"]

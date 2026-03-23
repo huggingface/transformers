@@ -14,8 +14,8 @@
 
 
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -28,9 +28,8 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 
 
 @auto_docstring(checkpoint="inceptionai/Jais-2-8B-Chat")
+@strict(accept_kwargs=True)
 class Jais2Config(LlamaConfig):
-    model_type = "jais2"
-
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -40,55 +39,19 @@ class Jais2Config(LlamaConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 150272,
-        hidden_size: int | None = 3328,
-        intermediate_size: int | None = 26624,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 26,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "relu2",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: float | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 150024,
-        tie_word_embeddings: bool | None = False,
-        attention_bias: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = True,
-        head_dim: int | None = None,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            mlp_bias=mlp_bias,
-            head_dim=head_dim,
-            rope_parameters=rope_parameters,
-            **kwargs,
-        )
-        self.layer_norm_eps = layer_norm_eps
-        del self.rms_norm_eps
-        del self.pretraining_tp
+    vocab_size: int = 150272
+    hidden_size: int = 3328
+    intermediate_size: int = 26624
+    num_attention_heads: int = 26
+    hidden_act: str = "relu2"
+    max_position_embeddings: int = 8192
+    layer_norm_eps: float = 1e-5
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 150024
+    attention_bias: bool = True
+    mlp_bias: bool = True
+    rms_norm_eps = AttributeError()
+    pretraining_tp = AttributeError()
 
 
 class Jais2MLP(NemotronMLP):

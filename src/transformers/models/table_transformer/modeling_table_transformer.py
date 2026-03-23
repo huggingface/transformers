@@ -752,7 +752,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -887,7 +887,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1061,7 +1061,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1228,7 +1228,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         ...     )
         Detected table with confidence 1.0 at location [202.1, 210.59, 1119.22, 385.09]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # First, sent images through TABLE_TRANSFORMER base model to obtain encoder + decoder outputs
         outputs = self.model(

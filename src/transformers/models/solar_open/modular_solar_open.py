@@ -13,9 +13,9 @@
 # limitations under the License.
 """PyTorch SolarOpen model."""
 
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
@@ -32,6 +32,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="upstage/Solar-Open-100B")
+@strict(accept_kwargs=True)
 class SolarOpenConfig(Glm4MoeConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -52,75 +53,19 @@ class SolarOpenConfig(Glm4MoeConfig):
         "layers.*.mlp.experts": "moe_tp_experts",
     }
 
-    def __init__(
-        self,
-        vocab_size: int = 196608,
-        hidden_size: int = 4096,
-        moe_intermediate_size: int = 1280,
-        num_hidden_layers: int = 48,
-        num_attention_heads: int = 64,
-        num_key_value_heads: int = 8,
-        n_shared_experts: int = 1,
-        n_routed_experts: int = 128,
-        head_dim: int = 128,
-        hidden_act: str = "silu",
-        max_position_embeddings: int = 131072,
-        initializer_range: float = 0.02,
-        rms_norm_eps: int = 1e-5,
-        use_cache: bool = True,
-        tie_word_embeddings: bool = False,
-        rope_parameters: RopeParameters | None = None,
-        attention_bias: bool = False,
-        attention_dropout: float = 0.0,
-        num_experts_per_tok: int = 8,
-        routed_scaling_factor: float = 1.0,
-        n_group: int = 1,
-        topk_group: int = 1,
-        norm_topk_prob: bool = True,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        # Default partial_rotary_factor to 1.0 (instead of 0.5 in Glm4MoeConfig).
-        # `setdefault` ensures this value is not overridden by subsequent calls.
-        # This workaround is required due to modular inheritance limitations.
+    vocab_size: int = 196608
+    moe_intermediate_size: int = 1280
+    num_hidden_layers: int = 48
+    num_attention_heads: int = 64
+    head_dim: int = 128
+    num_experts_per_tok: int = 8
+    intermediate_size = AttributeError()
+    first_k_dense_replace = AttributeError()
+    use_qk_norm = AttributeError()
+
+    def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 1.0)
-        self.head_dim = head_dim
-
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            moe_hidden_size=moe_intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            n_shared_experts=n_shared_experts,
-            n_routed_experts=n_routed_experts,
-            head_dim=head_dim,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            num_experts_per_tok=num_experts_per_tok,
-            routed_scaling_factor=routed_scaling_factor,
-            n_group=n_group,
-            topk_group=topk_group,
-            norm_topk_prob=norm_topk_prob,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
-
-        del self.intermediate_size
-        del self.first_k_dense_replace
-        del self.use_qk_norm
+        super().__post_init__(**kwargs)
 
 
 class SolarOpenDecoderLayer(LlamaDecoderLayer):

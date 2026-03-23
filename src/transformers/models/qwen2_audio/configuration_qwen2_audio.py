@@ -12,15 +12,15 @@
 # limitations under the License.
 """Qwen2Audio model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
+@strict(accept_kwargs=True)
 class Qwen2AudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -42,43 +42,25 @@ class Qwen2AudioEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_audio_encoder"
+    attribute_map = {"num_hidden_layers": "encoder_layers"}
 
-    def __init__(
-        self,
-        num_mel_bins=128,
-        encoder_layers=32,
-        encoder_attention_heads=20,
-        encoder_ffn_dim=5120,
-        encoder_layerdrop=0.0,
-        d_model=1280,
-        dropout=0.0,
-        attention_dropout=0.0,
-        activation_function="gelu",
-        activation_dropout=0.0,
-        scale_embedding=False,
-        initializer_range=0.02,
-        max_source_positions=1500,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.num_mel_bins = num_mel_bins
-        self.d_model = d_model
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_function = activation_function
-        self.activation_dropout = activation_dropout
-        self.encoder_layerdrop = encoder_layerdrop
-        self.num_hidden_layers = encoder_layers
-        self.initializer_range = initializer_range
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.max_source_positions = max_source_positions
+    num_mel_bins: int = 128
+    encoder_layers: int = 32
+    encoder_attention_heads: int = 20
+    encoder_ffn_dim: int = 5120
+    encoder_layerdrop: float | int = 0.0
+    d_model: int = 1280
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_function: str = "gelu"
+    activation_dropout: float | int = 0.0
+    scale_embedding: bool = False
+    initializer_range: float = 0.02
+    max_source_positions: int = 1500
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-Audio-7B")
+@strict(accept_kwargs=True)
 class Qwen2AudioConfig(PreTrainedConfig):
     r"""
     Example:
@@ -108,20 +90,16 @@ class Qwen2AudioConfig(PreTrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
 
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_index=151646,
-        **kwargs,
-    ):
-        self.audio_token_index = audio_token_index
+    audio_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    audio_token_index: int = 151646
 
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "qwen2_audio_encoder")
-            audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
-        elif audio_config is None:
-            audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](
+    def __post_init__(self, **kwargs):
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen2_audio_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["qwen2_audio_encoder"](
                 d_model=1280,
                 encoder_attention_heads=20,
                 encoder_ffn_dim=5120,
@@ -133,17 +111,13 @@ class Qwen2AudioConfig(PreTrainedConfig):
                 activation_function="gelu",
             )
 
-        self.audio_config = audio_config
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "qwen2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["qwen2"]()
-
-        self.text_config = text_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Qwen2AudioConfig", "Qwen2AudioEncoderConfig"]

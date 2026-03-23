@@ -13,6 +13,8 @@
 # limitations under the License.
 """Evolla model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
@@ -22,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
+@strict(accept_kwargs=True)
 class SaProtConfig(PreTrainedConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 4):
@@ -33,49 +36,27 @@ class SaProtConfig(PreTrainedConfig):
     token_dropout (`bool`, *optional*, defaults to `True`):
         Whether to apply dropout to the tokens in the protein sequence model."""
 
-    def __init__(
-        self,
-        vocab_size=446,
-        mask_token_id=4,
-        pad_token_id=1,
-        hidden_size=1280,
-        num_hidden_layers=33,
-        num_attention_heads=20,
-        intermediate_size=5120,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=1026,
-        initializer_range=0.02,
-        layer_norm_eps=1e-05,
-        position_embedding_type="rotary",
-        emb_layer_norm_before=False,
-        token_dropout=True,
-        is_decoder=False,
-        add_cross_attention=False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.pad_token_id = pad_token_id
-        self.mask_token_id = mask_token_id
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
-        self.emb_layer_norm_before = emb_layer_norm_before
-        self.token_dropout = token_dropout
+    vocab_size: int = 446
+    mask_token_id: int = 4
+    pad_token_id: int = 1
+    hidden_size: int = 1280
+    num_hidden_layers: int = 33
+    num_attention_heads: int = 20
+    intermediate_size: int = 5120
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 1026
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-05
+    position_embedding_type: str = "rotary"
+    emb_layer_norm_before: bool = False
+    token_dropout: bool = True
+    is_decoder: bool = False
+    add_cross_attention: bool = False
 
 
 @auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
+@strict(accept_kwargs=True)
 class EvollaConfig(PreTrainedConfig):
     r"""
     protein_encoder_config (`dict`, *optional*):
@@ -118,81 +99,45 @@ class EvollaConfig(PreTrainedConfig):
     sub_configs = {"protein_encoder_config": SaProtConfig}
     default_theta = 500000.0
 
-    def __init__(
-        self,
-        protein_encoder_config: dict | None = None,
-        vocab_size: int | None = 128256,  # llama vocab size
-        hidden_size: int | None = 4096,  # llama hidden size
-        intermediate_size: int | None = 14336,  # llama intermediate size
-        num_hidden_layers: int | None = 32,  # llama num layers
-        num_attention_heads: int | None = 32,  # llama num heads
-        num_key_value_heads: int | None = 8,  # llama num key-value heads
-        hidden_act: str | None = "silu",  # llama activation function
-        max_position_embeddings: int | None = 8192,  # llama rope max length
-        rms_norm_eps: int | None = 1e-05,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        aligner_ffn_mult: int | None = 4,
-        aligner_enable_bias: bool | None = True,
-        aligner_attention_probs_dropout_prob: float | None = 0.1,
-        aligner_num_add_layers: int | None = 8,
-        resampler_depth: int | None = 6,
-        resampler_dim_head: int | None = 64,
-        resampler_heads: int | None = 8,
-        resampler_num_latents: int | None = 64,
-        resampler_ff_mult: int | None = 4,
-        initializer_range: float | None = 0.02,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 128000,
-        eos_token_id: int | None = 128009,
-        use_cache: bool | None = False,
-        tie_word_embeddings: bool | None = False,
-        is_decoder: bool | None = False,
-        add_cross_attention: bool | None = False,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.rms_norm_eps = rms_norm_eps
-        self.tie_word_embeddings = tie_word_embeddings
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.aligner_ffn_mult = aligner_ffn_mult
-        self.aligner_enable_bias = aligner_enable_bias
-        self.aligner_attention_probs_dropout_prob = aligner_attention_probs_dropout_prob
-        self.aligner_num_add_layers = aligner_num_add_layers
-        self.use_cache = use_cache
-        self.initializer_range = initializer_range
+    protein_encoder_config: dict | PreTrainedConfig | None = None
+    vocab_size: int = 128256  # llama vocab size
+    hidden_size: int = 4096  # llama hidden size
+    intermediate_size: int = 14336  # llama intermediate size
+    num_hidden_layers: int = 32  # llama num layers
+    num_attention_heads: int = 32  # llama num heads
+    num_key_value_heads: int | None = 8  # llama num key-value heads
+    hidden_act: str = "silu"  # llama activation function
+    max_position_embeddings: int = 8192  # llama rope max length
+    rms_norm_eps: float = 1e-05
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int | None = 0.0
+    mlp_bias: bool = False
+    aligner_ffn_mult: int | None = 4
+    aligner_enable_bias: bool | None = True
+    aligner_attention_probs_dropout_prob: float | None = 0.1
+    aligner_num_add_layers: int | None = 8
+    resampler_depth: int | None = 6
+    resampler_dim_head: int | None = 64
+    resampler_heads: int | None = 8
+    resampler_num_latents: int | None = 64
+    resampler_ff_mult: int | None = 4
+    initializer_range: float = 0.02
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 128000
+    eos_token_id: int | list[int] | None = 128009
+    use_cache: bool = False
+    tie_word_embeddings: bool = False
+    is_decoder: bool | None = False
+    add_cross_attention: bool | None = False
 
-        self.resampler_depth = resampler_depth
-        self.resampler_dim_head = resampler_dim_head
-        self.resampler_heads = resampler_heads
-        self.resampler_num_latents = resampler_num_latents
-        self.resampler_ff_mult = resampler_ff_mult
-        self.rope_parameters = rope_parameters
-
-        # Subconfig
-        if protein_encoder_config is None:
-            protein_encoder_config = {}
+    def __post_init__(self, **kwargs):
+        if self.protein_encoder_config is None:
+            self.protein_encoder_config = SaProtConfig()
             logger.info("`protein_encoder_config` is `None`. Initializing the `SaProtConfig` with default values.")
-        self.protein_encoder_config = SaProtConfig(**protein_encoder_config)
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        elif isinstance(self.protein_encoder_config, dict):
+            self.protein_encoder_config = SaProtConfig(**self.protein_encoder_config)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["EvollaConfig"]

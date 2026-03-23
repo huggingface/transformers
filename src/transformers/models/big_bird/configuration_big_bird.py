@@ -13,14 +13,14 @@
 # limitations under the License.
 """BigBird model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/bigbird-roberta-base")
+@strict(accept_kwargs=True)
 class BigBirdConfig(PreTrainedConfig):
     r"""
     attention_type (`str`, *optional*, defaults to `"block_sparse"`):
@@ -53,65 +53,32 @@ class BigBirdConfig(PreTrainedConfig):
 
     model_type = "big_bird"
 
-    def __init__(
-        self,
-        vocab_size=50358,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu_new",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=4096,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        sep_token_id=66,
-        attention_type="block_sparse",
-        use_bias=True,
-        rescale_embeddings=False,
-        block_size=64,
-        num_random_blocks=3,
-        classifier_dropout=None,
-        is_decoder=False,
-        add_cross_attention=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.sep_token_id = sep_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-
-        self.rescale_embeddings = rescale_embeddings
-        self.attention_type = attention_type
-        self.use_bias = use_bias
-        self.block_size = block_size
-        self.num_random_blocks = num_random_blocks
-        self.classifier_dropout = classifier_dropout
+    vocab_size: int = 50358
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu_new"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 4096
+    type_vocab_size: int = 2
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    use_cache: int = True
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    sep_token_id: int | None = 66
+    attention_type: str = "block_sparse"
+    use_bias: bool = True
+    rescale_embeddings: bool = False
+    block_size: int = 64
+    num_random_blocks: int = 3
+    classifier_dropout: float | int | None = None
+    is_decoder: bool = False
+    add_cross_attention: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["BigBirdConfig"]

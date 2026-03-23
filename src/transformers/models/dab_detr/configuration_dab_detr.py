@@ -13,16 +13,16 @@
 # limitations under the License.
 """DAB-DETR model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="IDEA-Research/dab-detr-resnet-50")
+@strict(accept_kwargs=True)
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):
@@ -50,7 +50,6 @@ class DabDetrConfig(PreTrainedConfig):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
         If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
 
-
     Examples:
 
     ```python
@@ -71,50 +70,46 @@ class DabDetrConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
+        "num_hidden_layers": "encoder_layers",
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        num_queries=300,
-        encoder_layers=6,
-        encoder_ffn_dim=2048,
-        encoder_attention_heads=8,
-        decoder_layers=6,
-        decoder_ffn_dim=2048,
-        decoder_attention_heads=8,
-        is_encoder_decoder=True,
-        activation_function="prelu",
-        hidden_size=256,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        init_xavier_std=1.0,
-        auxiliary_loss=False,
-        dilation=False,
-        class_cost=2,
-        bbox_cost=5,
-        giou_cost=2,
-        cls_loss_coefficient=2,
-        bbox_loss_coefficient=5,
-        giou_loss_coefficient=2,
-        focal_alpha=0.25,
-        temperature_height=20,
-        temperature_width=20,
-        query_dim=4,
-        random_refpoints_xy=False,
-        keep_query_pos=False,
-        num_patterns=0,
-        normalize_before=False,
-        sine_position_embedding_scale=None,
-        initializer_bias_prior_prob=None,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        if query_dim != 4:
-            raise ValueError("The query dimensions has to be 4.")
+    backbone_config: dict | PreTrainedConfig | None = None
+    num_queries: int = 300
+    encoder_layers: int = 6
+    encoder_ffn_dim: int = 2048
+    encoder_attention_heads: int = 8
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 2048
+    decoder_attention_heads: int = 8
+    is_encoder_decoder: int = True
+    activation_function: str = "prelu"
+    hidden_size: int = 256
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    init_xavier_std: float = 1.0
+    auxiliary_loss: bool = False
+    dilation: bool = False
+    class_cost: int = 2
+    bbox_cost: int = 5
+    giou_cost: int = 2
+    cls_loss_coefficient: int = 2
+    bbox_loss_coefficient: int = 5
+    giou_loss_coefficient: int = 2
+    focal_alpha: float = 0.25
+    temperature_height: int = 20
+    temperature_width: int = 20
+    query_dim: int = 4
+    random_refpoints_xy: bool = False
+    keep_query_pos: bool = False
+    num_patterns: int = 0
+    normalize_before: bool = False
+    sine_position_embedding_scale: float | None = None
+    initializer_bias_prior_prob: float | None = None
+    tie_word_embeddings: bool = True
 
+    def __post_init__(self, **kwargs):
         # Init timm backbone with hardcoded values for BC
         timm_default_kwargs = {
             "num_channels": 3,
@@ -122,11 +117,11 @@ class DabDetrConfig(PreTrainedConfig):
             "use_pretrained_backbone": False,
             "out_indices": [1, 2, 3, 4],
         }
-        if dilation:
+        if self.dilation:
             timm_default_kwargs["output_stride"] = 16
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_backbone="resnet50",
             default_config_type="resnet50",
             default_config_kwargs={"out_features": ["stage4"]},
@@ -134,44 +129,12 @@ class DabDetrConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.num_queries = num_queries
-        self.hidden_size = hidden_size
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.num_hidden_layers = encoder_layers
-        self.auxiliary_loss = auxiliary_loss
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.cls_loss_coefficient = cls_loss_coefficient
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.focal_alpha = focal_alpha
-        self.query_dim = query_dim
-        self.random_refpoints_xy = random_refpoints_xy
-        self.keep_query_pos = keep_query_pos
-        self.num_patterns = num_patterns
-        self.normalize_before = normalize_before
-        self.temperature_width = temperature_width
-        self.temperature_height = temperature_height
-        self.sine_position_embedding_scale = sine_position_embedding_scale
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.tie_word_embeddings = tie_word_embeddings
+        super().__post_init__(**kwargs)
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.query_dim != 4:
+            raise ValueError("The query dimensions has to be 4.")
 
 
 __all__ = ["DabDetrConfig"]

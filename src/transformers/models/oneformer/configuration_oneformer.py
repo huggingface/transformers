@@ -13,16 +13,16 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="shi-labs/oneformer_ade20k_swin_tiny")
+@strict(accept_kwargs=True)
 class OneFormerConfig(PreTrainedConfig):
     r"""
     ignore_value (`int`, *optional*, defaults to 255):
@@ -97,55 +97,53 @@ class OneFormerConfig(PreTrainedConfig):
 
     model_type = "oneformer"
     sub_configs = {"backbone_config": AutoConfig}
-    attribute_map = {"hidden_size": "hidden_dim"}
+    attribute_map = {"hidden_size": "hidden_dim", "num_hidden_layers": "decoder_layers"}
 
-    def __init__(
-        self,
-        backbone_config: dict | PreTrainedConfig | None = None,
-        ignore_value: int = 255,
-        num_queries: int = 150,
-        no_object_weight: int = 0.1,
-        class_weight: float = 2.0,
-        mask_weight: float = 5.0,
-        dice_weight: float = 5.0,
-        contrastive_weight: float = 0.5,
-        contrastive_temperature: float = 0.07,
-        train_num_points: int = 12544,
-        oversample_ratio: float = 3.0,
-        importance_sample_ratio: float = 0.75,
-        init_std: float = 0.02,
-        init_xavier_std: float = 1.0,
-        layer_norm_eps: float = 1e-05,
-        is_training: bool = False,
-        use_auxiliary_loss: bool = True,
-        output_auxiliary_logits: bool = True,
-        strides: list | None = [4, 8, 16, 32],
-        task_seq_len: int = 77,
-        text_encoder_width: int = 256,
-        text_encoder_context_length: int = 77,
-        text_encoder_num_layers: int = 6,
-        text_encoder_vocab_size: int = 49408,
-        text_encoder_proj_layers: int = 2,
-        text_encoder_n_ctx: int = 16,
-        conv_dim: int = 256,
-        mask_dim: int = 256,
-        hidden_dim: int = 256,
-        encoder_feedforward_dim: int = 1024,
-        norm: str = "GN",
-        encoder_layers: int = 6,
-        decoder_layers: int = 10,
-        use_task_norm: bool = True,
-        num_attention_heads: int = 8,
-        dropout: float = 0.1,
-        dim_feedforward: int = 2048,
-        pre_norm: bool = False,
-        enforce_input_proj: bool = False,
-        query_dec_layers: int = 2,
-        common_stride: int = 4,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    ignore_value: int = 255
+    num_queries: int = 150
+    no_object_weight: float = 0.1
+    class_weight: float = 2.0
+    mask_weight: float = 5.0
+    dice_weight: float = 5.0
+    contrastive_weight: float = 0.5
+    contrastive_temperature: float = 0.07
+    train_num_points: int = 12544
+    oversample_ratio: float = 3.0
+    importance_sample_ratio: float = 0.75
+    init_std: float = 0.02
+    init_xavier_std: float = 1.0
+    layer_norm_eps: float = 1e-05
+    is_training: bool = False
+    use_auxiliary_loss: bool = True
+    output_auxiliary_logits: bool = True
+    strides: list[int] | tuple[int, ...] = (4, 8, 16, 32)
+    task_seq_len: int = 77
+    text_encoder_width: int = 256
+    text_encoder_context_length: int = 77
+    text_encoder_num_layers: int = 6
+    text_encoder_vocab_size: int = 49408
+    text_encoder_proj_layers: int = 2
+    text_encoder_n_ctx: int = 16
+    conv_dim: int = 256
+    mask_dim: int = 256
+    hidden_dim: int = 256
+    encoder_feedforward_dim: int = 1024
+    norm: str = "GN"
+    encoder_layers: int = 6
+    decoder_layers: int = 10
+    use_task_norm: bool = True
+    num_attention_heads: int = 8
+    dropout: float | int = 0.1
+    dim_feedforward: int = 2048
+    pre_norm: bool = False
+    enforce_input_proj: bool = False
+    query_dec_layers: int = 2
+    common_stride: int = 4
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="swin",
             default_config_kwargs={
                 "drop_path_rate": 0.3,
@@ -154,50 +152,7 @@ class OneFormerConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.ignore_value = ignore_value
-        self.num_queries = num_queries
-        self.no_object_weight = no_object_weight
-        self.class_weight = class_weight
-        self.mask_weight = mask_weight
-        self.dice_weight = dice_weight
-        self.contrastive_weight = contrastive_weight
-        self.contrastive_temperature = contrastive_temperature
-        self.train_num_points = train_num_points
-        self.oversample_ratio = oversample_ratio
-        self.importance_sample_ratio = importance_sample_ratio
-        self.init_std = init_std
-        self.init_xavier_std = init_xavier_std
-        self.layer_norm_eps = layer_norm_eps
-        self.is_training = is_training
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.output_auxiliary_logits = output_auxiliary_logits
-        self.strides = strides
-        self.task_seq_len = task_seq_len
-        self.text_encoder_width = text_encoder_width
-        self.text_encoder_context_length = text_encoder_context_length
-        self.text_encoder_num_layers = text_encoder_num_layers
-        self.text_encoder_vocab_size = text_encoder_vocab_size
-        self.text_encoder_proj_layers = text_encoder_proj_layers
-        self.text_encoder_n_ctx = text_encoder_n_ctx
-        self.conv_dim = conv_dim
-        self.mask_dim = mask_dim
-        self.hidden_dim = hidden_dim
-        self.encoder_feedforward_dim = encoder_feedforward_dim
-        self.norm = norm
-        self.encoder_layers = encoder_layers
-        self.decoder_layers = decoder_layers
-        self.use_task_norm = use_task_norm
-        self.num_attention_heads = num_attention_heads
-        self.dropout = dropout
-        self.dim_feedforward = dim_feedforward
-        self.pre_norm = pre_norm
-        self.enforce_input_proj = enforce_input_proj
-        self.query_dec_layers = query_dec_layers
-        self.common_stride = common_stride
-        self.num_hidden_layers = decoder_layers
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["OneFormerConfig"]

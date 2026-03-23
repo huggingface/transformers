@@ -13,15 +13,15 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/dinov3-vits16-pretrain-lvd1689m")
+@strict(accept_kwargs=True)
 class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     rope_theta (`float`, *optional*, defaults to 100.0):
@@ -75,79 +75,41 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "dinov3_vit"
 
-    def __init__(
-        self,
-        patch_size: int = 16,
-        hidden_size: int = 384,
-        intermediate_size: int = 1536,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 6,
-        hidden_act: str = "gelu",
-        attention_dropout: float = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-5,
-        rope_theta: float = 100.0,
-        image_size: int = 224,
-        num_channels: int = 3,
-        query_bias: bool = True,
-        key_bias: bool = False,
-        value_bias: bool = True,
-        proj_bias: bool = True,
-        mlp_bias: bool = True,
-        layerscale_value: float = 1.0,
-        drop_path_rate: float = 0.0,
-        use_gated_mlp: bool = False,
-        num_register_tokens: int = 0,
-        # train augs
-        pos_embed_shift: float | None = None,
-        pos_embed_jitter: float | None = None,
-        pos_embed_rescale: float | None = 2.0,
-        out_features: list[str] | None = None,
-        out_indices: list[int] | None = None,
-        apply_layernorm: bool = True,
-        reshape_hidden_states: bool = True,
-        return_class_token: bool = False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_size: int = 384
+    intermediate_size: int = 1536
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 6
+    hidden_act: str = "gelu"
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    rope_theta: float = 100.0
+    image_size: int | list[int] | tuple[int, int] = 224
+    num_channels: int = 3
+    query_bias: bool = True
+    key_bias: bool = False
+    value_bias: bool = True
+    proj_bias: bool = True
+    mlp_bias: bool = True
+    layerscale_value: float = 1.0
+    drop_path_rate: float = 0.0
+    use_gated_mlp: bool = False
+    num_register_tokens: int = 0
+    pos_embed_shift: float | None = None
+    pos_embed_jitter: float | None = None
+    pos_embed_rescale: float | None = 2.0
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    apply_layernorm: bool = True
+    reshape_hidden_states: bool = True
 
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.use_gated_mlp = use_gated_mlp
-        self.rope_theta = rope_theta
-        self.query_bias = query_bias
-        self.key_bias = key_bias
-        self.value_bias = value_bias
-        self.proj_bias = proj_bias
-        self.mlp_bias = mlp_bias
-        self.num_register_tokens = num_register_tokens
-
-        # train augs
-        self.pos_embed_shift = pos_embed_shift
-        self.pos_embed_jitter = pos_embed_jitter
-        self.pos_embed_rescale = pos_embed_rescale
-        # Initialize backbone-specific configuration
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
-        self.return_class_token = return_class_token
-
-        # Initialize backbone stage names
-        stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_hidden_layers + 1)]
-        self.stage_names = stage_names
-
-        # Initialize backbone features/indices
-        self.set_output_features_output_indices(out_indices=out_indices, out_features=out_features)
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{i}" for i in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DINOv3ViTConfig"]

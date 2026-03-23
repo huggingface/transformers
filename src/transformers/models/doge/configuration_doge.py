@@ -19,12 +19,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="SmallDoge/Doge-320M")
+@strict(accept_kwargs=True)
 class DogeConfig(PreTrainedConfig):
     r"""
     keep_window_size (`int`, *optional*, defaults to 2048):
@@ -67,74 +70,41 @@ class DogeConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32768,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 2048,
-        num_hidden_layers: int | None = 32,
-        hidden_dropout: float | None = 0.0,
-        hidden_act: str | None = "silu",
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-06,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        max_position_embeddings: int | None = 2048,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        num_attention_heads: int | None = 8,
-        num_key_value_heads: int | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        sliding_window: int | None = None,
-        keep_window_size: int | None = 2048,
-        is_moe: bool | None = False,
-        num_experts: int | None = 16384,
-        num_experts_per_tok: int | None = 64,
-        norm_topk_prob: bool | None = False,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
+    vocab_size: int = 32768
+    hidden_size: int = 1024
+    intermediate_size: int = 2048
+    num_hidden_layers: int = 32
+    hidden_dropout: float | int = 0.0
+    hidden_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-06
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    max_position_embeddings: int = 2048
+    rope_parameters: RopeParameters | dict | None = None
+    num_attention_heads: int = 8
+    num_key_value_heads: int | None = None
+    attention_bias: bool = False
+    attention_dropout: float | None = 0.0
+    mlp_bias: bool = False
+    sliding_window: int | None = None
+    keep_window_size: int = 2048
+    is_moe: bool = False
+    num_experts: int = 16384
+    num_experts_per_tok: int = 64
+    norm_topk_prob: bool = False
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-        self.hidden_dropout = hidden_dropout
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-
-        self.max_position_embeddings = max_position_embeddings
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
-        self.sliding_window = sliding_window
-        self.keep_window_size = keep_window_size
-        self.is_moe = is_moe
-        self.num_experts = num_experts
-        self.num_experts_per_tok = num_experts_per_tok
-        self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.rope_parameters = rope_parameters
-
+    def __post_init__(self, **kwargs):
         # for backward compatibility
-        if num_key_value_heads is None:
-            self.num_key_value_heads = num_attention_heads
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DogeConfig"]

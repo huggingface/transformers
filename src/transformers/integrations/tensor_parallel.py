@@ -1218,6 +1218,7 @@ class ParallelInterface(GeneralInterface):
     _global_mapping = (
         {
             "embedding_rowwise": EmbeddingParallel(embedding_dim_sharding=0),
+            "embedding_colwise": EmbeddingParallel(embedding_dim_sharding=1),
             "colwise_gather_output": ColwiseParallel(gather_output=True),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
@@ -1247,6 +1248,7 @@ class ParallelInterface(GeneralInterface):
         "rowwise_split_input": -1,
         "packed_rowwise": -1,
         "embedding_rowwise": 0,
+        "embedding_colwise": 1,
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
@@ -1261,10 +1263,19 @@ class ParallelInterface(GeneralInterface):
         "rowwise_split_input": None,
         "packed_rowwise": None,
         "embedding_rowwise": None,
+        "embedding_colwise": None,
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
     }
+
+    @classmethod
+    def register_plan_to_weight_dim(cls, key: str, value: int | None):
+        cls.plan_to_weight_dim[key] = value
+
+    @classmethod
+    def register_plan_to_bias_dim(cls, key: str, value: int | None):
+        cls.plan_to_bias_dim[key] = value
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()

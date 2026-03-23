@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     patch_torch_compile_force_graph,
 )
 from transformers.utils import enable_tf32
+from transformers.utils.network_logging import register_network_debug_plugin
 
 
 NOT_DEVICE_TESTS = {
@@ -90,10 +91,15 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
     config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
     config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
+    config.addinivalue_line("markers", "flash_attn_4_test: mark test which tests flash attention 4 functionality")
+    config.addinivalue_line(
+        "markers", "all_flash_attn_test: mark test which tests all mainline flash attentions' functionality"
+    )
     config.addinivalue_line("markers", "training_ci: mark test for training CI validation")
     config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+    register_network_debug_plugin(config)
 
 
 def pytest_collection_modifyitems(items):

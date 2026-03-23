@@ -12,17 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper import TimmWrapperConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="facebook/pe-av-large")
+@strict(accept_kwargs=True)
 class PeVideoEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -52,57 +53,41 @@ class PeVideoEncoderConfig(PreTrainedConfig):
         "initializer_range": 0.02,
     }
 
-    def __init__(
-        self,
-        vision_config: dict | PreTrainedConfig | None = None,
-        hidden_size: int | None = 1792,
-        intermediate_size: int | None = 4800,
-        num_hidden_layers: int | None = 6,
-        num_attention_heads: int | None = 14,
-        num_key_value_heads: int | None = None,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 10000,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-5,
-        rope_parameters: RopeParameters | dict | None = {"rope_theta": 20000},
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vision_config: dict | PreTrainedConfig | None = None
+    hidden_size: int = 1792
+    intermediate_size: int = 4800
+    num_hidden_layers: int = 6
+    num_attention_heads: int = 14
+    num_key_value_heads: int | None = None
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 10000
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.rope_parameters = rope_parameters
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_theta": 20000}
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]].from_dict(
-                {**self._default_vision_config_kwargs, **vision_config}
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "timm_wrapper")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]].from_dict(
+                {**self._default_vision_config_kwargs, **self.vision_config}
             )
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
 
-        self.vision_config = vision_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
+@strict(accept_kwargs=True)
 class PeVideoConfig(PretrainedConfig):
     r"""
     video_config (`dict` or `PreTrainedConfig`, *optional*):
@@ -133,29 +118,24 @@ class PeVideoConfig(PretrainedConfig):
         "num_attention_heads": 16,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        video_config=None,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "modernbert")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **text_config}
+    text_config: dict | PreTrainedConfig | None = None
+    video_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "modernbert")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **self.text_config}
             )
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
 
-        if isinstance(video_config, dict):
-            video_config = PeVideoEncoderConfig(**video_config)
-        elif video_config is None:
-            video_config = PeVideoEncoderConfig()
+        if isinstance(self.video_config, dict):
+            self.video_config = PeVideoEncoderConfig(**self.video_config)
+        elif self.video_config is None:
+            self.video_config = PeVideoEncoderConfig()
 
-        self.text_config = text_config
-        self.video_config = video_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PeVideoEncoderConfig", "PeVideoConfig"]

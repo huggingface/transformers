@@ -24,7 +24,7 @@ from transformers import (
     PPLCNetBackbone,
     PPLCNetConfig,
     PPLCNetForImageClassification,
-    PPLCNetImageProcessorFast,
+    PPLCNetImageProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -52,6 +52,7 @@ if is_vision_available():
 class PPLCNetModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=128,
         num_channels=3,
@@ -68,6 +69,7 @@ class PPLCNetModelTester:
         out_indices=[2, 3, 4],
         stem_channels=16,
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -134,7 +136,7 @@ class PPLCNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     config_class = PPLCNetConfig
 
     def setUp(self):
-        self.model_tester = PPLCNetModelTester()
+        self.model_tester = PPLCNetModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPLCNetConfig,
@@ -153,7 +155,7 @@ class PPLCNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = PPLCNetModelTester()
+        self.model_tester = PPLCNetModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPLCNetConfig,
@@ -279,7 +281,7 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
-        self.image_processor = PPLCNetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+        self.image_processor = PPLCNetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 

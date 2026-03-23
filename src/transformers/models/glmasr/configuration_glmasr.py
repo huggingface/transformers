@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
+@strict(accept_kwargs=True)
 class GlmAsrEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -37,41 +41,28 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
 
     model_type = "glmasr_encoder"
 
-    def __init__(
-        self,
-        hidden_size=1280,
-        intermediate_size=5120,
-        num_hidden_layers=32,
-        num_attention_heads=20,
-        num_key_value_heads=None,
-        hidden_act="gelu",
-        max_position_embeddings=1500,
-        initializer_range=0.02,
-        rope_parameters=None,
-        attention_dropout=0.0,
-        num_mel_bins=128,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.head_dim = hidden_size // num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.rope_parameters = rope_parameters
-        self.attention_dropout = attention_dropout
-        self.num_mel_bins = num_mel_bins
+    hidden_size: int = 1280
+    intermediate_size: int = 5120
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 20
+    num_key_value_heads: int | None = None
+    hidden_act: str = "gelu"
+    max_position_embeddings: int = 1500
+    initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+    attention_dropout: float | int = 0.0
+    num_mel_bins: int = 128
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
         kwargs.setdefault("partial_rotary_factor", 0.5)
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
+@strict(accept_kwargs=True)
 class GlmAsrConfig(PreTrainedConfig):
     r"""
     Example:
@@ -106,36 +97,27 @@ class GlmAsrConfig(PreTrainedConfig):
         "rope_parameters": {"rope_theta": 10000.0, "rope_type": "default"},
     }
 
-    def __init__(
-        self,
-        audio_config=None,
-        text_config=None,
-        audio_token_id=59260,
-        projector_hidden_act="gelu",
-        **kwargs,
-    ):
-        if isinstance(audio_config, dict):
-            audio_config["model_type"] = audio_config.get("model_type", "glmasr_encoder")
-            audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
-        elif audio_config is None:
-            audio_config = CONFIG_MAPPING["glmasr_encoder"]()
-        self.audio_config = audio_config
+    audio_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    audio_token_id: int = 59260
+    projector_hidden_act: str = "gelu"
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **text_config}
+    def __post_init__(self, **kwargs):
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "glmasr_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["glmasr_encoder"]()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **self.text_config}
             )
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
-        self.text_config = text_config
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["llama"](**self._default_text_config_kwargs)
 
-        self.vocab_size = text_config.vocab_size
-        self.hidden_size = text_config.hidden_size
-        self.audio_token_id = audio_token_id
-        self.projector_hidden_act = projector_hidden_act
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["GlmAsrEncoderConfig", "GlmAsrConfig"]

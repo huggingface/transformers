@@ -87,6 +87,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_kernels_available,
     is_torch_npu_available,
 )
@@ -760,6 +761,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
 
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -784,6 +788,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
+
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -2309,6 +2316,9 @@ class ModelUtilsTest(TestCasePlus):
 
         config = LlamaConfig(
             num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
             hidden_size=32,
             intermediate_size=64,
             vocab_size=100,
@@ -2829,7 +2839,7 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
@@ -2852,7 +2862,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 attn_implementation="flash_attention_2",
             )
 
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_kernels_fallback(self):
         if not is_kernels_available():

@@ -16,15 +16,14 @@
 import math
 
 import numpy as np
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/encodec_24khz")
+@strict(accept_kwargs=True)
 class EncodecConfig(PreTrainedConfig):
     r"""
     chunk_length_s (`float`, *optional*):
@@ -85,63 +84,40 @@ class EncodecConfig(PreTrainedConfig):
 
     model_type = "encodec"
 
-    def __init__(
-        self,
-        target_bandwidths=[1.5, 3.0, 6.0, 12.0, 24.0],
-        sampling_rate=24_000,
-        audio_channels=1,
-        normalize=False,
-        chunk_length_s=None,
-        overlap=None,
-        hidden_size=128,
-        num_filters=32,
-        num_residual_layers=1,
-        upsampling_ratios=[8, 5, 4, 2],
-        norm_type="weight_norm",
-        kernel_size=7,
-        last_kernel_size=7,
-        residual_kernel_size=3,
-        dilation_growth_rate=2,
-        use_causal_conv=True,
-        pad_mode="reflect",
-        compress=2,
-        num_lstm_layers=2,
-        trim_right_ratio=1.0,
-        codebook_size=1024,
-        codebook_dim=None,
-        use_conv_shortcut=True,
-        **kwargs,
-    ):
-        self.target_bandwidths = target_bandwidths
-        self.sampling_rate = sampling_rate
-        self.audio_channels = audio_channels
-        self.normalize = normalize
-        self.chunk_length_s = chunk_length_s
-        self.overlap = overlap
-        self.hidden_size = hidden_size
-        self.num_filters = num_filters
-        self.num_residual_layers = num_residual_layers
-        self.upsampling_ratios = upsampling_ratios
-        self.norm_type = norm_type
-        self.kernel_size = kernel_size
-        self.last_kernel_size = last_kernel_size
-        self.residual_kernel_size = residual_kernel_size
-        self.dilation_growth_rate = dilation_growth_rate
-        self.use_causal_conv = use_causal_conv
-        self.pad_mode = pad_mode
-        self.compress = compress
-        self.num_lstm_layers = num_lstm_layers
-        self.trim_right_ratio = trim_right_ratio
-        self.codebook_size = codebook_size
-        self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
-        self.use_conv_shortcut = use_conv_shortcut
+    target_bandwidths: list[float] | tuple[float, ...] = (1.5, 3.0, 6.0, 12.0, 24.0)
+    sampling_rate: int = 24_000
+    audio_channels: int = 1
+    normalize: bool = False
+    chunk_length_s: int | float | None = None
+    overlap: float | None = None
+    hidden_size: int = 128
+    num_filters: int = 32
+    num_residual_layers: int = 1
+    upsampling_ratios: list[int] | tuple[int, ...] = (8, 5, 4, 2)
+    norm_type: str = "weight_norm"
+    kernel_size: int = 7
+    last_kernel_size: int = 7
+    residual_kernel_size: int = 3
+    dilation_growth_rate: int = 2
+    use_causal_conv: bool = True
+    pad_mode: str = "reflect"
+    compress: int = 2
+    num_lstm_layers: int = 2
+    trim_right_ratio: float = 1.0
+    codebook_size: int = 1024
+    codebook_dim: int | None = None
+    use_conv_shortcut: bool = True
 
+    def __post_init__(self, **kwargs):
+        self.codebook_dim = self.codebook_dim if self.codebook_dim is not None else self.hidden_size
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.norm_type not in ["weight_norm", "time_group_norm"]:
             raise ValueError(
                 f'self.norm_type must be one of `"weight_norm"`, `"time_group_norm"`), got {self.norm_type}'
             )
-
-        super().__init__(**kwargs)
 
     # This is a property because you might want to change the chunk_length_s on the fly
     @property

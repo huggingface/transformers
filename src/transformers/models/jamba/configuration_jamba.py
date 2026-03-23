@@ -15,14 +15,14 @@
 
 import math
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ai21labs/Jamba-v0.1")
+@strict(accept_kwargs=True)
 class JambaConfig(PreTrainedConfig):
     r"""
     expert_layer_period (`int`, *optional*, defaults to 2):
@@ -47,86 +47,44 @@ class JambaConfig(PreTrainedConfig):
         "num_local_experts": "num_experts",
     }
 
-    def __init__(
-        self,
-        vocab_size=65536,
-        tie_word_embeddings=False,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        max_position_embeddings=262144,
-        attention_dropout=0.0,
-        num_experts_per_tok=2,
-        num_experts=16,
-        expert_layer_period=2,
-        expert_layer_offset=1,
-        attn_layer_period=8,
-        attn_layer_offset=4,
-        use_mamba_kernels=True,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_dt_rank="auto",
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.tie_word_embeddings = tie_word_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.attention_dropout = attention_dropout
+    vocab_size: int = 65536
+    tie_word_embeddings: bool = False
+    hidden_size: int = 4096
+    intermediate_size: int = 14336
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    max_position_embeddings: int = 262144
+    attention_dropout: float | int = 0.0
+    num_experts_per_tok: int = 2
+    num_experts: int = 16
+    expert_layer_period: int = 2
+    expert_layer_offset: int = 1
+    attn_layer_period: int = 8
+    attn_layer_offset: int = 4
+    use_mamba_kernels: bool = True
+    mamba_d_state: int = 16
+    mamba_d_conv: int = 4
+    mamba_expand: int = 2
+    mamba_dt_rank: int | str = "auto"
+    mamba_conv_bias: bool = True
+    mamba_proj_bias: bool = False
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-
-        self.use_cache = use_cache
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.expert_layer_period = expert_layer_period
-        self.expert_layer_offset = expert_layer_offset
-        self.attn_layer_period = attn_layer_period
-        self.attn_layer_offset = attn_layer_offset
-
-        self._check_supported_offset("attention", self.attn_layer_period, self.attn_layer_offset)
-        self._check_supported_offset("expert", self.expert_layer_period, self.expert_layer_offset)
-
-        self.use_mamba_kernels = use_mamba_kernels
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
-        self.mamba_conv_bias = mamba_conv_bias
-        self.mamba_proj_bias = mamba_proj_bias
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
+        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if self.mamba_dt_rank == "auto" else self.mamba_dt_rank
+        super().__post_init__(**kwargs)
 
     @property
     def layers_block_type(self):
@@ -142,10 +100,16 @@ class JambaConfig(PreTrainedConfig):
             for i in range(self.num_hidden_layers)
         ]
 
-    def _check_supported_offset(self, property_: str, period: int, offset: int):
-        if offset >= period:
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.attn_layer_offset >= self.attn_layer_period:
             raise ValueError(
-                f"{property_} layer offset ({offset}) must be smaller than {property_} layer period ({period})"
+                f"attention layer offset ({self.attn_layer_offset}) must be smaller than attention layer period ({self.attn_layer_period})"
+            )
+
+        if self.expert_layer_offset >= self.expert_layer_period:
+            raise ValueError(
+                f"expert layer offset ({self.expert_layer_offset}) must be smaller than expert layer period ({self.expert_layer_period})"
             )
 
 

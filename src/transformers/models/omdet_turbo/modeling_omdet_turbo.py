@@ -743,7 +743,7 @@ class OmDetTurboHybridEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeddings
 
@@ -1341,7 +1341,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         vision_features, vision_shapes, vision_shapes_list, level_start_index = self._get_encoder_input(
             vision_features
@@ -1588,7 +1588,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         image_features = self.vision_backbone(pixel_values)

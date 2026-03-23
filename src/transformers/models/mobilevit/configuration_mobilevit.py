@@ -13,14 +13,14 @@
 # limitations under the License.
 """MobileViT model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/mobilenet_v2_1.0_224")
+@strict(accept_kwargs=True)
 class MobileViTConfig(PreTrainedConfig):
     r"""
     neck_hidden_sizes (`list[int]`, *optional*, defaults to `[16, 32, 64, 96, 128, 160, 640]`):
@@ -49,56 +49,27 @@ class MobileViTConfig(PreTrainedConfig):
 
     model_type = "mobilevit"
 
-    def __init__(
-        self,
-        num_channels=3,
-        image_size=256,
-        patch_size=2,
-        hidden_sizes=[144, 192, 240],
-        neck_hidden_sizes=[16, 32, 64, 96, 128, 160, 640],
-        num_attention_heads=4,
-        mlp_ratio=2.0,
-        expand_ratio=4.0,
-        hidden_act="silu",
-        conv_kernel_size=3,
-        output_stride=32,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.0,
-        classifier_dropout_prob=0.1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        qkv_bias=True,
-        aspp_out_channels=256,
-        atrous_rates=[6, 12, 18],
-        aspp_dropout_prob=0.1,
-        semantic_loss_ignore_index=255,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_sizes = hidden_sizes
-        self.neck_hidden_sizes = neck_hidden_sizes
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.expand_ratio = expand_ratio
-        self.hidden_act = hidden_act
-        self.conv_kernel_size = conv_kernel_size
-        self.output_stride = output_stride
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-
-        # decode head attributes for semantic segmentation
-        self.aspp_out_channels = aspp_out_channels
-        self.atrous_rates = atrous_rates
-        self.aspp_dropout_prob = aspp_dropout_prob
-        self.semantic_loss_ignore_index = semantic_loss_ignore_index
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 256
+    patch_size: int | list[int] | tuple[int, int] = 2
+    hidden_sizes: list[int] | tuple[int, ...] = (144, 192, 240)
+    neck_hidden_sizes: list[int] | tuple[int, ...] = (16, 32, 64, 96, 128, 160, 640)
+    num_attention_heads: int = 4
+    mlp_ratio: float = 2.0
+    expand_ratio: float = 4.0
+    hidden_act: str = "silu"
+    conv_kernel_size: int = 3
+    output_stride: int = 32
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.0
+    classifier_dropout_prob: float = 0.1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    qkv_bias: bool = True
+    aspp_out_channels: int = 256
+    atrous_rates: list[int] | tuple[int, ...] = (6, 12, 18)
+    aspp_dropout_prob: float = 0.1
+    semantic_loss_ignore_index: int = 255
 
 
 __all__ = ["MobileViTConfig"]

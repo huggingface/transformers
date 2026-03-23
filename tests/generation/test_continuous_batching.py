@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import gc
 import itertools
 import unittest
@@ -28,6 +29,7 @@ from transformers import (
     ContinuousBatchingConfig,
     GenerationConfig,
     LogitsProcessorList,
+    StaticCache,
 )
 from transformers.generation.continuous_batching.cache import (
     PagedAttentionCache,
@@ -46,7 +48,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_flash_attn_2_available, is_kernels_available
+from transformers.utils import (
+    is_flash_attn_2_available,
+    is_kernels_available,
+    is_torch_xpu_available,
+)
+from transformers.utils.generic import is_flash_attention_requested
 
 
 def flush_memory(flush_compile: bool = True) -> None:
@@ -77,7 +84,34 @@ def flush_memory(flush_compile: bool = True) -> None:
     gc.collect()
 
 
-class ContinuousBatchingNonGenerationTest(unittest.TestCase):
+def with_flush_memory(func):
+    """Decorator that ensures flush_memory is called after the test, even if it fails."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Determine flush_compile value from continuous_batching_config or generation_config
+        cb_config = kwargs.get("continuous_batching_config")
+        generation_config = kwargs.get("generation_config")
+        if isinstance(cb_config, ContinuousBatchingConfig):
+            flush_compile = (
+                cb_config.use_default_compile_configs
+                or cb_config.varlen_compile_config is not None
+                or cb_config.decode_compile_config is not None
+            )
+        elif isinstance(generation_config, GenerationConfig):
+            flush_compile = generation_config.compile_config is not None
+        else:
+            flush_compile = False
+        # Run the test and always flush memory
+        try:
+            return func(*args, **kwargs)
+        finally:
+            flush_memory(flush_compile=flush_compile)
+
+    return wrapper
+
+
+class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         [
             (None, None, "0"),
@@ -341,19 +375,67 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             f"Failed for {block_size=}, {block_table=}, {past_length=}, {query_length=}",
         )
 
+    @slow
+    def test_continuous_batching_no_accelerators(self) -> None:
+        """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
+        environment by mocking all acceleratoravailability checks to return False"""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        # Mock all accelerator availability checks to simulate CPU-only PyTorch
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("transformers.utils.is_torch_xpu_available", return_value=False),
+            patch("torch.backends.mps.is_available", return_value=False),
+        ):
+            # Verify patches work
+            self.assertFalse(torch.cuda.is_available())
+            self.assertFalse(is_torch_xpu_available())
+            self.assertFalse(torch.backends.mps.is_available())
+
+            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+            tokenizer.pad_token = tokenizer.eos_token
+
+            user_messages = [
+                "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?"
+            ]
+            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+            # Load model on CPU
+            model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
+            model = model.to("cpu").eval()
+            model.generation_config.max_new_tokens = 10
+            model.generation_config.do_sample = False
+
+            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+
+            # This should not crash even with all accelerators unavailable
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=model.generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+
+            # Verify we got outputs
+            self.assertEqual(len(outputs), len(input_ids))
+            for output in outputs.values():
+                self.assertIsNotNone(output.generated_tokens)
+                self.assertGreater(len(output.generated_tokens), 0)
+
 
 @require_torch_accelerator
-class ContinuousBatchingGenerationTest(unittest.TestCase):
+class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
     @require_deterministic_for_xpu
+    @with_flush_memory
     def _test_continuous_batching_parity(
         self,
         model_id: str,
         continuous_batching_config: ContinuousBatchingConfig,
         attn_implementation: str,
-        use_compile: bool,
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
     ) -> None:
@@ -365,6 +447,13 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
             self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+
+        # If the config turns on compile, change the generation config to use the default mode instead of
+        # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
+        if continuous_batching_config.use_default_compile_configs:
+            fullgraph = not is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            compile_config = CompileConfig(mode="default", fullgraph=fullgraph, dynamic=True)
+            continuous_batching_config.varlen_compile_config = compile_config
 
         # Prepare continuous batching inputs
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -397,8 +486,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
-        if use_compile:
-            model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
         # Generation with continuous batching
         continuous_batching_outputs = model.generate_batch(
@@ -424,10 +511,17 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
-        if use_compile:
-            model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
+        model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
 
-        generate_outputs = model.generate(**inputs.to(torch_device), generation_config=model.generation_config)
+        # Create a static cache if compile_config is set, because regular generate requires a compileable cache
+        past_key_values = None
+        if model.generation_config.compile_config is not None:
+            max_cache_len = num_input_tokens + max_new_tokens
+            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+
+        generate_outputs = model.generate(
+            **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
+        )
 
         for i, user_message in enumerate(user_messages):
             # Find the corresponding request in the continuous batching outputs
@@ -448,14 +542,11 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             if continuous_batching_output != generate_output:
                 decoded_continuous_batching_output = tokenizer.decode(continuous_batching_output)
                 decoded_generate_output = tokenizer.decode(generate_output)
-                msg = f"Test failed for {model_id = } {continuous_batching_config = }, {attn_implementation = }, {use_compile = }\n"
+                msg = f"Test failed for {model_id = } {continuous_batching_config = }, {attn_implementation = }\n"
                 msg += f"User message              : {repr(user_message)}\n"
                 msg += f"Continuous batching output: {repr(decoded_continuous_batching_output)}\n"
                 msg += f"Generate output           : {repr(decoded_generate_output)}"
                 self.fail(msg)
-
-        del model
-        flush_memory(flush_compile=use_compile)
 
     @parameterized.expand(
         list(
@@ -477,13 +568,14 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     ) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            allow_block_sharing=allow_block_sharing, use_cuda_graph=use_cuda_graph
+            allow_block_sharing=allow_block_sharing,
+            use_cuda_graph=use_cuda_graph,
+            use_default_compile_configs=use_compile,
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
-            use_compile=use_compile,
         )
 
     # FIXME: Qwen2.5-0.5B-Instruct is not here because it's  broken (it uses a repetition penalty logits processor)
@@ -499,41 +591,117 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     )
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
-        try:
-            continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph)
-            self._test_continuous_batching_parity(
-                model_id=model_id,
-                continuous_batching_config=continuous_batching_config,
-                attn_implementation="flash_attention_2",
-                use_compile=use_compile,
-            )
-        finally:
-            flush_memory(flush_compile=use_compile)
-
-    def test_continuous_batching_fast(self) -> None:
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=False, allow_block_sharing=False, use_async_batching=False
-        )
-        self._test_continuous_batching_parity(
-            model_id=model_id,
-            continuous_batching_config=continuous_batching_config,
-            attn_implementation="sdpa",
-            use_compile=False,
-        )
-
-    def test_continuous_batching_long_generate(self) -> None:
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False
+            use_cuda_graph=use_cuda_graph, use_default_compile_configs=use_compile
         )
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=continuous_batching_config,
             attn_implementation="flash_attention_2",
-            use_compile=True,
+        )
+
+    def test_continuous_batching_fast(self) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False,
+            allow_block_sharing=False,
+            use_async_batching=False,
+            use_default_compile_configs=False,
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="sdpa",
+        )
+
+    def test_continuous_batching_long_generate(self) -> None:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, use_default_compile_configs=True
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="sdpa",
             max_new_tokens=80,
         )
+
+    def test_continuous_batching_with_default_compile_configs(self) -> None:
+        """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
+
+        This test verifies that:
+        1. Default compile configs are created for both varlen and decode paths
+        2. Generation completes successfully with compiled functions
+        3. Output matches expectations
+        """
+        # Skip if Flash Attention 2 is not available
+        if not (is_flash_attn_2_available() or is_kernels_available()):
+            self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
+        # Skip if not on CUDA (compile works best on CUDA)
+        if torch_device != "cuda":
+            self.skipTest("This test is designed for CUDA devices. Skipping test.")
+
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        try:
+            # Prepare inputs
+            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
+            if hasattr(tokenizer, "eos_token"):
+                tokenizer.pad_token = tokenizer.eos_token
+            user_messages = [
+                "What is 2+2?",
+                "What is the capital of France?",
+            ]
+            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
+            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
+            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+
+            # Load model
+            model = AutoModelForCausalLM.from_pretrained(
+                model_id, attn_implementation="flash_attention_2", torch_dtype="auto"
+            )
+            model = model.to(torch_device).eval()
+
+            # Create ContinuousBatchingConfig with use_default_compile_configs=True
+            cb_config = ContinuousBatchingConfig(use_default_compile_configs=True)
+
+            # Verify the config will create default compile configs
+            cb_config.resolve_compile_configs(
+                fallback_compile_config=None, is_flash_attn=True, decode_fast_path_available=False
+            )
+            varlen_cfg = cb_config.varlen_compile_config
+            if varlen_cfg is None:
+                raise RuntimeError("Varlen compile config should be created with use_default_compile_configs=True")
+            self.assertEqual(
+                varlen_cfg.mode,
+                "max-autotune-no-cudagraphs",
+                "Default varlen config should use max-autotune-no-cudagraphs mode",
+            )
+            self.assertTrue(varlen_cfg.dynamic, "Default varlen config should have dynamic=True")
+
+            # Create GenerationConfig
+            gen_config = GenerationConfig(max_new_tokens=20, do_sample=False)
+
+            # Test that generation works with default compile configs
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=gen_config,
+                continuous_batching_config=cb_config,
+            )
+
+            # Verify we got outputs for all requests
+            self.assertEqual(len(outputs), len(user_messages), "Should have outputs for all input requests")
+
+            # Verify outputs are valid
+            for req_id, output in outputs.items():
+                self.assertIsNotNone(output.generated_tokens, f"Output for {req_id} should have generated_tokens")
+                self.assertGreater(
+                    len(output.generated_tokens), 0, f"Output for {req_id} should have at least one token"
+                )
+                self.assertEqual(output.status.name, "FINISHED", f"Output for {req_id} should be FINISHED")
+
+        finally:
+            flush_memory(flush_compile=True)
 
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
@@ -553,7 +721,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
                 model_id=model_id,
                 continuous_batching_config=continuous_batching_config,
                 attn_implementation="sdpa",
-                use_compile=False,
                 max_new_tokens=30,
                 num_repeat_prompts=4,
             )
@@ -791,10 +958,12 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         self._test_continuous_batching_parity(
             model_id=model_id,
             continuous_batching_config=ContinuousBatchingConfig(
-                allow_block_sharing=True, use_cuda_graph=use_cuda_graph, use_async_batching=True
+                allow_block_sharing=True,
+                use_cuda_graph=use_cuda_graph,
+                use_async_batching=True,
+                use_default_compile_configs=use_compile,
             ),
             attn_implementation=attn_implementation,
-            use_compile=use_compile,
         )
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])

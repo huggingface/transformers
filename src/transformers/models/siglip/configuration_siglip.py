@@ -13,6 +13,8 @@
 # limitations under the License.
 """Siglip model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -21,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
+@strict(accept_kwargs=True)
 class SiglipTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -41,43 +44,29 @@ class SiglipTextConfig(PreTrainedConfig):
     model_type = "siglip_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size=32000,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        max_position_embeddings=64,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        # This differs from `CLIPTokenizer`'s default and from openai/siglip
-        # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
-        pad_token_id=1,
-        bos_token_id=49406,
-        eos_token_id=49407,
-        projection_size=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+    vocab_size: int = 32000
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    max_position_embeddings: int = 64
+    hidden_act: str = "gelu_pytorch_tanh"
+    layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
+    # This differs from `CLIPTokenizer`'s default and from openai/siglip
+    # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 49406
+    eos_token_id: int | list[int] | None = 49407
+    projection_size: int | None = None
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.projection_size = projection_size if projection_size is not None else hidden_size
+    def __post_init__(self, **kwargs):
+        self.projection_size = self.projection_size if self.projection_size is not None else self.hidden_size
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
+@strict(accept_kwargs=True)
 class SiglipVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -98,35 +87,20 @@ class SiglipVisionConfig(PreTrainedConfig):
     model_type = "siglip_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
-        image_size=224,
-        patch_size=16,
-        hidden_act="gelu_pytorch_tanh",
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    num_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    hidden_act: str = "gelu_pytorch_tanh"
+    layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
 
 
 @auto_docstring(checkpoint="google/siglip-base-patch16-224")
+@strict(accept_kwargs=True)
 class SiglipConfig(PreTrainedConfig):
     r"""
     Example:
@@ -156,24 +130,24 @@ class SiglipConfig(PreTrainedConfig):
     model_type = "siglip"
     sub_configs = {"text_config": SiglipTextConfig, "vision_config": SiglipVisionConfig}
 
-    def __init__(self, text_config=None, vision_config=None, **kwargs):
-        if text_config is None:
-            text_config = SiglipTextConfig()
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    initializer_factor: float = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            self.text_config = SiglipTextConfig()
             logger.info("`text_config` is `None`. Initializing the `SiglipTextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = SiglipTextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = SiglipTextConfig(**self.text_config)
 
-        if vision_config is None:
-            vision_config = SiglipVisionConfig()
+        if self.vision_config is None:
+            self.vision_config = SiglipVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `SiglipVisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = SiglipVisionConfig(**vision_config)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = SiglipVisionConfig(**self.vision_config)
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.initializer_factor = 1.0
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["SiglipConfig", "SiglipTextConfig", "SiglipVisionConfig"]

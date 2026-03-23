@@ -502,6 +502,8 @@ def getattribute_from_module(module, attr):
         return None
     if isinstance(attr, tuple):
         return tuple(getattribute_from_module(module, a) for a in attr)
+    if isinstance(attr, dict):
+        return {k: getattribute_from_module(module, v) for k, v in attr.items()}
     if hasattr(module, attr):
         return getattr(module, attr)
     # Some of the mappings have entries model_type -> object of another model type. In that case we try to grab the

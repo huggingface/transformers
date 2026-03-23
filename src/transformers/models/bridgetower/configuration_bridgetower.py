@@ -13,6 +13,8 @@
 # limitations under the License.
 """BridgeTower model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -21,6 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="BridgeTower/bridgetower-base")
+@strict(accept_kwargs=True)
 class BridgeTowerVisionConfig(PreTrainedConfig):
     r"""
     stop_gradient (`bool`, *optional*, defaults to `False`):
@@ -45,34 +48,20 @@ class BridgeTowerVisionConfig(PreTrainedConfig):
     model_type = "bridgetower_vision_model"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_channels=3,
-        patch_size=16,
-        image_size=288,
-        initializer_factor=1,
-        layer_norm_eps=1e-05,
-        stop_gradient=False,
-        share_layernorm=True,
-        remove_last_layer=False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_factor = initializer_factor
-        self.layer_norm_eps = layer_norm_eps
-        self.stop_gradient = stop_gradient
-        self.share_layernorm = share_layernorm
-        self.remove_last_layer = remove_last_layer
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_channels: int = 3
+    patch_size: int | list[int] | tuple[int, int] = 16
+    image_size: int | list[int] | tuple[int, int] = 288
+    initializer_factor: float | int = 1
+    layer_norm_eps: float = 1e-05
+    stop_gradient: bool = False
+    share_layernorm: bool = True
+    remove_last_layer: bool = False
 
 
 @auto_docstring(checkpoint="BridgeTower/bridgetower-base")
+@strict(accept_kwargs=True)
 class BridgeTowerTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -90,51 +79,28 @@ class BridgeTowerTextConfig(PreTrainedConfig):
     model_type = "bridgetower_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size=50265,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        initializer_factor=1,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=514,
-        type_vocab_size=1,
-        layer_norm_eps=1e-05,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        use_cache=True,
-        is_decoder=False,
-        add_cross_attention=False,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.initializer_factor = initializer_factor
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+    vocab_size: int = 50265
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    initializer_factor: float | int = 1
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 514
+    type_vocab_size: int = 1
+    layer_norm_eps: float = 1e-05
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    use_cache: bool = True
+    is_decoder: bool = False
+    add_cross_attention: bool = False
 
 
 @auto_docstring(checkpoint="BridgeTower/bridgetower-base")
+@strict(accept_kwargs=True)
 class BridgeTowerConfig(PreTrainedConfig):
     r"""
     share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
@@ -164,55 +130,38 @@ class BridgeTowerConfig(PreTrainedConfig):
     model_type = "bridgetower"
     sub_configs = {"text_config": BridgeTowerTextConfig, "vision_config": BridgeTowerVisionConfig}
 
-    def __init__(
-        self,
-        share_cross_modal_transformer_layers=True,
-        hidden_act="gelu",
-        hidden_size=768,
-        initializer_factor=1,
-        layer_norm_eps=1e-05,
-        share_link_tower_layers=False,
-        link_tower_type="add",
-        num_attention_heads=12,
-        num_hidden_layers=6,
-        tie_word_embeddings=False,
-        init_layernorm_from_vision_encoder=False,
-        text_config=None,
-        vision_config=None,
-        **kwargs,
-    ):
+    share_cross_modal_transformer_layers: bool = True
+    hidden_act: str = "gelu"
+    hidden_size: int = 768
+    initializer_factor: float | int = 1
+    layer_norm_eps: float = 1e-05
+    share_link_tower_layers: bool = False
+    link_tower_type: str = "add"
+    num_attention_heads: int = 12
+    num_hidden_layers: int = 6
+    tie_word_embeddings: bool = False
+    init_layernorm_from_vision_encoder: bool = False
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
         # TODO: remove this once the Hub files are updated.
         _ = kwargs.pop("text_config_dict", None)
         _ = kwargs.pop("vision_config_dict", None)
 
-        self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.initializer_factor = initializer_factor
-        self.layer_norm_eps = layer_norm_eps
-        self.share_link_tower_layers = share_link_tower_layers
-        self.link_tower_type = link_tower_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.tie_word_embeddings = tie_word_embeddings
-        self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
-
-        if text_config is None:
-            text_config = BridgeTowerTextConfig()
+        if self.text_config is None:
+            self.text_config = BridgeTowerTextConfig()
             logger.info("`text_config` is `None`. initializing the `BridgeTowerTextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = BridgeTowerTextConfig(**text_config)
+        elif isinstance(self.text_config, dict):
+            self.text_config = BridgeTowerTextConfig(**self.text_config)
 
-        if vision_config is None:
-            vision_config = BridgeTowerVisionConfig()
+        if self.vision_config is None:
+            self.vision_config = BridgeTowerVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `BridgeTowerVisionConfig` with default values.")
-        elif isinstance(vision_config, dict):
-            vision_config = BridgeTowerVisionConfig(**vision_config)
+        elif isinstance(self.vision_config, dict):
+            self.vision_config = BridgeTowerVisionConfig(**self.vision_config)
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

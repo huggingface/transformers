@@ -23,7 +23,7 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5MobileDetConfig,
     PPOCRV5MobileDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -50,6 +50,7 @@ if is_vision_available():
 class PPOCRV5MobileDetModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=128,
         num_channels=3,
@@ -62,6 +63,7 @@ class PPOCRV5MobileDetModelTester:
         kernel_list=[3, 2, 2],
         interpolate_mode="nearest",
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
@@ -138,6 +140,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = PPOCRV5MobileDetModelTester(
+            self,
             batch_size=3,
             is_training=False,
             image_size=128,
@@ -237,7 +240,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
         self.model = PPOCRV5MobileDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
         self.image = Image.open(requests.get(url, stream=True).raw)

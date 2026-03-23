@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
@@ -24,7 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
-from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
+from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
 from ..idefics3.modeling_idefics3 import (
     Idefics3BaseModelOutputWithPast,
     Idefics3ForConditionalGeneration,
@@ -38,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+@strict(accept_kwargs=True)
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
     Example:
@@ -68,6 +71,7 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+@strict(accept_kwargs=True)
 class SmolVLMConfig(Idefics3Config):
     r"""
     scale_factor (`int`, *optional*, defaults to 2):
@@ -91,7 +95,7 @@ class SmolVLMImageProcessor(Idefics3ImageProcessor):
     pass
 
 
-class SmolVLMImageProcessorFast(Idefics3ImageProcessorFast):
+class SmolVLMImageProcessorPil(Idefics3ImageProcessorPil):
     pass
 
 
@@ -342,7 +346,7 @@ __all__ = [
     "SmolVLMVisionConfig",
     "SmolVLMConfig",
     "SmolVLMImageProcessor",
-    "SmolVLMImageProcessorFast",
+    "SmolVLMImageProcessorPil",
     "SmolVLMForConditionalGeneration",
     "SmolVLMPreTrainedModel",
     "SmolVLMModel",

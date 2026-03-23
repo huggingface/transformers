@@ -13,14 +13,14 @@
 # limitations under the License.
 """VideoMAE model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="MCG-NJU/videomae-base")
+@strict(accept_kwargs=True)
 class VideoMAEConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 16):
@@ -57,56 +57,27 @@ class VideoMAEConfig(PreTrainedConfig):
 
     model_type = "videomae"
 
-    def __init__(
-        self,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        num_frames=16,
-        tubelet_size=2,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        qkv_bias=True,
-        use_mean_pooling=True,
-        decoder_num_attention_heads=6,
-        decoder_hidden_size=384,
-        decoder_num_hidden_layers=4,
-        decoder_intermediate_size=1536,
-        norm_pix_loss=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_frames = num_frames
-        self.tubelet_size = tubelet_size
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.use_mean_pooling = use_mean_pooling
-
-        self.decoder_num_attention_heads = decoder_num_attention_heads
-        self.decoder_hidden_size = decoder_hidden_size
-        self.decoder_num_hidden_layers = decoder_num_hidden_layers
-        self.decoder_intermediate_size = decoder_intermediate_size
-        self.norm_pix_loss = norm_pix_loss
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    num_frames: int = 16
+    tubelet_size: int = 2
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    qkv_bias: bool = True
+    use_mean_pooling: bool = True
+    decoder_num_attention_heads: int = 6
+    decoder_hidden_size: int = 384
+    decoder_num_hidden_layers: int = 4
+    decoder_intermediate_size: int = 1536
+    norm_pix_loss: bool = True
 
 
 __all__ = ["VideoMAEConfig"]
