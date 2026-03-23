@@ -277,10 +277,16 @@ class MambaMixer(nn.Module):
         if attention_mask is not None:
             hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
+        if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
+            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
+        else:
+            ssm_state = torch.zeros(
+                (batch_size, self.intermediate_size, self.ssm_state_size),
+                device=hidden_states.device, dtype=dtype
+            )
+
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
-            ssm_state = ssm_state.to(hidden_states.device)
             if not cache_params.has_previous_state(self.layer_idx):
                 conv_state = nn.functional.pad(
                     hidden_states,
@@ -297,10 +303,6 @@ class MambaMixer(nn.Module):
                     hidden_states += self.conv1d.bias
                 hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)         # [batch, intermediate_size, 1] : decoding
         else:
-            ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size),
-                device=hidden_states.device, dtype=dtype
-            )
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])         # [batch, intermediate_size, seq_len]
 
         if attention_mask is not None:
@@ -354,7 +356,7 @@ class MambaMixer(nn.Module):
             scan_output = (scan_output * self.act(gate))
 
             if cache_params is not None:
-                cache_params.update_ssm_states(ssm_state, self.layer_idx)
+                cache_params.update_ssm_state(ssm_state, self.layer_idx)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]

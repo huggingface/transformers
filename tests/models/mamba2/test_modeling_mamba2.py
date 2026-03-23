@@ -256,8 +256,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         ssm_shape = (batch_size, config.num_heads, config.head_dim, config.state_size)
 
         for idx in range(len(past_key_values)):
-            self.assertEqual(past_key_values[idx].conv_states.shape, conv_shape)
-            self.assertEqual(past_key_values[idx].ssm_states.shape, ssm_shape)
+            self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
+            self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
 
     def test_mamba2_caching(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -289,9 +289,9 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
-                        for idx in len(tuple_object):
-                            recursive_check(tuple_object[idx].conv_states, dict_object[idx].conv_states)
-                            recursive_check(tuple_object[idx].ssm_states, dict_object[idx].ssm_states)
+                        for idx in range(len(tuple_object)):
+                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
+                            recursive_check(tuple_object.layers[idx].ssm_states, dict_object.layers[idx].ssm_states)
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
