@@ -96,6 +96,130 @@ class _StreamError:
 
 
 # ---------------------------------------------------------------------------
+# Tool call parsing
+# ---------------------------------------------------------------------------
+
+# Model-specific tokens that mark the start/end of a tool call block.
+# TODO: extract these from the chat template at runtime instead of hardcoding.
+# Qwen/Hermes use <tool_call>/<tool_call>, Mistral uses [TOOL_CALLS], etc.
+# The markers are defined in each model's Jinja chat template.
+_TOOL_CALL_TOKENS = {
+    "qwen": {
+        "start": "<tool_call>",
+        "end": "</tool_call>",
+    },
+}
+
+
+def detect_tool_format(model) -> dict | None:
+    """Return the tool call token format (``{"start": ..., "end": ...}``) if supported, else ``None``."""
+    architecture = model.config.architectures[0].lower()
+    for family in _TOOL_CALL_TOKENS:
+        if family in architecture:
+            return _TOOL_CALL_TOKENS[family]
+    return None
+
+
+class ToolCallParser:
+    """Parses tool calls from model output.
+
+    The model emits tool calls as structured text between start/end tokens
+    (e.g. ``<tool_call>{"name": "fn", "arguments": {...}}</tool_call>``).
+
+    **Streaming** (``feed``): buffers tokens between start/end markers, parses
+    the complete block when the end marker is seen, returns a ``ChoiceDeltaToolCall``.
+
+    **Non-streaming** (``parse``): extracts all tool call blocks from complete text.
+
+    Usage::
+
+        parser = ToolCallParser(tool_format={"start": ..., "end": ...})
+        for text_chunk in streamer:
+            result = parser.feed(text_chunk)
+            if result is None:
+                # Normal text — emit as content
+            elif result is ToolCallParser.CONSUMED:
+                # Buffering — skip
+            else:
+                # result is a ChoiceDeltaToolCall — emit it
+    """
+
+    def __init__(self, tool_format: dict):
+        self._tokens = tool_format
+        self._inside = False
+        self._buffer = ""
+
+    # Sentinel: token was consumed by the parser but produced no output.
+    CONSUMED = object()
+
+    def feed(self, text: str):
+        """Feed a text chunk (streaming).
+
+        Returns:
+        - ``None`` — normal text, not a tool token. Emit as content.
+        - ``CONSUMED`` — token consumed internally (buffering/markers). Skip.
+        - A ``ChoiceDeltaToolCall`` — emit as a tool call delta.
+        """
+        if text.strip() == self._tokens["start"]:
+            self._inside = True
+            self._buffer = ""
+            return self.CONSUMED
+
+        if text.strip() == self._tokens["end"]:
+            self._inside = False
+            block = self._buffer.strip()
+            self._buffer = ""
+            return self._parse_block(block) or self.CONSUMED
+
+        if self._inside:
+            self._buffer += text
+            return self.CONSUMED
+
+        return None
+
+    @staticmethod
+    def _extract_name_and_args(block: str) -> tuple[str, str] | None:
+        """Extract (name, arguments_json) from a tool call block, or None if invalid."""
+        if not block:
+            return None
+        parsed = json.loads(block)
+        name = parsed.get("name")
+        if name is None:
+            return None
+        arguments = parsed.get("arguments", {})
+        return name, json.dumps(arguments)
+
+    @staticmethod
+    def parse(text: str, tool_format: dict) -> list[dict] | None:
+        """Parse tool calls from complete text.
+
+        Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
+        """
+        start, end = tool_format["start"], tool_format["end"]
+        tool_calls = []
+        pos = 0
+        while True:
+            s = text.find(start, pos)
+            if s < 0:
+                break
+            e = text.find(end, s + len(start))
+            if e < 0:
+                break
+            result = ToolCallParser._extract_name_and_args(text[s + len(start) : e].strip())
+            if result is not None:
+                tool_calls.append({"name": result[0], "arguments": result[1]})
+            pos = e + len(end)
+        return tool_calls if tool_calls else None
+
+    def _parse_block(self, block: str) -> dict | None:
+        """Parse a buffered tool call block. Returns ``{"name": str, "arguments": str}`` or None."""
+        result = self._extract_name_and_args(block)
+        if result is None:
+            return None
+        return {"name": result[0], "arguments": result[1]}
+
+
+# ---------------------------------------------------------------------------
 # Progress tracking for model loading
 # ---------------------------------------------------------------------------
 

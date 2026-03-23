@@ -412,7 +412,153 @@ class TestChunkSSE(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 6. App-level tests with ASGI test client (no real model)
+# 6. Unit tests — tool parser
+# ---------------------------------------------------------------------------
+
+
+QWEN_TOOL_FORMAT = {"start": "<tool_call>", "end": "</tool_call>"}
+
+
+@require_openai
+class TestToolParser(unittest.TestCase):
+    def test_detect_tool_format_qwen(self):
+        from transformers.cli.serving.utils import detect_tool_format
+
+        model = MagicMock()
+        model.config.architectures = ["Qwen2ForCausalLM"]
+        fmt = detect_tool_format(model)
+        self.assertEqual(fmt, QWEN_TOOL_FORMAT)
+
+    def test_detect_tool_format_unsupported(self):
+        from transformers.cli.serving.utils import detect_tool_format
+
+        model = MagicMock()
+        model.config.architectures = ["LlamaForCausalLM"]
+        self.assertIsNone(detect_tool_format(model))
+
+    def test_parser_start_token(self):
+        from transformers.cli.serving.utils import ToolCallParser
+
+        parser = ToolCallParser(QWEN_TOOL_FORMAT)
+        result = parser.feed("<tool_call>")
+        self.assertIs(result, ToolCallParser.CONSUMED)
+
+    def test_parser_end_token(self):
+        from transformers.cli.serving.utils import ToolCallParser
+
+        parser = ToolCallParser(QWEN_TOOL_FORMAT)
+        parser.feed("<tool_call>")
+        result = parser.feed("</tool_call>")
+        self.assertIs(result, ToolCallParser.CONSUMED)
+
+    def test_parser_buffers_until_end(self):
+        from transformers.cli.serving.utils import ToolCallParser
+
+        parser = ToolCallParser(QWEN_TOOL_FORMAT)
+        parser.feed("<tool_call>")
+        # Intermediate tokens are buffered
+        result = parser.feed('{"name": "my_tool", "arguments": {"x": 1}}')
+        self.assertIs(result, ToolCallParser.CONSUMED)
+        # Tool call is emitted on end token
+        result = parser.feed("</tool_call>")
+        self.assertIsNot(result, ToolCallParser.CONSUMED)
+        self.assertEqual(result["name"], "my_tool")
+
+    def test_parser_normal_text_returns_none(self):
+        from transformers.cli.serving.utils import ToolCallParser
+
+        parser = ToolCallParser(QWEN_TOOL_FORMAT)
+        result = parser.feed("Hello world")
+        self.assertIsNone(result)
+
+    def test_parser_full_flow(self):
+        """Simulate a complete tool call token sequence."""
+        from transformers.cli.serving.utils import ToolCallParser
+
+        parser = ToolCallParser(QWEN_TOOL_FORMAT)
+        tool_calls = []
+
+        for token in [
+            "<tool_call>",
+            '{"name": "get_weather",',
+            ' "arguments": {',
+            '"city": "Paris"',
+            "}}",
+            "\n",
+            "</tool_call>",
+        ]:
+            result = parser.feed(token)
+            if result is not None and result is not ToolCallParser.CONSUMED:
+                tool_calls.append(result)
+
+        # Single tool call emitted on </tool_call> with both name and arguments
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "get_weather")
+        self.assertIn("Paris", tool_calls[0]["arguments"])
+
+    def test_parse_tool_calls_from_text(self):
+        """Non-streaming tool call parsing from complete text."""
+        from transformers.cli.serving.utils import ToolCallParser
+
+        text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
+        calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
+        self.assertIsNotNone(calls)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["name"], "get_weather")
+        self.assertIn("Paris", calls[0]["arguments"])
+
+    def test_parse_tool_calls_no_tool_call(self):
+        """Non-streaming: normal text returns None."""
+        from transformers.cli.serving.utils import ToolCallParser
+
+        calls = ToolCallParser.parse("Hello, how can I help?", QWEN_TOOL_FORMAT)
+        self.assertIsNone(calls)
+
+    def test_parse_multiple_tool_calls(self):
+        """Non-streaming: multiple tool calls in one response."""
+        from transformers.cli.serving.utils import ToolCallParser
+
+        text = (
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
+        )
+        calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
+        self.assertIsNotNone(calls)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["name"], "get_weather")
+        self.assertIn("Paris", calls[0]["arguments"])
+        self.assertEqual(calls[1]["name"], "get_weather")
+        self.assertIn("London", calls[1]["arguments"])
+
+    def test_feed_multiple_tool_calls(self):
+        """Streaming: multiple tool calls emitted sequentially."""
+        from transformers.cli.serving.utils import ToolCallParser
+
+        parser = ToolCallParser(QWEN_TOOL_FORMAT)
+        tool_calls = []
+
+        tokens = [
+            "<tool_call>",
+            '{"name": "get_weather", "arguments": {"city": "Paris"}}',
+            "</tool_call>",
+            "<tool_call>",
+            '{"name": "get_weather", "arguments": {"city": "London"}}',
+            "</tool_call>",
+        ]
+        for token in tokens:
+            result = parser.feed(token)
+            if result is not None and result is not ToolCallParser.CONSUMED:
+                tool_calls.append(result)
+
+        self.assertEqual(len(tool_calls), 2)
+        self.assertEqual(tool_calls[0]["name"], "get_weather")
+        self.assertIn("Paris", tool_calls[0]["arguments"])
+        self.assertEqual(tool_calls[1]["name"], "get_weather")
+        self.assertIn("London", tool_calls[1]["arguments"])
+
+
+# ---------------------------------------------------------------------------
+# 7. App-level tests with ASGI test client (no real model)
 # ---------------------------------------------------------------------------
 
 
@@ -613,6 +759,110 @@ class TestChatCompletion(unittest.TestCase):
         self.assertGreater(last.usage.prompt_tokens, 0)
         self.assertGreater(last.usage.completion_tokens, 0)
         self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+
+    def test_tool_call(self):
+        """Tool calls should be parsed and emitted as ChoiceDeltaToolCall objects."""
+        # Qwen2.5-0.5B-Instruct supports tools (Qwen family)
+        tool_def = {
+            "function": {
+                "name": "get_weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                },
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+                stream=True,
+                max_tokens=50,
+                temperature=0.0,
+                tools=[tool_def],
+            )
+        )
+
+        # First chunk should have role="assistant"
+        self.assertEqual(chunks[0].choices[0].delta.role, "assistant")
+
+        # Model should make a tool call for this prompt
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertGreater(len(tool_chunks), 0, "Model did not produce a tool call")
+
+        # First tool call delta should have the function name
+        first_tool = tool_chunks[0].choices[0].delta.tool_calls[0]
+        self.assertEqual(first_tool.function.name, "get_weather")
+
+        # finish_reason should be "tool_calls"
+        last = chunks[-1]
+        self.assertEqual(last.choices[0].finish_reason, "tool_calls")
+
+        # Arguments should be valid JSON with no trailing brace
+        args_json = first_tool.function.arguments
+        import json as json_mod
+
+        parsed_args = json_mod.loads(args_json)
+        self.assertIsInstance(parsed_args, dict)
+
+    def test_tool_call_non_streaming(self):
+        """Non-streaming tool calls should return tool_calls in the message."""
+        tool_def = {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+            stream=False,
+            max_tokens=50,
+            temperature=0.0,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
+        self.assertIsNotNone(resp.choices[0].message.tool_calls)
+        tc = resp.choices[0].message.tool_calls[0]
+        self.assertEqual(tc.function.name, "get_weather")
+
+        import json as json_mod
+
+        parsed_args = json_mod.loads(tc.function.arguments)
+        self.assertIsInstance(parsed_args, dict)
+
+    def test_tool_call_multi(self):
+        """Model should be able to call multiple tools when asked."""
+        tool_def = {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+        # Ask for two cities to encourage multiple tool calls
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
+                stream=True,
+                max_tokens=100,
+                temperature=0.0,
+                tools=[tool_def],
+            )
+        )
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        # Should have two tool calls — one for Paris, one for London
+        self.assertEqual(len(tool_chunks), 2, f"Expected 2 tool calls, got {len(tool_chunks)}")
+        cities = {tc.choices[0].delta.tool_calls[0].function.name for tc in tool_chunks}
+        self.assertEqual(cities, {"get_weather"})
+        last = chunks[-1]
+        self.assertEqual(last.choices[0].finish_reason, "tool_calls")
 
     def test_concurrent_non_streaming(self):
         """Two concurrent non-streaming requests should both complete without interference."""
@@ -929,6 +1179,155 @@ class TestResponsesIntegration(unittest.TestCase):
         self.assertGreater(usage.input_tokens, 0)
         self.assertGreater(usage.output_tokens, 0)
         self.assertEqual(usage.total_tokens, usage.input_tokens + usage.output_tokens)
+
+    def test_tool_call_streaming(self):
+        """Streaming responses with tools should emit function_call events."""
+        tool_def = {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris?",
+                stream=True,
+                max_output_tokens=50,
+                tools=[tool_def],
+            )
+        )
+        types = [e.type for e in events]
+        self.assertIn("response.created", types)
+        self.assertIn("response.completed", types)
+
+        # Should have function call events
+        self.assertIn("response.output_item.added", types)
+        self.assertIn("response.function_call_arguments.done", types)
+
+        # Check the arguments done event
+        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
+        self.assertGreater(len(args_done), 0)
+        self.assertEqual(args_done[0].name, "get_weather")
+
+        import json as json_mod
+
+        parsed = json_mod.loads(args_done[0].arguments)
+        self.assertIsInstance(parsed, dict)
+
+    def test_tool_call_non_streaming(self):
+        """Non-streaming responses with tools should include function_call output items."""
+        tool_def = {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris?",
+            stream=False,
+            max_output_tokens=50,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp.status, "completed")
+
+        # Should have at least message + function_call in output
+        self.assertGreater(len(resp.output), 1)
+        fc_items = [o for o in resp.output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+        self.assertEqual(fc_items[0].name, "get_weather")
+
+        import json as json_mod
+
+        parsed = json_mod.loads(fc_items[0].arguments)
+        self.assertIsInstance(parsed, dict)
+
+    def test_tool_call_multi(self):
+        """Model should produce multiple tool calls when asked about two cities."""
+        tool_def = {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris and London?",
+                stream=True,
+                max_output_tokens=100,
+                tools=[tool_def],
+            )
+        )
+        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
+        self.assertEqual(len(args_done), 2, f"Expected 2 tool calls, got {len(args_done)}")
+        self.assertEqual(events[-1].type, "response.completed")
+
+    def test_multi_turn(self):
+        """Multi-turn conversation via list input."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {"role": "user", "content": "My name is Alice"},
+                {"role": "assistant", "content": "Nice to meet you!"},
+                {"role": "user", "content": "What is my name?"},
+            ],
+            stream=False,
+        )
+        self.assertEqual(resp.status, "completed")
+        self.assertIn("Alice", resp.output[0].content[0].text)
+
+    def test_concurrent_non_streaming(self):
+        """Two concurrent non-streaming responses requests should both complete."""
+        import concurrent.futures
+
+        inputs = ["Say hello", "Say goodbye"]
+        results = [None, None]
+
+        def request_in_thread(index):
+            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            results[index] = client.responses.create(model=self.MODEL, input=inputs[index], stream=False)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(request_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            self.assertIsNotNone(results[i])
+            self.assertEqual(results[i].status, "completed")
+            self.assertTrue(len(results[i].output[0].content[0].text) > 0)
+
+    def test_concurrent_streaming(self):
+        """Two concurrent streaming responses requests should both produce complete event streams."""
+        import concurrent.futures
+
+        inputs = ["Say hello", "Say goodbye"]
+        results = [None, None]
+
+        def stream_in_thread(index):
+            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            results[index] = list(client.responses.create(model=self.MODEL, input=inputs[index], stream=True))
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(stream_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            types = [e.type for e in results[i]]
+            self.assertIn("response.created", types, f"Request {i} missing created event")
+            self.assertIn("response.output_text.delta", types, f"Request {i} missing delta events")
+            self.assertIn("response.completed", types, f"Request {i} missing completed event")
 
 
 # ---------------------------------------------------------------------------

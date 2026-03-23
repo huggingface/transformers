@@ -34,6 +34,8 @@ from openai.types.responses import (
     ResponseError,
     ResponseErrorEvent,
     ResponseFailedEvent,
+    ResponseFunctionCallArgumentsDoneEvent,
+    ResponseFunctionToolCall,
     ResponseInProgressEvent,
     ResponseOutputItemAddedEvent,
     ResponseOutputItemDoneEvent,
@@ -45,7 +47,7 @@ from openai.types.responses import (
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
 from ...utils import logging
-from .utils import BaseHandler, _StreamError
+from .utils import BaseHandler, ToolCallParser, _StreamError, detect_tool_format
 
 
 if TYPE_CHECKING:
@@ -84,14 +86,37 @@ class ResponseHandler(BaseHandler):
 
         messages = self._input_to_messages(body)
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+            messages,
+            add_generation_prompt=True,
+            tools=body.get("tools"),
+            return_tensors="pt",
+            return_dict=True,
         ).to(model.device)
 
         gen_config = self._build_generation_config(body, model.generation_config, processor)
+        tool_format = detect_tool_format(model) if body.get("tools") else None
 
         if body.get("stream", True):
-            return self._streaming(request_id, model, processor, model_id, body, inputs, gen_config)
-        return self._non_streaming(request_id, model, processor, model_id, body, inputs, gen_config)
+            return self._streaming(
+                request_id,
+                model,
+                processor,
+                model_id,
+                body,
+                inputs,
+                gen_config,
+                tool_format=tool_format,
+            )
+        return self._non_streaming(
+            request_id,
+            model,
+            processor,
+            model_id,
+            body,
+            inputs,
+            gen_config,
+            tool_format=tool_format,
+        )
 
     # ----- input conversion -----
 
@@ -132,14 +157,15 @@ class ResponseHandler(BaseHandler):
         body: dict,
         inputs: dict,
         gen_config: GenerationConfig,
+        tool_format: dict | None = None,
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
         queue, streamer = self._start_streaming(model, processor, inputs, gen_config)
         input_len = inputs["input_ids"].shape[-1]
+        parser = ToolCallParser(tool_format) if tool_format else None
 
         seq = 0
         output_index = 0
-        content_index = 0
         created_at = time.time()
         resp_id = f"resp_{request_id}"
         msg_id = f"msg_{request_id}"
@@ -149,15 +175,16 @@ class ResponseHandler(BaseHandler):
             "created_at": created_at,
             "model": model_id,
             "object": "response",
+            # Required by pydantic but not used — echo request config back
             "tools": [],
             "parallel_tool_calls": body.get("parallel_tool_calls", False),
             "tool_choice": "auto",
         }
 
         async def event_stream() -> AsyncGenerator[str, None]:
-            nonlocal seq
+            nonlocal seq, output_index
 
-            # 1. Created
+            # 1. Created + In progress
             yield self.chunk_to_sse(
                 ResponseCreatedEvent(
                     type="response.created",
@@ -166,8 +193,6 @@ class ResponseHandler(BaseHandler):
                 )
             )
             seq += 1
-
-            # 2. In progress
             yield self.chunk_to_sse(
                 ResponseInProgressEvent(
                     type="response.in_progress",
@@ -177,7 +202,7 @@ class ResponseHandler(BaseHandler):
             )
             seq += 1
 
-            # 3. Output item added
+            # 2. Output item added (message)
             yield self.chunk_to_sse(
                 ResponseOutputItemAddedEvent(
                     type="response.output_item.added",
@@ -194,21 +219,23 @@ class ResponseHandler(BaseHandler):
             )
             seq += 1
 
-            # 4. Content part added
+            # 3. Content part added
             yield self.chunk_to_sse(
                 ResponseContentPartAddedEvent(
                     type="response.content_part.added",
                     item_id=msg_id,
                     sequence_number=seq,
                     output_index=output_index,
-                    content_index=content_index,
+                    content_index=0,
                     part=ResponseOutputText(type="output_text", text="", annotations=[]),
                 )
             )
             seq += 1
 
-            # 5. Text deltas from DirectStreamer queue
+            # 4. Stream tokens
             full_text = ""
+            tool_calls = []
+
             while True:
                 text = await queue.get()
                 if text is None:
@@ -231,50 +258,96 @@ class ResponseHandler(BaseHandler):
                     )
                     return
 
+                # Tool call parsing
+                if parser is not None and (result := parser.feed(text)) is not None:
+                    if result is not ToolCallParser.CONSUMED:
+                        # Emit tool call as a function_call output item
+                        tc_id = f"{request_id}_tool_call"
+                        name = result["name"]
+                        arguments = result["arguments"]
+                        tc_item = ResponseFunctionToolCall(
+                            id=tc_id,
+                            call_id=tc_id,
+                            type="function_call",
+                            name=name,
+                            arguments=arguments,
+                            status="completed",
+                        )
+                        tool_calls.append(tc_item)
+                        # output[0] = message, output[1..N] = tool calls (required by OpenAI SSE spec)
+                        output_index += 1
+                        yield self.chunk_to_sse(
+                            ResponseOutputItemAddedEvent(
+                                type="response.output_item.added",
+                                sequence_number=seq,
+                                output_index=output_index,
+                                item=tc_item,
+                            )
+                        )
+                        seq += 1
+                        yield self.chunk_to_sse(
+                            ResponseFunctionCallArgumentsDoneEvent(
+                                type="response.function_call_arguments.done",
+                                sequence_number=seq,
+                                item_id=tc_id,
+                                output_index=output_index,
+                                arguments=arguments,
+                                name=name,
+                            )
+                        )
+                        seq += 1
+                        yield self.chunk_to_sse(
+                            ResponseOutputItemDoneEvent(
+                                type="response.output_item.done",
+                                sequence_number=seq,
+                                output_index=output_index,
+                                item=tc_item,
+                            )
+                        )
+                        seq += 1
+                    continue
+
                 full_text += text
                 yield self.chunk_to_sse(
                     ResponseTextDeltaEvent(
                         type="response.output_text.delta",
                         item_id=msg_id,
                         sequence_number=seq,
-                        output_index=output_index,
-                        content_index=content_index,
+                        output_index=0,
+                        content_index=0,
                         delta=text,
                         logprobs=[],
                     )
                 )
                 seq += 1
 
-            # 6. Text done
+            # 5. Close text output
+            output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
             yield self.chunk_to_sse(
                 ResponseTextDoneEvent(
                     type="response.output_text.done",
                     item_id=msg_id,
                     sequence_number=seq,
-                    output_index=output_index,
+                    output_index=0,
                     content_index=0,
                     text=full_text,
                     logprobs=[],
                 )
             )
             seq += 1
-
-            # 7. Content part done
-            output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
             yield self.chunk_to_sse(
                 ResponseContentPartDoneEvent(
                     type="response.content_part.done",
                     item_id=msg_id,
                     sequence_number=seq,
-                    output_index=output_index,
-                    content_index=content_index,
+                    output_index=0,
+                    content_index=0,
                     part=output_text_part,
                 )
             )
             seq += 1
 
-            # 8. Output item done
-            output_item = ResponseOutputMessage(
+            msg_item = ResponseOutputMessage(
                 id=msg_id,
                 type="message",
                 status="completed",
@@ -286,19 +359,20 @@ class ResponseHandler(BaseHandler):
                 ResponseOutputItemDoneEvent(
                     type="response.output_item.done",
                     sequence_number=seq,
-                    output_index=output_index,
-                    item=output_item,
+                    output_index=0,
+                    item=msg_item,
                 )
             )
             seq += 1
 
-            # 9. Completed
+            # 6. Completed
+            all_output = [msg_item] + list(tool_calls)
             usage = _make_usage(input_len, streamer.total_tokens)
             yield self.chunk_to_sse(
                 ResponseCompletedEvent(
                     type="response.completed",
                     sequence_number=seq,
-                    response=Response(**response_base, status="completed", output=[output_item], usage=usage),
+                    response=Response(**response_base, status="completed", output=all_output, usage=usage),
                 )
             )
             seq += 1
@@ -316,6 +390,7 @@ class ResponseHandler(BaseHandler):
         body: dict,
         inputs: dict,
         gen_config: GenerationConfig,
+        tool_format: dict | None = None,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
         full_text, input_len, generated_ids = self._generate_non_streaming(model, processor, inputs, gen_config)
@@ -325,26 +400,47 @@ class ResponseHandler(BaseHandler):
         msg_id = f"msg_{request_id}"
         output_tokens = len(generated_ids)
 
-        output_item = ResponseOutputMessage(
-            id=msg_id,
-            type="message",
-            status="completed",
-            role="assistant",
-            content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
-            annotations=[],
-        )
+        output_items = [
+            ResponseOutputMessage(
+                id=msg_id,
+                type="message",
+                status="completed",
+                role="assistant",
+                content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
+                annotations=[],
+            )
+        ]
+
+        # Parse tool calls from the generated text
+        if tool_format is not None:
+            parsed_calls = ToolCallParser.parse(full_text, tool_format)
+            if parsed_calls is not None:
+                for i, tc in enumerate(parsed_calls):
+                    tc_id = f"{request_id}_tool_call"
+                    output_items.append(
+                        ResponseFunctionToolCall(
+                            id=tc_id,
+                            call_id=tc_id,
+                            type="function_call",
+                            name=tc["name"],
+                            arguments=tc["arguments"],
+                            status="completed",
+                        )
+                    )
+
         usage = _make_usage(input_len, output_tokens)
         response = Response(
             id=resp_id,
             created_at=created_at,
             status="completed",
             model=model_id,
-            output=[output_item],
+            output=output_items,
             object="response",
+            usage=usage,
+            # Required by pydantic but not used — echo request config back
             tools=[],
             parallel_tool_calls=body.get("parallel_tool_calls", False),
             tool_choice="auto",
-            usage=usage,
         )
         return JSONResponse(response.model_dump(exclude_none=True))
 

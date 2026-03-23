@@ -31,9 +31,9 @@ if TYPE_CHECKING:
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta, ChoiceDeltaToolCall
 from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
 from openai.types.completion_usage import CompletionUsage
 
@@ -43,8 +43,10 @@ from ...utils import logging
 from .utils import (
     UNUSED_CHAT_COMPLETION_FIELDS,
     BaseHandler,
+    ToolCallParser,
     TransformersCompletionCreateParamsStreaming,
     _StreamError,
+    detect_tool_format,
     get_processor_inputs_from_messages,
 )
 
@@ -86,9 +88,31 @@ class ChatCompletionHandler(BaseHandler):
 
         gen_config = self._build_generation_config(body, model.generation_config, processor)
 
+        # Detect tool support for the loaded model
+        # TODO: after tool_call start token, use constrained generation to:
+        # 1. force generation to pick from the available tool names
+        # 2. force generation to produce valid JSON matching the tool's parameter schema
+        tool_format = detect_tool_format(model) if body.get("tools") else None
+
         if body.get("stream"):
-            return self._streaming(request_id, model, processor, model_id, inputs, gen_config)
-        return self._non_streaming(request_id, model, processor, model_id, inputs, gen_config)
+            return self._streaming(
+                request_id,
+                model,
+                processor,
+                model_id,
+                inputs,
+                gen_config,
+                tool_format=tool_format,
+            )
+        return self._non_streaming(
+            request_id,
+            model,
+            processor,
+            model_id,
+            inputs,
+            gen_config,
+            tool_format=tool_format,
+        )
 
     # ----- streaming -----
 
@@ -100,12 +124,15 @@ class ChatCompletionHandler(BaseHandler):
         model_id: str,
         inputs: dict[str, torch.Tensor],
         gen_config: GenerationConfig,
+        tool_format: dict | None = None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
         queue, streamer = self._start_streaming(model, processor, inputs, gen_config)
         input_len = inputs["input_ids"].shape[-1]
+        parser = ToolCallParser(tool_format) if tool_format else None
 
         async def sse_gen() -> AsyncGenerator[str, None]:
+            has_tool_calls = False
             yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
 
             while True:
@@ -115,9 +142,33 @@ class ChatCompletionHandler(BaseHandler):
                 elif isinstance(text, _StreamError):
                     yield f'data: {{"error": "{text.msg}"}}\n\n'
                     return
-                yield self._build_chunk_sse(request_id, content=text, model=model_id)
+
+                # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
+                chunk_kwargs = {"content": text}
+                if parser is not None and (result := parser.feed(text)) is not None:
+                    if result is ToolCallParser.CONSUMED:
+                        continue
+                    has_tool_calls = True
+                    chunk_kwargs = {
+                        "tool_calls": [
+                            ChoiceDeltaToolCall(
+                                index=0,
+                                type="function",
+                                id=f"{request_id}_tool_call",
+                                function={"name": result["name"], "arguments": result["arguments"]},
+                            )
+                        ]
+                    }
+
+                yield self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs)
 
             hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+            if has_tool_calls:
+                finish_reason = "tool_calls"
+            elif hit_max:
+                finish_reason = "length"
+            else:
+                finish_reason = "stop"
             usage = CompletionUsage(
                 prompt_tokens=input_len,
                 completion_tokens=streamer.total_tokens,
@@ -125,7 +176,7 @@ class ChatCompletionHandler(BaseHandler):
             )
             yield self._build_chunk_sse(
                 request_id,
-                finish_reason="length" if hit_max else "stop",
+                finish_reason=finish_reason,
                 model=model_id,
                 usage=usage,
             )
@@ -142,6 +193,7 @@ class ChatCompletionHandler(BaseHandler):
         model_id: str,
         inputs: dict[str, torch.Tensor],
         gen_config: GenerationConfig,
+        tool_format: dict | None = None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         content, input_len, generated_ids = self._generate_non_streaming(model, processor, inputs, gen_config)
@@ -153,13 +205,36 @@ class ChatCompletionHandler(BaseHandler):
             completion_tokens=completion_tokens,
             total_tokens=input_len + completion_tokens,
         )
+
+        # Parse tool calls from the generated text
+        tool_calls = None
+        if tool_format is not None:
+            parsed = ToolCallParser.parse(content, tool_format)
+            if parsed is not None:
+                tool_calls = [
+                    ChatCompletionMessageToolCall(
+                        id=f"{request_id}_tool_call",
+                        type="function",
+                        function={"name": tc["name"], "arguments": tc["arguments"]},
+                    )
+                    for tc in parsed
+                ]
+
+        if tool_calls is not None:
+            finish_reason = "tool_calls"
+        elif hit_max:
+            finish_reason = "length"
+        else:
+            finish_reason = "stop"
+
         return JSONResponse(
             self._build_completion(
                 request_id,
                 content,
                 model_id,
-                finish_reason="length" if hit_max else "stop",
+                finish_reason=finish_reason,
                 usage=usage,
+                tool_calls=tool_calls,
             ),
             media_type="application/json",
         )
@@ -201,8 +276,10 @@ class ChatCompletionHandler(BaseHandler):
         model_id: str,
         finish_reason: str,
         usage: CompletionUsage | None = None,
+        tool_calls: list[dict] | None = None,
     ) -> dict:
         """Build a non-streaming ChatCompletion response dict."""
+        message = ChatCompletionMessage(content=content, role="assistant", tool_calls=tool_calls)
         result = ChatCompletion(
             id=request_id,
             created=int(time.time()),
@@ -211,7 +288,7 @@ class ChatCompletionHandler(BaseHandler):
             choices=[
                 Choice(
                     index=0,
-                    message=ChatCompletionMessage(content=content, role="assistant"),
+                    message=message,
                     finish_reason=finish_reason,
                 )
             ],
