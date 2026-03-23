@@ -41,11 +41,11 @@ TORCH_INIT_FUNCTIONS = {
 
 # Track the current no-tie scope per execution context so concurrent model loads
 # do not leak tie_weights suppression across threads.
-_NO_TIE_WEIGHTS_STATE: ContextVar[object | None] = ContextVar("_NO_TIE_WEIGHTS_STATE", default=None)
+_SKIP_TIE_WEIGHTS_SCOPE: ContextVar[object | None] = ContextVar("_SKIP_TIE_WEIGHTS_SCOPE", default=None)
 
 
 def should_skip_tie_weights(model) -> bool:
-    scope = _NO_TIE_WEIGHTS_STATE.get()
+    scope = _SKIP_TIE_WEIGHTS_SCOPE.get()
     if scope is None:
         return False
 
@@ -303,8 +303,8 @@ def no_tie_weights():
     """
     # Use an opaque scope token so nested or concurrent loads can identify only
     # the models instantiated under this context manager.
-    state_token = _NO_TIE_WEIGHTS_STATE.set(object())
+    state_token = _SKIP_TIE_WEIGHTS_SCOPE.set(object())
     try:
         yield
     finally:
-        _NO_TIE_WEIGHTS_STATE.reset(state_token)
+        _SKIP_TIE_WEIGHTS_SCOPE.reset(state_token)

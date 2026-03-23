@@ -1326,7 +1326,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Preserve the current no-tie scope on this instance so only the model
         # being initialized in that scope skips tie_weights().
-        self._no_tie_weights_scope = init._NO_TIE_WEIGHTS_STATE.get()
+        self._no_tie_weights_scope = init._SKIP_TIE_WEIGHTS_SCOPE.get()
 
         # Maybe initialize the weights and tie the keys
         self.init_weights()
