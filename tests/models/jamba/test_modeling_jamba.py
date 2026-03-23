@@ -43,14 +43,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        JambaForCausalLM,
-        JambaForSequenceClassification,
-        JambaModel,
-    )
-    from transformers.models.jamba.modeling_jamba import (
-        HybridMambaAttentionDynamicCache,
-    )
+    from transformers import JambaForCausalLM, JambaForSequenceClassification, JambaModel, DynamicCache
 
 
 class JambaConfigTester(ConfigTester):
@@ -250,17 +243,7 @@ class JambaModelTester:
         model.to(torch_device)
         model.eval()
 
-        # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            past_key_values=past_key_values,
-            use_cache=True,
-        )
+        outputs = model(input_ids, attention_mask=input_mask, use_cache=True)
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
@@ -340,7 +323,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
+        self.assertIsInstance(past_key_values, DynamicCache)
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
@@ -353,18 +336,14 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         for idx in range(len(past_key_values)):
             if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
+                self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
+                self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
             else:
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
+                self.assertEqual(past_key_values.layers[idx].keys.shape, attention_shape)
+                self.assertEqual(past_key_values.layers[idx].values.shape, attention_shape)
 
-    def _check_caches_are_equal(
-        self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
-    ):
-        if not isinstance(cache1, HybridMambaAttentionDynamicCache) or not isinstance(
-            cache2, HybridMambaAttentionDynamicCache
-        ):
+    def _check_caches_are_equal(self, cache1: DynamicCache, cache2: DynamicCache):
+        if not isinstance(cache1, DynamicCache) or not isinstance(cache2, DynamicCache):
             raise ValueError("The wrong cache is being used!")
 
         if not len(cache1) == len(cache2):
@@ -372,10 +351,12 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+            if config.layers_block_type[idx] == "mamba":
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     def setUp(self):
         self.model_tester = JambaModelTester(self)
