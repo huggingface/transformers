@@ -669,6 +669,101 @@ class HQQQuantizedLayer(QuantizedLayer):
         return tensor
 
 
+class MambaCacheLayerMixin(ABC):
+    """Base, abstract class for a mamba single layer's cache."""
+
+    is_compileable = False
+
+    def __init__(self):
+        self.conv_states: torch.Tensor | None = None
+        self.ssm_states: torch.Tensor | None = None
+        self.is_initialized = False
+        self.has_previous_state = False
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}"
+
+    @abstractmethod
+    def lazy_initialization(self, conv_states: torch.Tensor) -> None: ...
+
+    @abstractmethod
+    def update_conv_state(self, conv_states: torch.Tensor) -> torch.Tensor: ...
+
+    @abstractmethod
+    def update_ssm_state(self, ssm_states: torch.Tensor) -> torch.Tensor: ...
+
+    def offload(self):
+        """Offload this layer's data to CPU device."""
+        if self.is_initialized:
+            self.conv_states = self.conv_states.to("cpu", non_blocking=True)
+            self.ssm_states = self.ssm_states.to("cpu", non_blocking=True)
+
+    def prefetch(self):
+        """In case of layer offloading, this allows to move the data back to the layer's device ahead of time."""
+        if self.is_initialized and self.conv_states.device != self.device:
+            self.conv_states = self.conv_states.to(self.device, non_blocking=True)
+            self.ssm_states = self.ssm_states.to(self.device, non_blocking=True)
+
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects"""
+        if self.is_initialized:
+            self.conv_states.zero_()
+            self.ssm_states.zero_()
+        self.has_previous_state = False
+
+
+class MambaLayer(MambaCacheLayerMixin):
+    def lazy_initialization(self, conv_states: torch.Tensor, ssm_states: torch.Tensor) -> None:
+        self.dtype, self.device = conv_states.dtype, conv_states.device
+        self.conv_states = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.is_initialized = True
+
+    def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Update the mamba cache in-place, and return the necessary conv states.
+
+        Args:
+            conv_states (`torch.Tensor`): The new conv states to cache.
+
+        Returns:
+            `torch.Tensor`: The updated conv states.
+        """
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(conv_states, conv_states)
+
+        # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
+        # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
+        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
+        if not self.has_previous_state:
+            self.conv_states = conv_states
+            self.has_previous_state = True
+        else:
+            new_conv_states = self.conv_states.roll(shifts=-1, dims=-1)
+            new_conv_states[:, :, -1:] = conv_states
+            self.conv_states = new_conv_states
+
+        return self.conv_states
+
+    def update_ssm_state(self, ssm_states: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Update the mamba cache in-place, and return the necessary ssm states.
+
+        Args:
+            smm_states (`torch.Tensor`): The new ssm states to cache.
+
+        Returns:
+            `torch.Tensor`: The updated ssm states.
+        """
+        # Lazy initialization
+        if not self.is_initialized:
+            self.lazy_initialization(ssm_states, ssm_states)
+
+        self.ssm_states = ssm_states
+
+        return self.ssm_states
+
+
 class Cache:
     """
     A `Cache` is mostly a list of `CacheLayerMixin` objects, one per model layer. It serves as a container for
@@ -676,9 +771,9 @@ class Cache:
 
     Args:
         layers (`Optional`, *optional*):
-            A list of pre-created `CacheLayerMixin`. If omitted (`None`), then `layer_class_to_replicate` will
-            be used.
-        layer_class_to_replicate (`type[CacheLayerMixin]`, *optional*):
+            A list of pre-created `CacheLayerMixin` or `MambaCacheLayerMixin`. If omitted (`None`), then `layer_class_to_replicate`
+            will be used.
+        layer_class_to_replicate (`type[CacheLayerMixin | MambaCacheLayerMixin]`, *optional*):
             Only used if `layers` is omitted (`None`), in which case it will be used as the base class for each layer,
             and the layers will be added lazily as soon as `update` is called with a `layer_idx` greater than the current
             list of layers.
@@ -691,8 +786,8 @@ class Cache:
 
     def __init__(
         self,
-        layers: list[CacheLayerMixin] | None = None,
-        layer_class_to_replicate: type[CacheLayerMixin] | None = None,
+        layers: list[CacheLayerMixin | MambaCacheLayerMixin] | None = None,
+        layer_class_to_replicate: type[CacheLayerMixin | MambaCacheLayerMixin] | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
     ):
@@ -779,6 +874,46 @@ class Cache:
 
         return keys, values
 
+    def update_conv_state(self, conv_states: torch.Tensor, layer_idx: int, **kwargs) -> torch.Tensor:
+        """
+        Updates the cache with the new `conv_states` for the layer `layer_idx`.
+
+        Parameters:
+            conv_states (`torch.Tensor`):
+                The new conv states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+
+        Return:
+            `torch.Tensor`: The updated conv states.
+        """
+        # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
+        # out of the box
+        if not isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+            raise ValueError("Cannot call `update_conv_state` on a non-Mamba layer!")
+        conv_states = self.layers[layer_idx].update_conv_state(conv_states, **kwargs)
+        return conv_states
+
+    def update_ssm_state(self, ssm_states: torch.Tensor, layer_idx: int, **kwargs) -> torch.Tensor:
+        """
+        Updates the cache with the new `ssm_states` for the layer `layer_idx`.
+
+        Parameters:
+            smm_states (`torch.Tensor`):
+                The new ssm states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+
+        Return:
+            `torch.Tensor`: The updated ssm states.
+        """
+        # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
+        # out of the box
+        if not isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+            raise ValueError("Cannot call `update_conv_state` on a non-Mamba layer!")
+        ssm_states = self.layers[layer_idx].update_ssm_state(ssm_states, **kwargs)
+        return ssm_states
+
     def early_initialization(
         self, batch_size: int, num_heads: int, head_dim: int, dtype: torch.dtype, device: torch.device
     ):
@@ -798,6 +933,24 @@ class Cache:
         """Returns the sequence length of the cache for the given layer."""
         if layer_idx >= len(self.layers):
             return 0
+
+        # For Hybrid attention-mamba caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
+        if isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+            # If this is called with non-default arg, raise
+            if layer_idx != 0:
+                raise ValueError(
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a Mamba layer, which "
+                    "does not track sequence length."
+                )
+            try:
+                # Use the first attention layer
+                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
+            except StopIteration:
+                raise ValueError(
+                    "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
+                    "Mamba layers."
+                )
+
         return self.layers[layer_idx].get_seq_length()
 
     def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
@@ -810,6 +963,24 @@ class Cache:
         # simply the query_length
         if layer_idx >= len(self.layers):
             return query_length, 0
+
+        # For Hybrid attention-mamba caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
+        if isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+            # If this is called with non-default arg, raise
+            if layer_idx != 0:
+                raise ValueError(
+                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a Mamba layer, which "
+                    "does not track sequence length."
+                )
+            try:
+                # Use the first attention layer
+                layer_idx = next(idx for idx in range(len(self)) if isinstance(self.layers[idx], CacheLayerMixin))
+            except StopIteration:
+                raise ValueError(
+                    "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
+                    "Mamba layers."
+                )
+
         return self.layers[layer_idx].get_mask_sizes(query_length)
 
     def get_max_cache_shape(self, layer_idx: int = 0) -> int:
@@ -943,12 +1114,17 @@ class DynamicCache(Cache):
             sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
                 decoder_config, "attention_chunk_size", None
             )
+            conv_kernel = getattr(decoder_config, "conv_kernel", None)
             layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
-                layer_types = [
-                    "sliding_attention" if sliding_window is not None else "full_attention"
-                    for _ in range(decoder_config.num_hidden_layers)
-                ]
+                layer_types = []
+                for _ in range(decoder_config.num_hidden_layers):
+                    if sliding_window is not None:
+                        layer_types.append("sliding_attention")
+                    elif conv_kernel is not None:
+                        layer_types.append("mamba")
+                    else:
+                        layer_types.append("full_attention")
             # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
             if hasattr(decoder_config, "num_kv_shared_layers"):
                 layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
@@ -958,6 +1134,8 @@ class DynamicCache(Cache):
                 # states they should return - only the mask changes to make them different at the end!
                 if layer_type in ("sliding_attention", "chunked_attention"):
                     layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                elif layer_type in ("mamba", "conv"):
+                    layers.append(MambaLayer())
                 else:
                     layers.append(DynamicLayer())
 

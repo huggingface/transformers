@@ -22,7 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
@@ -53,117 +53,6 @@ if is_mambapy_available():
     from mambapy.pscan import pscan
 else:
     pscan = None
-
-
-class MambaCache:
-    """
-    Cache for mamba model which does not have attention mechanism and key value states.
-
-    Arguments:
-        config (`PreTrainedConfig):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if
-            a smaller batch size is used.
-        dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
-            The default `dtype` to use when initializing the layer.
-        device (`torch.device` or `str`, *optional*):
-            The device on which the cache should be initialized. Should be the same as the layer.
-
-    Example:
-
-        ```python
-        >>> import torch
-        >>> from transformers import AutoTokenizer, MambaForCausalLM, MambaCache
-
-        >>> model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-
-        >>> inputs = tokenizer(text="My name is Mamba", return_tensors="pt")
-
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_params = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
-        >>> outputs.cache_params
-        ```
-    """
-
-    is_compileable = True
-
-    # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
-    def __init__(
-        self,
-        config: PreTrainedConfig,
-        max_batch_size: int,
-        dtype: torch.dtype = torch.float16,
-        device: torch.device | str | None = None,
-    ):
-        self.max_batch_size = max_batch_size
-        self._dtype = dtype
-        self.intermediate_size = config.intermediate_size
-        self.ssm_state_size = config.state_size
-        self.conv_kernel_size = config.conv_kernel
-        self.has_previous_state = False
-
-        self.conv_states: list[torch.Tensor] = []
-        self.ssm_states: list[torch.Tensor] = []
-        device = torch.device(device) if device is not None else None
-        for _ in range(config.num_hidden_layers):
-            conv_state: torch.Tensor = torch.zeros(
-                self.max_batch_size,
-                self.intermediate_size,
-                self.conv_kernel_size,
-                device=device,
-                dtype=self._dtype,
-            )
-            ssm_state: torch.Tensor = torch.zeros(
-                self.max_batch_size,
-                self.intermediate_size,
-                self.ssm_state_size,
-                device=device,
-                dtype=self._dtype,
-            )
-
-            torch._dynamo.mark_static_address(conv_state)
-            torch._dynamo.mark_static_address(ssm_state)
-            self.conv_states.append(conv_state)
-            self.ssm_states.append(ssm_state)
-
-    def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_init: bool = False
-    ) -> torch.Tensor:
-        # This `if` blocks is only reached in multigpu and if `layer_device_map` is not passed. It is used
-        # when the cache is initialized in the forward pass (e.g. Mamba)
-        if self.conv_states[layer_idx].device != new_conv_state.device:
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
-
-        # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
-        # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
-        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
-        if cache_init:
-            self.conv_states[layer_idx].copy_(new_conv_state)
-        else:
-            conv_state = self.conv_states[layer_idx].roll(shifts=-1, dims=-1)
-            conv_state[:, :, -1:] = new_conv_state
-            self.conv_states[layer_idx].copy_(conv_state)
-
-        # If last layer is updated, set the flag
-        if layer_idx == len(self.conv_states) - 1:
-            self.has_previous_state = True
-
-        return self.conv_states[layer_idx]
-
-    def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        self.ssm_states[layer_idx].zero_()
-        self.ssm_states[layer_idx] += new_ssm_state.to(self.ssm_states[layer_idx].device)
-        return self.ssm_states[layer_idx]
-
-    def reset(self):
-        self.has_previous_state = False
-        for layer_idx in range(len(self.conv_states)):
-            # In-place ops prevent breaking the static address
-            self.conv_states[layer_idx].zero_()
-            self.ssm_states[layer_idx].zero_()
 
 
 class MambaMixer(nn.Module):
@@ -278,7 +167,7 @@ class MambaMixer(nn.Module):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: MambaCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         # 1. Gated MLP's linear projection
@@ -325,7 +214,7 @@ class MambaMixer(nn.Module):
                     conv_states = nn.functional.pad(
                         hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0)
                     )
-                    cache_params.update_conv_state(self.layer_idx, conv_states, cache_init=True)
+                    cache_params.update_conv_state(conv_states, self.layer_idx)
                 hidden_states = causal_conv1d_fn(
                     hidden_states, conv_weights, self.conv1d.bias, activation=self.activation
                 )
@@ -371,14 +260,14 @@ class MambaMixer(nn.Module):
                     return_last_state=True,
                 )
                 if ssm_state is not None and cache_params is not None:
-                    cache_params.update_ssm_state(self.layer_idx, ssm_state)
+                    cache_params.update_ssm_state(ssm_state, self.layer_idx)
 
             # 4. Final linear projection
             contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
         return contextualized_states
 
     # fmt: off
-    def slow_forward(self, input_states, cache_params: MambaCache | None=None, attention_mask: torch.LongTensor | None = None):
+    def slow_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.LongTensor | None = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # 1. Gated MLP's linear projection
@@ -390,7 +279,7 @@ class MambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params.ssm_states[self.layer_idx].clone()
+            ssm_state = cache_params[self.layer_idx].ssm_states.clone()
             ssm_state = ssm_state.to(hidden_states.device)
             if not cache_params.has_previous_state:
                 conv_state = nn.functional.pad(
@@ -398,10 +287,10 @@ class MambaMixer(nn.Module):
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
 
-                cache_params.update_conv_state(self.layer_idx, conv_state, cache_init=True)
+                cache_params.update_conv_state(conv_state, self.layer_idx)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])     # [batch, intermediate_size, seq_len]
             else:
-                conv_state = cache_params.update_conv_state(self.layer_idx, hidden_states, cache_init=False)
+                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
                 conv_state = conv_state.to(self.conv1d.weight.device)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
@@ -465,7 +354,7 @@ class MambaMixer(nn.Module):
             scan_output = (scan_output * self.act(gate))
 
             if cache_params is not None:
-                cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+                cache_params.update_ssm_states(ssm_state, self.layer_idx)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))  # [batch, seq_len, hidden_size]
@@ -475,7 +364,7 @@ class MambaMixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: MambaCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
@@ -519,7 +408,7 @@ class MambaBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states,
-        cache_params: MambaCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
@@ -587,7 +476,7 @@ class MambaPreTrainedModel(PreTrainedModel):
 )
 class MambaOutput(ModelOutput):
     r"""
-    cache_params (`MambaCache`):
+    cache_params (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
 
@@ -595,7 +484,7 @@ class MambaOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor | None = None
-    cache_params: MambaCache | None = None
+    cache_params: Cache | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
@@ -611,7 +500,7 @@ class MambaCausalLMOutput(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache_params (`MambaCache`):
+    cache_params (`Cache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
 
@@ -620,7 +509,7 @@ class MambaCausalLMOutput(ModelOutput):
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    cache_params: MambaCache | None = None
+    cache_params: Cache | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None
 
 
@@ -655,7 +544,7 @@ class MambaModel(MambaPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
-        cache_params: MambaCache | None = None,
+        cache_params: Cache | None = None,
         use_cache: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -663,7 +552,7 @@ class MambaModel(MambaPreTrainedModel):
         **kwargs,
     ) -> tuple | MambaOutput:
         r"""
-        cache_params (`MambaCache`, *optional*):
+        cache_params (`Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
@@ -685,9 +574,7 @@ class MambaModel(MambaPreTrainedModel):
             use_cache = False
 
         if use_cache and cache_params is None:
-            cache_params = MambaCache(
-                self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            cache_params = DynamicCache(self.config)
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
@@ -743,12 +630,11 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         input_ids,
         inputs_embeds=None,
         use_cache=None,
-        cache_params: MambaCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
-        # Overwritten -- has custom cache class `MambaCache`
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             inputs_embeds=inputs_embeds,
@@ -759,15 +645,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if use_cache and cache_params is None:
-            if inputs_embeds is not None:
-                max_batch_size = inputs_embeds.size(0)
-            else:
-                max_batch_size = input_ids.size(0)
-            model_inputs["cache_params"] = MambaCache(
-                self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
-            )
-        elif use_cache and not is_first_iteration:
+        if use_cache and not is_first_iteration:
             model_inputs["attention_mask"] = None
 
         return model_inputs
@@ -778,7 +656,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_params: MambaCache | None = None,
+        cache_params: Cache | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -787,7 +665,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         **kwargs,  # for now we need this for generation
     ) -> tuple | MambaCausalLMOutput:
         r"""
-        cache_params (`MambaCache`, *optional*):
+        cache_params (`Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -837,4 +715,4 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["MambaForCausalLM", "MambaModel", "MambaPreTrainedModel", "MambaCache"]
+__all__ = ["MambaForCausalLM", "MambaModel", "MambaPreTrainedModel"]
