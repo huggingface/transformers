@@ -186,7 +186,7 @@ def _get_auto_policy_kwargs(fsdp_plan: dict[str, Any]) -> dict[str, Any]:
     return policy_kwargs
 
 
-def _shard_auto_input_embedding(input_embed, is_weights_tied: bool, device_mesh, auto_policy_kwargs):
+def _auto_shard_input_embedding(input_embed, is_weights_tied: bool, device_mesh, auto_policy_kwargs):
     # Shard input embeddings (only when not tied).
     # When tied, the shared weight is grouped with the final norm in step 3.
     if input_embed is None or is_weights_tied:
@@ -195,7 +195,7 @@ def _shard_auto_input_embedding(input_embed, is_weights_tied: bool, device_mesh,
     logger.debug(f"Applied fully_shard to input embeddings ({type(input_embed).__name__})")
 
 
-def _shard_auto_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs):
+def _auto_shard_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs):
     for name, module in model.named_modules():
         if type(module) in block_classes:
             fully_shard(module, mesh=device_mesh, reshard_after_forward=True, **auto_policy_kwargs)
@@ -223,7 +223,7 @@ def _find_final_norm(model, decoder_layer_names):
     return final_norm
 
 
-def _get_auto_tail_modules(model, decoder_layer_names, input_embed, output_embed, is_weights_tied: bool) -> list:
+def _auto_get_tail_modules(model, decoder_layer_names, input_embed, output_embed, is_weights_tied: bool) -> list:
     # Group final norm + output head.
     # NOTE(3outeille): Small optimization by forcing reshard_after_forward=False for the final norm and output head.
     # Otherwise, that would mean reshard/freeing full params after the last forward and immediately re-all-gathering
@@ -246,7 +246,7 @@ def _get_auto_tail_modules(model, decoder_layer_names, input_embed, output_embed
     return tail_modules
 
 
-def _shard_auto_tail_modules(tail_modules, device_mesh, auto_policy_kwargs):
+def _auto_shard_tail_modules(tail_modules, device_mesh, auto_policy_kwargs):
     if len(tail_modules) > 1:
         fully_shard(tail_modules, mesh=device_mesh, reshard_after_forward=False, **auto_policy_kwargs)
         logger.debug(f"Applied fully_shard to {[type(m).__name__ for m in tail_modules]} grouped (reshard=False)")
@@ -413,14 +413,14 @@ def apply_fsdp2(
                 "Could not auto-detect transformer block classes for FSDP. Applying FSDP only to root module."
             )
         else:
-            _shard_auto_input_embedding(input_embed, is_weights_tied, device_mesh, auto_policy_kwargs)
+            _auto_shard_input_embedding(input_embed, is_weights_tied, device_mesh, auto_policy_kwargs)
 
-            _shard_auto_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs)
+            _auto_shard_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs)
 
-            tail_modules = _get_auto_tail_modules(
+            tail_modules = _auto_get_tail_modules(
                 model, decoder_layer_names, input_embed, output_embed, is_weights_tied
             )
-            _shard_auto_tail_modules(tail_modules, device_mesh, auto_policy_kwargs)
+            _auto_shard_tail_modules(tail_modules, device_mesh, auto_policy_kwargs)
 
         # Shard root model
         fully_shard(model, mesh=device_mesh, **auto_policy_kwargs)
