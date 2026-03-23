@@ -679,7 +679,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             # Find the corresponding CB output by matching prompt tokens
             input_tokens = inputs.input_ids[i][inputs.attention_mask[i] == 1].tolist()
             cb_output = None
-            for key, state in cb_outputs.items():
+            for state in cb_outputs.values():
                 if state.prompt_ids == input_tokens:
                     cb_output = state
                     break
