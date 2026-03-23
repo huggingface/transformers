@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_vilt import *
     from .feature_extraction_vilt import *
+    from .image_processing_pil_vilt import *
     from .image_processing_vilt import *
-    from .image_processing_vilt_fast import *
     from .modeling_vilt import *
     from .processing_vilt import *
 else:

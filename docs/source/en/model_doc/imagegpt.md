@@ -99,9 +99,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] ImageGPTImageProcessor
     - preprocess
 
-## ImageGPTImageProcessorFast
+## ImageGPTImageProcessorPil
 
-[[autodoc]] ImageGPTImageProcessorFast
+[[autodoc]] ImageGPTImageProcessorPil
     - preprocess
 
 ## ImageGPTModel

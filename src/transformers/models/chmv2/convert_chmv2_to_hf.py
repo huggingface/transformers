@@ -43,7 +43,7 @@ from transformers.models.dinov3_vit.convert_dinov3_vit_to_hf import (
 from transformers.utils import logging
 
 from .configuration_chmv2 import CHMv2Config
-from .image_processing_chmv2_fast import CHMv2ImageProcessorFast
+from .image_processing_chmv2 import CHMv2ImageProcessor
 from .modeling_chmv2 import CHMv2ForDepthEstimation
 
 
@@ -229,7 +229,7 @@ def convert_chmv2_checkpoint(
     if verify_image_path is not None:
         logger.info(f"Verifying with image: {verify_image_path}")
         image = Image.open(verify_image_path)
-        processor = CHMv2ImageProcessorFast()
+        processor = CHMv2ImageProcessor()
         inputs = processor(images=[image], return_tensors="pt")
         with torch.no_grad():
             outputs = model(**inputs)
@@ -242,7 +242,7 @@ def convert_chmv2_checkpoint(
     # Save
     logger.info(f"Saving to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    processor = CHMv2ImageProcessorFast()
+    processor = CHMv2ImageProcessor()
     processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:

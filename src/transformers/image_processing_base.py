@@ -477,7 +477,7 @@ class ImageProcessingMixin(PushToHubMixin):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(image_url_or_urls, list):
+        if isinstance(image_url_or_urls, (list, tuple)):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
             return load_image(image_url_or_urls)

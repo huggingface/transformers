@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_det_safetensors")
 @strict(accept_kwargs=True)
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""

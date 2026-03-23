@@ -544,20 +544,16 @@ When both implementations have the same `input_ids`, add a tokenizer test file. 
 ## Implement image processor
 
 > [!TIP]
-> Fast image processors use the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU, significantly improving processing speed.
-> We recommend adding a fast image processor ([`BaseImageProcessorFast`]) in addition to the "slow" image processor ([`BaseImageProcessor`]) to provide users with the best performance. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for help adding a [`BaseImageProcessorFast`].
+> Image processors now use a backend-based architecture. The default backend is [`TorchvisionBackend`], which uses the [torchvision](https://pytorch.org/vision/stable/index.html) library and can perform image processing on the GPU. A PIL/NumPy alternative backend ([`PilBackend`]) is also provided. Both backends are imported from `image_processing_backends`. Feel free to tag [@yonigozlan](https://github.com/yonigozlan) for help.
 
 While this example doesn't include an image processor, you may need to implement one if your model requires image inputs. The image processor is responsible for converting images into a format suitable for your model. Before implementing a new one, check whether an existing image processor in the Transformers library can be reused, as many models share similar image processing techniques. Note that you can also use [modular](./modular_transformers) for image processors to reuse existing components.
 
-If you do need to implement a new image processor, refer to an existing image processor to understand the expected structure. Slow image processors ([`BaseImageProcessor`]) and fast image processors ([`BaseImageProcessorFast`]) are designed differently, so make sure you follow the correct structure based on the processor type you're implementing.
+If you do need to implement a new image processor, each model has two processor files:
 
-Run the following command (only if you haven't already created the fast image processor with the `transformers add-new-model-like` command) to generate the necessary imports and to create a prefilled template for the fast image processor. Modify the template to fit your model.
+- `image_processing_<model>.py`: the **default** torchvision-backed processor (`<Model>ImageProcessor`), inheriting from [`TorchvisionBackend`]. This replaces the old "fast" processor.
+- `image_processing_pil_<model>.py`: the PIL/NumPy alternative processor (`<Model>ImageProcessorPil`), inheriting from [`PilBackend`]. This replaces the old "slow" processor.
 
-```bash
-transformers add-fast-image-processor --model-name your_model_name
-```
-
-This command will generate the necessary imports and provide a pre-filled template for the fast image processor. You can then modify it to fit your model's needs.
+The torchvision backend file also defines any custom kwargs class that the PIL file imports. Both files use the `@auto_docstring` decorator — do not add manual class docstrings. Refer to the [IMAGE_PROCESSOR_REFACTORING_GUIDE.md](https://github.com/huggingface/transformers/blob/main/IMAGE_PROCESSOR_REFACTORING_GUIDE.md) for a step-by-step walkthrough and complete examples.
 
 Add tests for the image processor in `tests/models/your_model_name/test_image_processing_your_model_name.py`. These tests should be similar to those for other image processors and should verify that the image processor correctly handles image inputs. If your image processor includes unique features or processing methods, ensure you add specific tests for those as well.
 
