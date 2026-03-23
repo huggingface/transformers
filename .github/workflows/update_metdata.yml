@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - fix_minor_failing_job
+      - update_transformers_metadata*
 
 jobs:
   build_and_package:
