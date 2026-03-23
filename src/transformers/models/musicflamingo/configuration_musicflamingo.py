@@ -36,6 +36,8 @@ class MusicFlamingoConfig(PreTrainedConfig):
         The end-of-audio token index used to mark the end of audio spans.
     audio_rotary_dim (`int`, *optional*, defaults to 256):
         Number of audio encoder channels used by MusicFlamingo rotary time embeddings per axis.
+    audio_frame_step (`float`, *optional*, defaults to 0.01):
+        Duration in seconds of one input mel frame (trained with hop_length 160 at sampling_rate 16000).
 
     Example:
 
@@ -69,6 +71,7 @@ class MusicFlamingoConfig(PreTrainedConfig):
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
     audio_rotary_dim: int = 256
+    audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):

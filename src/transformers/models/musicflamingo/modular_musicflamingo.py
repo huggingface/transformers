@@ -52,6 +52,8 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         The end-of-audio token index used to mark the end of audio spans.
     audio_rotary_dim (`int`, *optional*, defaults to 256):
         Number of audio encoder channels used by MusicFlamingo rotary time embeddings per axis.
+    audio_frame_step (`float`, *optional*, defaults to 0.01):
+        Duration in seconds of one input mel frame (trained with hop_length 160 at sampling_rate 16000).
 
     Example:
 
@@ -77,6 +79,7 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
     audio_rotary_dim: int = 256
+    audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
@@ -175,7 +178,6 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            chunk_start_times: list[float] = []  # For computing rotary time embedding timestamps
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -192,7 +194,6 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
                     start = i * window_size
                     end = min((i + 1) * window_size, time_cap)
                     flat_chunks.append(audio_el[start:end])
-                    chunk_start_times.append(start / audio_kwargs["sampling_rate"])
 
             # Feature extraction
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
@@ -211,14 +212,6 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
                     text[i],
                 )
 
-            # Compute timestamps for rotary time embeddings
-            frames_per_window = self._get_audio_token_length(self.feature_extractor.nb_max_frames)
-            time_step = self.feature_extractor.chunk_length / frames_per_window
-            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
-            audio_inputs["rote_timestamps"] = (
-                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
-            )
-
         text_inputs = self.tokenizer(text, **text_kwargs)
 
         data = {**text_inputs, **audio_inputs}
@@ -236,7 +229,7 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "rote_timestamps"]))
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")
@@ -276,8 +269,13 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
 
 
 class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
-    """Rotary time embedding module for computing 2D axial rotary embeddings for batch and time dimensions,
-    with time-based angle modulation. See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
+    """Rotary time embedding module used by MusicFlamingo checkpoints.
+
+    This is a checkpoint-faithful integration, not a direct implementation of
+    the RoTE formulation described in (Goel et al., 2024):
+    https://arxiv.org/abs/2410.12109. It applies axial rotary embeddings over
+    the window index within each audio sample and the encoder time index within
+    each window, then modulates both axes with absolute timestamps in seconds.
     """
 
     def __init__(self, config: MusicFlamingoConfig, device=None):
@@ -290,8 +288,7 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         del seq_len
         dim = config.audio_rotary_dim
         inv_freq = 1.0 / (
-            config.rope_parameters["rope_theta"]
-            ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
+            config.rope_parameters["rope_theta"] ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
         )
         return inv_freq, 1.0
 
@@ -353,6 +350,50 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         super().__init__(config)
         self.pos_emb = MusicFlamingoRotaryEmbedding(config)
 
+    def _build_audio_timestamps(
+        self,
+        input_ids: torch.LongTensor,
+        post_lengths: torch.LongTensor,
+        max_post_length: int,
+    ) -> torch.FloatTensor:
+        audio_token_mask = input_ids == self.config.audio_token_id
+        diff = torch.diff(torch.nn.functional.pad(audio_token_mask.int(), (1, 1), value=0), dim=1)
+        batch_starts, starts = torch.where(diff == 1)
+        batch_ends, ends = torch.where(diff == -1)
+        if not torch.equal(batch_starts, batch_ends):
+            raise ValueError("Audio token spans in input_ids must be contiguous.")
+        span_lengths = (ends - starts).to(torch.long)
+        if span_lengths.sum() != post_lengths.sum():
+            raise ValueError("The number of audio tokens in input_ids must match the audio encoder output length.")
+
+        audio_embed_frame_step = self.config.audio_frame_step * 4
+        frame_offsets = (
+            torch.arange(max_post_length, device=post_lengths.device, dtype=torch.float32) * audio_embed_frame_step
+        )
+        timestamps = torch.empty(
+            (post_lengths.shape[0], max_post_length), device=post_lengths.device, dtype=torch.float32
+        )
+
+        row_idx = 0
+        for span_length in span_lengths.tolist():
+            consumed = 0
+            window_idx = 0
+            while consumed < span_length:
+                if row_idx >= post_lengths.numel():
+                    raise ValueError("Audio encoder outputs do not align with the audio token spans in input_ids.")
+                row_length = int(post_lengths[row_idx].item())
+                consumed += row_length
+                if consumed > span_length:
+                    raise ValueError("Audio encoder outputs exceed the corresponding audio token span in input_ids.")
+                timestamps[row_idx] = window_idx * max_post_length * audio_embed_frame_step + frame_offsets
+                row_idx += 1
+                window_idx += 1
+
+        if row_idx != post_lengths.numel():
+            raise ValueError("Some audio encoder outputs could not be assigned to any audio token span.")
+
+        return timestamps
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
@@ -361,14 +402,14 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        rote_timestamps: torch.Tensor,
+        input_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
-        rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
-            Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Token ids containing the `<sound>` spans used to reconstruct rotary time embedding timestamps.
         """
         audio_output = self.audio_tower(
             input_features,
@@ -377,12 +418,13 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
             **kwargs,
         )
         hidden_states = audio_output.last_hidden_state
-        cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
+        audio_timestamps = self._build_audio_timestamps(input_ids, post_lengths, hidden_states.shape[-2])
+        cos, sin = self.pos_emb(audio_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
         hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
         audio_embeds = self.multi_modal_projector(hidden_states)
 
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
-        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
 
@@ -395,7 +437,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
-        rote_timestamps: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -412,8 +453,9 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
-            Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices describing the position of the input tokens in the sequence. Used to update the cache at the
+            correct offset and infer the full sequence length.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -467,7 +509,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
             audio_embeds = self.get_audio_features(
                 input_features,
                 input_features_mask,
-                rote_timestamps=rote_timestamps,
+                input_ids=input_ids,
                 return_dict=True,
             ).pooler_output
 
@@ -493,7 +535,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
-        rote_timestamps = kwargs.pop("rote_timestamps", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
@@ -502,8 +543,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
                 model_inputs["input_features_mask"] = input_features_mask
-            if rote_timestamps is not None:
-                model_inputs["rote_timestamps"] = rote_timestamps
 
         return model_inputs
 

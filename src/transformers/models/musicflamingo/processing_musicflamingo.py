@@ -157,7 +157,6 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            chunk_start_times: list[float] = []  # For computing rotary time embedding timestamps
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -174,7 +173,6 @@ class MusicFlamingoProcessor(ProcessorMixin):
                     start = i * window_size
                     end = min((i + 1) * window_size, time_cap)
                     flat_chunks.append(audio_el[start:end])
-                    chunk_start_times.append(start / audio_kwargs["sampling_rate"])
 
             # Feature extraction
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
@@ -193,14 +191,6 @@ class MusicFlamingoProcessor(ProcessorMixin):
                     text[i],
                 )
 
-            # Compute timestamps for rotary time embeddings
-            frames_per_window = self._get_audio_token_length(self.feature_extractor.nb_max_frames)
-            time_step = self.feature_extractor.chunk_length / frames_per_window
-            frame_offsets = torch.arange(frames_per_window, dtype=torch.float32) * time_step
-            audio_inputs["rote_timestamps"] = (
-                torch.as_tensor(chunk_start_times, dtype=torch.float32).unsqueeze(1) + frame_offsets
-            )
-
         text_inputs = self.tokenizer(text, **text_kwargs)
 
         data = {**text_inputs, **audio_inputs}
@@ -218,7 +208,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "rote_timestamps"]))
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
 
 
 __all__ = ["MusicFlamingoProcessor"]
