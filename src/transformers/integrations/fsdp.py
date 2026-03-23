@@ -59,8 +59,6 @@ def initialize_fsdp(
     if device_mesh is None:
         # Detect the accelerator on the machine
         device_type = torch._C._get_accelerator().type
-        if device_type == "mps":
-            device_type = "cpu"  # fallback
         current_device = getattr(torch, device_type)
 
         if not dist.is_initialized():
