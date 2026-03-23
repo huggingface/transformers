@@ -2063,4 +2063,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         )
 
 
-__all__ = ["MaskFormerForInstanceSegmentation", "MaskFormerModel", "MaskFormerPreTrainedModel"]
+__all__ = [
+    "MaskFormerForInstanceSegmentation",
+    "MaskFormerModel",
+    "MaskFormerPreTrainedModel",
+    "MaskFormerDetrPreTrainedModel",
+]

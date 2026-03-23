@@ -1522,4 +1522,5 @@ __all__ = [
     "MaskFormerForInstanceSegmentation",
     "MaskFormerModel",
     "MaskFormerPreTrainedModel",
+    "MaskFormerDetrPreTrainedModel",  # noqa F821
 ]
