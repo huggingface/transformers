@@ -210,6 +210,10 @@ def _build_rule_checks() -> dict[str, CheckFn]:
 
 TRF_RULE_CHECKS = _build_rule_checks()
 
+# Expose rule-id string constants (e.g. TRF001 == "TRF001") for test compatibility.
+for _rule_id in TRF_RULE_CHECKS:
+    globals()[_rule_id] = _rule_id
+
 
 def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = None) -> list[Violation]:
     if enabled_rules is None:
