@@ -127,6 +127,8 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         truncation,
         pad_to_multiple_of,
         return_tensors,
+        spectrogram_config=None,
+        do_extract_spectrogram=None,
         **kwargs,
     ) -> BatchFeature:
         import torch

@@ -177,7 +177,6 @@ class ClapAudioProcessor(NumpyAudioBackend):
         return_tensors,
         spectrogram_config=None,
         do_extract_spectrogram=None,
-        do_batch_spectrogram=True,
         **kwargs,
     ):
         # Use instance defaults when not explicitly provided (matching feature extractor behavior)
@@ -237,12 +236,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
         is_longer = [[longer] for longer in is_longer]
 
         input_features = {"audio_features": input_mel, "is_longer": is_longer}
-        input_features = BatchFeature(input_features)
-
-        if return_tensors is not None:
-            input_features = input_features.convert_to_tensors(return_tensors)
-
-        return input_features
+        return BatchFeature(input_features, tensor_type=return_tensors)
 
 
 __all__ = ["ClapAudioProcessor"]

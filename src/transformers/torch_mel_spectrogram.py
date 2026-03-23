@@ -29,10 +29,11 @@ def hertz_to_mel(freq: torch.Tensor, mel_scale: str = "htk") -> torch.Tensor:
     elif mel_scale == "kaldi":
         return 1127.0 * torch.log(1.0 + freq / 700.0)
     # slaney
+    f_sp = 200.0 / 3
     min_log_hertz = 1000.0
-    min_log_mel = 15.0
+    min_log_mel = min_log_hertz / f_sp
     logstep = 27.0 / torch.log(torch.tensor(6.4))
-    mels = 3.0 * freq / 200.0
+    mels = freq / f_sp
     log_region = freq >= min_log_hertz
     mels[log_region] = min_log_mel + torch.log(freq[log_region] / min_log_hertz) * logstep
     return mels
@@ -218,54 +219,7 @@ def window_function(window_length, name="hann_window", periodic=True, wkwargs=No
 
 # --- Sub-methods ---
 
-def _extract_spectrogram(
-    waveform: torch.Tensor,
-    sampling_rate: int,
-    *,
-    n_fft: int = 400,
-    win_length: int | None = None,
-    hop_length: int | None = None,
-    window_fn: str = "hann_window",
-    wkwargs: dict | None = None,
-    power: float = 2.0,
-    center: bool = True,
-    pad_mode: str = "reflect",
-    normalized: bool = False,
-    pad: int = 0,
-    periodic: bool = True,
-    dither: float = 0.0,
-    preemphasis: float | None = None,
-    remove_dc_offset: bool = False,
-    computation_dtype: "torch.dtype | None" = None,
-    left_align_fft: bool = False,
-) -> torch.Tensor:
-    """Compute the (power) spectrogram via STFT.
-
-    Args:
-        waveform: Input waveform of shape (..., time).
-        sampling_rate: Sample rate in Hz.
-        left_align_fft: If True, use manual framing with unfold(win_length) + zero-pad
-            right + rfft(n_fft). This left-aligns the window in the FFT buffer (kaldi
-            style), instead of center-padding it (torch.stft default).
-
-    Returns:
-        Power spectrogram of shape (..., freq, time).
-    """
-    if win_length is None:
-        win_length = n_fft
-    if hop_length is None:
-        hop_length = win_length // 2
-    if computation_dtype is not None:
-        waveform = waveform.to(computation_dtype)
-    device = waveform.device
-    dtype = waveform.dtype
-
-    needs_manual_framing = (dither != 0.0) or (preemphasis is not None) or remove_dc_offset or left_align_fft
-
-    window_wkwargs = {**(wkwargs or {}), "dtype": dtype}
-    window = window_function(win_length, name=window_fn, periodic=periodic, wkwargs=window_wkwargs)
-    window = window.to(device=device)
-
+def _prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing):
     if needs_manual_framing and win_length < n_fft:
         frame_length = win_length
     else:
@@ -274,40 +228,20 @@ def _extract_spectrogram(
             right_pad = n_fft - win_length - left_pad
             window = torch.nn.functional.pad(window, (left_pad, right_pad))
         frame_length = n_fft
+    return window, frame_length
 
-    fft_length = n_fft
-    num_frequency_bins = (fft_length // 2) + 1
 
-    is_1d = waveform.ndim == 1
-    if is_1d:
-        waveform = waveform.unsqueeze(0)
-
-    leading_shape = waveform.shape[:-1]
-    waveform = waveform.reshape(-1, waveform.shape[-1])
-
-    if pad > 0:
-        waveform = torch.nn.functional.pad(waveform, (pad, pad))
-
-    if needs_manual_framing:
-        result = _manual_stft(
-            waveform, window, frame_length, hop_length, fft_length,
-            num_frequency_bins, power, normalized, center, pad_mode,
-            dither, preemphasis, remove_dc_offset,
-        )
-    else:
-        result = _torch_stft(
-            waveform, window, frame_length, hop_length, fft_length,
-            power, normalized, center, pad_mode,
-        )
-
-    result = result.reshape(*leading_shape, result.shape[-2], result.shape[-1])
-
-    if is_1d:
-        result = result.squeeze(0)
-
-    if computation_dtype is not None:
-        return result
-    return result.float()
+def _apply_frame_processing(frames, *, dither=0.0, preemphasis=None, remove_dc_offset=False):
+    if dither != 0.0:
+        frames = frames + dither * torch.randn_like(frames)
+    if remove_dc_offset:
+        frames = frames - frames.mean(dim=-1, keepdim=True)
+    if preemphasis is not None:
+        frames = torch.cat([
+            frames[..., :1] * (1 - preemphasis),
+            frames[..., 1:] - preemphasis * frames[..., :-1],
+        ], dim=-1)
+    return frames
 
 
 def _apply_mel_scale(
@@ -332,9 +266,9 @@ def _apply_mel_scale(
 
 def _torch_stft(
     waveform, window, frame_length, hop_length, fft_length,
-    power, normalized, center, pad_mode,
+    normalized, center, pad_mode,
 ):
-    """Fast path using torch.stft. Returns power spectrogram of shape (batch, freq, time)."""
+    """Fast path using torch.stft. Returns complex STFT of shape (batch, freq, time)."""
     stft_out = torch.stft(
         waveform,
         n_fft=fft_length,
@@ -348,13 +282,13 @@ def _torch_stft(
     )
     if normalized:
         stft_out = stft_out / window.pow(2.0).sum().sqrt()
-    return stft_out.abs() ** power
+    return stft_out
 
 
 def _manual_stft(
     waveform, window, frame_length, hop_length, fft_length,
     num_frequency_bins, power, normalized, center, pad_mode,
-    dither, preemphasis, remove_dc_offset,
+    apply_frame_processing=None,
 ):
     """Manual framing STFT for kaldi-specific features. Returns power spectrogram of shape (batch, freq, time)."""
     if center:
@@ -365,17 +299,8 @@ def _manual_stft(
     # Extract all frames at once: (batch, num_frames, frame_length)
     frames = waveform.unfold(-1, frame_length, hop_length)
 
-    if dither != 0.0:
-        frames = frames + dither * torch.randn_like(frames)
-
-    if remove_dc_offset:
-        frames = frames - frames.mean(dim=-1, keepdim=True)
-
-    if preemphasis is not None:
-        frames = torch.cat([
-            frames[..., :1] * (1 - preemphasis),
-            frames[..., 1:] - preemphasis * frames[..., :-1],
-        ], dim=-1)
+    if apply_frame_processing is not None:
+        frames = apply_frame_processing(frames)
 
     frames = frames * window
 
@@ -410,7 +335,6 @@ def mel_spectrogram(
     center: bool = True,
     pad_mode: str = "reflect",
     normalized: bool = False,
-    pad: int = 0,
     periodic: bool = True,
     # mel scale kwargs
     n_mels: int = 128,
@@ -437,13 +361,45 @@ def mel_spectrogram(
     if f_max is None:
         f_max = sampling_rate / 2.0
 
-    spectrogram = _extract_spectrogram(
-        waveform, sampling_rate,
-        n_fft=n_fft, win_length=win_length, hop_length=hop_length,
-        window_fn=window_fn, wkwargs=wkwargs, power=power,
-        center=center, pad_mode=pad_mode,         normalized=normalized, pad=pad, periodic=periodic,
-        dither=dither, preemphasis=preemphasis, remove_dc_offset=remove_dc_offset,
-    )
+    # --- STFT ---
+    if win_length is None:
+        win_length = n_fft
+    if hop_length is None:
+        hop_length = win_length // 2
+    device = waveform.device
+    dtype = waveform.dtype
+
+    needs_manual_framing = (dither != 0.0) or (preemphasis is not None) or remove_dc_offset
+
+    window_wkwargs = {**(wkwargs or {}), "dtype": dtype}
+    window = window_function(win_length, name=window_fn, periodic=periodic, wkwargs=window_wkwargs)
+    window = window.to(device=device)
+    window, frame_length = _prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+
+    is_1d = waveform.ndim == 1
+    if is_1d:
+        waveform = waveform.unsqueeze(0)
+    leading_shape = waveform.shape[:-1]
+    waveform = waveform.reshape(-1, waveform.shape[-1])
+    if needs_manual_framing:
+        frame_proc = lambda f: _apply_frame_processing(
+            f, dither=dither, preemphasis=preemphasis, remove_dc_offset=remove_dc_offset,
+        )
+        spectrogram = _manual_stft(
+            waveform, window, frame_length, hop_length, n_fft,
+            n_fft // 2 + 1, power, normalized, center, pad_mode,
+            apply_frame_processing=frame_proc,
+        )
+    else:
+        spectrogram = _torch_stft(
+            waveform, window, frame_length, hop_length, n_fft,
+            power, normalized, center, pad_mode,
+        )
+
+    spectrogram = spectrogram.reshape(*leading_shape, spectrogram.shape[-2], spectrogram.shape[-1])
+    if is_1d:
+        spectrogram = spectrogram.squeeze(0)
+    spectrogram = spectrogram.float()
 
     num_frequency_bins = spectrogram.shape[-2]
     mel_filters = mel_filter_bank_torch(
@@ -481,7 +437,6 @@ class MelSpectrogram(torch.nn.Module):
         center: bool = True,
         pad_mode: str = "reflect",
         normalized: bool = False,
-        pad: int = 0,
         periodic: bool = True,
         n_mels: int = 128,
         f_min: float = 0.0,
@@ -503,7 +458,6 @@ class MelSpectrogram(torch.nn.Module):
         self.center = center
         self.pad_mode = pad_mode
         self.normalized = normalized
-        self.pad = pad
         self.n_mels = n_mels
         self.f_min = f_min
         self.f_max = f_max if f_max is not None else sampling_rate / 2.0
@@ -516,14 +470,7 @@ class MelSpectrogram(torch.nn.Module):
 
         # Build window
         window = window_function(self.win_length, name=window_fn, periodic=periodic, wkwargs=wkwargs)
-        if self._needs_manual_framing and self.win_length < n_fft:
-            self._frame_length = self.win_length
-        else:
-            if self.win_length < n_fft:
-                left_pad = (n_fft - self.win_length) // 2
-                right_pad = n_fft - self.win_length - left_pad
-                window = torch.nn.functional.pad(window, (left_pad, right_pad))
-            self._frame_length = n_fft
+        window, self._frame_length = _prepare_window_and_framing(window, self.win_length, n_fft, self._needs_manual_framing)
         self.register_buffer("window", window)
 
         # Build mel filterbank
@@ -551,15 +498,15 @@ class MelSpectrogram(torch.nn.Module):
         leading_shape = waveform.shape[:-1]
         waveform = waveform.reshape(-1, waveform.shape[-1])
 
-        if self.pad > 0:
-            waveform = torch.nn.functional.pad(waveform, (self.pad, self.pad))
-
         if self._needs_manual_framing:
+            frame_proc = lambda f: _apply_frame_processing(
+                f, dither=self.dither, preemphasis=self.preemphasis, remove_dc_offset=self.remove_dc_offset,
+            )
             spec = _manual_stft(
                 waveform, self.window, self._frame_length, self.hop_length,
                 self.n_fft, self.n_fft // 2 + 1, self.power, self.normalized,
-                self.center, self.pad_mode, self.dither, self.preemphasis,
-                self.remove_dc_offset,
+                self.center, self.pad_mode,
+                apply_frame_processing=frame_proc,
             )
         else:
             spec = _torch_stft(

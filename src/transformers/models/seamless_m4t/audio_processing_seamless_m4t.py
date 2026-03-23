@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...feature_extraction_utils import BatchFeature
 
 
@@ -48,27 +48,12 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         waveform_scale=32768.0,
     )
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.window = window_function(400, "povey", periodic=False)
-
     def _extract_fbank_features(self, waveform):
-        waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
-        features = spectrogram(
-            waveform,
-            self.window,
-            frame_length=400,
-            hop_length=160,
-            fft_length=512,
-            power=2.0,
-            center=False,
-            preemphasis=0.97,
-            mel_filters=self.mel_filters,
-            log_mel="log",
-            mel_floor=1.192092955078125e-07,
-            remove_dc_offset=True,
-        ).T
-        return features
+        """Extract log-mel filterbank features for a single waveform using the base spectrogram pipeline."""
+        waveform = np.squeeze(waveform) * self.spectrogram_config.waveform_scale
+        features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+        # extract_spectrogram returns list of (n_mels, time); transpose to (time, n_mels)
+        return features[0].T
 
     def feature_normalize(self, features):
         normalized = []
@@ -78,7 +63,18 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
             normalized.append((f - mean) / np.sqrt(var + 1e-7))
         return normalized
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
+    def _preprocess(
+        self,
+        audio,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        return_tensors,
+        spectrogram_config=None,
+        do_extract_spectrogram=None,
+        **kwargs,
+    ):
         # Extract features from raw (unpadded) audio, then pad at feature level
         features = [self._extract_fbank_features(waveform) for waveform in audio]
         features = self.feature_normalize(features)

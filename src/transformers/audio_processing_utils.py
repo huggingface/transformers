@@ -157,6 +157,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         # pad and truncate
         audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
         padded_length = audio[0].shape[-1]
+        self._audio_lengths = [end - start for start, end in audio_ranges]
 
         if do_extract_spectrogram:
             audio = self._to_batch(audio) if do_batch_spectrogram else audio
@@ -323,28 +324,74 @@ class BaseAudioProcessor(AudioProcessingMixin):
 
         return features
 
-    def _extract_spectrogram(self, *args, **kwargs):
-        """
-        Compute the (power) spectrogram via STFT.
+    # ── Spectrogram extraction pipeline ──────────────────────────────────
+    #
+    # The full feature-extraction pipeline executed by `extract_spectrogram`:
+    #
+    #   1. _extract_spectrogram   (STFT → power/magnitude spectrogram)
+    #      a. _pre_stft               – waveform-level pre-processing (hook, no-op by default)
+    #      b. _prepare_window_and_framing – build/pad window, decide frame length
+    #      c. _frame_waveform          – slice waveform into overlapping frames
+    #      d. _apply_frame_processing  – per-frame conditioning: dither, DC offset, preemphasis (hook)
+    #      e. windowing + FFT + power
+    #   2. _apply_mel_scale       (mel filterbank projection)
+    #   3. _normalize_magnitude   (log / dB scaling, optional per-utterance norm)
+    #
+    # Backend subclasses (NumpyAudioBackend, TorchAudioBackend) implement the
+    # full pipeline.  Model-specific processors can override individual hooks
+    # (_pre_stft, _apply_frame_processing) or the entire _extract_spectrogram
+    # when the base STFT path is insufficient (e.g., Parakeet's custom magnitude
+    # computation).
 
-        Implemented by backend subclasses (e.g., ``TorchAudioBackend``).
+    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
+        """Orchestrate the STFT pipeline.
+
+        Runs the sub-steps listed above in order. Override this only when the
+        pipeline ordering itself needs to change (e.g., Parakeet needs audio-length
+        detection before ``_pre_stft``). Otherwise, override individual hooks.
+        """
+        audio = self._pre_stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+        return self._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
+
+    def _pre_stft(self, audio, *, spectrogram_config, **kwargs):
+        """Hook: waveform-level pre-processing before STFT.
+
+        Called before framing. Default: no-op (returns audio unchanged).
+        Override for processing on the full waveform, e.g. length-aware
+        preemphasis with masking (Parakeet).
+        """
+        return audio
+
+    def _stft(self, audio, *, spectrogram_config, **kwargs):
+        """Compute the STFT and return a power/magnitude spectrogram.
+
+        Implemented by backend subclasses. Internally runs:
+        window creation → padding → framing → ``_apply_frame_processing`` →
+        windowing → FFT → power.
+
+        Override in model-specific processors that need a fully custom STFT
+        (e.g., Gemma3n's unfold-based STFT with extra-sample framing).
+        """
+        raise NotImplementedError
+
+    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
+        """Hook: per-frame signal conditioning after frame extraction.
+
+        Called after framing, before windowing and FFT. Default backend
+        implementations apply dither, DC-offset removal, and standard
+        preemphasis.
+
+        Override for non-standard frame processing, e.g. HTK-style
+        preemphasis (Gemma3n).
         """
         raise NotImplementedError
 
     def _apply_mel_scale(self, *args, **kwargs):
-        """
-        Apply mel filterbank to a spectrogram.
-
-        Implemented by backend subclasses (e.g., ``TorchAudioBackend``).
-        """
+        """Apply mel filterbank to spectrogram features."""
         raise NotImplementedError
 
     def _normalize_magnitude(self, *args, **kwargs):
-        """
-        Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
-
-        Implemented by backend subclasses (e.g., ``TorchAudioBackend``).
-        """
+        """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features."""
         raise NotImplementedError
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):

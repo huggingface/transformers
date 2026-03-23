@@ -78,26 +78,27 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         else:
             self.per_bin_stddev = None
 
-    def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
-        stft_cfg = spectrogram_config.stft_config
+    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
+        """HTK-style preemphasis on frames extracted with an extra sample."""
         preemphasis = spectrogram_config.preemphasis
-
-        frame_size_for_unfold = stft_cfg.win_length + 1
-        frames_to_process = _unfold(audio, dimension=-1, size=frame_size_for_unfold, step=stft_cfg.hop_length)
-
-        # Preemphasis
         if preemphasis is not None and preemphasis > 0.0:
             if self.preemphasis_htk_flavor:
-                first_in_frame = frames_to_process[..., :1] * (1.0 - preemphasis)
-                rest_in_frame = frames_to_process[..., 1:-1] - preemphasis * frames_to_process[..., :-2]
-                frames = np.concatenate([first_in_frame, rest_in_frame], axis=-1)
+                first = frames[..., :1] * (1.0 - preemphasis)
+                rest = frames[..., 1:-1] - preemphasis * frames[..., :-2]
+                return np.concatenate([first, rest], axis=-1)
             else:
-                frames = frames_to_process[..., 1:] - preemphasis * frames_to_process[..., :-1]
-        else:
-            frames = frames_to_process[..., :-1]
+                return frames[..., 1:] - preemphasis * frames[..., :-1]
+        return frames[..., :-1]
 
-        frames = frames * self.window  # Broadcasting window
+    def _stft(self, audio, *, spectrogram_config, **kwargs):
+        stft_cfg = spectrogram_config.stft_config
 
+        frame_size_for_unfold = stft_cfg.win_length + 1
+        frames = _unfold(audio, dimension=-1, size=frame_size_for_unfold, step=stft_cfg.hop_length)
+
+        frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
+
+        frames = frames * self.window
         stft = np.fft.rfft(frames, n=stft_cfg.n_fft, axis=-1)
         return np.abs(stft)
 
