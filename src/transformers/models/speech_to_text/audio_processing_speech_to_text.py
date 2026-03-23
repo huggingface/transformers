@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 from ...feature_extraction_utils import BatchFeature
 from ...utils import is_speech_available
 
@@ -57,31 +57,19 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
         super().__init__(**kwargs)
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
-        if not is_speech_available():
-            self.window = window_function(400, "povey", periodic=False)
 
     def _extract_fbank_features(self, waveform):
-        waveform = waveform * (2**15)  # Kaldi compliance
+        """Extract log-mel filterbank features for a single waveform."""
+        waveform = waveform * self.spectrogram_config.waveform_scale
         if is_speech_available():
             waveform_tensor = torch.from_numpy(waveform).unsqueeze(0)
             features = ta_kaldi.fbank(waveform_tensor, num_mel_bins=80, sample_frequency=self.sample_rate)
             return features.numpy()
         else:
             waveform = np.squeeze(waveform)
-            return spectrogram(
-                waveform,
-                self.window,
-                frame_length=400,
-                hop_length=160,
-                fft_length=512,
-                power=2.0,
-                center=False,
-                preemphasis=0.97,
-                mel_filters=self.mel_filters,
-                log_mel="log",
-                mel_floor=1.192092955078125e-07,
-                remove_dc_offset=True,
-            ).T
+            features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+            # extract_spectrogram returns list of (n_mels, time); transpose to (time, n_mels)
+            return features[0].T
 
     @staticmethod
     def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
@@ -95,7 +83,18 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
             x[input_length:] = padding_value
         return x.astype(np.float32)
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
+    def _preprocess(
+        self,
+        audio,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        return_tensors,
+        spectrogram_config=None,
+        do_extract_spectrogram=None,
+        **kwargs,
+    ):
         # Extract features from raw (unpadded) audio, then pad at feature level
         features = [self._extract_fbank_features(waveform) for waveform in audio]
         lengths = [f.shape[0] for f in features]

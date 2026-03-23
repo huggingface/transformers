@@ -76,7 +76,6 @@ class StftConfig:
     pad_mode: str = "reflect"
     normalized: bool = False
     onesided: bool | None = None
-    pad: int = 0
     periodic: bool = True
     left_align_fft: bool = False
 
@@ -400,10 +399,11 @@ def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np
     elif mel_scale == "kaldi":
         return 1127.0 * np.log(1.0 + (freq / 700.0))
 
+    f_sp = 200.0 / 3
     min_log_hertz = 1000.0
-    min_log_mel = 15.0
+    min_log_mel = min_log_hertz / f_sp
     logstep = 27.0 / np.log(6.4)
-    mels = 3.0 * freq / 200.0
+    mels = freq / f_sp
 
     if isinstance(freq, np.ndarray):
         log_region = freq >= min_log_hertz
@@ -436,10 +436,11 @@ def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk") -> float | np
     elif mel_scale == "kaldi":
         return 700.0 * (np.exp(mels / 1127.0) - 1.0)
 
+    f_sp = 200.0 / 3
     min_log_hertz = 1000.0
-    min_log_mel = 15.0
+    min_log_mel = min_log_hertz / f_sp
     logstep = np.log(6.4) / 27.0
-    freq = 200.0 * mels / 3.0
+    freq = f_sp * mels
 
     if isinstance(mels, np.ndarray):
         log_region = mels >= min_log_mel

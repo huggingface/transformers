@@ -21,7 +21,6 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 class LasrAudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    add_channel_dim = True
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
             n_fft=512,

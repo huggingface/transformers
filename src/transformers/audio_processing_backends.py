@@ -14,11 +14,9 @@
 # limitations under the License.
 
 
-import sys
-from pathlib import Path
-
 import numpy as np
 
+from . import numpy_mel_spectrogram as _np_spec
 from .audio_processing_utils import BaseAudioProcessor
 from .audio_utils import SpectrogramConfig, amplitude_to_db, power_to_db
 from .feature_extraction_utils import BatchFeature
@@ -27,16 +25,10 @@ from .utils import is_torch_available, logging
 
 logger = logging.get_logger(__name__)
 
-_WORKSPACE_ROOT = str(Path(__file__).resolve().parents[3])
-if _WORKSPACE_ROOT not in sys.path:
-    sys.path.insert(0, _WORKSPACE_ROOT)
-
-from spectrograms import numpy_mel_spectrogram as _np_spec
-
 
 if is_torch_available():
     import torch
-    from spectrograms import torch_mel_spectrogram as _torch_spec
+    from . import torch_mel_spectrogram as _torch_spec
 
 
 class NumpyAudioBackend(BaseAudioProcessor):
@@ -88,7 +80,7 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         return np.pad(audio, pad_width, mode="constant", constant_values=self.padding_value)
 
-    def _extract_spectrogram(
+    def _stft(
         self,
         audio: list[np.ndarray],
         *,
@@ -97,23 +89,29 @@ class NumpyAudioBackend(BaseAudioProcessor):
     ) -> list[np.ndarray]:
         """Compute the (power) spectrogram via STFT using the numpy backend."""
         stft_cfg = spectrogram_config.stft_config
+        n_fft = stft_cfg.n_fft
+        win_length = stft_cfg.win_length or n_fft
+        hop_length = stft_cfg.hop_length or win_length // 2
 
-        return _np_spec._extract_spectrogram(
-                audio,
-                self.sample_rate,
-                n_fft=stft_cfg.n_fft,
-                win_length=stft_cfg.win_length,
-                hop_length=stft_cfg.hop_length,
-                window_fn=stft_cfg.window_fn,
-                power=stft_cfg.power,
-                center=stft_cfg.center,
-                pad_mode=stft_cfg.pad_mode,
-                normalized=stft_cfg.normalized,
-                pad=stft_cfg.pad,
-                periodic=stft_cfg.periodic,
-                preemphasis=spectrogram_config.preemphasis,
-                remove_dc_offset=spectrogram_config.remove_dc_offset,
-            )
+        window = _np_spec.window_function(win_length, name=stft_cfg.window_fn, periodic=stft_cfg.periodic)
+        needs_manual_framing = (spectrogram_config.preemphasis is not None) or spectrogram_config.remove_dc_offset
+        window, frame_length = _np_spec._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+
+        frames, num_frames = _np_spec._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
+        compute_dtype = np.result_type(audio.dtype, window.dtype)
+        frames = frames.astype(compute_dtype, copy=False)
+
+        frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
+
+        return _np_spec._windowed_fft(frames, window, n_fft, stft_cfg.power, stft_cfg.normalized)
+
+    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
+        """Apply per-frame signal conditioning using the numpy backend."""
+        return _np_spec._apply_frame_processing(
+            frames,
+            preemphasis=spectrogram_config.preemphasis,
+            remove_dc_offset=spectrogram_config.remove_dc_offset,
+        )
 
     def _apply_mel_scale(
         self,
@@ -252,7 +250,23 @@ class TorchAudioBackend(BaseAudioProcessor):
 
         return F.pad(audio, pad_args, "constant", self.padding_value)
 
-    def _extract_spectrogram(
+    def _needs_manual_framing(self, spectrogram_config):
+        """Whether the STFT requires manual framing (unfold-based) instead of torch.stft.
+
+        Manual framing is needed when per-frame processing must happen between
+        frame extraction and windowing (e.g. per-frame preemphasis, DC offset removal,
+        or left-aligned FFT padding).
+
+        Override in model-specific processors that handle preemphasis at the
+        waveform level (in ``_pre_stft``) and don't need per-frame processing.
+        """
+        return (
+            (spectrogram_config.preemphasis is not None)
+            or spectrogram_config.remove_dc_offset
+            or spectrogram_config.stft_config.left_align_fft
+        )
+
+    def _stft(
         self,
         audio: list["torch.Tensor"],  # TODO: this can be either a audio or batch of audio and this should be documented
         *,
@@ -260,7 +274,6 @@ class TorchAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list["torch.Tensor"]:
         """Compute the (power) spectrogram via STFT using the torch backend."""
-
         stft_cfg = spectrogram_config.stft_config
         computation_dtype = (
             getattr(torch, spectrogram_config.computation_dtype)
@@ -268,27 +281,50 @@ class TorchAudioBackend(BaseAudioProcessor):
             else None
         )
 
-        magnitudes = _torch_spec._extract_spectrogram(
-            audio,
-            self.sample_rate,
-            n_fft=stft_cfg.n_fft,
-            win_length=stft_cfg.win_length,
-            hop_length=stft_cfg.hop_length,
-            window_fn=stft_cfg.window_fn,
-            wkwargs=stft_cfg.wkwargs,
-            power=stft_cfg.power,
-            center=stft_cfg.center,
-            pad_mode=stft_cfg.pad_mode,
-            normalized=stft_cfg.normalized,
-            pad=stft_cfg.pad,
-            periodic=stft_cfg.periodic,
+        n_fft = stft_cfg.n_fft
+        win_length = stft_cfg.win_length or n_fft
+        hop_length = stft_cfg.hop_length or win_length // 2
+
+        if computation_dtype is not None:
+            audio = audio.to(computation_dtype)
+
+        needs_manual_framing = self._needs_manual_framing(spectrogram_config)
+
+        window_wkwargs = {**(stft_cfg.wkwargs or {}), "dtype": audio.dtype}
+        window = _torch_spec.window_function(win_length, name=stft_cfg.window_fn, periodic=stft_cfg.periodic, wkwargs=window_wkwargs)
+        window = window.to(device=audio.device)
+        window, frame_length = _torch_spec._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+
+        if needs_manual_framing:
+            apply_fp = lambda frames: self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
+            magnitudes = _torch_spec._manual_stft(
+                audio, window, frame_length, hop_length, n_fft,
+                n_fft // 2 + 1, stft_cfg.power, stft_cfg.normalized,
+                stft_cfg.center, stft_cfg.pad_mode,
+                apply_frame_processing=apply_fp,
+            )
+        else:
+            stft_out = _torch_spec._torch_stft(
+                audio, window, frame_length, hop_length, n_fft,
+                stft_cfg.normalized, stft_cfg.center, stft_cfg.pad_mode,
+            )
+            magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power)
+
+        if computation_dtype is not None:
+            return magnitudes
+        return magnitudes.float()
+
+    def _compute_magnitudes(self, stft_out, power):
+        """Convert complex STFT output to a real-valued magnitude spectrogram."""
+        return stft_out.abs() ** power
+
+    def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
+        """Apply per-frame signal conditioning using the torch backend."""
+        return _torch_spec._apply_frame_processing(
+            frames,
             preemphasis=spectrogram_config.preemphasis,
             remove_dc_offset=spectrogram_config.remove_dc_offset,
-            computation_dtype=computation_dtype,
-            left_align_fft=stft_cfg.left_align_fft,
         )
-
-        return magnitudes
 
     def _apply_mel_scale(
         self,
