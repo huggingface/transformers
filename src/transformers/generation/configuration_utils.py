@@ -1587,6 +1587,8 @@ class ContinuousBatchingConfig:
             If True, a default compile config will be used for paths that are not explicitly set.
         scheduler (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
+        return_logprobs (`bool`, *optional*, defaults to `False`):
+            Whether to return log probabilities along with the generated tokens.
         max_queue_size (`int`, *optional*, defaults to 0):
             Maximum request queue size for serving. 0 means unlimited.
     """
