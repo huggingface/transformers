@@ -96,6 +96,7 @@ def flush_memory(flush_compile: bool = True) -> None:
         torch.xpu.synchronize()
     gc.collect()
 
+
 def get_tokenizer_and_model(
     model_id: str, attn_implementation: str, device: str, dtype: str | torch.dtype = "auto"
 ) -> tuple[AutoTokenizer, GenerationMixin]:
@@ -109,6 +110,7 @@ def get_tokenizer_and_model(
     model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
     model = model.to(device).eval()
     return tokenizer, model
+
 
 def with_flush_memory(func):
     """Decorator that ensures flush_memory is called after the test, even if it fails."""
@@ -135,7 +137,6 @@ def with_flush_memory(func):
             flush_memory(flush_compile=flush_compile)
 
     return wrapper
-
 
 
 def get_generation_inputs(
@@ -422,7 +423,6 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
 @require_torch_accelerator
 class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
-
     # -----------------------------------------------Parity tests----------------------------------------------- #
     #         Ensure continuous batching and non-continuous batching generation produce the same outputs         #
     # ---------------------------------------------------------------------------------------------------------- #
