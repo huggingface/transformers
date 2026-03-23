@@ -44,16 +44,8 @@ TORCH_INIT_FUNCTIONS = {
 _NO_TIE_WEIGHTS_STATE: ContextVar[object | None] = ContextVar("_NO_TIE_WEIGHTS_STATE", default=None)
 
 
-def are_tie_weights_disabled() -> bool:
-    return _NO_TIE_WEIGHTS_STATE.get() is not None
-
-
-def get_no_tie_weights_scope() -> object | None:
-    return _NO_TIE_WEIGHTS_STATE.get()
-
-
 def should_skip_tie_weights(model) -> bool:
-    scope = get_no_tie_weights_scope()
+    scope = _NO_TIE_WEIGHTS_STATE.get()
     if scope is None:
         return False
 
