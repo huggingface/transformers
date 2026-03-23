@@ -289,10 +289,10 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
 
         # Compute window index within each sample (0, 1, 2, ... then reset for next sample)
         sample_start_rows = torch.searchsorted(
-            sample_indices, torch.arange(len(sample_lengths), device=post_lengths.device)
+            sample_indices, torch.arange(sample_lengths.shape[0], device=post_lengths.device)
         )
         window_indices = (
-            torch.arange(len(post_lengths), device=post_lengths.device) - sample_start_rows[sample_indices]
+            torch.arange(post_lengths.shape[0], device=post_lengths.device) - sample_start_rows[sample_indices]
         )
 
         # Compute timestamps
