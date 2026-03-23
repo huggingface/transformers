@@ -82,7 +82,7 @@ if is_vision_available():
 else:
     Image = None
 if is_torchvision_available():
-    from ..pix2struct.image_processing_pix2struct_fast import torch_extract_patches
+    from ..pix2struct.image_processing_pix2struct import torch_extract_patches
 
 
 class SinglePoint(NamedTuple):
