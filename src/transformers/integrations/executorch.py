@@ -240,11 +240,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        return self.model.forward(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-        )
+        return self.model.forward(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
     def export(
         self,
@@ -578,7 +574,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         outs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             attention_mask=None,
             past_key_values=past_key_values,
             use_cache=True,
@@ -747,7 +742,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         outputs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             attention_mask=None,
             past_key_values=self.cache,
             use_cache=True,
@@ -889,7 +883,6 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             past_key_values=self.cache,
             use_cache=True,
-            cache_position=cache_position,
         )
 
         # Apply language model head

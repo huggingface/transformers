@@ -34,7 +34,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileNetV2ImageProcessor
+    from transformers import MobileNetV2ImageProcessorPil
 
 
 class MobileNetV2ConfigTester(ConfigTester):
@@ -280,7 +280,9 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MobileNetV2ImageProcessor.from_pretrained("google/mobilenet_v2_1.0_224") if is_vision_available() else None
+            MobileNetV2ImageProcessorPil.from_pretrained("google/mobilenet_v2_1.0_224")
+            if is_vision_available()
+            else None
         )
 
     @slow
@@ -314,7 +316,7 @@ class MobileNetV2ModelIntegrationTest(unittest.TestCase):
         model = MobileNetV2ForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
         model = model.to(torch_device)
 
-        image_processor = MobileNetV2ImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
+        image_processor = MobileNetV2ImageProcessorPil.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

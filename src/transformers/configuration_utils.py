@@ -31,6 +31,7 @@ from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
@@ -161,6 +162,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             `float16` weights.
     """
 
+    # Class attributes that we don't want to save or have in `self.__dict__`
+    # They are not supposed to be set/changed by users. Each field is set when
+    # creating a model class
     base_config_key: ClassVar[str] = ""
     sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
     has_no_defaults_at_init: ClassVar[bool] = False
@@ -171,10 +175,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
 
-    # Attributes set for all models internally when saving
+    # Attributes set internally when saving and used to infer model
+    # class for `Auto` mapping
     model_type: ClassVar[str] = ""
-    transformers_version: ClassVar[str | None] = None
-    architectures: ClassVar[list[str] | None] = None
+    transformers_version: str | None = None
+    architectures: list[str] | None = None
 
     # Common attributes for all models
     output_hidden_states: bool | None = False
@@ -189,7 +194,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
 
     # Tokenizer kwargs
-    tokenizer_class: str | None = None
+    tokenizer_class: str | PreTrainedTokenizerBase | None = None
 
     def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
@@ -499,7 +504,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                   huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PreTrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
+                - a path to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -1265,3 +1270,18 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 
 # The alias is only here for BC - we did not have the correct CamelCasing before
 PretrainedConfig = PreTrainedConfig
+
+
+def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
+    logger.warning(
+        "`layer_type_validation` is deprecated and will be removed in v5.20. "
+        "Use `PreTrainedConfig.validate_layer_type` instead"
+    )
+
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        raise ValueError(
+            f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
+            f"({len(layer_types)})"
+        )

@@ -57,7 +57,7 @@ class XCLIPTextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
 
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")

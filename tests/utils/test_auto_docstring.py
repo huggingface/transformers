@@ -29,8 +29,8 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from transformers.configuration_utils import PretrainedConfig
+from transformers.image_processing_backends import TorchvisionBackend
 from transformers.image_processing_utils import BatchFeature
-from transformers.image_processing_utils_fast import BaseImageProcessorFast
 from transformers.image_utils import ImageInput
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
@@ -356,7 +356,7 @@ class DummyImageProcessorKwargs(ImagesKwargs, total=False):
     Constructs a fast DummyForTest image processor.
     """
 )
-class DummyForTestImageProcessorFast(BaseImageProcessorFast):
+class DummyForTestImageProcessorFast(TorchvisionBackend):
     model_input_names = ["pixel_values"]
     valid_kwargs = DummyImageProcessorKwargs
 
@@ -608,7 +608,7 @@ Parameters:
 
     def test_dummy_image_processor_complete_docstring(self):
         self.maxDiff = None
-        """Test complete class and preprocess docstrings for BaseImageProcessorFast with custom ImagesKwargs and custom_intro."""
+        """Test complete class and preprocess docstrings for DummyForTestImageProcessorFast with custom ImagesKwargs and custom_intro."""
 
         actual_preprocess_docstring = DummyForTestImageProcessorFast.preprocess.__doc__
 

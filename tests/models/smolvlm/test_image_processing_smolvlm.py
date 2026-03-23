@@ -19,7 +19,7 @@ import numpy as np
 
 from transformers.image_utils import PILImageResampling, load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
@@ -27,11 +27,6 @@ from ...test_processing_common import url_to_local_path
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import SmolVLMImageProcessor
-
-    if is_torchvision_available():
-        from transformers import SmolVLMImageProcessorFast
 
 
 if is_torch_available():
@@ -167,9 +162,6 @@ class SmolVLMImageProcessingTester:
 @require_torch
 @require_vision
 class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = SmolVLMImageProcessor if is_vision_available() else None
-    fast_image_processing_class = SmolVLMImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = SmolVLMImageProcessingTester(self)
@@ -179,7 +171,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
             self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -196,7 +188,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processing, "do_image_splitting"))
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -219,7 +211,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_call_numpy_4_channels(self):
         # SmolVLM always processes images as RGB, so it always returns images with 3 channels
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processor_dict = self.image_processor_dict
             image_processing = image_processing_class(**image_processor_dict)
@@ -243,7 +235,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -265,7 +257,7 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -290,40 +282,37 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     @require_vision
     @require_torch
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence(self):
+        """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         dummy_image = dummy_image.resize((100, 150))
-        image_processor_slow = self.image_processing_class(
-            **self.image_processor_dict, resample=PILImageResampling.BICUBIC
-        )
-        image_processor_fast = self.fast_image_processing_class(
-            **self.image_processor_dict, resample=PILImageResampling.BICUBIC
-        )
 
-        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt", return_row_col_info=True)
-        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt", return_row_col_info=True)
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt", return_row_col_info=True)
 
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float()
-        )
-        self.assertEqual(encoding_slow.rows, encoding_fast.rows)
-        self.assertEqual(encoding_slow.cols, encoding_fast.cols)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference = encodings[reference_backend]
+        for backend_name in backend_names[1:]:
+            encoding = encodings[backend_name]
+            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values)
+            self._assert_tensors_equivalence(
+                reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
+            )
+            self.assertEqual(reference.rows, encoding.rows)
+            self.assertEqual(reference.cols, encoding.cols)
 
     @require_vision
     @require_torch
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+    def test_backends_equivalence_batched(self):
+        """Override to also compare pixel_attention_mask, rows, and cols (return_row_col_info=True)."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
         if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
             self.skipTest(
@@ -339,25 +328,25 @@ class SmolVLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             if i is not None:
                 dummy_images[i].pop()
 
-        image_processor_slow = self.image_processing_class(
-            **self.image_processor_dict, resample=PILImageResampling.BICUBIC
-        )
-        image_processor_fast = self.fast_image_processing_class(
-            **self.image_processor_dict, resample=PILImageResampling.BICUBIC
-        )
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict, resample=PILImageResampling.BICUBIC)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt", return_row_col_info=True)
 
-        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt", return_row_col_info=True)
-        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt", return_row_col_info=True)
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=3e-1)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.pixel_attention_mask.float(), encoding_fast.pixel_attention_mask.float()
-        )
-        self.assertEqual(encoding_slow.rows, encoding_fast.rows)
-        self.assertEqual(encoding_slow.cols, encoding_fast.cols)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference = encodings[reference_backend]
+        for backend_name in backend_names[1:]:
+            encoding = encodings[backend_name]
+            self._assert_tensors_equivalence(reference.pixel_values, encoding.pixel_values, atol=3e-1)
+            self._assert_tensors_equivalence(
+                reference.pixel_attention_mask.float(), encoding.pixel_attention_mask.float()
+            )
+            self.assertEqual(reference.rows, encoding.rows)
+            self.assertEqual(reference.cols, encoding.cols)
 
     def test_get_num_patches_without_images(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processing = image_processing_class(**self.image_processor_dict)
             num_patches_and_row_cols = image_processing.get_number_of_image_patches(
                 height=100, width=100, images_kwargs={}

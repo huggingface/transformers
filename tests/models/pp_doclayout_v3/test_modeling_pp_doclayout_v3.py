@@ -24,7 +24,7 @@ from parameterized import parameterized
 from transformers import (
     PPDocLayoutV3Config,
     PPDocLayoutV3ForObjectDetection,
-    PPDocLayoutV3ImageProcessorFast,
+    PPDocLayoutV3ImageProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -455,7 +455,7 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
         self.model = PPDocLayoutV3ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPDocLayoutV3ImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPDocLayoutV3ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
