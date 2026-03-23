@@ -93,9 +93,7 @@ def _inherits_pretrained_model(
     return False
 
 
-def iter_pretrained_classes(
-    tree: ast.Module, source_lines: list[str], rule_id: str
-) -> list[ast.ClassDef]:
+def iter_pretrained_classes(tree: ast.Module, source_lines: list[str], rule_id: str) -> list[ast.ClassDef]:
     """Yield ClassDef nodes that inherit from PreTrainedModel (transitively), skipping suppressed ones."""
     class_to_bases = _collect_class_bases(tree)
     results = []

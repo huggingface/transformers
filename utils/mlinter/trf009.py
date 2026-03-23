@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ._helpers import Violation, _has_rule_suppression, _known_model_dirs, _model_dir_name
 
+
 RULE_ID = ""  # Set by discovery
 
 

@@ -222,12 +222,14 @@ def analyze_file(file_path: Path, text: str, enabled_rules: set[str] | None = No
     for rule_id, check_fn in TRF_RULE_CHECKS.items():
         if rule_id in enabled_rules:
             for v in check_fn(tree, file_path, source_lines):
-                violations.append(Violation(
-                    file_path=v.file_path,
-                    line_number=v.line_number,
-                    rule_id=rule_id,
-                    message=v.message,
-                ))
+                violations.append(
+                    Violation(
+                        file_path=v.file_path,
+                        line_number=v.line_number,
+                        rule_id=rule_id,
+                        message=v.message,
+                    )
+                )
 
     return [
         violation

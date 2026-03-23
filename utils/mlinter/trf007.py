@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ._helpers import Violation, _class_methods, is_self_method_call, iter_pretrained_classes
 
+
 RULE_ID = ""  # Set by discovery
 
 

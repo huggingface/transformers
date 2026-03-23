@@ -12,6 +12,7 @@ from ._helpers import (
     iter_pretrained_classes,
 )
 
+
 RULE_ID = ""  # Set by discovery
 
 # Attributes that exist on torch.nn.Identity (i.e. standard nn.Module interface).

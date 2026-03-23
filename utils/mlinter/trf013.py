@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ._helpers import Violation, _has_rule_suppression, full_name, is_self_method_call, is_super_method_call
 
+
 RULE_ID = ""  # Set by discovery
 
 
