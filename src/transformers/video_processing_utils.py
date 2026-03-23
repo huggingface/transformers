@@ -28,7 +28,6 @@ from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
-    PILImageResampling,
     SizeDict,
     validate_kwargs,
 )
@@ -67,6 +66,10 @@ if is_torch_available():
 if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as tvF
 
+try:
+    from .image_utils import PILImageResampling
+except Exception:
+    PILImageResampling = None
 
 logger = logging.get_logger(__name__)
 
