@@ -711,11 +711,18 @@ class MambaCacheLayerMixin(ABC):
             self.ssm_states.zero_()
         self.has_previous_state = False
 
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        if self.has_previous_state:
+            self.conv_states = self.conv_states.index_select(0, beam_idx.to(self.device))
+            self.ssm_states = self.ssm_states.index_select(0, beam_idx.to(self.device))
+
 
 class MambaLayer(MambaCacheLayerMixin):
     def lazy_initialization(self, conv_states: torch.Tensor, ssm_states: torch.Tensor) -> None:
         self.dtype, self.device = conv_states.dtype, conv_states.device
         self.conv_states = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.ssm_states = torch.tensor([], dtype=self.dtype, device=self.device)
         self.is_initialized = True
 
     def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:

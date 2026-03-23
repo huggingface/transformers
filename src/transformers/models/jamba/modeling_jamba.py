@@ -397,7 +397,7 @@ class JambaMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            if cache_params.has_previous_state and seq_len == 1:
+            if cache_params.has_previous_state(self.layer_idx) and seq_len == 1:
                 conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
                 hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
                 if self.use_conv_bias:
@@ -408,7 +408,7 @@ class JambaMambaMixer(nn.Module):
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
         else:
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
