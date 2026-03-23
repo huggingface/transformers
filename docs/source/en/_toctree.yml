@@ -30,7 +30,7 @@
       title: Legacy model contribution
     - local: auto_docstring
       title: Documenting a model
-    - local: modeular_output_tracing
+    - local: model_output_tracing
       title: Tracing model intermediate outputs
     title: Models
   - isExpanded: false
