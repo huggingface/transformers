@@ -16,11 +16,10 @@ from __future__ import annotations
 import inspect
 import os
 from collections.abc import Mapping
-from dataclasses import fields
 from functools import lru_cache
 from pathlib import Path
 from types import UnionType
-from typing import Union, get_args, get_origin
+from typing import ClassVar, Union, get_args, get_origin
 
 import regex as re
 import typing_extensions
@@ -88,7 +87,7 @@ _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 # repeated compilation overhead (and cache lookups) on every decorator call.
 _re_example_or_return = re.compile(r"(?m)^([ \t]*)(?=Example|Return|```)")
 _re_return = re.compile(r"(?m)^([ \t]*)(?=Return)")
-_re_example = re.compile(r"(?m)^([ \t]*)(?=Example)")
+_re_example = re.compile(r"(?m)^([ \t]*)(?=Example|```)")
 _re_args_section = re.compile(r"(?:Args:)(\n.*)?(\n)?$", re.DOTALL)
 _re_shape = re.compile(r"(of shape\s*(?:`.*?`|\(.*?\)))")
 _re_default = re.compile(r"(defaults to \s*[^)]*)")
@@ -4016,7 +4015,7 @@ def _process_example_section(
 
     example_docstring = ""
 
-    # Use existing example section if available
+    # Use existing example section if available (with or without an "Example:" header)
     if func_documentation is not None and (match := _re_example.search(func_documentation)):
         example_docstring = func_documentation[match.start() :]
         example_docstring = "\n" + set_min_indent(example_docstring, indent_level + 4)
@@ -4217,13 +4216,17 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         if custom_args is None and doc_class:
             custom_args = doc_class
 
-        # `fields(cls)` returns only the annotations defined on cls exclduing `ClassVar`
-        # (e.g. model_type). Also exclude two quasi-ClassVar fields which can `setattr` and
-        # saved in config. These do not act as class attributes and thus cannot be `ClassVar`
-        # in its general sense.
-        own_config_params = {
-            field.name for field in fields(cls) if field.name not in ["transformers_version", "architectures"]
-        }
+        # Collect all non-ClassVar annotations from the class and its ancestors up to
+        # (but not including) PreTrainedConfig. This allows inherited params from intermediate
+        # config base classes to be documented, while naturally excluding PreTrainedConfig-specific
+        # quasi-ClassVar params (e.g. `transformers_version`, `architectures`).
+        own_config_params = set()
+        for ancestor in cls.__mro__:
+            if ancestor.__name__ == "PreTrainedConfig":
+                break
+            own_config_params |= {
+                k for k, v in getattr(ancestor, "__annotations__", {}).items() if get_origin(v) is not ClassVar
+            }
         allowed_params = own_config_params if own_config_params else None
         docstring_init = auto_method_docstring(
             cls.__init__,

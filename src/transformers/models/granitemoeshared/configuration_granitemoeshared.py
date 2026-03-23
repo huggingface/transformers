@@ -39,6 +39,19 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
         attention multiplier
     shared_intermediate_size (`int`, *optional*, defaults to 1024):
         intermediate size for shared experts.
+
+    ```python
+    >>> from transformers import GraniteMoeSharedModel, GraniteMoeSharedConfig
+
+    >>> # Initializing a GraniteMoeShared granitemoe-3b style configuration
+    >>> configuration = GraniteMoeSharedConfig()
+
+    >>> # Initializing a model from the granitemoe-7b style configuration
+    >>> model = GraniteMoeSharedModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "granitemoeshared"

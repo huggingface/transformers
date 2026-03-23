@@ -82,10 +82,10 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
     ```python
     >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
 
-    >>> # Initializing a GlmImageVisionConfig GLM-4.1V-9B style configuration
+    >>> # Initializing a GlmImageVisionConfig GLM-Image style configuration
     >>> configuration = GlmImageVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+    >>> # Initializing a model (with random weights) from the GLM-Image configuration
     >>> model = GlmImageVisionModel(configuration)
 
     >>> # Accessing the model configuration

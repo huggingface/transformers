@@ -28,6 +28,21 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="ibm-granite/granite-3.0-8b-base")
 @strict(accept_kwargs=True)
 class GraniteConfig(PreTrainedConfig):
+    r"""
+    ```python
+    >>> from transformers import GraniteModel, GraniteConfig
+
+    >>> # Initializing a Granite granite-3b style configuration
+    >>> configuration = GraniteConfig()
+
+    >>> # Initializing a model from the granite-7b style configuration
+    >>> model = GraniteModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
     model_type = "granite"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `GraniteModel`
