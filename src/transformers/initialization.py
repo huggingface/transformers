@@ -50,7 +50,7 @@ def should_skip_tie_weights(model) -> bool:
         return False
 
     # Only skip tying for the model instance created inside the active scope.
-    return getattr(model, "_no_tie_weights_scope", None) is scope
+    return getattr(model, "_skip_tie_weights_scope", None) is scope
 
 
 def uniform_(
