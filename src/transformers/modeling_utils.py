@@ -69,7 +69,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.fsdp import distribute_fsdp_model
+from .integrations.fsdp import apply_fsdp2
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -4159,7 +4159,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if fsdp_plan is not None:
             fsdp_mesh = fsdp_device_mesh if fsdp_device_mesh is not None else device_mesh
             if fsdp_mesh is not None:
-                model = distribute_fsdp_model(model, fsdp_plan, fsdp_mesh)
+                model = apply_fsdp2(model, fsdp_mesh, fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)

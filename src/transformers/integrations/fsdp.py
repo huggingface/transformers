@@ -516,29 +516,6 @@ def save_fsdp_model(model, save_directory):
         ),
     )
 
-
-def distribute_fsdp_model(model, fsdp_plan, device_mesh):
-    """
-    Distribute a model according to the FSDP plan.
-
-    This function wraps apply_fsdp2 and sets model attributes for tracking.
-
-    Args:
-        model: The model to distribute.
-        fsdp_plan: Optional FSDP config dict with an explicit "mode".
-        device_mesh: The DeviceMesh for FSDP communication.
-
-    Returns:
-        The FSDP-distributed model.
-    """
-    if fsdp_plan is None or device_mesh is None:
-        return model
-
-    model = apply_fsdp2(model, device_mesh, fsdp_plan)
-
-    return model
-
-
 # ========================= PEFT compatibility =========================
 # TODO(3outeille): make sure new FSDP works with PEFT
 def get_fsdp_ckpt_kwargs():
