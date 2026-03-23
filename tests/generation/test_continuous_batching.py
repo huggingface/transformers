@@ -626,7 +626,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=80,
         )
 
-    def test_continuous_batching_log_probs(self) -> None:
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @slow
+    def test_continuous_batching_log_probs(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
         """Test that log probabilities match between continuous batching and regular generate."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         max_new_tokens = 10
@@ -646,7 +648,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=eos_token_id)
 
         continuous_batching_config = ContinuousBatchingConfig(
-            use_cuda_graph=False, use_async_batching=False, allow_block_sharing=False, return_logprobs=True
+            use_cuda_graph=use_cuda_graph,
+            use_async_batching=use_async_batching,
+            allow_block_sharing=False,
+            return_logprobs=True,
         )
 
         cb_outputs = model.generate_batch(

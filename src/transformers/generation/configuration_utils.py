@@ -1633,7 +1633,7 @@ class ContinuousBatchingConfig:
     # Scheduler type used
     scheduler: str = "fifo"
 
-    # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log 
+    # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
 
