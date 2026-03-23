@@ -388,7 +388,7 @@ class JambaMambaMixer(nn.Module):
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
-            ssm_state = cache_params.ssm_states[self.layer_idx].clone()
+            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),

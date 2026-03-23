@@ -43,7 +43,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import JambaForCausalLM, JambaForSequenceClassification, JambaModel, DynamicCache
+    from transformers import DynamicCache, JambaForCausalLM, JambaForSequenceClassification, JambaModel
+    from transformers.cache_utils import MambaLayer
 
 
 class JambaConfigTester(ConfigTester):
@@ -351,7 +352,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            if config.layers_block_type[idx] == "mamba":
+            if isinstance(cache1.layers[idx], MambaLayer):
                 torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
                 torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
             else:

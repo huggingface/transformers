@@ -955,14 +955,14 @@ class Cache:
 
     def has_previous_state(self, layer_idx: int | None = None) -> bool:
         """Returns whether the Mamba layer at index `layer_idx` has previous state or not."""
-        if layer_idx >= len(self.layers):
+        if layer_idx is not None and layer_idx >= len(self.layers):
             return False
 
         # In this case, use last Mamba layer
         if layer_idx is None:
             try:
                 layer_idx = next(
-                    idx for idx in range(len(self) - 1, -1, -1) if isinstance(self.layers[idx], CacheLayerMixin)
+                    idx for idx in range(len(self) - 1, -1, -1) if isinstance(self.layers[idx], MambaCacheLayerMixin)
                 )
             except StopIteration:
                 raise ValueError(
