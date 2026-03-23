@@ -39,7 +39,6 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_pos_embed_utils import build_2d_sinusoidal_position_embedding
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -59,6 +58,7 @@ from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleD
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
 
 

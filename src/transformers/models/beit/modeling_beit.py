@@ -29,7 +29,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import DropPath, GradientCheckpointingLayer, drop_path_schedule
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -438,7 +438,10 @@ class BeitEncoder(nn.Module):
         self.layer = nn.ModuleList(
             [
                 BeitLayer(config, drop_path_rate=r)
-                for r in drop_path_schedule(config.drop_path_rate, config.num_hidden_layers)
+                for r in [
+                    config.drop_path_rate * i / max(config.num_hidden_layers - 1, 1)
+                    for i in range(config.num_hidden_layers)
+                ]
             ]
         )
         self.gradient_checkpointing = False

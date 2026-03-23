@@ -36,7 +36,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_layers import DropPath, GradientCheckpointingLayer, drop_path_schedule
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -506,7 +506,9 @@ class SegformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        drop_path_decays = drop_path_schedule(config.drop_path_rate, sum(config.depths))
+        drop_path_decays = [
+            config.drop_path_rate * i / max(sum(config.depths) - 1, 1) for i in range(sum(config.depths))
+        ]
         self.stages = nn.ModuleList(
             [SegformerStage(config, stage_idx, drop_path_decays) for stage_idx in range(config.num_encoder_blocks)]
         )

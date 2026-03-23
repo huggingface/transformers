@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import DropPath, GradientCheckpointingLayer, drop_path_schedule
+from ...modeling_layers import DropPath, GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -693,7 +693,7 @@ class SwinEncoder(SwinPreTrainedModel):
         super().__init__(config)
         self.num_layers = len(config.depths)
         self.config = config
-        dpr = drop_path_schedule(config.drop_path_rate, sum(config.depths))
+        dpr = [config.drop_path_rate * i / max(sum(config.depths) - 1, 1) for i in range(sum(config.depths))]
         self.layers = nn.ModuleList(
             [
                 SwinStage(

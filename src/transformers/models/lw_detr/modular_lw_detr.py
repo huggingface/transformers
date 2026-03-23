@@ -26,13 +26,13 @@ from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
-from ...modeling_pos_embed_utils import encode_sinusoidal_position_embedding
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
+from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderOutput,

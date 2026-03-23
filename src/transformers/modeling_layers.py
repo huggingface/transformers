@@ -118,39 +118,6 @@ class DropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-def drop_path_schedule(drop_path_rate: float, num_layers: int) -> list[float]:
-    """Return a linearly-spaced list of stochastic depth rates (0 → ``drop_path_rate``).
-
-    Follows the stochastic-depth decay rule from `Deep Networks with Stochastic Depth
-    <https://arxiv.org/abs/1603.09382>`_: rates increase linearly from 0 at the first
-    layer to ``drop_path_rate`` at the last.
-
-    Returns a plain Python list so it can be sliced, extended, or combined freely —
-    useful for multi-stage architectures where each stage takes a contiguous slice.
-
-    Args:
-        drop_path_rate: maximum stochastic depth rate at the last layer.
-        num_layers: total number of layers to schedule over.
-
-    Example::
-
-        # Single-stage encoder:
-        self.layer = nn.ModuleList([
-            MyLayer(config, drop_path_rate=r)
-            for r in drop_path_schedule(config.drop_path_rate, config.num_hidden_layers)
-        ])
-
-        # Multi-stage encoder (e.g. SegFormer/Swin):
-        schedule = drop_path_schedule(config.drop_path_rate, sum(config.depths))
-        cur = 0
-        for i, depth in enumerate(config.depths):
-            stage = [MyLayer(config, drop_path_rate=r) for r in schedule[cur : cur + depth]]
-            cur += depth
-    """
-    # Pure-Python linspace avoids creating a tensor, which would fail on meta devices.
-    return [drop_path_rate * i / max(num_layers - 1, 1) for i in range(num_layers)]
-
-
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"

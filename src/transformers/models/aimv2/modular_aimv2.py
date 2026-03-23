@@ -26,7 +26,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_pos_embed_utils import build_2d_sinusoidal_position_embedding
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -36,6 +35,7 @@ from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
+from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
