@@ -757,6 +757,10 @@ class TransformersKwargs(TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
+        router_logits (`Optional[Union[torch.Tensor, Tuple[torch.Tensor, ...]]]`, *optional*):
+            For MoE models, overrides the per-layer router logits/probabilities used for expert selection.
+            This enables "Routing Replay" by forcing deterministic expert selection. The expected structure
+            matches the model's own `outputs.router_logits`.
         cu_seq_lens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
         cu_seq_lens_k (`torch.LongTensor`, *optional*)
@@ -775,6 +779,7 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: bool | None
     output_attentions: bool | None
     output_router_logits: bool | None
+    router_logits: torch.Tensor | tuple[torch.Tensor, ...] | None
     cu_seq_lens_q: torch.LongTensor | None
     cu_seq_lens_k: torch.LongTensor | None
     max_length_q: int | None

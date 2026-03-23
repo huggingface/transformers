@@ -98,8 +98,21 @@ class Qwen2MoeTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+
+        router_logits = getattr(self, "_router_logits_override", None)
+        if router_logits is not None:
+            self._router_logits_override = None
+            if router_logits.dim() == 3:
+                router_logits = router_logits.view(-1, router_logits.shape[-1])
+            if router_logits.shape[0] != hidden_states.shape[0] or router_logits.shape[-1] != self.num_experts:
+                raise ValueError(
+                    "Invalid `router_logits` override shape. Expected "
+                    f"({hidden_states.shape[0]}, {self.num_experts}) (or (batch, seq, {self.num_experts})), got {tuple(router_logits.shape)}."
+                )
+            router_logits = router_logits.to(device=hidden_states.device, dtype=torch.float)
+        else:
+            router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+            router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
@@ -177,6 +190,27 @@ class Qwen2MoeModel(MixtralModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
+        router_logits = kwargs.pop("router_logits", None)
+
+        if router_logits is not None:
+            if isinstance(router_logits, (list, tuple)):
+                router_logits_per_layer = list(router_logits)
+            else:
+                router_logits_per_layer = [router_logits]
+
+            router_modules = [
+                layer.mlp.gate
+                for layer in self.layers[: self.config.num_hidden_layers]
+                if hasattr(layer, "mlp") and hasattr(layer.mlp, "gate")
+            ]
+            if len(router_logits_per_layer) != len(router_modules):
+                raise ValueError(
+                    "Invalid `router_logits` override: expected a tuple/list with one entry per router "
+                    f"call ({len(router_modules)}), got {len(router_logits_per_layer)}."
+                )
+            for router_module, per_layer_router_logits in zip(router_modules, router_logits_per_layer):
+                setattr(router_module, "_router_logits_override", per_layer_router_logits)
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

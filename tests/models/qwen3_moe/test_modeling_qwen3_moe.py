@@ -101,6 +101,42 @@ class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    def test_routing_replay_with_router_logits_override(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_experts = 3
+        config.output_router_logits = True
+
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+
+        model = Qwen3MoeForCausalLM(config).to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            out_ref = model(input_ids, attention_mask=attention_mask, output_router_logits=True)
+
+        for module in model.modules():
+            if module.__class__.__name__.endswith("TopKRouter") and hasattr(module, "weight"):
+                module.weight.data.normal_(mean=0.0, std=0.5)
+
+        with torch.no_grad():
+            out_changed = model(input_ids, attention_mask=attention_mask, output_router_logits=True)
+
+        self.assertFalse(torch.allclose(out_changed.logits, out_ref.logits))
+
+        with torch.no_grad():
+            out_replay = model(
+                input_ids,
+                attention_mask=attention_mask,
+                router_logits=out_ref.router_logits,
+                output_router_logits=True,
+            )
+
+        torch.testing.assert_close(out_replay.logits, out_ref.logits, rtol=1e-5, atol=1e-5)
+        self.assertEqual(len(out_replay.router_logits), len(out_ref.router_logits))
+        for got, expected in zip(out_replay.router_logits, out_ref.router_logits):
+            torch.testing.assert_close(got, expected)
+
 
 # Run on runners with larger accelerators (for example A10 instead of T4) with a lot of CPU RAM (e.g. g5-12xlarge)
 @require_torch_multi_accelerator
