@@ -221,9 +221,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] Idefics2ImageProcessor
     - preprocess
 
-## Idefics2ImageProcessorFast
+## Idefics2ImageProcessorPil
 
-[[autodoc]] Idefics2ImageProcessorFast
+[[autodoc]] Idefics2ImageProcessorPil
     - preprocess
 
 ## Idefics2Processor

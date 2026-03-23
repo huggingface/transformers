@@ -608,6 +608,21 @@ def corners_to_center_format(bboxes_corners: TensorType) -> TensorType:
     raise ValueError(f"Unsupported input type {type(bboxes_corners)}")
 
 
+def safe_squeeze(
+    tensor: Union[np.ndarray, "torch.Tensor"], axis: int | None = None
+) -> Union[np.ndarray, "torch.Tensor"]:
+    """
+    Squeezes a tensor, but only if the axis specified has dim 1.
+    """
+    if axis is None:
+        return tensor.squeeze()
+
+    try:
+        return tensor.squeeze(axis=axis)
+    except ValueError:
+        return tensor
+
+
 # 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
 # Copyright (c) 2018, Alexander Kirillov
 # All rights reserved.
@@ -819,6 +834,30 @@ def split_to_tiles(images: "torch.Tensor", num_tiles_height: int, num_tiles_widt
         width // num_tiles_width,
     )
     return image
+
+
+def divide_to_patches(
+    image: Union[np.ndarray, "torch.Tensor"], patch_size: int
+) -> list[Union[np.ndarray, "torch.Tensor"]]:
+    """
+    Divides an image into patches of a specified size.
+
+    Args:
+        image (`np.array | "torch.Tensor"`):
+            The input image.
+        patch_size (`int`):
+            The size of each patch.
+    Returns:
+        list: A list of `np.array | "torch.Tensor"` representing the patches.
+    """
+    patches = []
+    height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+    for i in range(0, height, patch_size):
+        for j in range(0, width, patch_size):
+            patch = image[:, i : i + patch_size, j : j + patch_size]
+            patches.append(patch)
+
+    return patches
 
 
 def _group_images_by_shape(nested_images, *paired_inputs, is_nested: bool = False):
