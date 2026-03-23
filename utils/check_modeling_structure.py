@@ -1031,55 +1031,48 @@ def trf011_check_pp_safe_forward(
             continue
 
         for sub in ast.walk(forward_method):
-            if not isinstance(sub, ast.Attribute):
-                continue
-            pp_submodule = _unsafe_pp_submodule_attr_access(sub, pp_modules)
-            if pp_submodule is None:
-                continue
-            if _has_rule_suppression(source_lines, rule_id, sub.lineno):
-                continue
-            violations.append(
-                Violation(
-                    file_path=file_path,
-                    line_number=sub.lineno,
-                    rule_id=rule_id,
-                    message=(
-                        f"{rule_id}: {node.name}.forward accesses `self.{pp_submodule}.{sub.attr}`. "
-                        f"`self.{pp_submodule}` is part of `base_model_pp_plan` and may be replaced with "
-                        "Identity on some pipeline stages. Use `self.config` or pass the metadata explicitly "
-                        "instead."
-                    ),
-                )
-            )
-
-        for stmt in ast.walk(forward_method):
-            if not isinstance(stmt, ast.For):
-                continue
-            pp_loop = _pp_loop_var(stmt, pp_modules)
-            if pp_loop is None:
-                continue
-            pp_module, loop_var = pp_loop
-            for sub in ast.walk(stmt):
-                if (
-                    isinstance(sub, ast.Attribute)
-                    and isinstance(sub.value, ast.Name)
-                    and sub.value.id == loop_var
-                    and _is_non_module_attr_access(sub)
-                ):
-                    if _has_rule_suppression(source_lines, rule_id, sub.lineno):
-                        continue
+            if isinstance(sub, ast.Attribute):
+                pp_submodule = _unsafe_pp_submodule_attr_access(sub, pp_modules)
+                if pp_submodule is not None and not _has_rule_suppression(source_lines, rule_id, sub.lineno):
                     violations.append(
                         Violation(
                             file_path=file_path,
                             line_number=sub.lineno,
                             rule_id=rule_id,
                             message=(
-                                f"{rule_id}: {node.name}.forward accesses `{loop_var}.{sub.attr}` "
-                                f"in a loop over `self.{pp_module}`. This breaks pipeline parallelism when "
-                                f"`self.{pp_module}` entries are replaced with Identity. Use `self.config` instead."
+                                f"{rule_id}: {node.name}.forward accesses `self.{pp_submodule}.{sub.attr}`. "
+                                f"`self.{pp_submodule}` is part of `base_model_pp_plan` and may be replaced with "
+                                "Identity on some pipeline stages. Use `self.config` or pass the metadata explicitly "
+                                "instead."
                             ),
                         )
                     )
+
+            if isinstance(sub, ast.For):
+                pp_loop = _pp_loop_var(sub, pp_modules)
+                if pp_loop is not None:
+                    pp_module, loop_var = pp_loop
+                    for inner in ast.walk(sub):
+                        if (
+                            isinstance(inner, ast.Attribute)
+                            and isinstance(inner.value, ast.Name)
+                            and inner.value.id == loop_var
+                            and _is_non_module_attr_access(inner)
+                        ):
+                            if _has_rule_suppression(source_lines, rule_id, inner.lineno):
+                                continue
+                            violations.append(
+                                Violation(
+                                    file_path=file_path,
+                                    line_number=inner.lineno,
+                                    rule_id=rule_id,
+                                    message=(
+                                        f"{rule_id}: {node.name}.forward accesses `{loop_var}.{inner.attr}` "
+                                        f"in a loop over `self.{pp_module}`. This breaks pipeline parallelism when "
+                                        f"`self.{pp_module}` entries are replaced with Identity. Use `self.config` instead."
+                                    ),
+                                )
+                            )
 
     return violations
 
