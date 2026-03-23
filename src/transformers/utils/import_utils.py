@@ -624,9 +624,7 @@ def is_kenlm_available() -> bool:
 @lru_cache
 def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
     is_available, kernels_version = _is_package_available("kernels", return_version=True)
-    if not is_available or kernels_version == "N/A":
-        return False
-    return version.parse(kernels_version) >= version.parse(MIN_VERSION)
+    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
 
 
 @lru_cache
@@ -653,9 +651,7 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
 @lru_cache
 def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
     is_available, triton_version = _is_package_available("triton", return_version=True)
-    if not is_available or triton_version == "N/A":
-        return False
-    return version.parse(triton_version) >= version.parse(min_version)
+    return is_available and version.parse(triton_version) >= version.parse(min_version)
 
 
 @lru_cache
