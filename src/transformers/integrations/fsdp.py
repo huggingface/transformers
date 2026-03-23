@@ -100,7 +100,7 @@ def initialize_fsdp(
         if device_mesh.ndim > 1:
             if "dp_shard" not in device_mesh.mesh_dim_names:
                 raise ValueError(
-                    "When using `fsdp_plan` with n-d `device_mesh`, it must contain an 'fsdp' dimension. "
+                    "When using `fsdp_plan` with n-d `device_mesh`, it must contain a 'dp_shard' dimension. "
                     "Please provide a valid `device_mesh`."
                 )
             device_mesh = device_mesh["dp_shard"]
