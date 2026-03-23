@@ -15,49 +15,19 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
-from ..utils import is_torch_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import QuantizationMethod
 
 
-if TYPE_CHECKING:
-    import torch.nn as nn
-
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch
+    import torch.distributed as dist
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
 
 logger = logging.get_logger(__name__)
-
-
-# TODO(3outeille): too many imports, make sure there is no redundant imports
-def is_fsdp_managed_module(module: nn.Module) -> bool:
-    if not is_torch_available():
-        return False
-    import torch
-
-    if not torch.distributed.is_available():
-        return False
-    try:
-        from torch.distributed.fsdp import FullyShardedDataParallel
-    except ImportError:
-        return False
-    return isinstance(module, FullyShardedDataParallel) or getattr(module, "_is_fsdp_managed_module", False)
-
-
-def is_fsdp_enabled():
-    if not is_torch_available():
-        return False
-    import torch
-
-    return (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
-        and strtobool(os.environ.get("FSDP_CPU_RAM_EFFICIENT_LOADING", "False")) == 1
-    )
 
 
 def initialize_fsdp(
@@ -79,9 +49,6 @@ def initialize_fsdp(
     """
     if not is_torch_available():
         raise ImportError("PyTorch is required for FSDP support")
-
-    import torch
-    import torch.distributed as dist
 
     if fsdp_plan is None:
         return device_map, device_mesh, None
