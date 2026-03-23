@@ -143,6 +143,8 @@ SPECIAL_CASES_TO_ALLOW = {
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
     # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
     "chunk_size_feed_forward",
     "dtype",
     "id2label",
