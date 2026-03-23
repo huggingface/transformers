@@ -1031,6 +1031,7 @@ def get_scheduler(
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
 
     if name == SchedulerType.INVERSE_SQRT:
+        scheduler_specific_kwargs.pop("num_training_steps", None)
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
 
     # wsd scheduler requires either num_training_steps or num_stable_steps
