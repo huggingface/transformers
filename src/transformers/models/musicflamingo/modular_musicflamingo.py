@@ -16,19 +16,15 @@
 import re
 from math import pi
 
-import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, broadcast_tensors
 
 from ... import initialization as init
-from ...audio_utils import AudioInput, make_list_of_audio
 from ...cache_utils import Cache
-from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -142,94 +138,23 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
 
-    def __call__(
-        self,
-        text: TextInput | list[TextInput],
-        audio: AudioInput | None = None,
-        output_labels: bool | None = False,
-        **kwargs: Unpack[MusicFlamingoProcessorKwargs],
-    ) -> BatchFeature:
-        call_kwargs = self._merge_kwargs(
-            MusicFlamingoProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
+    def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
+        audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
+        audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
+        for i, audio_length in enumerate(audio_tokens_lengths):
+            text[i] = re.sub(
+                re.escape(self.audio_token),
+                self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
+                text[i],
+            )
+        return text
+
+    def _get_audio_tokens_mask(self, input_ids):
+        return (
+            (input_ids == self.audio_token_id)
+            | (input_ids == self.audio_bos_token_id)
+            | (input_ids == self.audio_eos_token_id)
         )
-
-        text_kwargs = call_kwargs["text_kwargs"]
-        audio_kwargs = call_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors")
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
-        if isinstance(text, str):
-            text = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-        audio_inputs = {}
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-            if len(text) != len(audio):
-                raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
-
-            # Determine number of chunks per sample, and flatten
-            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
-            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
-
-            per_sample_windows: list[int] = []
-            flat_chunks: list[np.ndarray] = []
-
-            for audio_el in audio:
-                n_samples = int(audio_el.shape[0])
-                n_win = max(1, (n_samples + window_size - 1) // window_size)
-                if n_win > max_windows:
-                    logger.warning(
-                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
-                    )
-                    n_win = max_windows
-                per_sample_windows.append(n_win)
-
-                time_cap = min(n_samples, n_win * window_size)
-                for i in range(n_win):
-                    start = i * window_size
-                    end = min((i + 1) * window_size, time_cap)
-                    flat_chunks.append(audio_el[start:end])
-
-            # Feature extraction
-            audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
-            padding_mask = audio_inputs.pop("attention_mask")
-            audio_inputs["input_features_mask"] = padding_mask
-
-            # Compute sequence lengths token counting
-            audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-            audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
-
-            # expand audio tokens in text
-            for i, audio_length in enumerate(audio_tokens_lengths):
-                text[i] = re.sub(
-                    re.escape(self.audio_token),
-                    self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
-                    text[i],
-                )
-
-        text_inputs = self.tokenizer(text, **text_kwargs)
-
-        data = {**text_inputs, **audio_inputs}
-        if output_labels:
-            labels = data["input_ids"].clone()
-            labels[labels == self.audio_token_id] = -100
-            labels[labels == self.audio_bos_token_id] = -100
-            labels[labels == self.audio_eos_token_id] = -100
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            data["labels"] = labels
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
-
-    @property
-    def model_input_names(self) -> list[str]:
-        tok_names = self.tokenizer.model_input_names
-        fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")
@@ -271,11 +196,10 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
 class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
     """Rotary time embedding module used by MusicFlamingo checkpoints.
 
-    This is a checkpoint-faithful integration, not a direct implementation of
-    the RoTE formulation described in (Goel et al., 2024):
-    https://arxiv.org/abs/2410.12109. It applies axial rotary embeddings over
-    the window index within each audio sample and the encoder time index within
-    each window, then modulates both axes with absolute timestamps in seconds.
+    This is a checkpoint-faithful integration, not a direct implementation of the RoTE formulation described in
+    (Goel et al., 2024): https://arxiv.org/abs/2410.12109. It applies axial rotary embeddings over the window index
+    within each audio sample and the encoder time index within each window, then modulates both axes with absolute
+    timestamps in seconds.
     """
 
     def __init__(self, config: MusicFlamingoConfig, device=None):
@@ -284,8 +208,7 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         self.register_buffer("position_angles", position_angles, persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config=None, device=None, seq_len=None):
-        del seq_len
+    def compute_default_rope_parameters(config: MusicFlamingoConfig, device=None):
         dim = config.audio_rotary_dim
         inv_freq = 1.0 / (
             config.rope_parameters["rope_theta"] ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
@@ -303,18 +226,9 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
         """Compute 2D axial rotary embeddings for window and time dimensions."""
 
-        # Compute frequencies for the window axis. This axis should reset for
-        # each audio sample, so derive it from the chunk start timestamps rather
-        # than the flattened row index.
+        # Compute frequencies for the window axis, accounting for x4 due to the downsampling in the audio encoder (conv2 and avg pooling)
         window_starts = timestamps[:, 0].to(device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        if seq_len > 1:
-            frame_step = (timestamps[0, 1] - timestamps[0, 0]).to(self.inv_freq)
-            window_duration = frame_step * seq_len
-        else:
-            unique_starts = torch.unique(window_starts)
-            window_duration = (
-                torch.diff(unique_starts).min() if unique_starts.numel() > 1 else window_starts.new_tensor(1.0)
-            )
+        window_duration = self.config.audio_frame_step * 4 * seq_len
         window_positions = torch.round(window_starts / window_duration) / self.max_seq_len_cached
         window_freqs = window_positions.unsqueeze(-1) * self.inv_freq
         window_freqs = torch.repeat_interleave(window_freqs, 2, dim=-1)
@@ -358,41 +272,31 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
     ) -> torch.FloatTensor:
         audio_token_mask = input_ids == self.config.audio_token_id
         diff = torch.diff(torch.nn.functional.pad(audio_token_mask.int(), (1, 1), value=0), dim=1)
-        batch_starts, starts = torch.where(diff == 1)
-        batch_ends, ends = torch.where(diff == -1)
-        if not torch.equal(batch_starts, batch_ends):
-            raise ValueError("Audio token spans in input_ids must be contiguous.")
-        span_lengths = (ends - starts).to(torch.long)
-        if span_lengths.sum() != post_lengths.sum():
-            raise ValueError("The number of audio tokens in input_ids must match the audio encoder output length.")
+        _, starts = torch.where(diff == 1)
+        _, ends = torch.where(diff == -1)
+        sample_lengths = (ends - starts).to(torch.long)
 
+        # Account for 4x downsampling in audio encoder (conv2 and avg pooling)
         audio_embed_frame_step = self.config.audio_frame_step * 4
         frame_offsets = (
             torch.arange(max_post_length, device=post_lengths.device, dtype=torch.float32) * audio_embed_frame_step
         )
-        timestamps = torch.empty(
-            (post_lengths.shape[0], max_post_length), device=post_lengths.device, dtype=torch.float32
+
+        # Map each encoder output row to its audio sample using token counts
+        cumsum_post = torch.cat([torch.zeros(1, device=post_lengths.device), torch.cumsum(post_lengths, dim=0)[:-1]])
+        cumsum_samples = torch.cumsum(sample_lengths, dim=0)
+        sample_indices = torch.searchsorted(cumsum_samples, cumsum_post, right=True)
+
+        # Compute window index within each sample (0, 1, 2, ... then reset for next sample)
+        sample_start_rows = torch.searchsorted(
+            sample_indices, torch.arange(len(sample_lengths), device=post_lengths.device)
+        )
+        window_indices = (
+            torch.arange(len(post_lengths), device=post_lengths.device) - sample_start_rows[sample_indices]
         )
 
-        row_idx = 0
-        for span_length in span_lengths.tolist():
-            consumed = 0
-            window_idx = 0
-            while consumed < span_length:
-                if row_idx >= post_lengths.numel():
-                    raise ValueError("Audio encoder outputs do not align with the audio token spans in input_ids.")
-                row_length = int(post_lengths[row_idx].item())
-                consumed += row_length
-                if consumed > span_length:
-                    raise ValueError("Audio encoder outputs exceed the corresponding audio token span in input_ids.")
-                timestamps[row_idx] = window_idx * max_post_length * audio_embed_frame_step + frame_offsets
-                row_idx += 1
-                window_idx += 1
-
-        if row_idx != post_lengths.numel():
-            raise ValueError("Some audio encoder outputs could not be assigned to any audio token span.")
-
-        return timestamps
+        # Compute timestamps
+        return window_indices.unsqueeze(1) * max_post_length * audio_embed_frame_step + frame_offsets
 
     @can_return_tuple
     @auto_docstring(
@@ -409,7 +313,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Token ids containing the `<sound>` spans used to reconstruct rotary time embedding timestamps.
+            Token ids containing the audio token ID placeholders, for reconstructing rotary time embedding timestamps.
         """
         audio_output = self.audio_tower(
             input_features,
