@@ -516,6 +516,10 @@ def _is_packed_sequence(position_ids, batch_size):
         1. Position ids exist
         2. Flattened sequences only are supported
         3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+    Note: Multi-dimensional position_ids (e.g. 3D for multi-dim RoPE in Qwen3.5) are handled by extracting
+    the temporal dimension before checking. See https://github.com/huggingface/transformers/issues/44910
+    and https://github.com/QwenLM/Qwen3.5/issues/104 (fix by @ouroborosscr, @JJJYmmm).
+
     """
     if position_ids is None:
         return False
