@@ -216,35 +216,9 @@ class ReLUSquaredActivation(nn.Module):
 
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
-        key, _, operation = key.partition("_and_")
         content = super().__getitem__(key)
         cls, kwargs = content if isinstance(content, tuple) else (content, {})
-        act = cls(**kwargs)
-        if operation == "mul":
-            class ActAndMul(nn.Module):
-                """
-                The module computes x -> act(x[:d]) * x[d:] where d = x.shape[-1] // 2.
-
-                Shapes:
-                    x: (..., 2 * d)
-                    return: (..., d)
-                """
-                def __init__(self):
-                    super().__init__()
-                    self.act = act
-
-                def forward(self, input: Tensor) -> Tensor:
-                    d = input.shape[-1] // 2
-                    return self.act(input[..., :d]) * input[..., d:]
-
-            ActAndMul.__name__ = f"{type(act).__name__}AndMul"
-            ActAndMul.__qualname__ = f"{type(act).__qualname__}AndMul"
-            act = ActAndMul()
-        elif operation:
-            raise ValueError(
-                f"Invalid {operation=} to fuse with activation {cls.__name__}. Only 'mul' is supported."
-            )
-        return act
+        return cls(**kwargs)
 
 
 class XIELUActivation(nn.Module):

@@ -33,6 +33,24 @@ def _make_fused_mlp(original_cls):
     and overrides ``_compute_gate_up`` to use it.
     """
 
+    class ActAndMul(nn.Module):
+        """
+        The module computes x -> act(x[:d]) * x[d:] where d = x.shape[-1] // 2.
+
+        Shapes:
+            x: (..., 2 * d)
+            return: (..., d)
+        """
+        def __init__(self, act):
+            super().__init__()
+            self.act = act
+            ActAndMul.__name__ = f"{type(act).__name__}AndMul"
+            ActAndMul.__qualname__ = f"{type(act).__qualname__}AndMul"
+
+        def forward(self, input: torch.Tensor) -> torch.Tensor:
+            d = input.shape[-1] // 2
+            return self.act(input[..., :d]) * input[..., d:]
+
     class FusedMLP(original_cls):
         _weight_converter = WeightConverter(
             source_patterns=[".gate_proj.weight$", ".up_proj.weight$"],
@@ -43,12 +61,13 @@ def _make_fused_mlp(original_cls):
         def __init__(self, config):
             super().__init__(config)
 
-            del self.gate_proj
-            del self.up_proj
-            self.gate_up_proj = nn.Linear(
-                self.hidden_size, self.intermediate_size * 2, bias=config.mlp_bias
-            )
-            self.act_fn = ACT2FN[config.hidden_act + "_and_mul"]
+            in_features = self.gate_proj.in_features
+            out_features = self.gate_proj.out_features + self.up_proj.out_features
+            bias = self.gate_proj.bias is not None
+            del self.gate_proj, self.up_proj
+
+            self.gate_up_proj = nn.Linear(in_features=in_features, out_features=out_features, bias=bias)
+            self.act_fn = ActAndMul(self.act_fn)
 
         def _compute_gate_up(self, x):
             return self.act_fn(self.gate_up_proj(x))
@@ -75,17 +94,14 @@ def _make_fused_attention(original_cls):
         def __init__(self, config, layer_idx: int):
             super().__init__(config, layer_idx)
 
-            del self.q_proj
-            del self.k_proj
-            del self.v_proj
+            in_features = self.q_proj.in_features
+            self.q_size = self.q_proj.out_features
+            self.kv_size = self.k_proj.out_features
+            out_features = self.q_size + 2 * self.kv_size
+            bias = self.q_proj.bias is not None
+            del self.q_proj, self.k_proj, self.v_proj
 
-            self.q_size = config.num_attention_heads * self.head_dim
-            self.kv_size = config.num_key_value_heads * self.head_dim
-            self.qkv_proj = nn.Linear(
-                config.hidden_size,
-                self.q_size + 2 * self.kv_size,
-                bias=config.attention_bias,
-            )
+            self.qkv_proj = nn.Linear(in_features=in_features, out_features=out_features, bias=bias)
 
         def _project_qkv(self, hidden_states, hidden_shape):
             qkv = self.qkv_proj(hidden_states)
