@@ -259,7 +259,8 @@ def get_state_dict_dtype(state_dict):
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
     for t in state_dict.values():
-        if t.is_floating_point():
+        # We cannot instantiate a whole model under float4/8_xxx dtypes (torch does not allow setting them as default dtype)
+        if t.is_floating_point() and "float8_" not in str(t.dtype) and "float4_" not in str(t.dtype):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
@@ -1820,10 +1821,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
-                # No kernels support for FA4 for now
-                if fa_version == 4:
-                    continue
-
                 # Check whether we have an original FA requested but not available in the env
                 if requested_original_flash_attn := (
                     attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
