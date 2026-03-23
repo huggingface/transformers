@@ -700,7 +700,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             # Compare with tolerance for floating point differences
             for j, (cb_lp, exp_lp) in enumerate(zip(cb_logprobs, expected_logprobs)):
                 self.assertAlmostEqual(
-                    cb_lp, exp_lp, places=5,
+                    cb_lp, exp_lp, places=4 if use_cuda_graph else 5,  # cuda graphs add padding, hence lower precision
                     msg=f"logprob mismatch at position {j} for request {i}: CB={cb_lp}, expected={exp_lp}"
                 )
 
