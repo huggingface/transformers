@@ -517,7 +517,6 @@ class ContinuousBatchProcessor:
 
     @traced(span_name="sampling")
     def _sample(self, probs: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
-
         # Apply softmax if we are sampling or if we are generating log probabilities
         if self.do_sample or self.return_logprobs:
             probs = nn.functional.softmax(probs[0], dim=-1)  # shape [seq_len, vocab_size]
