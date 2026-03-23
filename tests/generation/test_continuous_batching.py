@@ -15,9 +15,9 @@
 import functools
 import gc
 import itertools
+import unittest
 from contextlib import contextmanager
 from types import SimpleNamespace
-import unittest
 from unittest.mock import patch
 
 import torch
@@ -161,7 +161,9 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         inputs_and_outputs = FakeInputsAndOutputs()
         forward_calls = []
 
-        def fake_forward_fn(model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids):
+        def fake_forward_fn(
+            model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
+        ):
             del model, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
             forward_calls.append(batch_data["input_ids"].clone())
 

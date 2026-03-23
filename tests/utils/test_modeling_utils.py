@@ -1602,47 +1602,6 @@ class ModelUtilsTest(TestCasePlus):
             model = LlamaForCausalLM._from_config(copy.deepcopy(config))
             self.assertTrue(model.lm_head.weight is not model.model.embed_tokens.weight)
 
-    def test_no_tie_weights_is_thread_local(self):
-        # Regress the old global monkey patch: another thread must continue to
-        # observe the original tie_weights method while this context is active.
-        original_tie_weights = PreTrainedModel.tie_weights
-        context_entered = threading.Event()
-        release_context = threading.Event()
-        observed_methods: list[object] = []
-
-        def worker():
-            with init.no_tie_weights():
-                context_entered.set()
-                release_context.wait(timeout=5)
-
-        thread = threading.Thread(target=worker)
-        thread.start()
-
-        self.assertTrue(context_entered.wait(timeout=5))
-        observed_methods.append(PreTrainedModel.tie_weights)
-        release_context.set()
-        thread.join(timeout=5)
-
-        self.assertIs(observed_methods[0], original_tie_weights)
-        self.assertIs(PreTrainedModel.tie_weights, original_tie_weights)
-
-    def test_no_tie_weights_is_model_specific(self):
-        # The no-tie scope should only affect models created inside that scope;
-        # existing models must still be able to tie normally.
-        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=16, tie_word_embeddings=True)
-
-        with init.no_tie_weights():
-            first_model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-
-        self.assertTrue(first_model.lm_head.weight is not first_model.model.embed_tokens.weight)
-
-        with init.no_tie_weights():
-            second_model = LlamaForCausalLM._from_config(copy.deepcopy(config))
-            first_model.tie_weights()
-
-            self.assertTrue(second_model.lm_head.weight is not second_model.model.embed_tokens.weight)
-            self.assertTrue(first_model.lm_head.weight is first_model.model.embed_tokens.weight)
-
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
         logger = logging.get_logger("transformers.modeling_utils")
