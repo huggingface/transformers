@@ -91,7 +91,7 @@ class LongcatFlashConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     ffn_hidden_size: int = 12288
-    q_lora_rank: int = 1536
+    q_lora_rank: int | None = 1536
     kv_lora_rank: int = 512
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64

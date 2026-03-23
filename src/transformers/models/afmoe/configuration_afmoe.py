@@ -87,7 +87,7 @@ class AfmoeConfig(PreTrainedConfig):
     output_router_logits: bool = False
     global_attn_every_n_layers: int | None = 4
     sliding_window: int | None = 1024
-    layer_types: list | None = None
+    layer_types: list[str] | None = None
     attention_dropout: float | int | None = 0.0
     mup_enabled: bool | None = False
     eos_token_id: int | list[int] | None = None
