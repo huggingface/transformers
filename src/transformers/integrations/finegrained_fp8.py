@@ -755,13 +755,13 @@ class Fp8Dequantize(ConversionOps):
         if "weight$" in input_dict:
             quantized = input_dict["weight$"][0]
             scales = input_dict["weight_scale_inv"][0]
-            if f"{full_layer_name[:-7]}_scale_inv" in kwargs["loading_info"].unexpected_keys: 
+            if f"{full_layer_name[:-7]}_scale_inv" in kwargs["loading_info"].unexpected_keys:
                 kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_scale_inv")
                 kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_weight")
         else:
             quantized, scales = input_dict.values()
-            quantized, scales =quantized[0], scales[0]
-            if f"{full_layer_name}_scale_inv" in kwargs["loading_info"].unexpected_keys: 
+            quantized, scales = quantized[0], scales[0]
+            if f"{full_layer_name}_scale_inv" in kwargs["loading_info"].unexpected_keys:
                 kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_scale_inv")
                 kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_activation_scale")
                 kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_weight")

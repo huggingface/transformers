@@ -1029,7 +1029,6 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         tools: list[dict | Callable] | None = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
-        reasoning_effort: ReasoningEffort | None = None,
         tokenize: bool = True,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
