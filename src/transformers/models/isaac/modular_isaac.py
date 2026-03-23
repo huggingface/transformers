@@ -1531,19 +1531,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
                 image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
             )
             vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
-        if position_ids is None or position_ids.ndim == 2:
-            position_ids = self._prepare_position_ids_for_generation(
-                input_ids,
-                {
-                    "input_ids": input_ids,
-                    "attention_mask": attention_mask,
-                    "past_key_values": past_key_values,
-                    "mm_token_type_ids": mm_token_type_ids,
-                    "vision_token_grids": vision_token_grids,
-                    "vision_token_offsets": vision_token_offsets,
-                    "vision_token_lengths": vision_token_lengths,
-                },
-            )
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
