@@ -198,8 +198,9 @@ This is the default signature for an attention mask function.
 ```python
 def custom_attention_mask(
     batch_size: int,  # required arg
-    cache_position: torch.Tensor,  # required arg
+    q_length: int,  # required arg
     kv_length: int,  # required arg
+    q_offset: int = 0,  # required arg
     kv_offset: int = 0,  # required arg
     mask_function: Callable = causal_mask_function,  # required arg
     attention_mask: Optional[torch.Tensor] = None,  # required arg

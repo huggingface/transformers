@@ -78,7 +78,7 @@ class DiaDecoderConfig(PreTrainedConfig):
     use_cache: bool = True
     is_encoder_decoder: bool = True
     pad_token_id: int | None = 1025
-    eos_token_id: int | None = 1024
+    eos_token_id: int | list[int] | None = 1024
     bos_token_id: int | None = 1026
 
 
