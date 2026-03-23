@@ -162,6 +162,33 @@ def w8a8_block_fp8_matmul_cutlass(
     return C.view(original_shape[:-1] + (N,))
 
 
+def _needs_triton_padding(dim: int) -> bool:
+    r"""Check if a matrix dimension needs padding for the Triton tensor-scale FP8 kernel.
+
+    The Triton kernel uses ``BLOCK_SIZE = 128`` when ``dim % 128 == 0``, otherwise it
+    falls back to ``BLOCK_SIZE = dim``. Since ``tl.arange`` requires a power-of-2 range,
+    dimensions that are neither divisible by 128 nor a power of 2 will crash.
+    """
+    if dim % 128 == 0:
+        return False
+    # dim is used directly as block size; must be a power of 2
+    return (dim & (dim - 1)) != 0
+
+
+def _pad_dim_to_multiple_of_128(tensor: torch.Tensor, dim: int) -> torch.Tensor:
+    r"""Pad ``tensor`` with zeros along ``dim`` to the next multiple of 128."""
+    dim = dim % tensor.ndim  # normalise negative dims
+    size = tensor.shape[dim]
+    target = (size + 127) // 128 * 128
+    if target == size:
+        return tensor
+    pad_amount = target - size
+    pad = [0] * (2 * tensor.ndim)
+    pad_idx = 2 * (tensor.ndim - 1 - dim) + 1
+    pad[pad_idx] = pad_amount
+    return F.pad(tensor, pad)
+
+
 def w8a8_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -185,6 +212,27 @@ def w8a8_fp8_matmul(
 
     if _supports_cutlass(A, B, block_size, output_dtype):
         return w8a8_block_fp8_matmul_cutlass(A, B, As, Bs, output_dtype)
+
+    # For tensor-scale mode the Triton kernel uses the raw N / K as block sizes
+    # when they are not divisible by 128.  Triton requires tl.arange ranges to be
+    # powers of 2, so we pad to the next multiple of 128 and slice afterwards.
+    is_tensor_mode = block_size is None or (block_size[0] == B.size(0) and block_size[1] == B.size(1))
+    if is_tensor_mode:
+        N, K = B.shape
+        needs_n_pad = _needs_triton_padding(N)
+        needs_k_pad = _needs_triton_padding(K)
+
+        if needs_n_pad or needs_k_pad:
+            if needs_n_pad:
+                B = _pad_dim_to_multiple_of_128(B, dim=0)
+            if needs_k_pad:
+                B = _pad_dim_to_multiple_of_128(B, dim=1)
+                A = _pad_dim_to_multiple_of_128(A, dim=-1)
+
+            padded_block_size = [B.size(0), B.size(1)] if block_size is not None else None
+            kernel = _get_triton_kernel()
+            result = kernel.w8a8_fp8_matmul(A, B, As, Bs, padded_block_size, output_dtype)
+            return result[..., :N]
 
     # Fall back to Triton
     kernel = _get_triton_kernel()
@@ -414,9 +462,6 @@ class FP8Experts(nn.Module):
         assert has_bias is False, (
             "FP8Experts does not support bias for now, please open an issue if you want this feature"
         )
-        assert activation_scheme == "dynamic", (
-            "Only dynamic activation quantization is supported for now, please open an issue if you want others"
-        )
 
         self.config = config
         self.has_bias = has_bias
@@ -457,6 +502,10 @@ class FP8Experts(nn.Module):
         )
         self.register_parameter("down_proj_bias", None)
 
+        if self.activation_scheme == "static":
+            self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
+            self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
+
         self.act_fn = ACT2FN[config.hidden_act]
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
@@ -481,26 +530,48 @@ class FP8Experts(nn.Module):
 
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
+            gate_up_act_scale = (
+                self.gate_up_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
+            )
             proj_out = self.linear(
                 current_state,
                 self.gate_up_proj[expert_idx] if self.has_gate else self.up_proj[expert_idx],
                 self.gate_up_proj_scale_inv[expert_idx] if self.has_gate else self.up_proj_scale_inv[expert_idx],
+                activation_scale=gate_up_act_scale,
             )
             proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
-            proj_out = self.linear(proj_out, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx])
+            down_act_scale = (
+                self.down_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
+            )
+            proj_out = self.linear(
+                proj_out,
+                self.down_proj[expert_idx],
+                self.down_proj_scale_inv[expert_idx],
+                activation_scale=down_act_scale,
+            )
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
             weighted_out = proj_out * routing_weights.to(proj_out.dtype)
             final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
         return final_hidden_states.to(hidden_states.dtype)
 
-    def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
+    def linear(
+        self,
+        input: torch.Tensor,
+        weight: torch.Tensor,
+        weight_scale_inv: torch.Tensor,
+        activation_scale: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if weight.element_size() > 1:
             return F.linear(input, weight, None)
 
-        kernel = _get_triton_kernel()
-        qinput, scale = kernel.fp8_act_quant(
-            input, self.block_size[1] if self.block_size is not None else input.shape[-1]
-        )
+        if self.activation_scheme == "static" and activation_scale is not None:
+            scale = activation_scale.to(torch.float32)
+            qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        else:
+            kernel = _get_triton_kernel()
+            qinput, scale = kernel.fp8_act_quant(
+                input, self.block_size[1] if self.block_size is not None else input.shape[-1]
+            )
         output = w8a8_fp8_matmul(
             qinput,
             weight,
@@ -679,11 +750,21 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
-            # case where we only got weights, need to check for "weight$"
             return {full_layer_name: input_dict["weight$"]}
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["weight_scale_inv"][0]
+        if "weight$" in input_dict:
+            quantized = input_dict["weight$"][0]
+            scales = input_dict["weight_scale_inv"][0]
+            if f"{full_layer_name[:-7]}_scale_inv" in kwargs["loading_info"].unexpected_keys:
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_scale_inv")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name[:-7]}_weight")
+        else:
+            quantized, scales = input_dict.values()
+            quantized, scales = quantized[0], scales[0]
+            if f"{full_layer_name}_scale_inv" in kwargs["loading_info"].unexpected_keys:
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_scale_inv")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_activation_scale")
+                kwargs["loading_info"].unexpected_keys.remove(f"{full_layer_name}_weight")
 
         rows, cols = quantized.shape[-2:]
         block_size = self.hf_quantizer.quantization_config.weight_block_size
@@ -696,6 +777,7 @@ class Fp8Dequantize(ConversionOps):
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_m}, {block_n})."
             )
+
         quantized = quantized.to(scales.dtype)
         reshaped = quantized.reshape(-1, rows // block_m, block_m, cols // block_n, block_n)
         expanded_scales = scales.reshape(-1, rows // block_m, cols // block_n)

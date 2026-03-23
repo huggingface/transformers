@@ -85,7 +85,7 @@ class Mistral4IntegrationTest(unittest.TestCase):
     def test_mistral_small_4_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            "mistralai/Mistral-Small-4-119B-2603", device_map="auto"
+            "mistralai/Mistral-Small-4-119B-2602", device_map="auto"
         )
         input_ids = torch.tensor([input_ids]).to(model.device)
         with torch.no_grad():
@@ -94,7 +94,8 @@ class Mistral4IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_MEANS = Expectations(
             {
-                ("cuda", None): torch.tensor([[0.1793, -1.0928, -3.9925, -2.8699, -0.1250, -1.6851, -2.5565, -1.2263]]),
+                ("cuda", None): torch.tensor([[-1.1503, -1.9935, -0.4457, -1.0717, -1.9182, -1.1431, -0.9697, -1.7098]]),
+                ("xpu", None): torch.tensor([[-0.9800, -2.4773, -0.2386, -1.0664, -1.8994, -1.3792, -1.0531, -1.8832]]),
             }
         )
         # fmt: on
@@ -111,16 +112,16 @@ class Mistral4IntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", None): "My favourite condiment is 1000 island dressing. I love it on burgers and hot dogs. I also like",
-                # ("xpu", None): "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",
+                ("cuda", None): "My favourite condiment is 100% pure olive oil. It's a staple in my kitchen and I use it in",
+                ("xpu", None): "My favourite condiment is iced tea. I love the way it makes me feel. It’s like a little bubble bath for",
             }
         )
         # fmt: on
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-Small-4-119B-2603")
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-Small-4-119B-2602")
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            "mistralai/Mistral-Small-4-119B-2603", device_map="auto"
+            "mistralai/Mistral-Small-4-119B-2602", device_map="auto"
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
