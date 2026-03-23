@@ -23,6 +23,7 @@ This module tests:
 - Built-in callbacks (DefaultFlowCallback, EarlyStoppingCallback, etc.)
 """
 
+import importlib.util
 import os
 import shutil
 import tempfile
@@ -51,6 +52,9 @@ if is_torch_available():
     from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
     from .trainer_test_utils import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
+
+
+IPYTHON_AVAILABLE = importlib.util.find_spec("IPython") is not None
 
 
 # =============================================================================
@@ -1272,6 +1276,7 @@ class ExportableStateTest(unittest.TestCase):
 
 
 @require_torch
+@unittest.skipUnless(IPYTHON_AVAILABLE, "IPython is required for NotebookProgressCallback")
 class NotebookProgressCallbackTest(unittest.TestCase):
     """Tests for NotebookProgressCallback behavior in notebook environments."""
 
