@@ -238,7 +238,7 @@ class FalconMambaMixer(nn.Module):
             if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params[self.layer_idx].conv_states,
+                    cache_params.layers[self.layer_idx].conv_states,
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -280,7 +280,7 @@ class FalconMambaMixer(nn.Module):
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
             if is_decoding:
                 scan_outputs = selective_state_update(
-                    cache_params[self.layer_idx].ssm_states,
+                    cache_params.layers[self.layer_idx].ssm_states,
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -328,7 +328,7 @@ class FalconMambaMixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params[self.layer_idx].ssm_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
             ssm_state = ssm_state.to(hidden_states.device)
             if not cache_params.has_previous_state(self.layer_idx):
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))

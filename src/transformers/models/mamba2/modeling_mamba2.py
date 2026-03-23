@@ -264,7 +264,7 @@ class Mamba2Mixer(nn.Module):
             # 2. Convolution sequence transformation
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
-                cache_params[self.layer_idx].conv_states,
+                cache_params.layers[self.layer_idx].conv_states,
                 self.conv1d.weight.squeeze(1),
                 self.conv1d.bias,
                 self.activation,
@@ -286,7 +286,7 @@ class Mamba2Mixer(nn.Module):
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params[self.layer_idx].ssm_states,
+                cache_params.layers[self.layer_idx].ssm_states,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -416,10 +416,7 @@ class Mamba2Mixer(nn.Module):
 
         # 2. Convolution sequence transformation
         if is_decoding:
-            cache_params.update_conv_state(hidden_states_B_C[:, 0:1, :], layer_idx=self.layer_idx)
-
-            # We need to guarantee that anything regarding the cache is on the same device
-            conv_states = cache_params[self.layer_idx].conv_states.to(device=self.conv1d.weight.device)
+            conv_states = cache_params.update_conv_state(hidden_states_B_C[:, 0:1, :], layer_idx=self.layer_idx)
 
             hidden_states_B_C = torch.sum(
                 conv_states * self.conv1d.weight.squeeze(1), dim=-1
@@ -449,7 +446,7 @@ class Mamba2Mixer(nn.Module):
         A = -torch.exp(self.A_log.float())                            # [num_heads]
         if is_decoding:
             # We need to guarantee that anything regarding the cache is on the same device
-            cache_device = cache_params[self.layer_idx].device
+            cache_device = cache_params.layers[self.layer_idx].device
 
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
@@ -479,10 +476,8 @@ class Mamba2Mixer(nn.Module):
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            cache_params.update_ssm_state(
-                cache_params[self.layer_idx].ssm_states * dA + dBx,
-                layer_idx=self.layer_idx,
-            )
+            ssm_states = cache_params.layers[self.layer_idx].ssm_states * dA + dBx
+            ssm_states = cache_params.update_ssm_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
             # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
@@ -491,7 +486,6 @@ class Mamba2Mixer(nn.Module):
             C = C.reshape(batch_size, -1, C.shape[-1])
             # [bsz, num_heads, head_dim]
 
-            ssm_states = cache_params[self.layer_idx].ssm_states.to(device=C.device, dtype=C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
