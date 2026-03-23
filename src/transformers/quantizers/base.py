@@ -248,10 +248,12 @@ class HfQuantizer(ABC):
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        # Also skip modules marked as _modules_to_not_quantize (no fp32 upcasting, just skip quantization)
-        modules_to_not_quantize = getattr(model, "_modules_to_not_quantize", None)
-        if modules_to_not_quantize is not None:
-            modules_to_not_convert.extend(modules_to_not_quantize)
+        # Skip nn.Linear subclasses with custom forward methods (e.g., MoE routers)
+        # as they would lose their custom behavior when replaced by quantized modules
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear) and type(module) is not torch.nn.Linear:
+                if type(module).forward is not torch.nn.Linear.forward:
+                    modules_to_not_convert.append(name)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
 

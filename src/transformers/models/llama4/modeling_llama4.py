@@ -469,7 +469,6 @@ class Llama4PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True
-    _modules_to_not_quantize = ["router"]
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
