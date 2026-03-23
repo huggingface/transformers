@@ -558,7 +558,6 @@ Hey how are you doing"""  # noqa: W293
         ("Embodied-CoT/ecot-openvla-7b-bridge", EXPECTED_EMBODIED_COT_ECOT_OPENVLA_7B_BRIDGE),
         ("DeepGlint-AI/UniME-Phi3.5-V-4.2B", EXPECTED_DEEPGLINT_AI_UNIME_PHI35_V_42B),
         ("1024m/Phi-3.5-MoE-4bit-fp4", EXPECTED_1024M_PHI_35_MOE_4BIT_FP4),
-
     ]
 
     @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)
