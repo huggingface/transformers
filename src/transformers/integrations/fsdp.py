@@ -24,8 +24,12 @@ from ..utils.quantization_config import QuantizationMethod
 if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch
     import torch.distributed as dist
+    import torch.distributed.checkpoint as dcp
     from torch.distributed._composable.fsdp import fully_shard
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
+    from torch.distributed.checkpoint.state_dict import get_model_state_dict
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy, OffloadPolicy
+    from torch.distributed.tensor import DTensor
 
 logger = logging.get_logger(__name__)
 
@@ -499,11 +503,6 @@ def save_fsdp_model(model, save_directory):
     Each rank saves its DTensor shard in parallel, then rank 0 consolidates
     into standard HF-compatible safetensors files.
     """
-    import torch.distributed.checkpoint as dcp
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
-    from torch.distributed.checkpoint.state_dict import get_model_state_dict
-    from torch.distributed.tensor import DTensor
-
     model_sd = get_model_state_dict(model)
 
     # Clone tensors sharing storage (tied weights) — safetensors refuses aliased tensors
