@@ -23,7 +23,7 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5MobileDetConfig,
     PPOCRV5MobileDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -240,7 +240,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-OCRv5_mobile_det_safetensors"
         self.model = PPOCRV5MobileDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
         self.image = Image.open(requests.get(url, stream=True).raw)

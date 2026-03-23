@@ -539,6 +539,10 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         "hidden_states": Owlv2EncoderLayer,
         "attentions": Owlv2Attention,
     }
+    _keys_to_ignore_on_load_unexpected = [
+        r".*text_model\.embeddings\.position_ids",
+        r".*vision_model\.embeddings\.position_ids",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -672,7 +676,6 @@ class Owlv2TextTransformer(Owlv2PreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
             past_key_values=None,
         )
 

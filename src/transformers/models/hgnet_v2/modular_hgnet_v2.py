@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+from collections.abc import Sequence
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -45,6 +47,10 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         - First number (3) is input image channels
         - Second number (32) is intermediate stem channels
         - Third number (48) is output stem channels
+    stem_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 1, 1, 2, 1)`):
+        Stride patterns for the stem layers.
+    stage_downsample_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 2, 2, 2)`):
+        Stride patterns for each stage layer.
     stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
         Input channel dimensions for each stage of the backbone.
         This defines how many channels the input to each stage will have.
@@ -82,11 +88,13 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
     stem_channels: list[int] | tuple[int, ...] = (3, 32, 48)
+    stem_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 1, 1, 2, 1)
     stage_in_channels: list[int] | tuple[int, ...] = (48, 128, 512, 1024)
     stage_mid_channels: list[int] | tuple[int, ...] = (48, 96, 192, 384)
     stage_out_channels: list[int] | tuple[int, ...] = (128, 512, 1024, 2048)
     stage_num_blocks: list[int] | tuple[int, ...] = (1, 1, 3, 1)
     stage_downsample: list[bool] | tuple[bool, ...] = (False, True, True, True)
+    stage_downsample_strides: Sequence[int | list[int] | tuple[int, ...]] = (2, 2, 2, 2)
     stage_light_block: list[bool] | tuple[bool, ...] = (False, False, True, True)
     stage_kernel_size: list[int] | tuple[int, ...] = (3, 3, 5, 5)
     stage_numb_of_layers: list[int] | tuple[int, ...] = (6, 6, 6, 6)
@@ -216,7 +224,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[0],
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[0],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -224,7 +232,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[1] // 2,
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[1],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -232,7 +240,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] // 2,
             config.stem_channels[1],
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[2],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -240,7 +248,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] * 2,
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[3],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -248,7 +256,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[2],
             kernel_size=1,
-            stride=1,
+            stride=config.stem_strides[4],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -357,10 +365,11 @@ class HGNetV2Stage(nn.Module):
         light_block = config.stage_light_block[stage_index]
         kernel_size = config.stage_kernel_size[stage_index]
         use_learnable_affine_block = config.use_learnable_affine_block
+        stride = config.stage_downsample_strides[stage_index]
 
         if downsample:
             self.downsample = HGNetV2ConvLayer(
-                in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
+                in_channels, in_channels, kernel_size=3, stride=stride, groups=in_channels, activation=None
             )
         else:
             self.downsample = nn.Identity()
