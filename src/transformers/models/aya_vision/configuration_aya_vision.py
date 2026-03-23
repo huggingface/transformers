@@ -13,15 +13,15 @@
 # limitations under the License.
 """AyaVision model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="CohereForAI/aya-vision-8b")
+@strict(accept_kwargs=True)
 class AyaVisionConfig(PreTrainedConfig):
     r"""
     downsample_factor (`int`, *optional*, defaults to 2):
@@ -36,36 +36,21 @@ class AyaVisionConfig(PreTrainedConfig):
     }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
-    def __init__(
-        self,
-        vision_config=None,
-        text_config=None,
-        vision_feature_select_strategy="full",
-        vision_feature_layer=-1,
-        downsample_factor=2,
-        adapter_layer_norm_eps=1e-6,
-        image_token_index=255036,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.image_token_index = image_token_index
-        self.downsample_factor = downsample_factor
-        self.adapter_layer_norm_eps = adapter_layer_norm_eps
-        self.tie_word_embeddings = tie_word_embeddings
-        if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(
-                "vision_feature_select_strategy should be one of 'default', 'full'."
-                f"Got: {vision_feature_select_strategy}"
-            )
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    vision_feature_select_strategy: str = "full"
+    vision_feature_layer: int | list[int] = -1
+    downsample_factor: int = 2
+    adapter_layer_norm_eps: float = 1e-6
+    image_token_index: int = 255036
+    tie_word_embeddings: bool = True
 
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["siglip_vision_model"](
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "siglip_vision_model")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](
                 hidden_size=1152,
                 intermediate_size=4304,
                 patch_size=14,
@@ -75,17 +60,21 @@ class AyaVisionConfig(PreTrainedConfig):
                 vision_use_head=False,
             )
 
-        self.vision_config = vision_config
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "cohere2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["cohere2"]()
 
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "cohere2")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["cohere2"]()
+        super().__post_init__(**kwargs)
 
-        self.text_config = text_config
-
-        super().__init__(**kwargs)
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.vision_feature_select_strategy not in ["default", "full"]:
+            raise ValueError(
+                "vision_feature_select_strategy should be one of 'default', 'full'."
+                f"Got: {self.vision_feature_select_strategy}"
+            )
 
 
 __all__ = ["AyaVisionConfig"]

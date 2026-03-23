@@ -16,6 +16,7 @@ import itertools
 from collections.abc import Callable
 
 import torch
+from huggingface_hub.dataclasses import strict
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 from torch import nn
@@ -148,6 +149,7 @@ class LasrProcessor(ParakeetProcessor):
 
 
 @auto_docstring(checkpoint="google/medasr")
+@strict(accept_kwargs=True)
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -187,68 +189,27 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
     and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
-    def __init__(
-        self,
-        hidden_size=512,
-        num_hidden_layers=17,
-        num_attention_heads=8,
-        intermediate_size=2048,
-        hidden_act="silu",
-        attention_bias=False,
-        convolution_bias=False,
-        conv_kernel_size=32,
-        subsampling_conv_channels=256,
-        subsampling_conv_kernel_size=5,
-        subsampling_conv_stride=2,
-        num_mel_bins=128,
-        dropout=0.1,
-        dropout_positions=0.0,
-        layerdrop=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=10000,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        feed_forward_residual_weights=[1.5, 0.5],
-        conv_residual_weights=[2.0, 1.0],
-        batch_norm_momentum=0.01,
-        rope_parameters=None,
-        **kwargs,
-    ):
-        self.rope_parameters = rope_parameters
-        self.layer_norm_eps = layer_norm_eps
-        self.feed_forward_residual_weights = feed_forward_residual_weights
-        self.conv_residual_weights = conv_residual_weights
-        self.batch_norm_momentum = batch_norm_momentum
+    hidden_size: int = 512
+    num_hidden_layers: int = 17
+    intermediate_size: int = 2048
+    attention_bias: bool = False
+    convolution_bias: bool = False
+    conv_kernel_size: int = 32
+    subsampling_conv_kernel_size: int = 5
+    num_mel_bins: int = 128
+    max_position_embeddings: int = 10000
+    layer_norm_eps: float = 1e-6
+    feed_forward_residual_weights: list[float] | tuple[float, ...] = (1.5, 0.5)
+    conv_residual_weights: list[float] | tuple[float, ...] = (2.0, 1.0)
+    batch_norm_momentum: float = 0.01
+    rope_parameters: dict | None = None
 
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            attention_bias=attention_bias,
-            convolution_bias=convolution_bias,
-            conv_kernel_size=conv_kernel_size,
-            subsampling_conv_channels=subsampling_conv_channels,
-            num_mel_bins=num_mel_bins,
-            subsampling_conv_kernel_size=subsampling_conv_kernel_size,
-            subsampling_conv_stride=subsampling_conv_stride,
-            dropout=dropout,
-            dropout_positions=dropout_positions,
-            layerdrop=layerdrop,
-            activation_dropout=activation_dropout,
-            attention_dropout=attention_dropout,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            **kwargs,
-        )
-
-        del self.subsampling_factor
-        del self.scale_input
+    subsampling_factor = AttributeError()
+    scale_input = AttributeError()
 
 
 @auto_docstring(checkpoint="google/medasr")
+@strict(accept_kwargs=True)
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
@@ -273,23 +234,8 @@ class LasrCTCConfig(ParakeetCTCConfig):
     and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
     """
 
-    def __init__(
-        self,
-        vocab_size=512,
-        ctc_loss_reduction="mean",
-        ctc_zero_infinity=True,
-        encoder_config: dict | LasrEncoderConfig = None,
-        pad_token_id=0,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            ctc_loss_reduction=ctc_loss_reduction,
-            ctc_zero_infinity=ctc_zero_infinity,
-            encoder_config=encoder_config,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+    vocab_size: int = 512
+    pad_token_id: int = 0
 
     @property
     def inputs_to_logits_ratio(self):

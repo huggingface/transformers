@@ -13,16 +13,16 @@
 # limitations under the License.
 """VitMatte model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto.configuration_auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="hustvl/vitmatte-small-composition-1k")
+@strict(accept_kwargs=True)
 class VitMatteConfig(PreTrainedConfig):
     r"""
     batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -50,31 +50,21 @@ class VitMatteConfig(PreTrainedConfig):
     model_type = "vitmatte"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config: PreTrainedConfig | None = None,
-        hidden_size: int = 384,
-        batch_norm_eps: float = 1e-5,
-        initializer_range: float = 0.02,
-        convstream_hidden_sizes: list[int] = [48, 96, 192],
-        fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    hidden_size: int = 384
+    batch_norm_eps: float = 1e-5
+    initializer_range: float = 0.02
+    convstream_hidden_sizes: list[int] | tuple[int, ...] = (48, 96, 192)
+    fusion_hidden_sizes: list[int] | tuple[int, ...] = (256, 128, 64, 32)
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="vitdet",
             default_config_kwargs={"out_features": ["stage4"]},
             **kwargs,
         )
-
-        self.backbone_config = backbone_config
-        self.batch_norm_eps = batch_norm_eps
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-        self.convstream_hidden_sizes = convstream_hidden_sizes
-        self.fusion_hidden_sizes = fusion_hidden_sizes
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["VitMatteConfig"]

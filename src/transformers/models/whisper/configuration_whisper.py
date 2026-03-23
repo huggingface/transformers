@@ -13,11 +13,10 @@
 # limitations under the License.
 """Whisper model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 # fmt: off
@@ -47,6 +46,7 @@ NON_SPEECH_TOKENS_MULTI = [
 
 
 @auto_docstring(checkpoint="openai/whisper-tiny")
+@strict(accept_kwargs=True)
 class WhisperConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -121,98 +121,47 @@ class WhisperConfig(PreTrainedConfig):
         "num_key_value_heads": "encoder_attention_heads",
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
+        "num_hidden_layers": "encoder_layers",
     }
 
-    def __init__(
-        self,
-        vocab_size=51865,
-        num_mel_bins=80,
-        encoder_layers=4,
-        encoder_attention_heads=6,
-        decoder_layers=4,
-        decoder_attention_heads=6,
-        decoder_ffn_dim=1536,
-        encoder_ffn_dim=1536,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        decoder_start_token_id=50257,
-        use_cache=True,
-        is_encoder_decoder=True,
-        activation_function="gelu",
-        d_model=384,
-        dropout=0.0,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        scale_embedding=False,
-        max_source_positions=1500,
-        max_target_positions=448,
-        pad_token_id=50256,
-        bos_token_id=50256,
-        eos_token_id=50256,
-        suppress_tokens=None,
-        begin_suppress_tokens=[220, 50256],
-        use_weighted_layer_sum=False,
-        classifier_proj_size=256,
-        apply_spec_augment=False,
-        mask_time_prob=0.05,
-        mask_time_length=10,
-        mask_time_min_masks=2,
-        mask_feature_prob=0.0,
-        mask_feature_length=10,
-        mask_feature_min_masks=0,
-        median_filter_width=7,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.num_mel_bins = num_mel_bins
-        self.d_model = d_model
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.use_cache = use_cache
-        self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-
-        # Audio Classification-specific parameters. Feel free to ignore for other classes.
-        self.classifier_proj_size = classifier_proj_size
-        self.use_weighted_layer_sum = use_weighted_layer_sum
-
-        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_min_masks = mask_feature_min_masks
-
-        self.median_filter_width = median_filter_width
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            suppress_tokens=suppress_tokens,
-            begin_suppress_tokens=begin_suppress_tokens,
-            **kwargs,
-        )
+    vocab_size: int = 51865
+    num_mel_bins: int = 80
+    encoder_layers: int = 4
+    encoder_attention_heads: int = 6
+    decoder_layers: int = 4
+    decoder_attention_heads: int = 6
+    decoder_ffn_dim: int = 1536
+    encoder_ffn_dim: int = 1536
+    encoder_layerdrop: float | int = 0.0
+    decoder_layerdrop: float | int = 0.0
+    decoder_start_token_id: int = 50257
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
+    activation_function: str = "gelu"
+    d_model: int = 384
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    scale_embedding: bool = False
+    max_source_positions: int = 1500
+    max_target_positions: int = 448
+    pad_token_id: int | None = 50256
+    bos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
+    suppress_tokens: list | None = None
+    begin_suppress_tokens: list[int] | tuple[int, ...] | None = (220, 50256)
+    use_weighted_layer_sum: bool = False
+    classifier_proj_size: int = 256
+    apply_spec_augment: bool = False
+    mask_time_prob: float = 0.05
+    mask_time_length: int = 10
+    mask_time_min_masks: int = 2
+    mask_feature_prob: float = 0.0
+    mask_feature_length: int = 10
+    mask_feature_min_masks: int = 0
+    median_filter_width: int = 7
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["WhisperConfig"]

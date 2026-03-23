@@ -13,16 +13,14 @@
 # limitations under the License.
 """DBRX model configuration"""
 
-from typing import Any
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@strict(accept_kwargs=True)
 @auto_docstring(
     custom_intro="This config is used to instantiate attention layers.",
     checkpoint="transformers-community/dbrx-instruct",
@@ -39,19 +37,12 @@ class DbrxAttentionConfig(PreTrainedConfig):
 
     base_config_key = "attn_config"
 
-    def __init__(
-        self,
-        attn_pdrop: float = 0.0,
-        clip_qkv: float | None = None,
-        kv_n_heads: int = 1,
-        **kwargs: Any,
-    ):
-        super().__init__(**kwargs)
-        self.attn_pdrop = attn_pdrop
-        self.clip_qkv = clip_qkv
-        self.kv_n_heads = kv_n_heads
+    attn_pdrop: float = 0.0
+    clip_qkv: int | float | None = None
+    kv_n_heads: int = 1
 
 
+@strict(accept_kwargs=True)
 @auto_docstring(
     custom_intro="This config is used to instantiate feedforward layers.",
     checkpoint="transformers-community/dbrx-instruct",
@@ -77,29 +68,18 @@ class DbrxFFNConfig(PreTrainedConfig):
 
     base_config_key = "ffn_config"
 
-    def __init__(
-        self,
-        hidden_size=6144,
-        ffn_act_fn: dict | None = None,
-        ffn_hidden_size: int = 3584,
-        moe_num_experts: int = 4,
-        moe_top_k: int = 1,
-        moe_jitter_eps: float | None = None,
-        moe_loss_weight: float = 0.01,
-        moe_normalize_expert_weights: float | None = 1.0,
-        **kwargs: Any,
-    ):
-        super().__init__()
-        if ffn_act_fn is None:
-            ffn_act_fn = {"name": "silu"}
-        self.hidden_size = hidden_size
-        self.ffn_act_fn = ffn_act_fn
-        self.ffn_hidden_size = ffn_hidden_size
-        self.moe_num_experts = moe_num_experts
-        self.moe_top_k = moe_top_k
-        self.moe_jitter_eps = moe_jitter_eps
-        self.moe_loss_weight = moe_loss_weight
-        self.moe_normalize_expert_weights = moe_normalize_expert_weights
+    hidden_size: int = 6144
+    ffn_act_fn: dict | None = None
+    ffn_hidden_size: int = 3584
+    moe_num_experts: int = 4
+    moe_top_k: int = 1
+    moe_jitter_eps: float | None = None
+    moe_loss_weight: float = 0.01
+    moe_normalize_expert_weights: float | None = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.ffn_act_fn is None:
+            self.ffn_act_fn = {"name": "silu"}
 
         for k in [
             "model_type",
@@ -115,8 +95,11 @@ class DbrxFFNConfig(PreTrainedConfig):
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
 
+        super().__post_init__(**kwargs)
+
 
 @auto_docstring(checkpoint="transformers-community/dbrx-instruct")
+@strict(accept_kwargs=True)
 class DbrxConfig(PreTrainedConfig):
     r"""
     max_seq_len (`int`, *optional*, defaults to 2048):
@@ -150,62 +133,42 @@ class DbrxConfig(PreTrainedConfig):
         "max_position_embeddings": "max_seq_len",
     }
 
-    def __init__(
-        self,
-        d_model: int | None = 2048,
-        n_heads: int | None = 16,
-        n_layers: int | None = 24,
-        max_seq_len: int | None = 2048,
-        vocab_size: int | None = 32000,
-        resid_pdrop: float | None = 0.0,
-        emb_pdrop: float | None = 0.0,
-        attn_config: DbrxAttentionConfig | None = None,
-        ffn_config: DbrxFFNConfig | None = None,
-        use_cache: bool | None = True,
-        initializer_range: float | None = 0.02,
-        output_router_logits: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        tie_word_embeddings: bool | None = False,
-        **kwargs: Any,
-    ):
-        if attn_config is None:
+    d_model: int | None = 2048
+    n_heads: int | None = 16
+    n_layers: int | None = 24
+    max_seq_len: int | None = 2048
+    vocab_size: int = 32000
+    resid_pdrop: float | None = 0.0
+    emb_pdrop: float | None = 0.0
+    attn_config: DbrxAttentionConfig | dict | None = None
+    ffn_config: DbrxFFNConfig | dict | None = None
+    use_cache: bool = True
+    initializer_range: float = 0.02
+    output_router_logits: bool | None = False
+    rope_parameters: RopeParameters | dict | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if self.attn_config is None:
             self.attn_config = DbrxAttentionConfig()
-        elif isinstance(attn_config, dict):
-            self.attn_config = DbrxAttentionConfig(**attn_config)
-        else:
-            self.attn_config = attn_config
+        elif isinstance(self.attn_config, dict):
+            self.attn_config = DbrxAttentionConfig(**self.attn_config)
 
-        if ffn_config is None:
+        if self.ffn_config is None:
             self.ffn_config = DbrxFFNConfig()
-        elif isinstance(ffn_config, dict):
-            self.ffn_config = DbrxFFNConfig(**ffn_config)
-        else:
-            self.ffn_config = ffn_config
+        elif isinstance(self.ffn_config, dict):
+            self.ffn_config = DbrxFFNConfig(**self.ffn_config)
 
-        self.d_model = d_model
-        self.n_heads = n_heads
-        self.n_layers = n_layers
-        self.max_seq_len = max_seq_len
-        self.vocab_size = vocab_size
-        self.resid_pdrop = resid_pdrop
-        self.emb_pdrop = emb_pdrop
-        self.use_cache = use_cache
-        self.initializer_range = initializer_range
-        self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-        if tie_word_embeddings:
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
 
 
 __all__ = ["DbrxConfig"]

@@ -18,12 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageVQVAEConfig(PreTrainedConfig):
     r"""
     num_embeddings (`int`, *optional*, defaults to 16384):
@@ -33,24 +36,15 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
-    def __init__(
-        self,
-        embed_dim: int = 2048,
-        num_embeddings: int = 16384,
-        latent_channels: int = 1536,
-        in_channels: int = 3,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-        self.num_embeddings = num_embeddings
-        self.latent_channels = latent_channels
-        self.in_channels = in_channels
-        self.initializer_range = initializer_range
+    embed_dim: int = 2048
+    num_embeddings: int = 16384
+    latent_channels: int = 1536
+    in_channels: int = 3
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -74,41 +68,23 @@ class GlmImageVisionConfig(PreTrainedConfig):
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=40,
-        hidden_size=1536,
-        hidden_act="gelu",
-        attention_bias=True,
-        attention_dropout=0.0,
-        num_heads=16,
-        in_channels=3,
-        image_size=2048,
-        patch_size=16,
-        layer_norm_eps=1e-06,
-        spatial_merge_size=1,
-        intermediate_size=6144,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.intermediate_size = intermediate_size
-        self.initializer_range = initializer_range
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
+    depth: int = 40
+    hidden_size: int = 1536
+    hidden_act: str = "gelu"
+    attention_bias: bool = True
+    attention_dropout: float | int = 0.0
+    num_heads: int = 16
+    in_channels: int = 3
+    image_size: int | list[int] | tuple[int, int] = 2048
+    patch_size: int | list[int] | tuple[int, int] = 16
+    spatial_merge_size: int = 1
+    intermediate_size: int = 6144
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-06
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageTextConfig(PreTrainedConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -147,55 +123,35 @@ class GlmImageTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section"}
 
-    def __init__(
-        self,
-        vocab_size: int = 168064,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 13696,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int = 131072,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        pad_token_id: int = 167841,
-        vision_vocab_size: int = 16512,
-        attention_bias: bool = True,
-        eos_token_id: int = 16385,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 168064
+    hidden_size: int = 4096
+    intermediate_size: int = 13696
+    num_hidden_layers: int = 40
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 131072
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-05
+    use_cache: bool = True
+    attention_dropout: float | int = 0.0
+    rope_parameters: RopeParameters | dict | None = None
+    pad_token_id: int = 167841
+    vision_vocab_size: int = 16512
+    attention_bias: bool = True
+    eos_token_id: int | list[int] | None = 16385
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
-        self.vision_vocab_size = vision_vocab_size
-        self.attention_bias = attention_bias
-        self.eos_token_id = eos_token_id
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict(accept_kwargs=True)
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):
@@ -224,40 +180,31 @@ class GlmImageConfig(PreTrainedConfig):
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        vq_config=None,
-        image_token_id=167855,
-        image_start_token_id=16384,
-        image_end_token_id=16385,
-        tie_word_embeddings: bool | None = False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            vision_config = self.sub_configs["vision_config"](**kwargs)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    vq_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 167855
+    image_start_token_id: int = 16384
+    image_end_token_id: int = 16385
+    tie_word_embeddings: bool = False
 
-        if isinstance(vq_config, dict):
-            vq_config = self.sub_configs["vq_config"](**vq_config)
-        elif vq_config is None:
-            vq_config = self.sub_configs["vq_config"](**kwargs)
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
 
-        if isinstance(text_config, dict):
-            text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
-            text_config = self.sub_configs["text_config"](**kwargs)
+        if isinstance(self.vq_config, dict):
+            self.vq_config = self.sub_configs["vq_config"](**self.vq_config)
+        elif self.vq_config is None:
+            self.vq_config = self.sub_configs["vq_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.vq_config = vq_config
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["GlmImageVQVAEConfig", "GlmImageVisionConfig", "GlmImageTextConfig", "GlmImageConfig"]

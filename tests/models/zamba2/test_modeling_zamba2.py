@@ -250,9 +250,6 @@ class Zamba2ModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -353,7 +350,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=32)
 
     @unittest.skip("We need at leat 3 layers to test weight tying!")
     def test_num_layers_is_small(self):

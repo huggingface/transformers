@@ -105,8 +105,6 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config
@@ -157,7 +155,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:

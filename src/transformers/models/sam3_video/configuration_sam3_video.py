@@ -13,6 +13,8 @@
 # limitations under the License.
 """SAM3 Video model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -22,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sam3")
+@strict(accept_kwargs=True)
 class Sam3VideoConfig(PreTrainedConfig):
     r"""
     detector_config (`dict` or `Sam3Config`, *optional*):
@@ -106,117 +109,58 @@ class Sam3VideoConfig(PreTrainedConfig):
         "tracker_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        detector_config=None,
-        tracker_config=None,
-        initializer_range=0.02,
-        low_res_mask_size=288,
-        # Detection-tracking fusion hyperparameters
-        score_threshold_detection=0.5,
-        det_nms_thresh=0.1,
-        assoc_iou_thresh=0.1,
-        trk_assoc_iou_thresh=0.5,
-        new_det_thresh=0.7,
-        recondition_on_trk_masks=True,
-        # Hotstart parameters
-        hotstart_delay=15,
-        hotstart_unmatch_thresh=8,
-        hotstart_dup_thresh=8,
-        suppress_unmatched_only_within_hotstart=True,
-        # Keep-alive parameters
-        init_trk_keep_alive=30,
-        max_trk_keep_alive=30,
-        min_trk_keep_alive=-1,
-        # Occlusion and overlap handling
-        suppress_overlapping_based_on_recent_occlusion_threshold=0.7,
-        decrease_trk_keep_alive_for_empty_masklets=False,
-        # Mask post-processing
-        fill_hole_area=16,
-        # Object tracking limits
-        max_num_objects=10000,
-        # Reconditioning parameters
-        recondition_every_nth_frame=16,
-        high_conf_thresh=0.8,
-        high_iou_thresh=0.8,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    detector_config: dict | PreTrainedConfig | None = None
+    tracker_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+    low_res_mask_size: int = 288
+    score_threshold_detection: float = 0.5
+    det_nms_thresh: float = 0.1
+    assoc_iou_thresh: float = 0.1
+    trk_assoc_iou_thresh: float = 0.5
+    new_det_thresh: float = 0.7
+    recondition_on_trk_masks: bool = True
+    hotstart_delay: int = 15
+    hotstart_unmatch_thresh: int = 8
+    hotstart_dup_thresh: int = 8
+    suppress_unmatched_only_within_hotstart: bool = True
+    init_trk_keep_alive: int = 30
+    max_trk_keep_alive: int = 30
+    min_trk_keep_alive: int = -1
+    suppress_overlapping_based_on_recent_occlusion_threshold: float = 0.7
+    decrease_trk_keep_alive_for_empty_masklets: bool = False
+    fill_hole_area: int = 16
+    max_num_objects: int = 10000
+    recondition_every_nth_frame: int = 16
+    high_conf_thresh: float = 0.8
+    high_iou_thresh: float = 0.8
 
-        # Initialize detector config (Sam3)
-        if detector_config is None:
-            detector_config = {}
+    def __post_init__(self, **kwargs):
+        if self.detector_config is None:
+            self.detector_config = CONFIG_MAPPING["sam3"]()
             logger.info("detector_config is None. Initializing the Sam3Config with default values.")
-        if isinstance(detector_config, dict):
-            detector_config["model_type"] = detector_config.get("model_type", "sam3")
-            self.detector_config = CONFIG_MAPPING[detector_config["model_type"]](**detector_config)
-        elif isinstance(detector_config, PreTrainedConfig):
-            self.detector_config = detector_config
-        else:
-            raise ValueError(f"detector_config must be a dict or Sam3Config, got {type(detector_config)}")
+        if isinstance(self.detector_config, dict):
+            self.detector_config["model_type"] = self.detector_config.get("model_type", "sam3")
+            self.detector_config = CONFIG_MAPPING[self.detector_config["model_type"]](**self.detector_config)
 
-        # Initialize tracker config (Sam2Video)
-        if tracker_config is None:
-            tracker_config = {}
+        if self.tracker_config is None:
+            self.tracker_config = CONFIG_MAPPING["sam3_tracker_video"]()
             logger.info("tracker_config is None. Initializing the Sam3TrackerVideoConfig with default values.")
-        if isinstance(tracker_config, dict):
-            tracker_config["model_type"] = tracker_config.get("model_type", "sam3_tracker_video")
-            self.tracker_config = CONFIG_MAPPING[tracker_config["model_type"]](**tracker_config)
-        elif isinstance(tracker_config, PreTrainedConfig):
-            self.tracker_config = tracker_config
-        else:
-            raise ValueError(f"tracker_config must be a dict or Sam3TrackerVideoConfig, got {type(tracker_config)}")
+        if isinstance(self.tracker_config, dict):
+            self.tracker_config["model_type"] = self.tracker_config.get("model_type", "sam3_tracker_video")
+            self.tracker_config = CONFIG_MAPPING[self.tracker_config["model_type"]](**self.tracker_config)
+        super().__post_init__(**kwargs)
 
-        # Model initialization
-        self.initializer_range = initializer_range
-
-        self.low_res_mask_size = low_res_mask_size
-
-        # Detection-tracking fusion hyperparameters
-        self.score_threshold_detection = score_threshold_detection
-        self.det_nms_thresh = det_nms_thresh
-        self.assoc_iou_thresh = assoc_iou_thresh
-        self.trk_assoc_iou_thresh = trk_assoc_iou_thresh
-        self.new_det_thresh = new_det_thresh
-
-        self.recondition_on_trk_masks = recondition_on_trk_masks
-
-        # Hotstart parameters
-        if hotstart_delay > 0:
-            if hotstart_unmatch_thresh > hotstart_delay:
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hotstart_delay > 0:
+            if self.hotstart_unmatch_thresh > self.hotstart_delay:
                 raise ValueError(
-                    f"hotstart_unmatch_thresh ({hotstart_unmatch_thresh}) must be <= hotstart_delay ({hotstart_delay})"
+                    f"hotstart_unmatch_thresh ({self.hotstart_unmatch_thresh}) must be <= hotstart_delay ({self.hotstart_delay})"
                 )
-            if hotstart_dup_thresh > hotstart_delay:
+            if self.hotstart_dup_thresh > self.hotstart_delay:
                 raise ValueError(
-                    f"hotstart_dup_thresh ({hotstart_dup_thresh}) must be <= hotstart_delay ({hotstart_delay})"
+                    f"hotstart_dup_thresh ({self.hotstart_dup_thresh}) must be <= hotstart_delay ({self.hotstart_delay})"
                 )
-        self.hotstart_delay = hotstart_delay
-        self.hotstart_unmatch_thresh = hotstart_unmatch_thresh
-        self.hotstart_dup_thresh = hotstart_dup_thresh
-        self.suppress_unmatched_only_within_hotstart = suppress_unmatched_only_within_hotstart
-
-        # Keep-alive parameters
-        self.init_trk_keep_alive = init_trk_keep_alive
-        self.max_trk_keep_alive = max_trk_keep_alive
-        self.min_trk_keep_alive = min_trk_keep_alive
-
-        # Occlusion and overlap handling
-        self.suppress_overlapping_based_on_recent_occlusion_threshold = (
-            suppress_overlapping_based_on_recent_occlusion_threshold
-        )
-        self.decrease_trk_keep_alive_for_empty_masklets = decrease_trk_keep_alive_for_empty_masklets
-
-        # Mask post-processing
-        self.fill_hole_area = fill_hole_area
-
-        # Object tracking limits
-        self.max_num_objects = max_num_objects
-
-        # Reconditioning parameters
-        self.recondition_every_nth_frame = recondition_every_nth_frame
-        self.high_conf_thresh = high_conf_thresh
-        self.high_iou_thresh = high_iou_thresh
 
     @property
     def image_size(self):

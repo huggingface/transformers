@@ -14,12 +14,13 @@
 """PyTorch Pixio model."""
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, is_tracing, logging
+from ...utils import TransformersKwargs, auto_docstring, is_tracing
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
@@ -31,10 +32,8 @@ from ..dinov2.modeling_dinov2 import (
 from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel, ViTSelfAttention
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="facebook/pixio-huge")
+@strict(accept_kwargs=True)
 class PixioConfig(Dinov2Config):
     r"""
     n_cls_tokens (`int`, *optional*, defaults to 8):
@@ -63,53 +62,16 @@ class PixioConfig(Dinov2Config):
 
     model_type = "pixio"
 
-    def __init__(
-        self,
-        hidden_size=1280,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        mlp_ratio=4,
-        n_cls_tokens=8,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=256,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        drop_path_rate=0.0,
-        out_features=None,
-        out_indices=None,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
-        **kwargs,
-    ):
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            mlp_ratio=mlp_ratio,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_channels=num_channels,
-            qkv_bias=qkv_bias,
-            drop_path_rate=drop_path_rate,
-            apply_layernorm=apply_layernorm,
-            reshape_hidden_states=reshape_hidden_states,
-        )
+    hidden_size: int = 1280
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 16
+    n_cls_tokens: int = 8
+    image_size: int | list[int] | tuple[int, int] = 256
+    patch_size: int | list[int] | tuple[int, int] = 16
 
-        self.n_cls_tokens = n_cls_tokens
-
-        del self.layerscale_value
-        del self.use_swiglu_ffn
-        del self.use_mask_token
+    layerscale_value = AttributeError()
+    use_swiglu_ffn = AttributeError()
+    use_mask_token = AttributeError()
 
 
 class PixioPatchEmbeddings(ViTPatchEmbeddings):

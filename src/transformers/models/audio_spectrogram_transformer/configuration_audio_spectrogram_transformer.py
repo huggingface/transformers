@@ -13,16 +13,14 @@
 # limitations under the License.
 """Audio Spectogram Transformer (AST) model configuration"""
 
-from typing import Any
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="MIT/ast-finetuned-audioset-10-10-0.4593")
+@strict(accept_kwargs=True)
 class ASTConfig(PreTrainedConfig):
     r"""
     frequency_stride (`int`, *optional*, defaults to 10):
@@ -49,48 +47,21 @@ class ASTConfig(PreTrainedConfig):
 
     model_type = "audio-spectrogram-transformer"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        patch_size=16,
-        qkv_bias=True,
-        frequency_stride=10,
-        time_stride=10,
-        max_length=1024,
-        num_mel_bins=128,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.patch_size = patch_size
-        self.qkv_bias = qkv_bias
-        self.frequency_stride = frequency_stride
-        self.time_stride = time_stride
-        self.max_length = max_length
-        self.num_mel_bins = num_mel_bins
-
-    # Overwritten from the parent class: AST is not compatible with `generate`, but has a config parameter sharing the
-    # same name (`max_length`). Sharing the same name triggers checks regarding the config -> generation_config
-    # generative parameters deprecation cycle, overwriting this function prevents this from happening.
-    def _get_non_default_generation_parameters(self) -> dict[str, Any]:
-        return {}
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    patch_size: int | list[int] | tuple[int, int] = 16
+    qkv_bias: bool = True
+    frequency_stride: int = 10
+    time_stride: int = 10
+    max_length: int = 1024
+    num_mel_bins: int = 128
 
 
 __all__ = ["ASTConfig"]

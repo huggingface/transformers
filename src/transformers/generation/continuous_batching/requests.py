@@ -31,6 +31,12 @@ TMP_TOKEN_ID = -1
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
+# Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
+if logger.propagate:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:

@@ -15,6 +15,8 @@
 
 from typing import Any
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
@@ -23,6 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaImageConfig(PreTrainedConfig):
     r"""
     num_blocks_per_group (`int`, *optional*, defaults to 2):
@@ -50,45 +53,25 @@ class FlavaImageConfig(PreTrainedConfig):
     model_type = "flava_image_model"
     base_config_key = "image_config"
 
-    def __init__(
-        self,
-        hidden_size: int = 768,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 12,
-        intermediate_size: int = 3072,
-        hidden_act: int = "gelu",
-        hidden_dropout_prob: float = 0.0,
-        attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-12,
-        image_size: int = 224,
-        patch_size: int = 16,
-        num_channels: int = 3,
-        qkv_bias: bool = True,
-        mask_token: bool = True,
-        vocab_size: int = 8192,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.mask_token = mask_token
-        self.vocab_size = vocab_size
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    qkv_bias: bool = True
+    mask_token: bool = True
+    vocab_size: int = 8192
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -109,43 +92,24 @@ class FlavaTextConfig(PreTrainedConfig):
     model_type = "flava_text_model"
     base_config_key = "text_config"
 
-    def __init__(
-        self,
-        vocab_size: int = 30522,
-        type_vocab_size: int = 2,
-        max_position_embeddings: int = 512,
-        hidden_size: int = 768,
-        num_hidden_layers: int = 12,
-        num_attention_heads: int = 12,
-        intermediate_size: int = 3072,
-        hidden_act: str = "gelu",
-        hidden_dropout_prob: float = 0.0,
-        attention_probs_dropout_prob: float = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-12,
-        pad_token_id: int = 0,
-        qkv_bias: bool = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.type_vocab_size = type_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.pad_token_id = pad_token_id
+    vocab_size: int = 30522
+    type_vocab_size: int = 2
+    max_position_embeddings: int = 512
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    pad_token_id: int | None = 0
+    qkv_bias: bool = True
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     use_cls_token (`bool`, *optional*, defaults to `True`):
@@ -169,37 +133,21 @@ class FlavaMultimodalConfig(PreTrainedConfig):
     model_type = "flava_multimodal_model"
     base_config_key = "multimodal_config"
 
-    def __init__(
-        self,
-        hidden_size: int = 768,
-        num_hidden_layers: int = 6,
-        num_attention_heads: int = 12,
-        intermediate_size: int = 3072,
-        hidden_act: int = "gelu",
-        hidden_dropout_prob: int = 0.0,
-        attention_probs_dropout_prob: int = 0.0,
-        initializer_range: float = 0.02,
-        layer_norm_eps: float = 1e-12,
-        qkv_bias: bool = True,
-        use_cls_token: bool = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.use_cls_token = use_cls_token
+    hidden_size: int = 768
+    num_hidden_layers: int = 6
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    qkv_bias: bool = True
+    use_cls_token: bool = True
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaImageCodebookConfig(PreTrainedConfig):
     r"""
     num_groups (`int`, *optional*, defaults to 4):
@@ -225,31 +173,17 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "flava_image_codebook"
-    base_config_key = "image_codebook_config"
-
-    def __init__(
-        self,
-        num_groups: int = 4,
-        input_channels: int = 3,
-        num_blocks_per_group: int = 2,
-        hidden_size: int = 256,
-        vocab_size: int = 8192,
-        freeze: int = True,
-        initializer_range: float = 0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.num_groups = num_groups
-        self.input_channels = input_channels
-        self.num_blocks_per_group = num_blocks_per_group
-        self.hidden_size = hidden_size
-        self.vocab_size = vocab_size
-        self.freeze = freeze
-        self.initializer_range = initializer_range
+    num_groups: int = 4
+    input_channels: int = 3
+    num_blocks_per_group: int = 2
+    hidden_size: int = 256
+    vocab_size: int = 8192
+    freeze: bool = True
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
+@strict(accept_kwargs=True)
 class FlavaConfig(PreTrainedConfig):
     r"""
     image_config (`dict`, *optional*):
@@ -310,34 +244,65 @@ class FlavaConfig(PreTrainedConfig):
         "image_codebook_config": FlavaImageCodebookConfig,
     }
 
-    def __init__(
-        self,
-        image_config: dict[str, Any] | None = None,
-        text_config: dict[str, Any] | None = None,
-        multimodal_config: dict[str, Any] | None = None,
-        image_codebook_config: dict[str, Any] | None = None,
-        hidden_size: int = 768,
-        layer_norm_eps: float = 1e-12,
-        projection_dim: int = 768,
-        init_codebook: bool = True,
-        logit_scale_init_value: float = 2.6592,
-        initializer_range: float = 0.02,
-        ce_ignore_index: int = -100,
-        mim_weight: float = 1.0,
-        mlm_weight: float = 1.0,
-        global_contrastive_weight: float = 1.0,
-        itm_weight: float = 1.0,
-        mmm_image_weight: float = 1.0,
-        mmm_text_weight: float = 1.0,
-        global_backprop_contrastive: bool = True,
-        skip_unmasked_multimodal_encoder: bool = True,
-        return_loss: bool = True,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
+    image_config: dict[str, Any] | PreTrainedConfig | None = None
+    text_config: dict[str, Any] | PreTrainedConfig | None = None
+    multimodal_config: dict[str, Any] | PreTrainedConfig | None = None
+    image_codebook_config: dict[str, Any] | PreTrainedConfig | None = None
+    hidden_size: int = 768
+    layer_norm_eps: float = 1e-12
+    projection_dim: int = 768
+    init_codebook: bool = True
+    logit_scale_init_value: float = 2.6592
+    initializer_range: float = 0.02
+    ce_ignore_index: int = -100
+    mim_weight: float = 1.0
+    mlm_weight: float = 1.0
+    global_contrastive_weight: float = 1.0
+    itm_weight: float = 1.0
+    mmm_image_weight: float = 1.0
+    mmm_text_weight: float = 1.0
+    global_backprop_contrastive: bool = True
+    skip_unmasked_multimodal_encoder: bool = True
+    return_loss: bool = True
+    tie_word_embeddings: bool = True
+    initializer_factor: float = 1.0
+
+    def __post_init__(self, **kwargs):
+        if self.text_config is None:
+            text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `FlavaTextConfig` with default values.")
+        elif isinstance(self.text_config, FlavaTextConfig):
+            text_config = self.text_config.to_dict()
+        else:
+            text_config = self.text_config
+
+        if self.image_config is None:
+            image_config = {}
+            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
+        elif isinstance(self.image_config, FlavaImageConfig):
+            image_config = self.image_config.to_dict()
+        else:
+            image_config = self.image_config
+
+        if self.multimodal_config is None:
+            multimodal_config = {}
+            logger.info("`multimodal_config` is `None`. Initializing the `FlavaMultimodalConfig` with default values.")
+        elif isinstance(self.multimodal_config, FlavaMultimodalConfig):
+            multimodal_config = self.multimodal_config.to_dict()
+        else:
+            multimodal_config = self.multimodal_config
+
+        if self.image_codebook_config is None:
+            image_codebook_config = {}
+            logger.info(
+                "`image_codebook_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values."
+            )
+        elif isinstance(self.image_codebook_config, FlavaImageCodebookConfig):
+            image_codebook_config = self.image_codebook_config.to_dict()
+        else:
+            image_codebook_config = self.image_codebook_config
+
         # If `_config_dict` exist, we use them for the backward compatibility.
-        # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
-        # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         image_config_dict = kwargs.pop("image_config_dict", None)
         multimodal_config_dict = kwargs.pop("multimodal_config_dict", None)
@@ -347,9 +312,6 @@ class FlavaConfig(PreTrainedConfig):
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
         if text_config_dict is not None:
-            if text_config is None:
-                text_config = {}
-
             # This is the complete result when using `text_config_dict`.
             _text_config_dict = FlavaTextConfig(**text_config_dict).to_dict()
 
@@ -374,9 +336,6 @@ class FlavaConfig(PreTrainedConfig):
             text_config.update(_text_config_dict)
 
         if image_config_dict is not None:
-            if image_config is None:
-                image_config = {}
-
             # This is the complete result when using `image_config_dict`.
             _image_config_dict = FlavaImageConfig(**image_config_dict).to_dict()
             # convert keys to string instead of integer
@@ -406,9 +365,6 @@ class FlavaConfig(PreTrainedConfig):
             image_config.update(_image_config_dict)
 
         if multimodal_config_dict is not None:
-            if multimodal_config is None:
-                multimodal_config = {}
-
             # This is the complete result when using `multimodal_config_dict`.
             _multimodal_config_dict = FlavaMultimodalConfig(**multimodal_config_dict).to_dict()
 
@@ -434,9 +390,6 @@ class FlavaConfig(PreTrainedConfig):
             multimodal_config.update(_multimodal_config_dict)
 
         if image_codebook_config_dict is not None:
-            if image_codebook_config is None:
-                image_codebook_config = {}
-
             # This is the complete result when using `image_codebook_config_dict`.
             _image_codebook_config_dict = FlavaImageCodebookConfig(**image_codebook_config_dict).to_dict()
 
@@ -466,55 +419,13 @@ class FlavaConfig(PreTrainedConfig):
             # Update all values in `image_codebook_config` with the ones in `_image_codebook_config_dict`.
             image_codebook_config.update(_image_codebook_config_dict)
 
-        if text_config is None:
-            text_config = FlavaTextConfig()
-            logger.info("`text_config` is `None`. initializing the `FlavaTextConfig` with default values.")
-        elif isinstance(text_config, dict):
-            text_config = FlavaTextConfig(**text_config)
+        # Finally we can convert back our unified text/vision configs to `PretrainedConfig`
+        self.text_config = FlavaTextConfig(**text_config)
+        self.image_config = FlavaImageConfig(**image_config)
+        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
+        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
 
-        if image_config is None:
-            image_config = FlavaImageConfig()
-            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
-        elif isinstance(image_config, dict):
-            image_config = FlavaImageConfig(**image_config)
-
-        if multimodal_config is None:
-            multimodal_config = FlavaMultimodalConfig()
-            logger.info("`image_config` is `None`. initializing the `FlavaMultimodalConfig` with default values.")
-        elif isinstance(multimodal_config, dict):
-            multimodal_config = FlavaMultimodalConfig(**multimodal_config)
-
-        if image_codebook_config is None:
-            image_codebook_config = FlavaImageCodebookConfig()
-            logger.info("`image_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values.")
-        elif isinstance(image_codebook_config, dict):
-            image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
-
-        self.text_config = text_config
-        self.image_config = image_config
-        self.multimodal_config = multimodal_config
-        self.image_codebook_config = image_codebook_config
-
-        self.projection_dim = projection_dim
-        self.init_codebook = init_codebook
-
-        self.hidden_size = hidden_size
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
-        self.ce_ignore_index = ce_ignore_index
-        self.mim_weight = mim_weight
-        self.mlm_weight = mlm_weight
-        self.global_contrastive_weight = global_contrastive_weight
-        self.itm_weight = itm_weight
-        self.mmm_image_weight = mmm_image_weight
-        self.mmm_text_weight = mmm_text_weight
-        self.global_backprop_contrastive = global_backprop_contrastive
-        self.skip_unmasked_multimodal_encoder = skip_unmasked_multimodal_encoder
-        self.return_loss = return_loss
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["FlavaConfig", "FlavaImageCodebookConfig", "FlavaImageConfig", "FlavaMultimodalConfig", "FlavaTextConfig"]

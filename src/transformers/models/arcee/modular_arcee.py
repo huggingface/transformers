@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch Arcee model."""
 
+from huggingface_hub.dataclasses import strict
+
 from transformers.utils import auto_docstring, logging
 
 from ...modeling_rope_utils import RopeParameters
@@ -30,6 +32,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
+@strict(accept_kwargs=True)
 class ArceeConfig(LlamaConfig):
     r"""
     ```python
@@ -55,55 +58,28 @@ class ArceeConfig(LlamaConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32000,
-        hidden_size: int | None = 2560,
-        intermediate_size: int | None = 18432,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "relu2",
-        max_position_embeddings: int | None = 4096,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 128000,
-        eos_token_id: int | None = 128001,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        head_dim: int | None = None,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            mlp_bias=mlp_bias,
-            head_dim=head_dim,
-            **kwargs,
-        )
+    vocab_size: int = 32000
+    hidden_size: int = 2560
+    intermediate_size: int = 18432
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "relu2"
+    max_position_embeddings: int = 4096
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 128000
+    eos_token_id: int | list[int] | None = 128001
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    head_dim: int | None = None
 
-        del self.pretraining_tp
+    pretraining_tp = AttributeError()
 
 
 class ArceeMLP(NemotronMLP):

@@ -14,6 +14,7 @@
 """PyTorch SAM 2 model."""
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -37,6 +38,7 @@ from ..sam2.modeling_sam2 import (
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
+@strict(accept_kwargs=True)
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -63,66 +65,53 @@ class EdgeTamVisionConfig(PreTrainedConfig):
         "backbone_config": AutoConfig,
     }
 
-    def __init__(
-        self,
-        backbone_config=None,
-        backbone_channel_list=None,
-        backbone_feature_sizes=None,
-        fpn_hidden_size=256,
-        fpn_kernel_size=1,
-        fpn_stride=1,
-        fpn_padding=0,
-        fpn_top_down_levels=None,
-        num_feature_levels=3,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        backbone_channel_list = [384, 192, 96, 48] if backbone_channel_list is None else backbone_channel_list
-        backbone_feature_sizes = (
-            [[256, 256], [128, 128], [64, 64]] if backbone_feature_sizes is None else backbone_feature_sizes
-        )
-        fpn_top_down_levels = [2, 3] if fpn_top_down_levels is None else fpn_top_down_levels
+    backbone_config: dict | PreTrainedConfig | None = None
+    backbone_channel_list: list[int] | None = None
+    backbone_feature_sizes: list | None = None
+    fpn_hidden_size: int = 256
+    fpn_kernel_size: int = 1
+    fpn_stride: int = 1
+    fpn_padding: int = 0
+    fpn_top_down_levels: list[int] | None = None
+    num_feature_levels: int = 3
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-6
+    initializer_range: float = 0.02
 
-        if isinstance(backbone_config, dict):
-            backbone_config["model_type"] = backbone_config.get("model_type", "timm_wrapper")
-            backbone_config = CONFIG_MAPPING[backbone_config["model_type"]](**backbone_config)
-        elif backbone_config is None:
-            backbone_config = AutoConfig.from_pretrained(
+    def __post_init__(self, **kwargs):
+        self.backbone_channel_list = (
+            [384, 192, 96, 48] if self.backbone_channel_list is None else self.backbone_channel_list
+        )
+        self.backbone_feature_sizes = (
+            [[256, 256], [128, 128], [64, 64]] if self.backbone_feature_sizes is None else self.backbone_feature_sizes
+        )
+        self.fpn_top_down_levels = [2, 3] if self.fpn_top_down_levels is None else self.fpn_top_down_levels
+
+        if isinstance(self.backbone_config, dict):
+            self.backbone_config["model_type"] = self.backbone_config.get("model_type", "timm_wrapper")
+            self.backbone_config = CONFIG_MAPPING[self.backbone_config["model_type"]](**self.backbone_config)
+        elif self.backbone_config is None:
+            self.backbone_config = AutoConfig.from_pretrained(
                 "timm/repvit_m1.dist_in1k",
                 model_args={"in_chans": 3, "features_only": True, "out_indices": [0, 1, 2, 3]},
             )
-
-        self.backbone_config = backbone_config
-
-        # Neck
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
-        self.fpn_hidden_size = fpn_hidden_size
-        self.fpn_kernel_size = fpn_kernel_size
-        self.fpn_stride = fpn_stride
-        self.fpn_padding = fpn_padding
-        self.fpn_top_down_levels = fpn_top_down_levels
-        self.num_feature_levels = num_feature_levels
-
-        self.hidden_act = hidden_act
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
+@strict(accept_kwargs=True)
 class EdgeTamPromptEncoderConfig(Sam2PromptEncoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
+@strict(accept_kwargs=True)
 class EdgeTamMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
+@strict(accept_kwargs=True)
 class EdgeTamConfig(Sam2Config):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamPromptEncoderConfig`], *optional*):

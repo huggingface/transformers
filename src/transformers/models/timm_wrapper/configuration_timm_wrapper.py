@@ -16,18 +16,18 @@
 
 from typing import Any
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_timm_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, requires_backends
 
 
 if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="resnet50")
+@strict(accept_kwargs=True)
 class TimmWrapperConfig(PreTrainedConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -52,19 +52,10 @@ class TimmWrapperConfig(PreTrainedConfig):
 
     model_type = "timm_wrapper"
 
-    def __init__(
-        self,
-        architecture: str = "resnet50",
-        initializer_range: float = 0.02,
-        do_pooling: bool = True,
-        model_args: dict[str, Any] | None = None,
-        **kwargs,
-    ):
-        self.architecture = architecture
-        self.initializer_range = initializer_range
-        self.do_pooling = do_pooling
-        self.model_args = model_args  # named "model_args" for BC with timm
-        super().__init__(**kwargs)
+    architecture: str = "resnet50"
+    initializer_range: float = 0.02
+    do_pooling: bool = True
+    model_args: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any], **kwargs):

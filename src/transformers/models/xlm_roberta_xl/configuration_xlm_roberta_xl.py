@@ -13,14 +13,14 @@
 # limitations under the License.
 """XLM_ROBERTa_XL configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="FacebookAI/xlm-roberta-xl")
+@strict(accept_kwargs=True)
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
     Examples:
@@ -40,51 +40,26 @@ class XLMRobertaXLConfig(PreTrainedConfig):
 
     model_type = "xlm-roberta-xl"
 
-    def __init__(
-        self,
-        vocab_size=250880,
-        hidden_size=2560,
-        num_hidden_layers=36,
-        num_attention_heads=32,
-        intermediate_size=10240,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=514,
-        type_vocab_size=1,
-        initializer_range=0.02,
-        layer_norm_eps=1e-05,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        use_cache=True,
-        classifier_dropout=None,
-        is_decoder=False,
-        add_cross_attention=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
+    vocab_size: int = 250880
+    hidden_size: int = 2560
+    num_hidden_layers: int = 36
+    num_attention_heads: int = 32
+    intermediate_size: int = 10240
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float = 0.1
+    max_position_embeddings: int = 514
+    type_vocab_size: int = 1
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-05
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    use_cache: bool = True
+    classifier_dropout: float | int | None = None
+    is_decoder: bool = False
+    add_cross_attention: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["XLMRobertaXLConfig"]

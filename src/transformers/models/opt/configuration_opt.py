@@ -13,14 +13,14 @@
 # limitations under the License.
 """OPT model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/opt-350m")
+@strict(accept_kwargs=True)
 class OPTConfig(PreTrainedConfig):
     r"""
     do_layer_norm_before (`bool`, *optional*, defaults to `True`):
@@ -53,58 +53,33 @@ class OPTConfig(PreTrainedConfig):
     model_type = "opt"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        vocab_size=50272,
-        hidden_size=768,
-        num_hidden_layers=12,
-        ffn_dim=3072,
-        max_position_embeddings=2048,
-        do_layer_norm_before=True,
-        _remove_final_layer_norm=False,
-        word_embed_proj_dim=None,
-        dropout=0.1,
-        attention_dropout=0.0,
-        num_attention_heads=12,
-        activation_function="relu",
-        layerdrop=0.0,
-        init_std=0.02,
-        use_cache=True,
-        pad_token_id=1,
-        bos_token_id=2,
-        eos_token_id=2,
-        enable_bias=True,
-        layer_norm_elementwise_affine=True,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.num_attention_heads = num_attention_heads
-        self.word_embed_proj_dim = word_embed_proj_dim if word_embed_proj_dim is not None else hidden_size
-        self.ffn_dim = ffn_dim
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.layerdrop = layerdrop
-        self.use_cache = use_cache
-        self.do_layer_norm_before = do_layer_norm_before
-        # We keep these variables at `True` for backward compatibility.
-        self.enable_bias = enable_bias
-        self.layer_norm_elementwise_affine = layer_norm_elementwise_affine
+    vocab_size: int = 50272
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    ffn_dim: int = 3072
+    max_position_embeddings: int = 2048
+    do_layer_norm_before: bool = True
+    _remove_final_layer_norm: bool = False
+    word_embed_proj_dim: int | None = None
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    num_attention_heads: int = 12
+    activation_function: str = "relu"
+    layerdrop: float | int = 0.0
+    init_std: float = 0.02
+    use_cache: bool = True
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
+    enable_bias: bool = True
+    layer_norm_elementwise_affine: bool = True
+    tie_word_embeddings: bool = True
 
-        # Note that the only purpose of `_remove_final_layer_norm` is to keep backward compatibility
-        # with checkpoints that have been fine-tuned before transformers v4.20.1
-        # see https://github.com/facebookresearch/metaseq/pull/164
-        self._remove_final_layer_norm = _remove_final_layer_norm
+    def __post_init__(self, **kwargs):
+        self.word_embed_proj_dim = (
+            self.word_embed_proj_dim if self.word_embed_proj_dim is not None else self.hidden_size
+        )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["OPTConfig"]

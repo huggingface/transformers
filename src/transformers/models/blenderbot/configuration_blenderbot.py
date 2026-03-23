@@ -13,14 +13,14 @@
 # limitations under the License.
 """Blenderbot model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/blenderbot-3B")
+@strict(accept_kwargs=True)
 class BlenderbotConfig(PreTrainedConfig):
     r"""
     encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 3):
@@ -43,71 +43,39 @@ class BlenderbotConfig(PreTrainedConfig):
 
     model_type = "blenderbot"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "num_hidden_layers": "encoder_layers",
+    }
 
-    def __init__(
-        self,
-        vocab_size=8008,
-        max_position_embeddings=128,
-        encoder_layers=2,
-        encoder_ffn_dim=10240,
-        encoder_attention_heads=32,
-        decoder_layers=24,
-        decoder_ffn_dim=10240,
-        decoder_attention_heads=32,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        use_cache=True,
-        is_encoder_decoder=True,
-        activation_function="gelu",
-        d_model=2560,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        decoder_start_token_id=1,
-        scale_embedding=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        encoder_no_repeat_ngram_size=3,
-        forced_eos_token_id=2,
-        is_decoder=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.use_cache = use_cache
-        self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
-            forced_eos_token_id=forced_eos_token_id,
-            **kwargs,
-        )
+    vocab_size: int = 8008
+    max_position_embeddings: int = 128
+    encoder_layers: int = 2
+    encoder_ffn_dim: int = 10240
+    encoder_attention_heads: int = 32
+    decoder_layers: int = 24
+    decoder_ffn_dim: int = 10240
+    decoder_attention_heads: int = 32
+    encoder_layerdrop: float | int = 0.0
+    decoder_layerdrop: float | int = 0.0
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
+    activation_function: str = "gelu"
+    d_model: int = 2560
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    decoder_start_token_id: int = 1
+    scale_embedding: bool = False
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    encoder_no_repeat_ngram_size: int = 3
+    forced_eos_token_id: int | list[int] | None = 2
+    is_decoder: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["BlenderbotConfig"]

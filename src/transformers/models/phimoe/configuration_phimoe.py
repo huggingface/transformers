@@ -14,15 +14,15 @@
 
 """PyTorch Phi-MoE model."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/Phi-3.5-MoE-instruct")
+@strict(accept_kwargs=True)
 class PhimoeConfig(PreTrainedConfig):
     r"""
     num_local_experts (`int`, *optional*, defaults to 16):
@@ -46,75 +46,43 @@ class PhimoeConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 1000000.0
 
-    def __init__(
-        self,
-        vocab_size: int | None = 32064,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 6400,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 4096 * 32,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        tie_word_embeddings: int | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        sliding_window: int | None = None,
-        attention_dropout: float | None = 0.0,
-        num_experts_per_tok: int | None = 2,
-        num_local_experts: int | None = 16,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        router_jitter_noise: float | None = 0.01,
-        input_jitter_noise: float | None = 0.0,
-        attention_bias: bool | None = False,
-        lm_head_bias: bool | None = False,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-        self.attention_bias = attention_bias
-        self.lm_head_bias = lm_head_bias
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    vocab_size: int = 32064
+    hidden_size: int = 4096
+    intermediate_size: int = 6400
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 4096 * 32
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: int = False
+    rope_parameters: RopeParameters | dict | None = None
+    sliding_window: int | None = None
+    attention_dropout: float | int = 0.0
+    num_experts_per_tok: int = 2
+    num_local_experts: int = 16
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    router_jitter_noise: float = 0.01
+    input_jitter_noise: float = 0.0
+    attention_bias: bool = False
+    lm_head_bias: bool = False
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        super().__post_init__(**kwargs)
 
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_local_experts = num_local_experts
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.router_jitter_noise = router_jitter_noise
-        self.input_jitter_noise = input_jitter_noise
-        self.rope_parameters = rope_parameters
-
-        self.tie_word_embeddings = tie_word_embeddings
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        super().__init__(**kwargs)
-
-    def validate_rope(self, ignore_keys=None):
+    def validate_rope(self):
         """
         Validate the `rope_parameters` configuration.
         """
-        super().validate_rope(ignore_keys=ignore_keys)
+        super().validate_rope()
 
         # Run model-specific rope validation
         if self.rope_parameters["rope_type"] != "default":

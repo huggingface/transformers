@@ -14,15 +14,15 @@
 
 """Phi model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/phi-1")
+@strict(accept_kwargs=True)
 class PhiConfig(PreTrainedConfig):
     r"""
     qk_layernorm (`bool`, *optional*, defaults to `False`):
@@ -60,57 +60,33 @@ class PhiConfig(PreTrainedConfig):
         "final_layernorm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 51200,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 8192,
-        num_hidden_layers: int | None = 24,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        resid_pdrop: float | None = 0.0,
-        embd_pdrop: float | None = 0.0,
-        attention_dropout: float | None = 0.0,
-        hidden_act: str | None = "gelu_new",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        layer_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        qk_layernorm: bool | None = False,
-        bos_token_id: int | None = 1,
-        eos_token_id: int | None = 2,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vocab_size: int = 51200
+    hidden_size: int = 2048
+    intermediate_size: int = 8192
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    resid_pdrop: float = 0.0
+    embd_pdrop: float = 0.0
+    attention_dropout: float | int | None = 0.0
+    hidden_act: str = "gelu_new"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-5
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    qk_layernorm: bool = False
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = None
 
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attention_dropout = attention_dropout
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.qk_layernorm = qk_layernorm
-        self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PhiConfig"]

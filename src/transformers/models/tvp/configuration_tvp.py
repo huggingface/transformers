@@ -13,16 +13,16 @@
 # limitations under the License.
 """TVP model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="Intel/tvp-base")
+@strict(accept_kwargs=True)
 class TvpConfig(PreTrainedConfig):
     r"""
     distance_loss_weight (`float`, *optional*, defaults to 1.0):
@@ -53,65 +53,39 @@ class TvpConfig(PreTrainedConfig):
     model_type = "tvp"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config=None,
-        distance_loss_weight=1.0,
-        duration_loss_weight=0.1,
-        visual_prompter_type="framepad",
-        visual_prompter_apply="replace",
-        visual_prompt_size=96,
-        max_img_size=448,
-        num_frames=48,
-        vocab_size=30522,
-        type_vocab_size=2,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        max_position_embeddings=512,
-        max_grid_col_position_embeddings=100,
-        max_grid_row_position_embeddings=100,
-        hidden_dropout_prob=0.1,
-        hidden_act="gelu",
-        layer_norm_eps=1e-12,
-        initializer_range=0.02,
-        attention_probs_dropout_prob=0.1,
-        pad_token_id=None,
-        **kwargs,
-    ):
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    backbone_config: dict | PreTrainedConfig | None = None
+    distance_loss_weight: float = 1.0
+    duration_loss_weight: float = 0.1
+    visual_prompter_type: str = "framepad"
+    visual_prompter_apply: str = "replace"
+    visual_prompt_size: int = 96
+    max_img_size: int = 448
+    num_frames: int = 48
+    vocab_size: int = 30522
+    type_vocab_size: int = 2
+    hidden_size: int = 768
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    max_position_embeddings: int = 512
+    max_grid_col_position_embeddings: int = 100
+    max_grid_row_position_embeddings: int = 100
+    hidden_dropout_prob: float = 0.1
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-12
+    initializer_range: float = 0.02
+    attention_probs_dropout_prob: float = 0.1
+    pad_token_id: int | None = None
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="resnet",
             default_config_kwargs={"out_features": ["stage4"]},
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.distance_loss_weight = distance_loss_weight
-        self.duration_loss_weight = duration_loss_weight
-        self.visual_prompter_type = visual_prompter_type
-        self.visual_prompter_apply = visual_prompter_apply
-        self.visual_prompt_size = visual_prompt_size
-        self.max_img_size = max_img_size
-        self.num_frames = num_frames
-        self.vocab_size = vocab_size
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.max_grid_col_position_embeddings = max_grid_col_position_embeddings
-        self.max_grid_row_position_embeddings = max_grid_row_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.pad_token_id = pad_token_id
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["TvpConfig"]

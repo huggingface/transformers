@@ -21,11 +21,11 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
 from transformers.utils.generic import TransformersKwargs
 
 from ...cache_utils import Cache
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -45,6 +45,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
+@strict(accept_kwargs=True)
 class Olmo2Config(OlmoConfig):
     r"""
     Example:
@@ -79,51 +80,8 @@ class Olmo2Config(OlmoConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50304,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 11008,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = None,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 2048,
-        initializer_range: float | None = 0.02,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = 1,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = 50279,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        rms_norm_eps: int | None = 1e-5,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            **kwargs,
-        )
-
-        self.rms_norm_eps = rms_norm_eps
-        del self.clip_qkv
+    rms_norm_eps: float = 1e-5
+    clip_qkv = AttributeError()
 
 
 # OLMo2 RMS norm is identical to Llama RMS norm except:

@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """xLSTM configuration."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_xlstm_available, logging
+from ...utils import auto_docstring, is_xlstm_available
 
 
 if is_xlstm_available():
@@ -52,10 +53,8 @@ else:
     external_xlstm = False
 
 
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="NX-AI/xLSTM-7b")
+@strict(accept_kwargs=True)
 class xLSTMConfig(PreTrainedConfig):
     """
     num_blocks (int, optional, *optional*, defaults to 32):
@@ -118,93 +117,45 @@ class xLSTMConfig(PreTrainedConfig):
 
     model_type = "xlstm"
 
-    def __init__(
-        self,
-        vocab_size: int = 50304,
-        hidden_size: int = 4096,
-        embedding_dim: int | None = None,
-        num_hidden_layers: int | None = 32,
-        num_blocks: int | None = None,
-        num_heads: int = 8,
-        use_bias: bool = False,
-        norm_reduction_force_float32: bool = True,
-        tie_word_embeddings: bool = False,
-        add_out_norm: bool = True,
-        norm_eps: float = 1e-6,
-        # mlstm_layer
-        qk_dim_factor: float = 0.5,
-        v_dim_factor: float = 1.0,
-        # mlstm backend
-        chunkwise_kernel: ChunkwiseKernelType = "chunkwise--native_autograd",
-        sequence_kernel: SequenceKernelType = "native_sequence__native",
-        step_kernel: StepKernelType = "native",
-        # needed to enable generation
-        mode: BackendModeType = "inference",
-        chunk_size: int = 64,
-        # needed to be true for generation
-        return_last_states: bool = True,
-        autocast_kernel_dtype: DtypeType = "bfloat16",
-        eps: float = 1e-6,
-        inference_state_dtype: DtypeType = "float32",
-        # feedforward
-        ffn_proj_factor: float = 2.667,
-        ffn_round_up_to_multiple_of: int = 64,
-        # capping
-        gate_soft_cap: float = 15.0,
-        output_logit_soft_cap: float = 30.0,
-        # weights
-        weight_mode: WeightModeType = "single",
-        # HF interface
-        use_cache: bool = True,
-        pad_token_id: int = 1,
-        bos_token_id: int = 0,
-        eos_token_id: int = 2,
-        max_inference_chunksize: int = 16384,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size if hidden_size is not None else embedding_dim
-        self.embedding_dim = embedding_dim if embedding_dim is not None else hidden_size
-        self.num_hidden_layers = num_hidden_layers if num_hidden_layers is not None else num_blocks
-        self.num_blocks = num_blocks if num_blocks is not None else num_hidden_layers
-        self.num_heads = num_heads
-        self.use_bias = use_bias
-        self.tie_word_embeddings = tie_word_embeddings
-        self.add_out_norm = add_out_norm
-        self.norm_eps = norm_eps
-        self.norm_reduction_force_float32 = norm_reduction_force_float32
-        # mlstm_layer
-        self.qk_dim_factor = qk_dim_factor
-        self.v_dim_factor = v_dim_factor
-        # mlstm backend
-        self.chunkwise_kernel = chunkwise_kernel
-        self.sequence_kernel = sequence_kernel
-        self.step_kernel = step_kernel
-        self.mode = mode
-        self.chunk_size = chunk_size
-        self.return_last_states = return_last_states
-        self.autocast_kernel_dtype = autocast_kernel_dtype
-        self.eps = eps
-        self.inference_state_dtype = inference_state_dtype
-        # feedforward
-        self.ffn_proj_factor = ffn_proj_factor
-        self.ffn_round_up_to_multiple_of = ffn_round_up_to_multiple_of
-        # capping
-        self.gate_soft_cap = gate_soft_cap
-        self.output_logit_soft_cap = output_logit_soft_cap
-        self.weight_mode = weight_mode
+    vocab_size: int = 50304
+    hidden_size: int = 4096
+    embedding_dim: int | None = None
+    num_hidden_layers: int = 32
+    num_blocks: int | None = None
+    num_heads: int = 8
+    use_bias: bool = False
+    norm_reduction_force_float32: bool = True
+    tie_word_embeddings: bool = False
+    add_out_norm: bool = True
+    norm_eps: float = 1e-6
+    qk_dim_factor: float = 0.5
+    v_dim_factor: float = 1.0
+    chunkwise_kernel: ChunkwiseKernelType = "chunkwise--native_autograd"
+    sequence_kernel: SequenceKernelType = "native_sequence__native"
+    step_kernel: StepKernelType = "native"
+    mode: BackendModeType = "inference"
+    chunk_size: int = 64
+    return_last_states: bool = True
+    autocast_kernel_dtype: DtypeType = "bfloat16"
+    eps: float = 1e-6
+    inference_state_dtype: DtypeType = "float32"
+    ffn_proj_factor: float = 2.667
+    ffn_round_up_to_multiple_of: int = 64
+    gate_soft_cap: float = 15.0
+    output_logit_soft_cap: float = 30.0
+    weight_mode: WeightModeType = "single"
+    use_cache: bool = True
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    max_inference_chunksize: int = 16384
 
-        self.use_cache = use_cache
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.max_inference_chunksize = max_inference_chunksize
-
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        self.hidden_size = self.hidden_size if self.hidden_size is not None else self.embedding_dim
+        self.embedding_dim = self.embedding_dim if self.embedding_dim is not None else self.hidden_size
+        self.num_hidden_layers = self.num_hidden_layers if self.num_hidden_layers is not None else self.num_blocks
+        self.num_blocks = self.num_blocks if self.num_blocks is not None else self.num_hidden_layers
+        super().__post_init__(**kwargs)
 
     @property
     def qk_dim(self):

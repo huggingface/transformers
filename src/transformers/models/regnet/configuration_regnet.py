@@ -13,14 +13,14 @@
 # limitations under the License.
 """RegNet model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/regnet-y-040")
+@strict(accept_kwargs=True)
 class RegNetConfig(PreTrainedConfig):
     r"""
     layer_type (`str`, *optional*, defaults to `"y"`):
@@ -48,29 +48,19 @@ class RegNetConfig(PreTrainedConfig):
     model_type = "regnet"
     layer_types = ["x", "y"]
 
-    def __init__(
-        self,
-        num_channels=3,
-        embedding_size=32,
-        hidden_sizes=[128, 192, 512, 1088],
-        depths=[2, 6, 12, 2],
-        groups_width=64,
-        layer_type="y",
-        hidden_act="relu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        if layer_type not in self.layer_types:
-            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
-        self.num_channels = num_channels
-        self.embedding_size = embedding_size
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.groups_width = groups_width
-        self.layer_type = layer_type
-        self.hidden_act = hidden_act
-        # always downsample in the first stage
-        self.downsample_in_first_stage = True
+    num_channels: int = 3
+    embedding_size: int = 32
+    hidden_sizes: list[int] | tuple[int, ...] = (128, 192, 512, 1088)
+    depths: list[int] | tuple[int, ...] = (2, 6, 12, 2)
+    groups_width: int = 64
+    layer_type: str = "y"
+    hidden_act: str = "relu"
+    downsample_in_first_stage: bool = True
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.layer_type not in self.layer_types:
+            raise ValueError(f"layer_type={self.layer_type} is not one of {','.join(self.layer_types)}")
 
 
 __all__ = ["RegNetConfig"]

@@ -13,14 +13,14 @@
 # limitations under the License.
 """MVP model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="RUCAIBox/mvp")
+@strict(accept_kwargs=True)
 class MvpConfig(PreTrainedConfig):
     r"""
     use_prompt (`bool`, *optional*, defaults to `False`):
@@ -47,75 +47,41 @@ class MvpConfig(PreTrainedConfig):
 
     model_type = "mvp"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "num_hidden_layers": "encoder_layers",
+    }
 
-    def __init__(
-        self,
-        vocab_size=50267,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
-        encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        activation_function="gelu",
-        d_model=1024,
-        dropout=0.1,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        init_std=0.02,
-        classifier_dropout=0.0,
-        scale_embedding=False,
-        use_cache=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        is_encoder_decoder=True,
-        decoder_start_token_id=2,
-        use_prompt=False,
-        prompt_length=100,
-        prompt_mid_dim=800,
-        is_decoder=False,
-        tie_word_embeddings=True,
-        **kwargs,
-    ):
-        self.is_decoder = is_decoder
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_layers = encoder_layers
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.activation_function = activation_function
-        self.init_std = init_std
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
-        self.use_cache = use_cache
-        self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.use_prompt = use_prompt
-        self.prompt_length = prompt_length
-        self.prompt_mid_dim = prompt_mid_dim
-
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+    vocab_size: int = 50267
+    max_position_embeddings: int = 1024
+    encoder_layers: int = 12
+    encoder_ffn_dim: int = 4096
+    encoder_attention_heads: int = 16
+    decoder_layers: int = 12
+    decoder_ffn_dim: int = 4096
+    decoder_attention_heads: int = 16
+    encoder_layerdrop: float | int = 0.0
+    decoder_layerdrop: float | int = 0.0
+    activation_function: str = "gelu"
+    d_model: int = 1024
+    dropout: float | int = 0.1
+    attention_dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    init_std: float = 0.02
+    classifier_dropout: float | int = 0.0
+    scale_embedding: bool = False
+    use_cache: bool = True
+    pad_token_id: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 2
+    is_encoder_decoder: int = True
+    decoder_start_token_id: int | None = 2
+    use_prompt: bool = False
+    prompt_length: int = 100
+    prompt_mid_dim: int = 800
+    is_decoder: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["MvpConfig"]

@@ -13,15 +13,15 @@
 # limitations under the License.
 """Qwen3-Next model configuration"""
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Next-80B-A3B-Instruct")
+@strict(accept_kwargs=True)
 class Qwen3NextConfig(PreTrainedConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -81,92 +81,52 @@ class Qwen3NextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151936,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 5632,
-        num_hidden_layers: int | None = 48,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        head_dim: int | None = 256,
-        linear_conv_kernel_dim: int | None = 4,
-        linear_key_head_dim: int | None = 128,
-        linear_value_head_dim: int | None = 128,
-        linear_num_key_heads: int | None = 16,
-        linear_num_value_heads: int | None = 32,
-        decoder_sparse_step: int | None = 1,
-        moe_intermediate_size: int | None = 512,
-        shared_expert_intermediate_size: int | None = 512,
-        num_experts_per_tok: int | None = 10,
-        num_experts: int | None = 512,
-        norm_topk_prob: bool | None = True,
-        output_router_logits: bool | None = False,
-        router_aux_loss_coef: float | None = 0.001,
-        mlp_only_layers: list[int] | None = [],
-        layer_types: list[str] | None = None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.head_dim = head_dim
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
+    vocab_size: int = 151936
+    hidden_size: int = 2048
+    intermediate_size: int = 5632
+    num_hidden_layers: int = 48
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 2
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 32768
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    head_dim: int = 256
+    linear_conv_kernel_dim: int = 4
+    linear_key_head_dim: int = 128
+    linear_value_head_dim: int = 128
+    linear_num_key_heads: int = 16
+    linear_num_value_heads: int = 32
+    decoder_sparse_step: int = 1
+    moe_intermediate_size: int = 512
+    shared_expert_intermediate_size: int = 512
+    num_experts_per_tok: int = 10
+    num_experts: int = 512
+    norm_topk_prob: bool = True
+    output_router_logits: bool = False
+    router_aux_loss_coef: float = 0.001
+    mlp_only_layers: list[int] | None = None
+    layer_types: list[str] | None = None
+    pad_token_id: int | None = None
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = None
 
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
+        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
         if self.layer_types is None:
-            interval_pattern = kwargs.get("full_attention_interval", 4)
+            interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
                 "linear_attention" if bool((i + 1) % interval_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # linear attention part
-        self.linear_conv_kernel_dim = linear_conv_kernel_dim
-        self.linear_key_head_dim = linear_key_head_dim
-        self.linear_value_head_dim = linear_value_head_dim
-        self.linear_num_key_heads = linear_num_key_heads
-        self.linear_num_value_heads = linear_num_value_heads
-
-        # MoE arguments
-        self.decoder_sparse_step = decoder_sparse_step
-        self.moe_intermediate_size = moe_intermediate_size
-        self.shared_expert_intermediate_size = shared_expert_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.mlp_only_layers = mlp_only_layers
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["Qwen3NextConfig"]

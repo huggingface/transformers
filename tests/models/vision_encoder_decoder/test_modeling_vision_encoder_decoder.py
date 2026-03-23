@@ -74,7 +74,7 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 @require_torch
@@ -1199,7 +1199,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
     def test_inference_coco_en(self):
         loc = "ydshieh/vit-gpt2-coco-en"
 
-        image_processor = ViTImageProcessor.from_pretrained(loc)
+        image_processor = ViTImageProcessorPil.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
         model = VisionEncoderDecoderModel.from_pretrained(loc)
         model.to(torch_device)

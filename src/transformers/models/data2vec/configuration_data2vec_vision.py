@@ -13,14 +13,14 @@
 # limitations under the License.
 """Data2VecVision model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/data2vec-vision-base")
+@strict(accept_kwargs=True)
 class Data2VecVisionConfig(PreTrainedConfig):
     r"""
     use_mask_token (`bool`, *optional*, defaults to `False`):
@@ -60,69 +60,33 @@ class Data2VecVisionConfig(PreTrainedConfig):
 
     model_type = "data2vec-vision"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        use_mask_token=False,
-        use_absolute_position_embeddings=False,
-        use_relative_position_bias=False,
-        use_shared_relative_position_bias=False,
-        layer_scale_init_value=0.1,
-        drop_path_rate=0.1,
-        use_mean_pooling=True,
-        out_indices=[3, 5, 7, 11],
-        pool_scales=[1, 2, 3, 6],
-        use_auxiliary_head=True,
-        auxiliary_loss_weight=0.4,
-        auxiliary_channels=256,
-        auxiliary_num_convs=1,
-        auxiliary_concat_input=False,
-        semantic_loss_ignore_index=255,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.use_mask_token = use_mask_token
-        self.use_absolute_position_embeddings = use_absolute_position_embeddings
-        self.use_relative_position_bias = use_relative_position_bias
-        self.use_shared_relative_position_bias = use_shared_relative_position_bias
-        self.layer_scale_init_value = layer_scale_init_value
-        self.drop_path_rate = drop_path_rate
-        self.use_mean_pooling = use_mean_pooling
-        # decode head attributes (semantic segmentation)
-        self.out_indices = out_indices
-        self.pool_scales = pool_scales
-        # auxiliary head attributes (semantic segmentation)
-        self.use_auxiliary_head = use_auxiliary_head
-        self.auxiliary_loss_weight = auxiliary_loss_weight
-        self.auxiliary_channels = auxiliary_channels
-        self.auxiliary_num_convs = auxiliary_num_convs
-        self.auxiliary_concat_input = auxiliary_concat_input
-        self.semantic_loss_ignore_index = semantic_loss_ignore_index
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    intermediate_size: int = 3072
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-12
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    use_mask_token: bool = False
+    use_absolute_position_embeddings: bool = False
+    use_relative_position_bias: bool = False
+    use_shared_relative_position_bias: bool = False
+    layer_scale_init_value: float = 0.1
+    drop_path_rate: float = 0.1
+    use_mean_pooling: bool = True
+    out_indices: list[int] | tuple[int, ...] = (3, 5, 7, 11)
+    pool_scales: list[int] | tuple[int, ...] = (1, 2, 3, 6)
+    use_auxiliary_head: bool = True
+    auxiliary_loss_weight: float = 0.4
+    auxiliary_channels: int = 256
+    auxiliary_num_convs: int = 1
+    auxiliary_concat_input: bool = False
+    semantic_loss_ignore_index: int = 255
 
 
 __all__ = ["Data2VecVisionConfig"]

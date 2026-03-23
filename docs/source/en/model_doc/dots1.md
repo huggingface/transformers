@@ -15,15 +15,55 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-06-06 and added to Hugging Face Transformers on 2025-06-25.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
+    </div>
+</div>
+
 # dots.llm1
 
-## Overview
+[dots.llm1](https://huggingface.co/papers/2506.05767) is a 142B-parameter mixture-of-experts model that activates 14B parameters per token, using top-6-of-128 routed experts plus 2 shared experts. It delivers performance on par with Qwen2.5-72B while significantly reducing training and inference costs. Notably, no synthetic data was used during pretraining.
 
-The `dots.llm1` model was proposed in [dots.llm1 technical report](https://huggingface.co/papers/2506.05767) by rednote-hilab team.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
-The abstract from the report is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*Mixture of Experts (MoE) models have emerged as a promising paradigm for scaling language models efficiently by activating only a subset of parameters for each input token. In this report, we present dots.llm1, a large-scale MoE model that activates 14B parameters out of a total of 142B parameters, delivering performance on par with state-of-the-art models while reducing training and inference costs. Leveraging our meticulously crafted and efficient data processing pipeline, dots.llm1 achieves performance comparable to Qwen2.5-72B after pretraining on high-quality corpus and post-training to fully unlock its capabilities. Notably, no synthetic data is used during pretraining. To foster further research, we open-source intermediate training checkpoints spanning the entire training process, providing valuable insights into the learning dynamics of large language models.*
+```py
+import torch
+from transformers import pipeline
+
+pipe = pipeline(
+    task="text-generation",
+    model="rednote-hilab/dots.llm1.base",
+    dtype=torch.bfloat16,
+)
+pipe("The advantage of mixture-of-experts models is")
+```
+
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots.llm1.base")
+model = AutoModelForCausalLM.from_pretrained(
+    "rednote-hilab/dots.llm1.base",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+input_ids = tokenizer("The advantage of mixture-of-experts models is", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Dots1Config
 

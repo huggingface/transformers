@@ -11,20 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
+
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-if TYPE_CHECKING:
-    from ..superpoint import SuperPointConfig
-
-logger = logging.get_logger(__name__)
-
-
 @auto_docstring(checkpoint="magic-leap-community/superglue_indoor")
+@strict(accept_kwargs=True)
 class SuperGlueConfig(PreTrainedConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -56,51 +52,41 @@ class SuperGlueConfig(PreTrainedConfig):
     model_type = "superglue"
     sub_configs = {"keypoint_detector_config": AutoConfig}
 
-    def __init__(
-        self,
-        keypoint_detector_config: "SuperPointConfig" = None,
-        hidden_size: int = 256,
-        keypoint_encoder_sizes: list[int] | None = None,
-        gnn_layers_types: list[str] | None = None,
-        num_attention_heads: int = 4,
-        sinkhorn_iterations: int = 100,
-        matching_threshold: float = 0.0,
-        initializer_range: float = 0.02,
-        is_decoder=False,
-        **kwargs,
-    ):
-        self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
+    keypoint_detector_config: dict | PreTrainedConfig | None = None
+    hidden_size: int = 256
+    keypoint_encoder_sizes: list[int] | None = None
+    gnn_layers_types: list[str] | None = None
+    num_attention_heads: int = 4
+    sinkhorn_iterations: int = 100
+    matching_threshold: float = 0.0
+    initializer_range: float = 0.02
+    is_decoder: bool = False
+    attention_probs_dropout_prob: int | float = 0.0
+
+    def __post_init__(self, **kwargs):
+        self.gnn_layers_types = self.gnn_layers_types if self.gnn_layers_types is not None else ["self", "cross"] * 9
+        self.keypoint_encoder_sizes = (
+            self.keypoint_encoder_sizes if self.keypoint_encoder_sizes is not None else [32, 64, 128, 256]
+        )
+
+        if isinstance(self.keypoint_detector_config, dict):
+            self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
+            self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
+                **self.keypoint_detector_config
+            )
+        elif self.keypoint_detector_config is None:
+            self.keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
+
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
         # Check whether all gnn_layers_types are either 'self' or 'cross'
         if not all(layer_type in ["self", "cross"] for layer_type in self.gnn_layers_types):
             raise ValueError("All gnn_layers_types must be either 'self' or 'cross'")
 
-        if hidden_size % num_attention_heads != 0:
+        if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError("hidden_size % num_attention_heads is different from zero")
-
-        self.keypoint_encoder_sizes = (
-            keypoint_encoder_sizes if keypoint_encoder_sizes is not None else [32, 64, 128, 256]
-        )
-        self.hidden_size = hidden_size
-        self.keypoint_encoder_sizes = keypoint_encoder_sizes
-        self.gnn_layers_types = gnn_layers_types
-        self.num_attention_heads = num_attention_heads
-        self.sinkhorn_iterations = sinkhorn_iterations
-        self.matching_threshold = matching_threshold
-
-        if isinstance(keypoint_detector_config, dict):
-            keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")
-            keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config
-            )
-        if keypoint_detector_config is None:
-            keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
-
-        self.keypoint_detector_config = keypoint_detector_config
-        self.initializer_range = initializer_range
-        self.attention_probs_dropout_prob = 0
-        self.is_decoder = False
-
-        super().__init__(**kwargs)
 
 
 __all__ = ["SuperGlueConfig"]

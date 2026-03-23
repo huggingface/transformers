@@ -13,14 +13,14 @@
 # limitations under the License.
 """SwiftFormer model configuration"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="MBZUAI/swiftformer-xs")
+@strict(accept_kwargs=True)
 class SwiftFormerConfig(PreTrainedConfig):
     r"""
     embed_dims (`list[int]`, *optional*, defaults to `[48, 56, 112, 220]`):
@@ -59,43 +59,22 @@ class SwiftFormerConfig(PreTrainedConfig):
 
     model_type = "swiftformer"
 
-    def __init__(
-        self,
-        image_size=224,
-        num_channels=3,
-        depths=[3, 3, 6, 4],
-        embed_dims=[48, 56, 112, 220],
-        mlp_ratio=4,
-        downsamples=[True, True, True, True],
-        hidden_act="gelu",
-        down_patch_size=3,
-        down_stride=2,
-        down_pad=1,
-        drop_path_rate=0.0,
-        drop_mlp_rate=0.0,
-        drop_conv_encoder_rate=0.0,
-        use_layer_scale=True,
-        layer_scale_init_value=1e-5,
-        batch_norm_eps=1e-5,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.depths = depths
-        self.embed_dims = embed_dims
-        self.mlp_ratio = mlp_ratio
-        self.downsamples = downsamples
-        self.hidden_act = hidden_act
-        self.down_patch_size = down_patch_size
-        self.down_stride = down_stride
-        self.down_pad = down_pad
-        self.drop_path_rate = drop_path_rate
-        self.drop_mlp_rate = drop_mlp_rate
-        self.drop_conv_encoder_rate = drop_conv_encoder_rate
-        self.use_layer_scale = use_layer_scale
-        self.layer_scale_init_value = layer_scale_init_value
-        self.batch_norm_eps = batch_norm_eps
+    image_size: int | list[int] | tuple[int, int] = 224
+    num_channels: int = 3
+    depths: list[int] | tuple[int, ...] = (3, 3, 6, 4)
+    embed_dims: list[int] | tuple[int, ...] = (48, 56, 112, 220)
+    mlp_ratio: int = 4
+    downsamples: list[bool] | tuple[bool, ...] = (True, True, True, True)
+    hidden_act: str = "gelu"
+    down_patch_size: int | list[int] | tuple[int, int] = 3
+    down_stride: int = 2
+    down_pad: int = 1
+    drop_path_rate: float = 0.0
+    drop_mlp_rate: float = 0.0
+    drop_conv_encoder_rate: float = 0.0
+    use_layer_scale: bool = True
+    layer_scale_init_value: float = 1e-5
+    batch_norm_eps: float = 1e-5
 
 
 __all__ = ["SwiftFormerConfig"]

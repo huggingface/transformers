@@ -18,6 +18,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Literal
+
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
@@ -25,6 +29,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
+@strict(accept_kwargs=True)
 class CHMv2Config(PreTrainedConfig):
     r"""
     backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
@@ -66,27 +71,25 @@ class CHMv2Config(PreTrainedConfig):
     model_type = "chmv2"
     sub_configs = {"backbone_config": AutoConfig}
 
-    def __init__(
-        self,
-        backbone_config: dict | None = None,
-        patch_size: int | None = 16,
-        initializer_range: float | None = 0.02,
-        reassemble_factors: list[float] | None = None,
-        post_process_channels: list[int] | None = None,
-        fusion_hidden_size: int | None = 256,
-        head_hidden_size: int | None = 128,
-        number_output_channels: int | None = 256,
-        readout_type: str | None = "project",
-        min_depth: float | None = 0.001,
-        max_depth: float | None = 96.0,
-        bins_strategy: str | None = "chmv2_mixlog",
-        norm_strategy: str | None = "chmv2_mixlog",
-        **kwargs,
-    ):
-        if reassemble_factors is None:
-            reassemble_factors = [4, 2, 1, 0.5]
-        if post_process_channels is None:
-            post_process_channels = [128, 256, 512, 1024]
+    backbone_config: dict | PreTrainedConfig | None = None
+    patch_size: int = 16
+    initializer_range: float = 0.02
+    reassemble_factors: list[float | int] | None = None
+    post_process_channels: list[int] | None = None
+    fusion_hidden_size: int = 256
+    head_hidden_size: int = 128
+    number_output_channels: int = 256
+    readout_type: str = "project"
+    min_depth: float = 0.001
+    max_depth: float = 96.0
+    bins_strategy: Literal["linear", "log", "chmv2_mixlog"] = "chmv2_mixlog"
+    norm_strategy: Literal["linear", "softmax", "sigmoid", "chmv2_mixlog"] = "chmv2_mixlog"
+
+    def __post_init__(self, **kwargs):
+        if self.reassemble_factors is None:
+            self.reassemble_factors = [4, 2, 1, 0.5]
+        if self.post_process_channels is None:
+            self.post_process_channels = [128, 256, 512, 1024]
 
         default_config_kwargs = {
             "image_size": 416,
@@ -103,34 +106,14 @@ class CHMv2Config(PreTrainedConfig):
             "return_class_token": True,
         }
 
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="dinov3_vit",
             default_config_kwargs=default_config_kwargs,
             **kwargs,
         )
 
-        self.backbone_config = backbone_config
-        self.patch_size = patch_size
-        self.initializer_range = initializer_range
-        self.reassemble_factors = reassemble_factors
-        self.post_process_channels = post_process_channels
-        self.fusion_hidden_size = fusion_hidden_size
-        self.head_hidden_size = head_hidden_size
-        self.number_output_channels = number_output_channels
-        self.readout_type = readout_type
-
-        if bins_strategy not in ["linear", "log", "chmv2_mixlog"]:
-            raise ValueError("bins_strategy must be one of ['linear', 'log', 'chmv2_mixlog']")
-        if norm_strategy not in ["linear", "softmax", "sigmoid", "chmv2_mixlog"]:
-            raise ValueError("norm_strategy must be one of ['linear', 'softmax', 'sigmoid', 'chmv2_mixlog']")
-
-        self.min_depth = min_depth
-        self.max_depth = max_depth
-        self.bins_strategy = bins_strategy
-        self.norm_strategy = norm_strategy
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["CHMv2Config"]

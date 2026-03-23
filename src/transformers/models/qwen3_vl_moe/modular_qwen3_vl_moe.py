@@ -16,18 +16,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.output_capturing import OutputRecorder
+from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
@@ -54,7 +54,8 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
-class Qwen3VLMoeTextConfig(PreTrainedConfig):
+@strict(accept_kwargs=True)
+class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
         The frequency of the MoE layer.
@@ -95,73 +96,41 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 151936,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 5632,
-        num_hidden_layers: int | None = 24,
-        num_attention_heads: int | None = 16,
-        num_key_value_heads: int | None = 16,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 128000,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        decoder_sparse_step: int | None = 1,
-        moe_intermediate_size: int | None = 1408,
-        num_experts_per_tok: int | None = 4,
-        num_experts: int | None = 60,
-        mlp_only_layers: list[int] | None = None,
-        rope_parameters: RopeParameters | None = None,
-        head_dim: int | None = None,
-        pad_token_id: int | None = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    intermediate_size: int = 5632
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    max_position_embeddings: int = 128000
+    moe_intermediate_size: int = 1408
+    num_experts_per_tok: int = 4
+    num_experts: int = 60
+    head_dim: int | None = None
+    tie_word_embeddings: bool = True
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    norm_topk_prob = AttributeError()
+    output_router_logits = AttributeError()
+    use_sliding_window = AttributeError()
+    sliding_window = AttributeError()
 
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.head_dim = head_dim or hidden_size // num_attention_heads
-        self.rope_parameters = rope_parameters
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        # MoE arguments
-        self.decoder_sparse_step = decoder_sparse_step
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
-        self.pad_token_id = pad_token_id
-
-        super().__init__(
-            ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
-            **kwargs,
-        )
+        self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
+        super().__post_init__(**kwargs)
+        self.sliding_window = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
+@strict(accept_kwargs=True)
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
+@strict(accept_kwargs=True)
 class Qwen3VLMoeConfig(Qwen3VLConfig):
     r"""
     Example:
@@ -179,8 +148,7 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "qwen3_vl_moe"
-    sub_configs = {"vision_config": Qwen3VLMoeVisionConfig, "text_config": Qwen3VLMoeTextConfig}
+    pass
 
 
 class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):

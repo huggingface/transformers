@@ -812,7 +812,6 @@ class Kosmos2_5TextAttention(nn.Module):
         encoder_hidden_states: torch.Tensor | None = None,  # image part
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -833,9 +832,7 @@ class Kosmos2_5TextAttention(nn.Module):
         query_states = self.scaling * query_states
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -883,7 +880,6 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = True,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -896,7 +892,6 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -954,7 +949,6 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1005,17 +999,10 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -1027,7 +1014,6 @@ class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
                 attention_mask=causal_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -1155,7 +1141,6 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -1171,7 +1156,6 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1216,7 +1200,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Kosmos2_5ModelOutput:
         r"""
@@ -1275,7 +1258,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             inputs_embeds=inputs_embeds,
             position_ids=position_ids,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1394,7 +1376,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
-        cache_position=None,
         position_ids=None,
         is_first_iteration=False,
         **model_kwargs,
@@ -1409,7 +1390,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             is_first_iteration=is_first_iteration,
             **model_kwargs,
@@ -1584,7 +1564,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
-        cache_position=None,
         position_ids=None,
         is_first_iteration=False,
         **model_kwargs,
@@ -1598,7 +1577,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             is_first_iteration=is_first_iteration,
             **model_kwargs,

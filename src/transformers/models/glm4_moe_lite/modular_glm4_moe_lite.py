@@ -14,8 +14,9 @@
 
 
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
@@ -34,6 +35,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
+@strict(accept_kwargs=True)
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):
@@ -76,90 +78,50 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     }
     attribute_map = {
         "num_local_experts": "n_routed_experts",
+        "head_dim": "qk_rope_head_dim",
     }
 
-    def __init__(
-        self,
-        vocab_size: int | None = 154880,
-        hidden_size: int | None = 2048,
-        intermediate_size: int | None = 10240,
-        moe_intermediate_size: int | None = 1536,
-        num_hidden_layers: int | None = 47,
-        num_attention_heads: int | None = 20,
-        num_key_value_heads: int | None = 20,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 64,
-        routed_scaling_factor: float | None = 1.8,
-        kv_lora_rank: int | None = 512,
-        q_lora_rank: int | None = 768,
-        qk_rope_head_dim: int | None = 64,
-        v_head_dim: int | None = 256,
-        qk_nope_head_dim: int | None = 192,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        num_experts_per_tok: int | None = 4,
-        norm_topk_prob: bool | None = True,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 202752,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = 0,
-        eos_token_id: int | None = 1,
-        pretraining_tp: int | None = 1,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        rope_interleave: bool | None = True,
-        mlp_layer_types=None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
+    vocab_size: int = 154880
+    hidden_size: int = 2048
+    intermediate_size: int = 10240
+    moe_intermediate_size: int = 1536
+    num_hidden_layers: int = 47
+    num_attention_heads: int = 20
+    num_key_value_heads: int = 20
+    n_shared_experts: int = 1
+    n_routed_experts: int = 64
+    routed_scaling_factor: float = 1.8
+    kv_lora_rank: int = 512
+    q_lora_rank: int | None = 768
+    qk_rope_head_dim: int = 64
+    v_head_dim: int = 256
+    qk_nope_head_dim: int = 192
+    n_group: int = 1
+    topk_group: int = 1
+    num_experts_per_tok: int = 4
+    norm_topk_prob: bool = True
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 202752
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
+    pretraining_tp: int = 1
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    rope_interleave: bool = True
+    mlp_layer_types: list[str] | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
 
+    def __post_init__(self, **kwargs):
         # Default to MoE from the second layer and on
-        self.mlp_layer_types = mlp_layer_types
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
-        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
-
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
-        self.head_dim = qk_rope_head_dim
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.norm_topk_prob = norm_topk_prob
-        self.rope_interleave = rope_interleave
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        super().__init__(**kwargs)
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
+        super().__post_init__(**kwargs)
 
 
 class Glm4MoeLiteRotaryEmbedding(Glm4MoeRotaryEmbedding):
