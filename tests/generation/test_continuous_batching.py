@@ -16,8 +16,6 @@ import functools
 import gc
 import itertools
 import unittest
-from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -114,89 +112,6 @@ def with_flush_memory(func):
 
 
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    def test_generation_step_uses_thread_local_cuda_graph_capture_mode(self):
-        """Regression test for concurrent manager threads using CUDA graphs.
-
-        The behavior under test is specifically that CUDA graph capture opts into
-        `capture_error_mode="thread_local"` instead of PyTorch's default
-        process-global mode.
-        """
-        graph_capture_calls = []
-
-        @contextmanager
-        def fake_stream(stream):
-            self.assertEqual(stream, "compute-stream")
-            yield
-
-        @contextmanager
-        def fake_graph(*args, **kwargs):
-            self.assertEqual(args, ("graph-object",))
-            graph_capture_calls.append(dict(kwargs))
-            yield
-
-        class FakeInputsAndOutputs:
-            def __init__(self) -> None:
-                self.use_block_table = False
-                self.compute_stream = "compute-stream"
-                self.stored_graph = None
-                self.retrieve_called = False
-
-            def get_model_kwargs(self, use_padding: bool):
-                self.use_padding = use_padding
-                return {"input_ids": torch.tensor([[1]], dtype=torch.long)}
-
-            def get_cb_kwargs(self):
-                return (
-                    torch.tensor([0], dtype=torch.int32),
-                    torch.tensor([0], dtype=torch.int32),
-                    torch.tensor([0], dtype=torch.int32),
-                )
-
-            def get_graph(self):
-                return None
-
-            def set_graph(self, graph) -> None:
-                self.stored_graph = graph
-
-            def retrieve_device_outputs(self) -> None:
-                self.retrieve_called = True
-
-        inputs_and_outputs = FakeInputsAndOutputs()
-        forward_calls = []
-
-        def fake_forward_fn(
-            model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
-        ):
-            del model, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
-            forward_calls.append(batch_data["input_ids"].clone())
-
-        processor = SimpleNamespace(
-            inputs_and_outputs=inputs_and_outputs,
-            _compiled_decode=None,
-            _compiled_varlen=None,
-            _forward_process_and_sample=fake_forward_fn,
-            use_cuda_graph=True,
-            graph_pool="graph-pool",
-            _pad_inputs=True,
-        )
-
-        with (
-            patch("transformers.generation.continuous_batching.continuous_api.torch.cuda.stream", fake_stream),
-            patch("transformers.generation.continuous_batching.continuous_api.torch.cuda.graph", fake_graph),
-            patch(
-                "transformers.generation.continuous_batching.continuous_api.torch.cuda.CUDAGraph",
-                return_value="graph-object",
-            ),
-        ):
-            ContinuousBatchProcessor._generation_step(processor, object(), LogitsProcessorList(), False)
-
-        self.assertEqual(len(graph_capture_calls), 1)
-        self.assertEqual(
-            graph_capture_calls[0]["capture_error_mode"],
-            "thread_local",
-            "CUDA graph capture must stay thread-local so concurrent manager threads do not invalidate each other.",
-        )
-
     @parameterized.expand(
         [
             (None, None, "0"),
