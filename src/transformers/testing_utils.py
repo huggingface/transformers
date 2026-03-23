@@ -48,14 +48,8 @@ from unittest import mock
 from unittest.mock import patch
 
 import httpx
-import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
-
-# TODO(3outeille): guarding to protect against missing import
-from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import logging as transformers_logging
 
@@ -234,7 +228,10 @@ _VLM_COMMON_MODEL_NAMES_MAP = {
 
 if is_torch_available():
     import torch
+    import torch.distributed as dist
+    import torch.multiprocessing as mp
     from safetensors.torch import load_file
+    from torch.distributed.device_mesh import init_device_mesh
 
     from .modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, PreTrainedModel
 
@@ -4298,7 +4295,7 @@ def init_test_logger() -> logging.Logger:
 
     # Build format string - include rank if distributed is initialized
     rank_prefix = ""
-    if dist.is_initialized():
+    if is_torch_available() and dist.is_initialized():
         rank = dist.get_rank()
         rank_prefix = f"[rank{rank}] "
 
