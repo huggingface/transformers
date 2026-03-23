@@ -351,7 +351,10 @@ class NotebookProgressCallback(TrainerCallback):
             tt.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
-        tt = _require(self.training_tracker, "on_train_begin must be called before on_evaluate")
+        if self.training_tracker is None:
+            return control
+
+        tt = self.training_tracker
 
         values = {"Training Loss": "No log", "Validation Loss": "No log"}
         for log in reversed(state.log_history):
