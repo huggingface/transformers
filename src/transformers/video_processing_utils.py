@@ -29,6 +29,7 @@ from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
     SizeDict,
+    is_vision_available,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
