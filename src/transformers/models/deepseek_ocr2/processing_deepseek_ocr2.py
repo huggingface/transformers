@@ -177,8 +177,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
 
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            # Get number of local patches per image from pixel_values_local
-            num_crops_list = [len(patches) for patches in image_inputs["pixel_values_local"]]
+            num_crops_list = image_inputs["num_local_patches"]
             text = self._expand_image_tokens(text, num_crops_list)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)

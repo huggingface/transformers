@@ -484,8 +484,9 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        all_pixel_values_local = []  # local patches per image
+        all_pixel_values_local = []  # flat list of all local patches
         all_pixel_values_global = []  # global view per image
+        num_local_patches = []  # number of local patches per image
 
         for image in images:
             image_np = to_numpy_array(image)
@@ -505,7 +506,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
             # --- Local patches ---
             if crop_to_patches and max(original_width, original_height) > self.tile_size:
                 tile_size_dict = {"height": self.tile_size, "width": self.tile_size}
-                local_patches, (num_columns, num_rows) = self.crop_image_to_patches(
+                local_patches, (num_cols, num_rows) = self.crop_image_to_patches(
                     image_np,
                     min_patches=min_patches,
                     max_patches=max_patches,
@@ -513,7 +514,6 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
                     data_format=img_format,
                 )
 
-                processed_local = []
                 for patch_np in local_patches:
                     patch_fmt = infer_channel_dimension_format(patch_np)
                     if do_rescale:
@@ -521,17 +521,13 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
                     if do_normalize:
                         patch_np = self.normalize(image=patch_np, mean=image_mean, std=image_std, input_data_format=patch_fmt)
                     patch_np = to_channel_dimension_format(patch_np, data_format, input_channel_dim=patch_fmt)
-                    processed_local.append(patch_np)
+                    all_pixel_values_local.append(patch_np)
 
-                all_pixel_values_local.append(processed_local)
+                num_local_patches.append(len(local_patches))
             else:
-                # No local patches
-                num_columns, num_rows = 1, 1
-                all_pixel_values_local.append([])
+                num_local_patches.append(0)
 
-            # Global view size depends on crop_to_patches, not image size
-            # crop_to_patches=True -> always base size (1024), even for small images
-            # crop_to_patches=False -> tile_size (768)
+            # Global view size: crop_to_patches=True → base size, False → tile_size
             global_target_size = size["height"] if crop_to_patches else self.tile_size
 
             # --- Global view ---
@@ -551,13 +547,14 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
 
             all_pixel_values_global.append(global_np)
 
-        encoded_outputs = BatchFeature(
-            data={
-                "pixel_values": all_pixel_values_global,
-                "pixel_values_local": all_pixel_values_local,
-            },
-            tensor_type=return_tensors,
-        )
+        data = {
+            "pixel_values": all_pixel_values_global,
+            "num_local_patches": num_local_patches,
+        }
+        if all_pixel_values_local:
+            data["pixel_values_local"] = all_pixel_values_local
+
+        encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_outputs
 
