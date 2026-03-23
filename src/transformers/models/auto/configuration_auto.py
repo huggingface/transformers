@@ -433,6 +433,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("siglip2", "Siglip2Config"),
         ("siglip2_vision_model", "Siglip2VisionConfig"),
         ("siglip_vision_model", "SiglipVisionConfig"),
+        ("slanext", "SLANeXtConfig"),
         ("smollm3", "SmolLM3Config"),
         ("smolvlm", "SmolVLMConfig"),
         ("smolvlm_vision", "SmolVLMVisionConfig"),
@@ -472,6 +473,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
+        ("uvdoc", "UVDocConfig"),
+        ("uvdoc_backbone", "UVDocBackboneConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -954,6 +957,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("siglip2", "SigLIP2"),
         ("siglip2_vision_model", "Siglip2VisionModel"),
         ("siglip_vision_model", "SiglipVisionModel"),
+        ("slanext", "SLANeXt"),
         ("smollm3", "SmolLM3"),
         ("smolvlm", "SmolVLM"),
         ("smolvlm_vision", "SmolVLMVisionTransformer"),
@@ -995,6 +999,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSat"),
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
+        ("uvdoc", "UVDoc"),
+        ("uvdoc_backbone", "UVDocBackbone"),
         ("vaultgemma", "VaultGemma"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -1135,6 +1141,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("wav2vec2-bert", "wav2vec2_bert"),
         ("vibevoice_acoustic_tokenizer_encoder", "vibevoice_acoustic_tokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "vibevoice_acoustic_tokenizer"),
+        ("uvdoc_backbone", "uvdoc"),
     ]
 )
 

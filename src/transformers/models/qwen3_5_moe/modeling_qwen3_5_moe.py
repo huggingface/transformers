@@ -1482,7 +1482,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
+            layer_mask = linear_attn_mask if self.config.layer_types[layer_idx] == "linear_attention" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,

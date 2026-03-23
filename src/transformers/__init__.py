@@ -119,6 +119,7 @@ _import_structure = {
     ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
+    "image_processing_utils_fast": [],
     "image_transforms": [],
     "integrations": [
         "is_clearml_available",
@@ -799,13 +800,15 @@ else:
         extra_objects={"__version__": __version__},
     )
 
-    def _create_tokenization_alias(alias: str, target: str) -> None:
+    def _create_module_alias(alias: str, target: str) -> None:
         """
-        Lazily redirect legacy tokenization module paths to their replacements without importing heavy deps.
+        Lazily redirect legacy module paths to their replacements without importing heavy deps.
         """
-
         module = types.ModuleType(alias)
         module.__doc__ = f"Alias module for backward compatibility with `{target}`."
+        # Set __file__ explicitly so that inspect.py's hasattr(module, '__file__') check
+        # never falls through to __getattr__ and triggers a premature (possibly circular) import.
+        module.__file__ = None
 
         def _get_target():
             return importlib.import_module(target, __name__)
@@ -816,8 +819,9 @@ else:
         sys.modules[alias] = module
         setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
 
-    _create_tokenization_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
-    _create_tokenization_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
+    _create_module_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
+    _create_module_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
+    _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
 
 
 if not is_torch_available():
