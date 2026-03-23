@@ -38,7 +38,7 @@ from transformers import (
 )
 from transformers.image_utils import load_image
 from transformers.masking_utils import create_bidirectional_mask
-from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+from transformers.models.isaac.image_processing_isaac import IsaacImageProcessor
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
@@ -218,7 +218,7 @@ def create_isaac_processor(
 
     processor_image = image_processor
     if processor_image is None:
-        processor_image = IsaacImageProcessorFast(
+        processor_image = IsaacImageProcessor(
             patch_size=params["vision_patch_size"],
             max_num_patches=params["vision_max_num_patches"],
             min_num_patches=params["vision_min_num_patches"],

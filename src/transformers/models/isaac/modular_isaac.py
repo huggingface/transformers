@@ -25,7 +25,6 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
     ImagesKwargs,
     SizeDict,
     group_images_by_shape,
@@ -230,7 +229,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         "vision_patch_attention_mask",
         "vision_token_grids",
     ]
-    valid_kwargs = IsaacImageProcessorFastKwargs
+    valid_kwargs = IsaacImageProcessorKwargs
     unused_kwargs = ["size", "do_center_crop", "crop_size", "pad_size", "do_pad"]
 
     do_resize = True
@@ -1635,6 +1634,6 @@ __all__ = [
     "IsaacModel",
     "IsaacPreTrainedModel",  # noqa: F822
     "IsaacForConditionalGeneration",
-    "IsaacImageProcessorFast",
+    "IsaacImageProcessor",
     "IsaacProcessor",
 ]
