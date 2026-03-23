@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 </h3>
 
 Transformers acts as the model-definition framework for state-of-the-art machine learning models in text, computer
-vision, audio, video, and multimodal model, for both inference and training.
+vision, audio, video, and multimodal models, for both inference and training.
 
 It centralizes the model definition so that this definition is agreed upon across the ecosystem. `transformers` is the
 pivot across frameworks: if a model definition is supported, it will be compatible with the majority of training

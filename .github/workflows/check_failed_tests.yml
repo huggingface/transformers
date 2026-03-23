@@ -24,6 +24,10 @@ on:
       pr_number:
         required: false
         type: string
+    outputs:
+      is_check_failures_ok:
+        description: "Whether the failure checking infrastructure succeeded"
+        value: ${{ jobs.check_new_failures.result != 'failure' && jobs.process_new_failures_with_commit_info.result != 'failure' }}
 
 env:
   HF_HOME: /mnt/cache

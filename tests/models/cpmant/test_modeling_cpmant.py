@@ -153,7 +153,7 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_inputs_embeds(self):
-        unittest.skip(reason="CPMAnt doesn't support input_embeds.")(self.test_inputs_embeds)
+        unittest.skip(reason="CPMAnt doesn't support inputs_embeds.")(self.test_inputs_embeds)
 
     def test_retain_grad_hidden_states_attentions(self):
         unittest.skip(

@@ -490,11 +490,8 @@ def create_rename_keys(config):
 
 
 def rename_key(state_dict, old, new):
-    try:
-        val = state_dict.pop(old)
-        state_dict[new] = val
-    except Exception:
-        pass
+    if old in state_dict:
+        state_dict[new] = state_dict.pop(old)
 
 
 def read_in_q_k_v(state_dict, config):

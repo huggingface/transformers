@@ -16,11 +16,11 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -94,13 +94,9 @@ class YoutuIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=False)
 
+    @require_deterministic_for_xpu
     @require_torch_accelerator
     def test_dynamic_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
@@ -122,13 +118,9 @@ class YoutuIntegrationTest(unittest.TestCase):
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
+    @require_deterministic_for_xpu
     @require_torch_accelerator
     def test_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
@@ -152,15 +144,11 @@ class YoutuIntegrationTest(unittest.TestCase):
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
+    @require_deterministic_for_xpu
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
-        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-        if version.parse(torch.__version__) < version.parse("2.3.0"):
-            self.skipTest(reason="This test requires torch >= 2.3 to run.")
-
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",

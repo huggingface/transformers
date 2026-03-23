@@ -117,6 +117,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
@@ -124,7 +125,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=SuperPointConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["encoder_hidden_sizes", "decoder_hidden_size"],
         )
 

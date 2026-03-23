@@ -22,7 +22,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from pytest import mark
 
-from transformers import VideoMAEConfig
+from transformers import VideoMAEConfig, set_seed
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     Expectations,
@@ -54,7 +54,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import VideoMAEImageProcessor
+    from transformers import VideoMAEImageProcessorPil
 
 
 class VideoMAEModelTester:
@@ -199,7 +199,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = VideoMAEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -360,6 +360,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
@@ -418,7 +420,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessorPil(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
             if is_vision_available()
             else None
         )

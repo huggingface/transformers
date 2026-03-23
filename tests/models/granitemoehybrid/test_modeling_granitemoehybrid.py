@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import pytest
+from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
 from pytest import mark
 
@@ -107,7 +108,6 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
-    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     def _check_caches_are_equal(
         self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
@@ -351,7 +351,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     def test_config_requires_mamba_or_attention_layers(self):
         """Ensure we can't create a config with disallowed layers."""
-        with pytest.raises(ValueError):
+        with pytest.raises(StrictDataclassClassValidationError):
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
 
 

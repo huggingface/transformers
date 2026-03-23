@@ -19,12 +19,13 @@ import torch
 import torch.nn as nn
 
 from ... import initialization as init
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, eager_attention_forward
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3DecoderLayer, Qwen3RMSNorm, Qwen3RotaryEmbedding
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
@@ -185,7 +186,9 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
             # note: when one of the above is true, we can expect the other to be true as there is no reason
             # to have masked audio without masked video and vice versa
 
-            return nn.functional.interpolate(video_hidden_state, size=audio_hidden_state.shape[1], mode="nearest")
+            return nn.functional.interpolate(
+                video_hidden_state.transpose(1, 2), size=audio_hidden_state.shape[1], mode="nearest"
+            ).transpose(1, 2)
 
         aligned_shape = (*audio_hidden_state.shape[:2], video_hidden_state.shape[-1])
         aligned_hidden_state = audio_hidden_state.new_zeros(aligned_shape)
@@ -370,7 +373,8 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_values: torch.Tensor | None = None,
@@ -388,7 +392,11 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 
         if attention_mask is not None:
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+            )
 
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)

@@ -14,36 +14,36 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     group_images_by_shape,
     reorder_images,
 )
 from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_outputs import BaseModelOutput
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     is_cv2_available,
+    is_torchvision_available,
     logging,
     requires_backends,
 )
-from ...utils.backbone_utils import verify_backbone_config_arguments
-from ...utils.generic import TensorType
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils.generic import TensorType, can_return_tuple
+from ..auto import AutoConfig
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
@@ -60,6 +60,9 @@ from ..rt_detr.modeling_rt_detr import (
 )
 
 
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+
 if is_cv2_available():
     import cv2
 
@@ -67,125 +70,76 @@ if is_cv2_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV3_safetensors")
+@strict(accept_kwargs=True)
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PP-DocLayoutV3`]. It is used to instantiate a
-    PP-DocLayoutV3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PP-DocLayoutV3
-    [PaddlePaddle/PP-DocLayoutV3_safetensors](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) architecture.
+    initializer_bias_prior_prob (`float`, *optional*):
+        The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
+        If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the batch normalization layers.
+    freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
+        Whether to freeze the batch normalization layers in the backbone.
+    encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
+        Multi level features input for encoder.
+    feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
+        Strides used in each feature map.
+    encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
+        Indexes of the projected layers to be used in the encoder.
+    positional_encoding_temperature (`int`, *optional*, defaults to 10000):
+        The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    eval_size (`tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
+    normalize_before (`bool`, *optional*, defaults to `False`):
+        Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
+        feed-forward modules.
+    hidden_expansion (`float`, *optional*, defaults to 1.0):
+        Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
+    mask_feature_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+        The channels of the multi-level features for mask enhancement.
+    x4_feat_dim (`int`, *optional*, defaults to 128):
+        The dimension of the x4 feature map.
+    d_model (`int`, *optional*, defaults to 256):
+        Dimension of the layers exclude hybrid encoder.
+    num_prototypes (`int`, *optional*, defaults to 32):
+        Dimension of the layers exclude mask query head.
+    label_noise_ratio (`float`, *optional*, defaults to 0.4):
+        The fraction of denoising labels to which random noise should be added.
+    box_noise_scale (`float`, *optional*, defaults to 0.4):
+        Scale or magnitude of noise to be added to the bounding boxes.
+    mask_enhanced (`bool`, *optional*, defaults to `True`):
+        Whether to use enhanced masked attention.
+    num_queries (`int`, *optional*, defaults to 300):
+        Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder
+    decoder_ffn_dim (`int`, *optional*, defaults to 1024):
+        Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+    num_feature_levels (`int`, *optional*, defaults to 3):
+        The number of input feature levels.
+    decoder_n_points (`int`, *optional*, defaults to 4):
+        The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
+    num_denoising (`int`, *optional*, defaults to 100):
+        The total number of denoising tasks or queries to be used for contrastive denoising.
+    learn_initial_query (`bool`, *optional*, defaults to `False`):
+        Indicates whether the initial query embeddings for the decoder should be learned during training
+    anchor_image_size (`tuple[int, int]`, *optional*):
+        Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
+    disable_custom_kernels (`bool`, *optional*, defaults to `True`):
+        Whether to disable custom kernels.
+    global_pointer_head_size (`int`, *optional*, defaults to 64):
+        The size of the global pointer head.
+    gp_dropout_value (`float`, *optional*, defaults to 0.1):
+        The dropout probability in the global pointer head.
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        initializer_range (`float`, *optional*, defaults to 0.01):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_bias_prior_prob (`float`, *optional*):
-            The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
-            If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the batch normalization layers.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
-            The configuration of the backbone model.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
-            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
-            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
-            Whether to freeze the batch normalization layers in the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
-        encoder_hidden_dim (`int`, *optional*, defaults to 256):
-            Dimension of the layers in hybrid encoder.
-        encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
-            Multi level features input for encoder.
-        feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
-            Strides used in each feature map.
-        encoder_layers (`int`, *optional*, defaults to 1):
-            Total of layers to be used by the encoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The ratio for all dropout layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
-            Indexes of the projected layers to be used in the encoder.
-        positional_encoding_temperature (`int`, *optional*, defaults to 10000):
-            The temperature parameter used to create the positional encodings.
-        encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        activation_function (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        eval_size (`tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
-            into account the stride.
-        normalize_before (`bool`, *optional*, defaults to `False`):
-            Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
-            feed-forward modules.
-        hidden_expansion (`float`, *optional*, defaults to 1.0):
-            Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        mask_feature_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
-            The channels of the multi-level features for mask enhancement.
-        x4_feat_dim (`int`, *optional*, defaults to 128):
-            The dimension of the x4 feature map.
-        d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers exclude hybrid encoder.
-        num_prototypes (`int`, *optional*, defaults to 32):
-            Dimension of the layers exclude mask query head.
-        label_noise_ratio (`float`, *optional*, defaults to 0.4):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 0.4):
-            Scale or magnitude of noise to be added to the bounding boxes.
-        mask_enhanced (`bool`, *optional*, defaults to `True`):
-            Whether to use enhanced masked attention.
-        num_queries (`int`, *optional*, defaults to 300):
-            Number of object queries.
-        decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-            Multi level features dimension for decoder
-        decoder_ffn_dim (`int`, *optional*, defaults to 1024):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        num_feature_levels (`int`, *optional*, defaults to 3):
-            The number of input feature levels.
-        decoder_n_points (`int`, *optional*, defaults to 4):
-            The number of sampled keys in each feature level for each attention head in the decoder.
-        decoder_layers (`int`, *optional*, defaults to 6):
-            Number of decoder layers.
-        decoder_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        num_denoising (`int`, *optional*, defaults to 100):
-            The total number of denoising tasks or queries to be used for contrastive denoising.
-        learn_initial_query (`bool`, *optional*, defaults to `False`):
-            Indicates whether the initial query embeddings for the decoder should be learned during training
-        anchor_image_size (`tuple[int, int]`, *optional*):
-            Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
-        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
-            Whether the architecture has an encoder decoder structure.
-        global_pointer_head_size (`int`, *optional*, defaults to 64):
-            The size of the global pointer head.
-        gp_dropout_value (`float`, *optional*, defaults to 0.1):
-            The dropout probability in the global pointer head.
     Examples:
 
     ```python
@@ -210,74 +164,57 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         "num_attention_heads": "encoder_attention_heads",
     }
 
-    def __init__(
-        self,
-        initializer_range=0.01,
-        initializer_bias_prior_prob=None,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        tie_word_embeddings=True,
-        # backbone
-        backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        freeze_backbone_batch_norms=True,
-        backbone_kwargs=None,
-        # encoder PPDocLayoutV3HybridEncoder
-        encoder_hidden_dim=256,
-        encoder_in_channels=[512, 1024, 2048],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=1024,
-        encoder_attention_heads=8,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        hidden_expansion=1.0,
-        mask_feature_channels=[64, 64],
-        x4_feat_dim=128,
-        # decoder PPDocLayoutV3Transformer
-        d_model=256,
-        num_prototypes=32,
-        label_noise_ratio=0.4,
-        box_noise_scale=0.4,
-        mask_enhanced=True,
-        num_queries=300,
-        decoder_in_channels=[256, 256, 256],
-        decoder_ffn_dim=1024,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=6,
-        decoder_attention_heads=8,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=100,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        disable_custom_kernels=True,
-        is_encoder_decoder=True,
-        global_pointer_head_size=64,
-        gp_dropout_value=0.1,
-        **kwargs,
-    ):
-        self.initializer_range = initializer_range
-        self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.tie_word_embeddings = tie_word_embeddings
+    initializer_range: float = 0.01
+    initializer_bias_prior_prob: float | None = None
+    layer_norm_eps: float = 1e-5
+    batch_norm_eps: float = 1e-5
+    tie_word_embeddings: bool = True
+    backbone_config: dict | PreTrainedConfig | None = None
+    freeze_backbone_batch_norms: bool = True
+    encoder_hidden_dim: int = 256
+    encoder_in_channels: list[int] | tuple[int, ...] = (512, 1024, 2048)
+    feat_strides: list[int] | tuple[int, ...] = (8, 16, 32)
+    encoder_layers: int = 1
+    encoder_ffn_dim: int = 1024
+    encoder_attention_heads: int = 8
+    dropout: float | int = 0.0
+    activation_dropout: float | int = 0.0
+    encode_proj_layers: list[int] | tuple[int, ...] = (2,)
+    positional_encoding_temperature: int = 10000
+    encoder_activation_function: str = "gelu"
+    activation_function: str = "silu"
+    eval_size: int | None = None
+    normalize_before: bool = False
+    hidden_expansion: float = 1.0
+    mask_feature_channels: list[int] | tuple[int, ...] = (64, 64)
+    x4_feat_dim: int = 128
+    d_model: int = 256
+    num_prototypes: int = 32
+    label_noise_ratio: float = 0.4
+    box_noise_scale: float = 0.4
+    mask_enhanced: bool = True
+    num_queries: int = 300
+    decoder_in_channels: list[int] | tuple[int, ...] = (256, 256, 256)
+    decoder_ffn_dim: int = 1024
+    num_feature_levels: int = 3
+    decoder_n_points: int = 4
+    decoder_layers: int = 6
+    decoder_attention_heads: int = 8
+    decoder_activation_function: str = "relu"
+    attention_dropout: float | int = 0.0
+    num_denoising: int = 100
+    learn_initial_query: bool = False
+    anchor_image_size: int | None = None
+    disable_custom_kernels: bool = True
+    is_encoder_decoder: bool = True
+    global_pointer_head_size: int = 64
+    gp_dropout_value: float = 0.1
 
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNetV3` backbone."
-            )
-            backbone_config = {
-                "model_type": "hgnet_v2",
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
+            default_config_type="hgnet_v2",
+            default_config_kwargs={
                 "arch": "L",
                 "return_idx": [0, 1, 2, 3],
                 "freeze_stem_only": True,
@@ -285,76 +222,21 @@ class PPDocLayoutV3Config(PreTrainedConfig):
                 "freeze_norm": True,
                 "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
                 "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            }
-            config_class = CONFIG_MAPPING["hgnet_v2"]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            if backbone_model_type is None:
-                raise ValueError("`backbone_config` dict must contain key `model_type`.")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
+            },
+            **kwargs,
         )
-        self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        self.backbone_kwargs = dict(backbone_kwargs) if backbone_kwargs is not None else None
 
-        # ---- encoder ----
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = list(encoder_in_channels)
-        self.feat_strides = list(feat_strides)
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = list(encode_proj_layers)
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.eval_size = list(eval_size) if eval_size is not None else None
-        self.normalize_before = normalize_before
-        self.hidden_expansion = hidden_expansion
-        self.mask_feature_channels = mask_feature_channels
-        self.x4_feat_dim = x4_feat_dim
-
-        # ---- decoder ----
-        self.d_model = d_model
-        self.num_queries = num_queries
-        self.num_prototypes = num_prototypes
-        self.decoder_in_channels = list(decoder_in_channels)
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.mask_enhanced = mask_enhanced
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
-        self.disable_custom_kernels = disable_custom_kernels
-        self.global_pointer_head_size = global_pointer_head_size
-        self.gp_dropout_value = gp_dropout_value
-
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.encoder_in_channels = list(self.encoder_in_channels)
+        self.feat_strides = list(self.feat_strides)
+        self.encode_proj_layers = list(self.encode_proj_layers)
+        self.eval_size = list(self.eval_size) if self.eval_size is not None else None
+        self.decoder_in_channels = list(self.decoder_in_channels)
+        self.anchor_image_size = list(self.anchor_image_size) if self.anchor_image_size is not None else None
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
-class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
+class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
@@ -363,16 +245,13 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
     # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -391,9 +270,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images, size=size, interpolation=interpolation, antialias=False
-                )
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -713,7 +590,7 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
@@ -722,7 +599,7 @@ def mask_to_box_coordinate(mask, dtype):
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
     y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(1e8, device=mask.device, dtype=dtype))
+        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
         .flatten(start_dim=-2)
         .min(dim=-1)
         .values
@@ -934,83 +811,24 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
         self,
         inputs_embeds=None,
         x4_feat=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
-        valid_ratios=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
-                Ratio of valid area in each feature level.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        feature_maps = inputs_embeds
 
-        hidden_states = inputs_embeds
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # encoder
+        # AIFI: Apply transformer encoder to specified feature levels
         if self.config.encoder_layers > 0:
             for i, enc_ind in enumerate(self.encode_proj_layers):
-                if output_hidden_states:
-                    encoder_states = encoder_states + (hidden_states[enc_ind],)
-                height, width = hidden_states[enc_ind].shape[2:]
-                # flatten [batch, channel, height, width] to [batch, height*width, channel]
-                src_flatten = hidden_states[enc_ind].flatten(2).permute(0, 2, 1)
-                if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
-                        width,
-                        height,
-                        self.encoder_hidden_dim,
-                        self.positional_encoding_temperature,
-                        device=src_flatten.device,
-                        dtype=src_flatten.dtype,
-                    )
-                else:
-                    pos_embed = None
-
-                layer_outputs = self.encoder[i](
-                    src_flatten,
-                    pos_embed=pos_embed,
-                    output_attentions=output_attentions,
-                )
-                hidden_states[enc_ind] = (
-                    layer_outputs[0].permute(0, 2, 1).reshape(-1, self.encoder_hidden_dim, height, width).contiguous()
-                )
-
-                if output_attentions:
-                    all_attentions = all_attentions + (layer_outputs[1],)
-
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states[enc_ind],)
+                feature_maps[enc_ind] = self.aifi[i](feature_maps[enc_ind], **kwargs)
 
         # top-down FPN
-        fpn_feature_maps = [hidden_states[-1]]
+        fpn_feature_maps = [feature_maps[-1]]
         for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
-            backbone_feature_map = hidden_states[self.num_fpn_stages - idx - 1]
+            backbone_feature_map = feature_maps[self.num_fpn_stages - idx - 1]
             top_fpn_feature_map = fpn_feature_maps[-1]
             # apply lateral block
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
@@ -1038,13 +856,8 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
         mask_feat += self.encoder_mask_lateral(x4_feat[0])
         mask_feat = self.encoder_mask_output(mask_feat)
 
-        if not return_dict:
-            return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions, mask_feat] if v is not None)
-
         return PPDocLayoutV3HybridEncoderOutput(
             last_hidden_state=pan_feature_maps,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
             mask_feat=mask_feat,
         )
 
@@ -1065,21 +878,16 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings=None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        valid_ratios=None,
         order_head=None,
         global_pointer=None,
         mask_query_head=None,
         norm=None,
         mask_feat=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -1093,30 +901,17 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
                 in `[0, 1]`:
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
             reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
-                Ratio of valid area in each feature level.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
 
         # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
@@ -1128,24 +923,19 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L252
         for idx, decoder_layer in enumerate(self.layers):
             reference_points_input = reference_points.unsqueeze(2)
-            position_embeddings = self.query_pos_head(reference_points)
+            object_queries_position_embeddings = self.query_pos_head(reference_points)
 
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=position_embeddings,
+                object_queries_position_embeddings=object_queries_position_embeddings,
                 encoder_hidden_states=encoder_hidden_states,
                 reference_points=reference_points_input,
                 spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
             # hack implementation for iterative bounding box refinement
             if self.bbox_embed is not None:
@@ -1177,12 +967,6 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
                 order_logits = global_pointer(order_head[idx](valid_query))
                 decoder_out_order_logits += (order_logits,)
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
@@ -1192,26 +976,6 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             decoder_out_order_logits = torch.stack(decoder_out_order_logits, dim=1)
         decoder_out_masks = torch.stack(decoder_out_masks, dim=1)
 
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    intermediate,
-                    intermediate_logits,
-                    intermediate_reference_points,
-                    decoder_out_order_logits,
-                    decoder_out_masks,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return PPDocLayoutV3DecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
@@ -1219,9 +983,6 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             intermediate_reference_points=intermediate_reference_points,
             decoder_out_order_logits=decoder_out_order_logits,
             decoder_out_masks=decoder_out_masks,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1249,26 +1010,22 @@ class PPDocLayoutV3Model(RTDetrModel):
         self.decoder_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.decoder = PPDocLayoutV3Decoder(config)
         self.decoder.class_embed = nn.Linear(config.d_model, config.num_labels)
-        self.decoder.bbox_embed = PPDocLayoutV3MLPPredictionHead(
-            config, config.d_model, config.d_model, 4, num_layers=3
-        )
+        self.decoder.bbox_embed = PPDocLayoutV3MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
         self.mask_enhanced = config.mask_enhanced
         self.mask_query_head = PPDocLayoutV3MLPPredictionHead(
-            config, config.d_model, config.d_model, config.num_prototypes, num_layers=3
+            config.d_model, config.d_model, config.num_prototypes, num_layers=3
         )
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.LongTensor | None = None,
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1304,12 +1061,6 @@ class PPDocLayoutV3Model(RTDetrModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
@@ -1324,41 +1075,29 @@ class PPDocLayoutV3Model(RTDetrModel):
             encoder_outputs = self.encoder(
                 proj_feats,
                 x4_feat,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                **kwargs,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a PPDocLayoutV3HybridEncoderOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, PPDocLayoutV3HybridEncoderOutput):
+        elif not isinstance(encoder_outputs, PPDocLayoutV3HybridEncoderOutput):
             encoder_outputs = PPDocLayoutV3HybridEncoderOutput(
                 last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if output_hidden_states else None,
-                attentions=encoder_outputs[2]
-                if len(encoder_outputs) > 2
-                else encoder_outputs[1]
-                if output_attentions
-                else None,
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
                 mask_feat=encoder_outputs[-1],
             )
-
-        mask_feat = (
-            encoder_outputs.mask_feat
-            if isinstance(encoder_outputs, PPDocLayoutV3HybridEncoderOutput)
-            else encoder_outputs[-1]
-        )
 
         # Equivalent to def _get_encoder_input
         # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
-        for level, source in enumerate(encoder_outputs[0]):
+        for level, source in enumerate(encoder_outputs.last_hidden_state):
             sources.append(self.decoder_input_proj[level](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0][-1]))
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
+                sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
         # Prepare encoder inputs (by flattening)
         source_flatten = []
@@ -1427,10 +1166,6 @@ class PPDocLayoutV3Model(RTDetrModel):
         out_query = self.decoder_norm(target)
         mask_query_embed = self.mask_query_head(out_query)
         batch_size, mask_dim, _ = mask_query_embed.shape
-        _, _, mask_h, mask_w = mask_feat.shape
-        enc_out_masks = torch.bmm(mask_query_embed, mask_feat.flatten(start_dim=2)).reshape(
-            batch_size, mask_dim, mask_h, mask_w
-        )
 
         enc_topk_bboxes = F.sigmoid(reference_points_unact)
 
@@ -1449,6 +1184,10 @@ class PPDocLayoutV3Model(RTDetrModel):
             target = torch.concat([denoising_class, target], 1)
 
         if self.mask_enhanced:
+            _, _, mask_h, mask_w = encoder_outputs.mask_feat.shape
+            enc_out_masks = torch.bmm(mask_query_embed, encoder_outputs.mask_feat.flatten(start_dim=2)).reshape(
+                batch_size, mask_dim, mask_h, mask_w
+            )
             reference_points = mask_to_box_coordinate(enc_out_masks > 0, dtype=reference_points_unact.dtype)
             reference_points_unact = inverse_sigmoid(reference_points)
 
@@ -1466,28 +1205,13 @@ class PPDocLayoutV3Model(RTDetrModel):
             spatial_shapes=spatial_shapes,
             spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             order_head=self.decoder_order_head,
             global_pointer=self.decoder_global_pointer,
             mask_query_head=self.mask_query_head,
             norm=self.decoder_norm,
-            mask_feat=mask_feat,
+            mask_feat=encoder_outputs.mask_feat,
+            **kwargs,
         )
-
-        if not return_dict:
-            enc_outputs = tuple(
-                value
-                for value in [enc_topk_logits, enc_topk_bboxes, enc_outputs_class, enc_outputs_coord_logits]
-                if value is not None
-            )
-            dn_outputs = tuple(value if value is not None else None for value in [denoising_meta_values])
-            tuple_outputs = (
-                decoder_outputs + encoder_outputs[:-1] + (init_reference_points,) + enc_outputs + dn_outputs
-            )
-
-            return tuple_outputs
 
         return PPDocLayoutV3ModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1530,15 +1254,15 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~PPDocLayoutV3ImageProcessor.post_process_object_detection`] to retrieve the
+        unnormalized (absolute) bounding boxes.
     order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
         Order logits of the final layer of the decoder.
     out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
         Masks of the final layer of the decoder.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~PPDocLayoutV3ImageProcessorFast.post_process_object_detection`] to retrieve the
-        unnormalized (absolute) bounding boxes.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -1613,16 +1337,14 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.LongTensor | None = None,
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1681,26 +1403,18 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         Order 12: number: 0.88 [106.0, 2257.5, 135.84, 2282.18]
         Order 13: footer: 0.93 [338.4, 2255.52, 986.15, 2284.37]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             pixel_values,
             pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
             labels=labels,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        intermediate_logits = outputs.intermediate_logits if return_dict else outputs[2]
-        intermediate_reference_points = outputs.intermediate_reference_points if return_dict else outputs[3]
-        order_logits = outputs.out_order_logits if return_dict else outputs[4]
-        out_masks = outputs.out_masks if return_dict else outputs[5]
+        intermediate_logits = outputs.intermediate_logits
+        intermediate_reference_points = outputs.intermediate_reference_points
+        order_logits = outputs.out_order_logits
+        out_masks = outputs.out_masks
 
         pred_boxes = intermediate_reference_points[:, -1]
         logits = intermediate_logits[:, -1]
@@ -1709,9 +1423,6 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
 
         if labels is not None:
             raise ValueError("PPDocLayoutV3ForObjectDetection does not support training")
-
-        if not return_dict:
-            return (logits, pred_boxes, order_logits, out_masks) + outputs[:4] + outputs[6:]
 
         return PPDocLayoutV3ForObjectDetectionOutput(
             logits=logits,
@@ -1741,7 +1452,7 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
 
 __all__ = [
     "PPDocLayoutV3ForObjectDetection",
-    "PPDocLayoutV3ImageProcessorFast",
+    "PPDocLayoutV3ImageProcessor",
     "PPDocLayoutV3Config",
     "PPDocLayoutV3Model",
     "PPDocLayoutV3PreTrainedModel",

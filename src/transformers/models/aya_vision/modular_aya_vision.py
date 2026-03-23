@@ -29,7 +29,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from .configuration_aya_vision import AyaVisionConfig
 
 
@@ -88,10 +88,6 @@ class AyaVisionMultiModalProjector(nn.Module):
 
 class AyaVisionPreTrainedModel(LlavaPreTrainedModel):
     _can_compile_fullgraph = False
-    _can_record_outputs = {
-        "hidden_states": "DecoderLayer",
-        "attentions": "Attention",
-    }
 
 
 class AyaVisionCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
@@ -104,14 +100,15 @@ class AyaVisionModelOutputWithPast(LlavaModelOutputWithPast):
 
 class AyaVisionModel(LlavaModel):
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -142,7 +139,7 @@ class AyaVisionModel(LlavaModel):
 
         return image_outputs
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -152,10 +149,9 @@ class AyaVisionModel(LlavaModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | AyaVisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -183,7 +179,6 @@ class AyaVisionModel(LlavaModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -205,10 +200,9 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -259,7 +253,6 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
             labels=labels,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
             **kwargs,

@@ -27,9 +27,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from transformers.modeling_outputs import ModelOutput
-from transformers.utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
@@ -37,6 +34,8 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig
 
 
@@ -553,7 +552,8 @@ class SamHQVisionEncoder(SamHQPreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | SamHQVisionEncoderOutput:
@@ -1314,7 +1314,8 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         return prompt_output
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,

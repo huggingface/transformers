@@ -127,7 +127,7 @@ limitations under the License.
 &#8207;🤗 Transformers صرف پیشگی تربیت یافتہ ماڈلز کا ایک ٹول کٹ نہیں ہے: یہ ایک کمیونٹی ہے جو اس کے ارد گرد اور ہیگنگ فیس حب پر تعمیر شدہ منصوبوں کا مجموعہ ہے۔ ہم    چاہتے ہیں کہ🤗 Transformers ترقی کاروں، محققین، طلباء، پروفیسرز، انجینئرز، اور ہر کسی کو اپنے خوابوں کے منصوبے بنانے میں مدد فراہم کرے۔
 
 
-&#8207;🤗 Transformers کے 100,000 ستاروں کی خوشی منانے کے لیے، ہم نے کمیونٹی پر روشنی ڈالنے کا فیصلہ کیا ہے، اور ہم نے [awesome-transformers](./awesome-transformers.md) کا صفحہ بنایا ہے جو 100 شاندار منصوبے درج کرتا ہے جو 🤗 Transformers کے ارد گرد بنائے گئے ہیں۔
+&#8207;🤗 Transformers کے 100,000 ستاروں کی خوشی منانے کے لیے، ہم نے کمیونٹی پر روشنی ڈالنے کا فیصلہ کیا ہے، اور ہم نے [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) کا صفحہ بنایا ہے جو 100 شاندار منصوبے درج کرتا ہے جو 🤗 Transformers کے ارد گرد بنائے گئے ہیں۔
 
 اگر آپ کے پاس کوئی ایسا منصوبہ ہے جسے آپ سمجھتے ہیں کہ اس فہرست کا حصہ ہونا چاہیے، تو براہ کرم ایک PR کھولیں تاکہ اسے شامل کیا جا سکے!
 
@@ -261,7 +261,7 @@ limitations under the License.
 
 #### &#8207; pip کے ساتھ
 
-یہ ریپوزٹری Python 3.9+، Flax 0.4.1+، PyTorch 2.1+، اور TensorFlow 2.6+ پر ٹیسٹ کی گئی ہے۔
+یہ ریپوزٹری Python 3.10+ اور PyTorch 2.4+ پر ٹیسٹ کی گئی ہے۔
 
 آپ کو 🤗 Transformers کو ایک [ورچوئل ماحول](https://docs.python.org/3/library/venv.html) میں انسٹال کرنا چاہیے۔ اگر آپ Python ورچوئل ماحول سے واقف نہیں ہیں، تو [یوزر گائیڈ](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) دیکھیں۔
 

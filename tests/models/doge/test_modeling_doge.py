@@ -375,7 +375,7 @@ class DogeIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
         model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)
         input_text = ["Here's everything I know about dogs. Dogs is the best animal in the"]
-        set_seed(0)
+        set_seed(42)
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
         generated_ids = model.generate(**model_inputs, max_new_tokens=20, do_sample=False)

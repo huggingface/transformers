@@ -23,6 +23,9 @@ import torch
 from transformers.utils import is_torch_accelerator_available
 
 
+_logger = logging.getLogger(__name__)
+
+
 # Data class to hold the hardware information
 def get_device_name_and_memory_total() -> tuple[str, float]:
     """Returns the name and memory total of GPU 0."""
@@ -155,7 +158,7 @@ class GPUMonitor:
 
     def __init__(self, sample_interval_sec: float = 0.05, logger: Logger | None = None):
         self.sample_interval_sec = sample_interval_sec
-        self.logger = logger if logger is not None else logging.getLogger(__name__)
+        self.logger = logger if logger is not None else _logger
         self.gpu_type = None
         self.process = None
 
@@ -215,8 +218,9 @@ class GPUMonitor:
                 gpu_utilization.append(utilization)
                 gpu_memory_used.append(memory_used)
                 timestamps.append(time.time())
-            except Exception:
-                pass  # Skip failed measurements
+            except Exception as e:
+                # Skips failed measurements
+                _logger.debug(f"Failed to collect GPU metrics sample: {e}")
 
             stop = connection.poll(sample_interval_sec)
 
@@ -224,19 +228,19 @@ class GPUMonitor:
         if gpu_type == "amd":
             try:
                 amdsmi.amdsmi_shut_down()
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.debug(f"Failed to shutdown AMD GPU monitoring: {e}")
         elif gpu_type == "nvidia":
             try:
                 pynvml.nvmlShutdown()
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.debug(f"Failed to shutdown NVIDIA GPU monitoring: {e}")
 
         # Send results back
         try:
             connection.send((gpu_utilization, gpu_memory_used, timestamps))
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.error(f"Failed to send GPU monitoring results: {e}")
 
         connection.close()
 

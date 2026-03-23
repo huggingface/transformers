@@ -132,7 +132,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 ```
 
-### Notes
+## Notes
 
 - Use Qwen2.5-VL for video inputs by setting `"type": "video"` as shown below.
 

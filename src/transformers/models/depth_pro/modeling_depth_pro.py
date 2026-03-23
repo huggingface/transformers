@@ -279,9 +279,12 @@ class DepthProPatchEncoder(nn.Module):
             patches,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
+            return_dict=True,
         )
 
-        scaled_images_last_hidden_state = torch.split_with_sizes(encodings[0], n_patches_per_scaled_image[::-1])
+        scaled_images_last_hidden_state = torch.split_with_sizes(
+            encodings.last_hidden_state, n_patches_per_scaled_image[::-1]
+        )
         # -1 (reverse list) as patch encoder returns high res patches first, we need low res first
         scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
 
@@ -312,7 +315,7 @@ class DepthProPatchEncoder(nn.Module):
         intermediate_features = []
         for i in range(self.n_intermediate_hooks):
             # +1 to correct index position as hidden_states contain embedding output as well
-            hidden_state = encodings[2][self.intermediate_hook_ids[i] + 1]
+            hidden_state = encodings.hidden_states[self.intermediate_hook_ids[i] + 1]
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1]))
             output_height = base_height * 2 ** (self.n_scaled_images - 1)
             output_width = base_width * 2 ** (self.n_scaled_images - 1)
@@ -676,7 +679,7 @@ class DepthProModel(DepthProPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         encodings = self.encoder(
             pixel_values,
@@ -1079,7 +1082,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

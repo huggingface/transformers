@@ -110,7 +110,7 @@ Option 2: Instantiate DAB-DETR with randomly initialized weights for Transformer
 Option 3: Instantiate DAB-DETR with randomly initialized weights for backbone + Transformer
 
 ```py
->>> config = DabDetrConfig(use_pretrained_backbone=False)
+>>> config = DabDetrConfig()
 >>> model = DabDetrForObjectDetection(config)
 ```
 

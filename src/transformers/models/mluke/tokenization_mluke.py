@@ -1013,12 +1013,10 @@ class MLukeTokenizer(TokenizersBackend):
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
             first_ids = (
-                first_ids[:entity_token_end] + [self.additional_special_tokens_ids[0]] + first_ids[entity_token_end:]
+                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
             )
             first_ids = (
-                first_ids[:entity_token_start]
-                + [self.additional_special_tokens_ids[0]]
-                + first_ids[entity_token_start:]
+                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
             )
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
@@ -1040,8 +1038,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.additional_special_tokens_ids[0]),
-                (tail_token_span, self.additional_special_tokens_ids[1]),
+                (head_token_span, self.extra_special_tokens_ids[0]),
+                (tail_token_span, self.extra_special_tokens_ids[1]),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)

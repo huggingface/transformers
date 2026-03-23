@@ -156,6 +156,7 @@ class VideoLlama3Processor(ProcessorMixin):
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
             mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)

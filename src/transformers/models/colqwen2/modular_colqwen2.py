@@ -64,13 +64,10 @@ class ColQwen2Processor(ColPaliProcessor):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
-        if visual_prompt_prefix is None:
-            visual_prompt_prefix = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
-        self.visual_prompt_prefix = visual_prompt_prefix
-
-        if query_prefix is None:
-            query_prefix = "Query: "
-        self.query_prefix = query_prefix
+        self.visual_prompt_prefix = visual_prompt_prefix or (
+            "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
+        )
+        self.query_prefix = query_prefix or "Query: "
 
     def __call__(
         self,
@@ -260,8 +257,6 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColPaliForRetrieval):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         del self._tied_weights_keys
@@ -282,7 +277,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         return_dict: bool | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
@@ -302,14 +296,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        position_ids, rope_deltas = self.vlm.model.get_rope_index(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=None,
-            attention_mask=attention_mask,
-        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
@@ -335,7 +322,6 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None

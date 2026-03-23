@@ -37,7 +37,7 @@ class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
-            "return_mm_token_type_ids": False,
+            "return_mm_token_type_ids": True,
         },
     }
 
@@ -129,6 +129,7 @@ class Qwen2VLProcessor(ProcessorMixin):
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
             mm_token_type_ids[array_ids == self.image_token_id] = 1
+            mm_token_type_ids[array_ids == self.video_token_id] = 2
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
@@ -197,6 +198,12 @@ class Qwen2VLProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    @property
+    def model_input_names(self):
+        model_input_names = super().model_input_names
+        model_input_names.append("mm_token_type_ids")
+        return model_input_names
 
 
 __all__ = ["Qwen2VLProcessor"]

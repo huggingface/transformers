@@ -21,7 +21,7 @@ ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main ve
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # Install transformers
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video,audio]
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,testing,video,audio]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
@@ -36,10 +36,15 @@ RUN python3 -m pip uninstall -y kernels
 # On ROCm, torchcodec is required to decode audio files and 0.4 or 0.6 fails
 RUN python3 -m pip install --no-cache-dir "torchcodec==0.7"
 
-# Install flash attention from source. Tested with commit 6387433156558135a998d5568a9d74c1778666d8
+# Install flash attention from source. Pinned to commit 6387433156558135a998d5568a9d74c1778666d8
+# to avoid compilation time exceeding the 6h GitHub Actions job limit.
 RUN git clone https://github.com/ROCm/flash-attention/ -b tridao && \
     cd flash-attention && \
-    GPU_ARCHS="gfx942" python setup.py install  
+    git checkout 6387433156558135a998d5568a9d74c1778666d8 && \
+    GPU_ARCHS="gfx942" python setup.py install
 # GPU_ARCHS builds for MI300, MI325 but not MI355: we would need to add `;gfx950` but it takes too long to build.
 
-RUN python3 -m pip install --no-cache-dir einops
+RUN python3 -m pip install --no-cache-dir einops blobfile num2words
+
+# timm is required for many vision models tests
+RUN python3 -m pip install --no-cache-dir timm

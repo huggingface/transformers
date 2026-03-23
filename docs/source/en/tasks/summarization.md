@@ -27,7 +27,7 @@ Summarization creates a shorter version of a document or an article that capture
 
 This guide will show you how to:
 
-1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the California state bill subset of the [BillSum](https://huggingface.co/datasets/billsum) dataset for abstractive summarization.
+1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the California state bill subset of the [BillSum](https://huggingface.co/datasets/FiscalNote/billsum) dataset for abstractive summarization.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -229,18 +229,6 @@ Come up with some text you'd like to summarize. For T5, you need to prefix your 
 ```py
 >>> text = "summarize: The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country. It'll lower the deficit and ask the ultra-wealthy and corporations to pay their fair share. And no one making under $400,000 per year will pay a penny more in taxes."
 ```
-
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for summarization with your model, and pass your text to it:
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline("summarization", model="username/my_awesome_billsum_model")
->>> summarizer(text)
-[{"summary_text": "The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country."}]
-```
-
-You can also manually replicate the results of the `pipeline` if you'd like:
 
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 

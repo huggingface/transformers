@@ -25,8 +25,16 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available, logging
-from ...utils.generic import check_model_inputs
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_peft_available,
+    logging,
+    torch_compilable_check,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
@@ -296,7 +304,8 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
         self.num_layers = config.num_layers
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
@@ -383,7 +392,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **lm_kwargs,
     ) -> tuple[torch.Tensor] | GraniteSpeechCausalLMOutputWithPast:
@@ -400,7 +408,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -441,7 +449,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **lm_kwargs,
         )
@@ -484,7 +491,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         inputs_embeds=None,
         input_features=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -496,7 +502,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -533,9 +538,10 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         special_audio_mask = is_audio_index.unsqueeze(-1)
         audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_features_mask is not None:
-            if torch.all(is_audio_index.int().sum(dim=1) != input_features_mask.int().sum(dim=1)).item():
-                raise ValueError("Number of audio tokens does not match number of audio features")
-
+            torch_compilable_check(
+                not torch.all(is_audio_index.int().sum(dim=1) != input_features_mask.int().sum(dim=1)),
+                "Number of audio tokens does not match number of audio features",
+            )
             audio_features = audio_features[input_features_mask]
 
         inputs_embeds = inputs_embeds.masked_scatter(

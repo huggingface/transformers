@@ -247,8 +247,8 @@ class XIELUActivation(nn.Module):
         self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
         self.with_vector_loads = with_vector_loads
         # Temporary until xIELU CUDA fully implemented
-        self._beta_scalar = float(self.beta.detach().cpu().float().item())
-        self._eps_scalar = float(self.eps.detach().cpu().float().item())
+        self._beta_scalar = float(beta)
+        self._eps_scalar = float(eps)
 
         self._xielu_cuda_obj = None
         try:
@@ -257,7 +257,7 @@ class XIELUActivation(nn.Module):
             self._xielu_cuda_obj = torch.classes.xielu.XIELU()
             msg = "Using experimental xIELU CUDA."
             try:
-                from torch._dynamo import allow_in_graph
+                from torch.compiler import allow_in_graph
 
                 self._xielu_cuda_fn = allow_in_graph(self._xielu_cuda)
                 msg += " Enabled torch._dynamo for xIELU CUDA."
@@ -267,9 +267,8 @@ class XIELUActivation(nn.Module):
             logger.warning_once(msg)
         except Exception as err:
             logger.warning_once(
-                "CUDA-fused xIELU not available (%s) – falling back to a Python version.\n"
-                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`",
-                str(err),
+                f"CUDA-fused xIELU not available ({err}) – falling back to a Python version.\n"
+                "For CUDA xIELU (experimental), `pip install git+https://github.com/nickjbrowning/XIELU`"
             )
 
     def _xielu_python(self, x: Tensor) -> Tensor:
@@ -324,6 +323,7 @@ ACT2CLS = {
     "gelu_pytorch_tanh": GELUTanh,
     "gelu_python_tanh": (GELUTanh, {"use_gelu_tanh_python": True}),
     "gelu_accurate": AccurateGELUActivation,
+    "hardswish": nn.Hardswish,
     "laplace": LaplaceActivation,
     "leaky_relu": nn.LeakyReLU,
     "linear": LinearActivation,

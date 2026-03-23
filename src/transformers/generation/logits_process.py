@@ -15,12 +15,12 @@
 import inspect
 import math
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
 
-from ..pytorch_utils import isin_mps_friendly
+from .._typing import WhisperGenerationConfigLike
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -154,7 +154,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
         if input_ids.shape[-1] < self.min_length:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
@@ -226,7 +226,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
+        eos_token_mask = torch.isin(vocab_tensor, self.eos_token_id)
         if new_tokens_length < self.min_new_tokens:
             scores_processed = torch.where(eos_token_mask, -math.inf, scores)
 
@@ -1270,7 +1270,8 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(self, sequence_bias: list[list[list[int] | float]]):
-        self.sequence_bias = sequence_bias
+        # After _convert_list_arguments_into_dict(), becomes dict[tuple[int, ...], float]
+        self.sequence_bias: Any = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
 
@@ -1853,7 +1854,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.begin_suppress_tokens)
+        suppress_token_mask = torch.isin(vocab_tensor, self.begin_suppress_tokens)
         scores_processed = scores
         if input_ids.shape[-1] == self.begin_index:
             scores_processed = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -1896,7 +1897,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
+        suppress_token_mask = torch.isin(vocab_tensor, self.suppress_tokens.to(scores.device))
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
         return scores
 
@@ -1965,8 +1966,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         begin_index: int,
         _detect_timestamp_from_logprob: bool | None = None,
     ):  # support for the kwargs
-        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
-        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        whisper_generate_config = cast(WhisperGenerationConfigLike, generate_config)
+        self.no_timestamps_token_id = whisper_generate_config.no_timestamps_token_id
+        self.timestamp_begin = whisper_generate_config.no_timestamps_token_id + 1
         self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing
@@ -2058,17 +2060,14 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
-        # overwritten dynamically
-        self.model = None
-        self.inputs = None
+        # overwritten dynamically via set_model()
+        self.model: Any = None
+        self.inputs: dict[str, Any] | None = None
 
     def set_model(self, model):
         self.model = model
 
     def set_inputs(self, inputs):
-        # build `cache_position` on the fly
-        seq_length = inputs["input_ids"].shape[1]
-        inputs = self.model._get_initial_cache_position(seq_length, self.model.device, inputs)
         # prepare other inputs
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
@@ -2702,8 +2701,8 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         if self.debug_mode:
             scores = torch.ones_like(scores)
 
-        # Currently indices is just a arange to compute watermarking on the dense logits.
-        all_indices = torch.stack([torch.arange(vocab_size, device=self.device) for _ in range(batch_size)])
+        # Build continuation indices once and broadcast across batch instead of creating one arange per row.
+        all_indices = torch.arange(vocab_size, device=self.device).unsqueeze(0).expand(batch_size, -1)
 
         if self.state is None:
             # Initialize watermarking state if it does not exist.

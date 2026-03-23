@@ -213,7 +213,7 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLIPVisionConfig, has_text_modality=False, hidden_size=48)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -396,7 +396,7 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLIPTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -636,7 +636,6 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
 
     test_resize_embeddings = False
     test_attention_outputs = False
-    _is_composite = True
 
     def setUp(self):
         self.model_tester = CLIPForImageClassificationModelTester(self)

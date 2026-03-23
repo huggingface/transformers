@@ -118,7 +118,7 @@ Dans les tâches multimodales :
 
 Transformers est plus qu'une boîte à outils pour utiliser des modèles pré-entraînés : c'est une communauté de projets construits autour de lui et du Hub Hugging Face. Nous voulons que Transformers permette aux développeurs, chercheurs, étudiants, professeurs, ingénieurs et à quiconque d'imaginer et de réaliser leurs projets de rêve.
 
-Afin de célébrer les 100 000 étoiles de transformers, nous avons décidé de mettre en avant la communauté et avons créé la page [awesome-transformers](./awesome-transformers.md) qui répertorie 100 projets incroyables construits autour de transformers.
+Afin de célébrer les 100 000 étoiles de transformers, nous avons décidé de mettre en avant la communauté et avons créé la page [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) qui répertorie 100 projets incroyables construits autour de transformers.
 
 Si vous possédez ou utilisez un projet que vous pensez devoir figurer dans la liste, veuillez ouvrir une pull request pour l'ajouter !
 
@@ -245,7 +245,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 ### Avec pip
 
-Ce référentiel est testé sur Python 3.9+, Flax 0.4.1+, PyTorch 2.1+ et TensorFlow 2.6+.
+Ce référentiel est testé sur Python 3.10+ et PyTorch 2.4+.
 
 Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https://docs.python.org/3/library/venv.html). Si vous n'êtes pas familier avec les environnements virtuels Python, consultez le [guide utilisateur](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

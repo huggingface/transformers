@@ -222,8 +222,8 @@ class RTDetrLoss(nn.Module):
         logits = outputs["logits"]
         device = logits.device
         target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        # Count the number of predictions that are NOT "no-object" (sigmoid > 0.5 threshold)
+        card_pred = (logits.sigmoid().max(-1).values > 0.5).sum(1)
         card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses

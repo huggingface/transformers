@@ -26,7 +26,8 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioAttention,
@@ -65,7 +66,8 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "hidden_states": VoxtralEncoderLayer,
     }
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         input_features,
@@ -100,11 +102,10 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         for idx, encoder_layer in enumerate(self.layers):
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
             )
-            hidden_states = layer_outputs[0]
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -198,7 +199,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -254,7 +254,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

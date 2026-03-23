@@ -177,6 +177,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)

@@ -14,7 +14,6 @@
 """PyTorch BLOOM model."""
 
 import math
-from typing import Union
 
 import torch
 from torch import nn
@@ -23,7 +22,7 @@ from torch.nn import functional as F
 
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -35,17 +34,9 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
-    is_torch_flex_attn_available,
     logging,
 )
-from ...utils.generic import is_flash_attention_requested
 from .configuration_bloom import BloomConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -257,7 +248,7 @@ class BloomAttention(nn.Module):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ):
         batch_size, q_length, _ = hidden_states.shape
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
@@ -265,8 +256,7 @@ class BloomAttention(nn.Module):
         query_layer, key_layer, value_layer = self._reshape(fused_qkv)
 
         if layer_past is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx, cache_kwargs)
+            key_layer, value_layer = layer_past.update(key_layer, value_layer, self.layer_idx)
 
         # reshape qkv for further computations
         query_layer = query_layer.reshape(batch_size * self.num_heads, -1, self.head_dim)
@@ -283,9 +273,8 @@ class BloomAttention(nn.Module):
 
         # change view to [batch_size, num_heads, q_length, kv_length]
         attn_weights = attention_scores.view(batch_size, self.num_heads, q_length, -1)
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_layer.shape[-1]]
-            attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
 
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_layer.dtype)
@@ -372,7 +361,7 @@ class BloomBlock(GradientCheckpointingLayer):
         layer_past: Cache | None = None,
         use_cache: bool = False,
         output_attentions: bool = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ):
         # hidden_states: [batch_size, seq_length, hidden_size]
 
@@ -394,7 +383,6 @@ class BloomBlock(GradientCheckpointingLayer):
             alibi=alibi,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
 
         layernorm_output = self.post_attention_layernorm(attention_output)
@@ -464,7 +452,6 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -485,7 +472,7 @@ class BloomModel(BloomPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -505,8 +492,6 @@ class BloomModel(BloomPreTrainedModel):
         batch_size, seq_length, _ = inputs_embeds.shape
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         seq_length_with_past = seq_length + past_length
-        if cache_position is None:
-            cache_position = torch.arange(past_length, past_length + seq_length, device=inputs_embeds.device)
 
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
@@ -520,8 +505,11 @@ class BloomModel(BloomPreTrainedModel):
             attention_mask = attention_mask.to(hidden_states.device)
 
         alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
         )
 
         for i, block in enumerate(self.h):
@@ -535,7 +523,6 @@ class BloomModel(BloomPreTrainedModel):
                 use_cache=use_cache,
                 output_attentions=output_attentions,
                 alibi=alibi,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -559,131 +546,6 @@ class BloomModel(BloomPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if is_flash_attention_requested(self.config):
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        sequence_length = input_tensor.shape[1]
-        if using_compilable_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
 
 
 @auto_docstring(
@@ -712,7 +574,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         use_cache=True,
         is_first_iteration=False,
         **kwargs,
@@ -724,7 +585,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -755,7 +615,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -776,7 +635,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -787,7 +646,6 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]
@@ -872,7 +730,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -996,7 +854,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1071,7 +929,7 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,

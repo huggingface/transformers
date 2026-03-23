@@ -23,6 +23,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
@@ -35,7 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_beit import BeitConfig
 
 
@@ -734,7 +735,7 @@ class BeitModel(BeitPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         resolution = pixel_values.shape[2:]
@@ -853,7 +854,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> list(logits.shape)
         [1, 196, 8192]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.beit(
             pixel_values,
@@ -921,7 +922,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.beit(
             pixel_values,
             output_attentions=output_attentions,
@@ -1274,7 +1275,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1336,10 +1337,9 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     BEiT backbone, to be used with frameworks like DETR and MaskFormer.
     """
 )
-class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
+class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = BeitEmbeddings(config)
@@ -1370,6 +1370,8 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1405,7 +1407,7 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 768, 14, 14]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

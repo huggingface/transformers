@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import math
 import os
 import time
@@ -8,6 +9,9 @@ import zipfile
 from collections import Counter
 
 import requests
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_jobs(workflow_run_id, token=None):
@@ -130,8 +134,8 @@ def get_errors_from_single_artifact(artifact_zip_path, job_links=None):
                                     error = line[line.index(": ") + len(": ") :]
                                     errors.append([error_line, error])
                                 except Exception:
-                                    # skip un-related lines
-                                    pass
+                                    # skip un-related lines that don't match the expected format
+                                    logger.debug(f"Skipping unrelated line: {line}")
                             elif filename == "summary_short.txt" and line.startswith("FAILED "):
                                 # `test` is the test method that failed
                                 test = line[len("FAILED ") :]

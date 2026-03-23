@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import BitBackbone, BitForImageClassification, BitImageProcessor, BitModel
+    from transformers import BitBackbone, BitForImageClassification, BitImageProcessorPil, BitModel
 
 
 if is_vision_available():
@@ -130,6 +130,7 @@ class BitModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
+        print(config)
         model = BitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -256,7 +257,7 @@ def prepare_img():
 class BitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return BitImageProcessor.from_pretrained("google/bit-50") if is_vision_available() else None
+        return BitImageProcessorPil.from_pretrained("google/bit-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

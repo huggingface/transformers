@@ -226,7 +226,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # size of the architecture
     if "base" in checkpoint_url:
-        pass
+        if "ade20k" in checkpoint_url:
+            config.out_indices = [3, 5, 7, 11]
     elif "large" in checkpoint_url:
         config.hidden_size = 1024
         config.intermediate_size = 4096

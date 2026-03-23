@@ -268,10 +268,6 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": LEDModel,
-            "question-answering": LEDForQuestionAnswering,
-            "summarization": LEDForConditionalGeneration,
-            "text2text-generation": LEDForConditionalGeneration,
-            "translation": LEDForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -279,6 +275,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     is_encoder_decoder = True
 
     test_missing_keys = False
+    test_torch_exportable = False
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(

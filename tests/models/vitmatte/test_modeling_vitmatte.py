@@ -40,7 +40,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitMatteImageProcessor
+    from transformers import VitMatteImageProcessorPil
 
 
 class VitMatteModelTester:
@@ -146,7 +146,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self,
             config_class=VitMatteConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["hidden_size"],
         )
 
@@ -239,20 +239,27 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_pretrained_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
         # Force load_backbone path
-        config.is_hybrid = False
+        config_dict["is_hybrid"] = False
 
         # Load a timm backbone
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_timm_backbone"] = True
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
         # Load a HF backbone
-        config.backbone = "facebook/dinov2-small"
-        config.use_timm_backbone = False
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
+        config_dict["backbone"] = "facebook/dinov2-small"
+        config_dict["use_timm_backbone"] = False
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
 
@@ -260,7 +267,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 class VitMatteModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        processor = VitMatteImageProcessor.from_pretrained("hustvl/vitmatte-small-composition-1k")
+        processor = VitMatteImageProcessorPil.from_pretrained("hustvl/vitmatte-small-composition-1k")
         model = VitMatteForImageMatting.from_pretrained("hustvl/vitmatte-small-composition-1k").to(torch_device)
 
         filepath = hf_hub_download(

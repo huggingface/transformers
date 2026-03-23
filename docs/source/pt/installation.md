@@ -24,12 +24,10 @@ Neste guia poderá encontrar informações para a instalação do 🤗 Transform
 Machine Learning com a qual esteja a trabalhar. Além disso, poderá encontrar informações sobre como gerar cachês e
 configurar o 🤗 Transformers para execução em modo offline (opcional).
 
-🤗 Transformers foi testado com Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, e Flax. Para instalar a biblioteca de
+🤗 Transformers foi testado com Python 3.10+ e PyTorch 2.4+. Para instalar a biblioteca de
 deep learning com que deseja trabalhar, siga as instruções correspondentes listadas a seguir:
 
 * [PyTorch](https://pytorch.org/get-started/locally/)
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip)
-* [Flax](https://flax.readthedocs.io/en/latest/)
 
 ## Instalação pelo Pip
 
@@ -61,18 +59,6 @@ Por exemplo, para instalar o 🤗 Transformers e o PyTorch, digite:
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 Transformers e TensorFlow 2.0:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 Transformers e Flax:
-
-```bash
-pip install transformers[flax]
 ```
 
 Por último, verifique se o 🤗 Transformers foi instalado com sucesso usando o seguinte comando para baixar um modelo pré-treinado:
@@ -124,7 +110,7 @@ pip install -e .
 
 Estes comandos vão ligar o diretório para o qual foi clonado o repositório ao caminho de bibliotecas do Python.
 O Python agora buscará dentro dos arquivos que foram clonados além dos caminhos normais da biblioteca.
-Por exemplo, se os pacotes do Python se encontram instalados no caminho `~/anaconda3/envs/main/lib/python3.7/site-packages/`,
+Por exemplo, se os pacotes do Python se encontram instalados no caminho `~/anaconda3/envs/main/lib/python3.10/site-packages/`,
 o Python também buscará módulos no diretório onde clonamos o repositório `~/transformers/`.
 
 <Tip warning={true}>

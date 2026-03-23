@@ -63,14 +63,15 @@ class RopeTest(unittest.TestCase):
 
         # Any other parameters passed to RoPE will raise a warning that a particular key is not used
         # But sometimes we can have model-specific RoPE kwargs and bypass warning with `ignore_keys`
-        model_specific_kwarg = "mrope_sections"  # e,g in Qwen2-VL
+        config.ignore_keys_at_rope_validation = {"mrope_sections"}  # e,g in Qwen2-VL
+        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "mrope_sections": True}
+        config.validate_rope()
 
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, model_specific_kwarg: True}
-        config.validate_rope(ignore_keys={model_specific_kwarg})
         with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config.ignore_keys_at_rope_validation = set()
             config.validate_rope()
             self.assertEqual(len(logs.output), 1)
-            self.assertIn(model_specific_kwarg, logs.output[0])
+            self.assertIn("mrope_sections", logs.output[0])
 
         # We can indicate Different RoPE params for each attention type
         # We can also have only one RoPE params defined for all layer, we don't raise an error

@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 
 from transformers import OlmoConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
@@ -178,7 +177,7 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def setUp(self):
         self.model_tester = OlmoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OlmoConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=OlmoConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -287,9 +286,6 @@ class OlmoIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )

@@ -38,7 +38,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
-from ...utils.generic import OutputRecorder, check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_instructblip import InstructBlipConfig, InstructBlipQFormerConfig, InstructBlipVisionConfig
 
@@ -406,7 +407,8 @@ class InstructBlipVisionModel(InstructBlipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -860,7 +862,8 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -953,12 +956,6 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         self.language_model = AutoModel.from_config(config.text_config)
-
-        if self.language_model._no_split_modules is not None:
-            self._no_split_modules.extend(self.language_model._no_split_modules)
-
-        if self.language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(self.language_model._keep_in_fp32_modules)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1133,12 +1130,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
-
-        if language_model._no_split_modules is not None:
-            self._no_split_modules.extend(language_model._no_split_modules)
-
-        if language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(language_model._keep_in_fp32_modules)
 
         self.language_model = language_model
 

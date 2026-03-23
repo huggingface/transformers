@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
+
 import pytest
 from typer.testing import CliRunner
 
@@ -21,6 +23,19 @@ import transformers.cli.transformers
 def cli():
     def _cli_invoke(*args):
         runner = CliRunner()
-        return runner.invoke(transformers.cli.transformers.app, list(args), catch_exceptions=False)
+
+        old_out_close = sys.stdout.close
+        old_err_close = sys.stderr.close
+
+        def _noop(*a, **k):
+            return None
+
+        sys.stdout.close = _noop
+        sys.stderr.close = _noop
+        try:
+            return runner.invoke(transformers.cli.transformers.app, list(args), catch_exceptions=False)
+        finally:
+            sys.stdout.close = old_out_close
+            sys.stderr.close = old_err_close
 
     return _cli_invoke

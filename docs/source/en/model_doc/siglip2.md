@@ -125,7 +125,7 @@ from PIL import Image
 from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-model = AutoModel.from_pretrained("google/siglip2-large-patch16-512", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("google/siglip2-base-patch16-224", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
 processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -249,9 +249,9 @@ inputs = tokenizer(
 [[autodoc]] Siglip2ImageProcessor
     - preprocess
 
-## Siglip2ImageProcessorFast
+## Siglip2ImageProcessorPil
 
-[[autodoc]] Siglip2ImageProcessorFast
+[[autodoc]] Siglip2ImageProcessorPil
     - preprocess
 
 ## Siglip2Processor

@@ -138,7 +138,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `dtype` parameter.. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `dtype` parameter. Setting `dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -340,4 +340,4 @@ model.dequantize()
 
 Learn more about the details of 8-bit quantization in [A Gentle Introduction to 8-bit Matrix Multiplication for transformers at scale using Hugging Face Transformers, Accelerate and bitsandbytes](https://huggingface.co/blog/hf-bitsandbytes-integration).
 
-Try 4-bit quantization in this [notebook](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf) and learn more about it's details in [Making LLMs even more accessible with bitsandbytes, 4-bit quantization and QLoRA](https://huggingface.co/blog/4bit-transformers-bitsandbytes).
+Try 4-bit quantization in this [notebook](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf) and learn more about its details in [Making LLMs even more accessible with bitsandbytes, 4-bit quantization and QLoRA](https://huggingface.co/blog/4bit-transformers-bitsandbytes).

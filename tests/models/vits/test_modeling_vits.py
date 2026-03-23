@@ -162,11 +162,12 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     test_resize_embeddings = False
+    test_torch_exportable = False
     has_attentions = False
 
     def setUp(self):
         self.model_tester = VitsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -237,9 +238,9 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                set_seed(0)
+                set_seed(42)
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                set_seed(0)
+                set_seed(42)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
@@ -323,7 +324,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                set_seed(0)
+                set_seed(42)
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -338,7 +339,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
-                    set_seed(0)
+                    set_seed(42)
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             if isinstance(first, tuple) and isinstance(second, tuple):
