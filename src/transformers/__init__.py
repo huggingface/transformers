@@ -827,6 +827,7 @@ else:
         _module = _proc_file.stem
         _target = f".models.{_model}.{_module}"
         _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
+
         # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
         def getattr_factory(target):
             def _getattr(name):
