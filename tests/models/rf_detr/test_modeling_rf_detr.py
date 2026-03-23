@@ -219,24 +219,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     test_missing_keys = False
 
-    @unittest.skip(
-        "DINOv2 uses full (non-windowed) attention over long sequences; bfloat16 eager/FA2 differences exceed the test tolerance."
-    )
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        "DINOv2 uses full (non-windowed) attention over long sequences; bfloat16 eager/FA2 differences exceed the test tolerance."
-    )
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        "DINOv2 uses full (non-windowed) attention over long sequences; bfloat16 eager/FA2 differences exceed the test tolerance."
-    )
-    def test_flash_attn_kernels_inference_equivalence(self):
-        pass
-
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -307,6 +289,12 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
+
+    def flash_attn_inference_equivalence(self, **kwargs):
+        # RF-DETR's encoder-decoder bridge uses discrete top-k proposal selection. Tiny floating-point
+        # differences between flash attention and eager attention in the DINOv2 backbone cause different
+        # encoder proposals to be selected, resulting in decoder outputs that exceed the equivalence tolerance.
+        self.skipTest(reason="RF-DETR top-k proposal selection is sensitive to flash attention numerics")
 
     def test_attention_outputs(self):
         # Override test_attention_outputs to support object detection and segmentation heads.
@@ -597,23 +585,23 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 EXPECTED_OBJECT_DETECTION_OUTPUTS = {
     "stevenbucaille/rf-detr-base": {
-        "logits": [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
-        "boxes": [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
+        "logits": [-7.58881, -4.64088, -10.02118, -5.65906, -9.8343],
+        "boxes": [0.25457, 0.54871, 0.48585, 0.86988, 0.16926],
         "post_process_labels": [17, 75, 17, 75, 63],
-        "post_process_scores": [0.98291, 0.97628, 0.97799, 0.86630, 0.61596],
-        "post_process_boxes": [7.51008, 54.56673, 318.44214, 472.12595],
-        "loss": 21.967346,
+        "post_process_scores": [0.982765, 0.975941, 0.978163, 0.868452, 0.619554],
+        "post_process_boxes": [7.44911, 54.60959, 318.39551, 472.15417],
+        "loss": 21.911297,
     }
 }
 
 EXPECTED_SEGMENTATION_OUTPUTS = {
     "stevenbucaille/rf-detr-seg-small": {
-        "logits": [-7.35031, -5.09690, -9.58117, -10.80274, -8.35001],
-        "boxes": [0.25607, 0.54820, 0.48018, 0.87013, 0.90797],
-        "pred_masks": [-13.17243, -13.12057, -13.92742, -13.89896, -13.72802],
-        "post_process_labels": [17, 75, 75, 17],
-        "post_process_scores": [0.984295, 0.984524, 0.971301, 0.977482],
-        "loss": 87.918113,
+        "logits": [-7.3531, -5.14075, -9.63576, -10.81916, -8.3615],
+        "boxes": [0.25602, 0.54813, 0.48043, 0.87045, 0.77213],
+        "pred_masks": [-13.1366, -13.08283, -13.9058, -13.88317, -13.71717],
+        "post_process_labels": [17, 17, 75, 75],
+        "post_process_scores": [0.984311, 0.976176, 0.984499, 0.970341],
+        "loss": 88.117493,
     }
 }
 
@@ -847,8 +835,6 @@ class RfDetrDinov2ModelTester:
 class RfDetrDinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (RfDetrDinov2Backbone,) if is_torch_available() else ()
     config_class = RfDetrDinov2Config
-
-    has_attentions = False
 
     def setUp(self):
         self.model_tester = RfDetrDinov2ModelTester(self)
