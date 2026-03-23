@@ -33,14 +33,14 @@ import tests_fetcher  # noqa: E402
 from tests_fetcher import (  # noqa: E402
     checkout_commit,
     clean_code,
-    create_test_list_from_filter,
     create_reverse_dependency_map,
     create_reverse_dependency_tree,
+    create_test_list_from_filter,
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
-    get_repo_utils_tests,
     get_module_dependencies,
+    get_repo_utils_tests,
     get_tree_starting_at,
     infer_tests_to_run,
     init_test_examples_dependencies,
@@ -290,7 +290,9 @@ class TestFetcherTester(unittest.TestCase):
                 patch.object(tests_fetcher, "get_modified_python_files", return_value=["utils/mlinter/mlinter.py"])
             )
             stack.enter_context(patch.object(tests_fetcher, "create_reverse_dependency_map", return_value={}))
-            stack.enter_context(patch.object(tests_fetcher, "get_impacted_files_from_tiny_model_summary", return_value=[]))
+            stack.enter_context(
+                patch.object(tests_fetcher, "get_impacted_files_from_tiny_model_summary", return_value=[])
+            )
             mock_create_test_list = stack.enter_context(patch.object(tests_fetcher, "create_test_list_from_filter"))
             stack.enter_context(patch.object(tests_fetcher, "get_doctest_files", return_value=[]))
             infer_tests_to_run("unused.txt", diff_with_last_commit=True)
