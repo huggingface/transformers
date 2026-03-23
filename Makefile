@@ -32,6 +32,7 @@ check-repo:
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+	-python utils/check_auto.py
 	-python utils/check_copies.py
 	-python utils/check_modular_conversion.py
 	-python utils/check_doc_toc.py
@@ -60,6 +61,7 @@ check-repo:
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 fix-repo: style
 	-python setup.py deps_table_update
+	-python utils/check_auto.py --fix_and_overwrite
 	-python utils/check_doc_toc.py --fix_and_overwrite
 	-python utils/check_copies.py --fix_and_overwrite
 	-python utils/check_modular_conversion.py --fix_and_overwrite

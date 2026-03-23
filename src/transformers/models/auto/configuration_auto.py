@@ -13,14 +13,12 @@
 # limitations under the License.
 """Auto Config class."""
 
-import ast
-import glob
 import importlib
+import json
 import os
 import re
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
-from pathlib import Path
 from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
@@ -30,52 +28,13 @@ from ...utils import CONFIG_NAME, logging
 
 logger = logging.get_logger(__name__)
 
-
 _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
+with open("auto_mappings.json", "r") as f:
+    all_mappings = json.load(f)
 
-def build_config_mapping_names() -> tuple[dict, dict]:
-    model_type_map = OrderedDict()
-    special_mappings = OrderedDict()
-
-    root_path = Path(__file__).resolve().parents[2]
-    all_files = glob.glob(f"{root_path}/models/**/configuration_*.py", recursive=True)
-    for config_path in all_files:
-        module_name = config_path.split("/")[-2]
-        with open(config_path, "r") as f:
-            content = f.read()
-
-        tree = ast.parse(content)
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef) and any(
-                base.id == "PreTrainedConfig" for base in node.bases if isinstance(base, ast.Name)
-            ):
-                config_cls_name = node.name
-                model_type = None
-                for stmt in node.body:
-                    if isinstance(stmt, ast.Assign):
-                        model_types = [
-                            stmt.value.value
-                            for target in stmt.targets
-                            if isinstance(target, ast.Name) and target.id == "model_type"
-                        ]
-                        if model_types:
-                            model_type = model_types[0]
-                            break
-
-                if not model_type:
-                    continue
-
-                if model_type != module_name:
-                    special_mappings[model_type] = module_name
-                model_type_map[model_type] = config_cls_name
-
-    return model_type_map, special_mappings
-
-
-CONFIG_MAPPING_NAMES: OrderedDict[str, str]
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME: OrderedDict[str, str]
-CONFIG_MAPPING_NAMES, SPECIAL_MODEL_TYPE_TO_MODULE_NAME = build_config_mapping_names()
+CONFIG_MAPPING_NAMES: OrderedDict[str, str] = all_mappings["CONFIG_MAPPING_NAMES"]
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME: OrderedDict[str, str] = all_mappings["SPECIAL_MODEL_TYPE_TO_MODULE_NAME"]
 
 # This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
