@@ -377,6 +377,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
     from .solar_open import *
@@ -414,6 +415,7 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .uvdoc import *
     from .vaultgemma import *
     from .vibevoice_asr import *
     from .video_llama_3 import *

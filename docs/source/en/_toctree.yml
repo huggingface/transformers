@@ -970,6 +970,8 @@
         title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
+      - local: model_doc/uvdoc
+        title: UVDoc
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
@@ -1314,6 +1316,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/slanext
+        title: SLANeXt
       - local: model_doc/smollm3
         title: SmolLM3
       - local: model_doc/smolvlm
