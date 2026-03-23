@@ -203,7 +203,7 @@ class MambaMixer(nn.Module):
             if is_decoding:
                 hidden_states = causal_conv1d_update(
                     hidden_states.squeeze(-1),
-                    cache_params.conv_states[self.layer_idx],
+                    cache_params[self.layer_idx].conv_states,
                     conv_weights,
                     self.conv1d.bias,
                     self.activation,
@@ -235,7 +235,7 @@ class MambaMixer(nn.Module):
             time_proj_bias = self.dt_proj.bias.float() if hasattr(self.dt_proj, "bias") else None
             if is_decoding:
                 scan_outputs = selective_state_update(
-                    cache_params.ssm_states[self.layer_idx],
+                    cache_params[self.layer_idx].ssm_states,
                     hidden_states[..., 0],
                     discrete_time_step[..., 0],
                     A,
@@ -574,7 +574,7 @@ class MambaModel(MambaPreTrainedModel):
             use_cache = False
 
         if use_cache and cache_params is None:
-            cache_params = DynamicCache(self.config)
+            cache_params = DynamicCache(config=self.config)
 
         hidden_states = inputs_embeds
         all_hidden_states = () if output_hidden_states else None
