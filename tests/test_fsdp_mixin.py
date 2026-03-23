@@ -378,7 +378,7 @@ def train_fsdp2(
         init_model_dir,
         torch_dtype=dtype,
         fsdp_plan=fsdp_plan,
-        fsdp_device_mesh=device_mesh,
+        device_mesh=device_mesh,
         attn_implementation="eager",
     )
     pre_ckpt_model.train()
@@ -416,7 +416,7 @@ def train_fsdp2(
             model_dir,
             torch_dtype=dtype,
             fsdp_plan=fsdp_plan,
-            fsdp_device_mesh=device_mesh,
+            device_mesh=device_mesh,
             attn_implementation="eager",
         )
         resumed_model.train()
@@ -470,7 +470,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         model = AutoModelForCausalLM.from_pretrained(
             init_tmpdir,
             fsdp_plan=auto_plan,
-            fsdp_device_mesh=device_mesh,
+            device_mesh=device_mesh,
             attn_implementation="eager",
         )
         dist.barrier()
@@ -496,7 +496,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
         new_model = AutoModelForCausalLM.from_pretrained(
             tmpdir,
             fsdp_plan=auto_plan,
-            fsdp_device_mesh=device_mesh,
+            device_mesh=device_mesh,
             attn_implementation="eager",
         )
         dist.barrier()

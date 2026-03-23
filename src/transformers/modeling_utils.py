@@ -3950,7 +3950,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
         fsdp_plan = kwargs.pop("fsdp_plan", None)
-        fsdp_device_mesh = kwargs.pop("fsdp_device_mesh", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -4157,9 +4156,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Apply FSDP2 if configured (must be after weight loading)
         if fsdp_plan is not None:
-            fsdp_mesh = fsdp_device_mesh if fsdp_device_mesh is not None else device_mesh
-            if fsdp_mesh is not None:
-                model = apply_fsdp2(model, fsdp_mesh, fsdp_plan)
+            if device_mesh is None:
+                raise ValueError(
+                    "`fsdp_plan` was provided but no device mesh is available. "
+                    "Pass `device_mesh` to `from_pretrained`."
+                )
+            model = apply_fsdp2(model, device_mesh, fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
