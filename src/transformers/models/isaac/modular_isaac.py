@@ -527,6 +527,7 @@ class IsaacVisionTransformer(PreTrainedModel):
 
     """
 
+    config: IsaacVisionConfig
     _supports_sdpa = True
     _supports_flash_attn = True
     _can_record_outputs = {
