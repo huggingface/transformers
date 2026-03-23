@@ -256,7 +256,7 @@ class Mamba2Mixer(nn.Module):
         ) // 2
 
         # Single step calculations via cache
-        if cache_params is not None and cache_params.has_previous_state:
+        if cache_params is not None and cache_params[self.layer_idx].has_previous_state:
             _, _, gate, hidden_states_B_C, dt = projected_states.squeeze(1).split(
                 [d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
             )
@@ -412,8 +412,10 @@ class Mamba2Mixer(nn.Module):
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
 
+        is_decoding = cache_params is not None and cache_params[self.layer_idx].has_previous_state
+
         # 2. Convolution sequence transformation
-        if cache_params is not None and cache_params.has_previous_state:
+        if is_decoding:
             cache_params.update_conv_state(hidden_states_B_C[:, 0:1, :], layer_idx=self.layer_idx)
 
             # We need to guarantee that anything regarding the cache is on the same device
@@ -445,7 +447,7 @@ class Mamba2Mixer(nn.Module):
 
         # 3. SSM transformation
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if cache_params is not None and cache_params.has_previous_state:
+        if is_decoding:
             # We need to guarantee that anything regarding the cache is on the same device
             cache_device = cache_params[self.layer_idx].device
 
@@ -550,10 +552,7 @@ class Mamba2Mixer(nn.Module):
 
             # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
             # (middle term of factorization of off-diag blocks; A terms)
-            if cache_params is not None and cache_params.has_previous_state:
-                previous_states = cache_params[self.layer_idx].ssm_states[:, None, ...].to(device=states.device)
-            else:
-                previous_states = torch.zeros_like(states[:, :1])
+            previous_states = torch.zeros_like(states[:, :1])
             states = torch.cat([previous_states, states], dim=1)
             decay_chunk = torch.exp(segment_sum(nn.functional.pad(A_cumsum[:, :, :, -1], (1, 0))))
             decay_chunk = decay_chunk.transpose(1, 3)

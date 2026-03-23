@@ -231,7 +231,7 @@ class FalconMambaMixer(nn.Module):
             if attention_mask is not None:
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
-            is_decoding = cache_params is not None and cache_params.has_previous_state
+            is_decoding = cache_params is not None and cache_params[self.layer_idx].has_previous_state
 
             # 2. Convolution sequence transformation
             conv_weights = self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2))
@@ -330,7 +330,7 @@ class FalconMambaMixer(nn.Module):
         if cache_params is not None:
             ssm_state = cache_params[self.layer_idx].ssm_states.clone()
             ssm_state = ssm_state.to(hidden_states.device)
-            if not cache_params.has_previous_state:
+            if not cache_params[self.layer_idx].has_previous_state:
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
 
                 cache_params.update_conv_state(conv_state, self.layer_idx)
