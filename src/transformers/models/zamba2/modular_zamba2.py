@@ -458,10 +458,16 @@ class Zamba2MambaMixer(nn.Module):
 
         has_previous_state = cache_params.has_previous_state(self.layer_idx)
 
+        if cache_params is not None and has_previous_state:
+            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
+        else:
+            ssm_state = torch.zeros(
+                (batch_size, self.num_heads, self.head_dim, self.ssm_state_size),
+                device=hidden_states.device, dtype=dtype
+            )
+
         # Convolution sequence transformation
         if cache_params is not None:
-            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
-            ssm_state = ssm_state.to(hidden_states.device)
             if has_previous_state:
                 gate = gate.unsqueeze(1)
                 conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
@@ -482,10 +488,6 @@ class Zamba2MambaMixer(nn.Module):
                     # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
                     hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
         else:
-            ssm_state = torch.zeros(
-                (batch_size, self.num_heads, self.head_dim, self.ssm_state_size),
-                device=hidden_states.device, dtype=dtype
-            )
             hidden_states = self.act(self.conv1d(hidden_states.transpose(1, 2))[..., :seq_len].transpose(1, 2))
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]
