@@ -111,7 +111,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
     return cls
 
 
-@strict
+@strict(accept_kwargs=True)
 @dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # no-format
@@ -289,6 +289,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls = dataclass(cls, repr=False)
+
+        # wrap all subclasses to accept arbitrary kwargs for BC
         cls = wrap_init_to_accept_kwargs(cls)
 
     @property
