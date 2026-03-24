@@ -101,6 +101,10 @@ class FalconMambaConfig(MambaConfig):
     use_associative_scan: bool = True
     mixer_rms_eps: float = 1e-6
 
+    @property
+    def layer_types(self):
+        return ["mamba"] * self.num_hidden_layers
+
 
 def rms_forward(hidden_states, variance_epsilon=1e-6):
     """

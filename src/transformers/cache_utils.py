@@ -1166,15 +1166,12 @@ class DynamicCache(Cache):
             sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
                 decoder_config, "attention_chunk_size", None
             )
-            conv_kernel = getattr(decoder_config, "conv_kernel", None)
             layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
                 layer_types = []
                 for _ in range(decoder_config.num_hidden_layers):
                     if sliding_window is not None:
                         layer_types.append("sliding_attention")
-                    elif conv_kernel is not None:
-                        layer_types.append("mamba")
                     else:
                         layer_types.append("full_attention")
             # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
