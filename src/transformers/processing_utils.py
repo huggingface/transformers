@@ -418,6 +418,14 @@ class AudioKwargs(TypedDict, total=False):
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
+class CommonKwargs(TypedDict, total=False):
+    """
+    Backward-compatible common processor kwargs shared across modalities.
+    """
+
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+
+
 class ProcessingKwargs(TypedDict, total=False):
     """
     Base class for kwargs passing to processors.
