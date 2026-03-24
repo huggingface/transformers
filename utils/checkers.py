@@ -26,9 +26,11 @@ import argparse
 import hashlib
 import itertools
 import os
+import shutil
 import subprocess
 import sys
 import threading
+from collections import deque
 from pathlib import Path
 
 
@@ -77,23 +79,110 @@ def _file_md5(path):
     return hashlib.md5(path.read_bytes()).hexdigest()
 
 
-def _run_cmd(cmd):
+# ANSI helpers
+ORANGE = "\033[38;5;214m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+RESET = "\033[0m"
+SPINNER_CHARS = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+class SlidingWindow:
+    """Displays a spinning title + sliding window of the last N output lines in a TTY."""
+
+    def __init__(self, label, max_lines=10):
+        self.label = label
+        self.max_lines = max_lines
+        self.lines = deque(maxlen=max_lines)
+        self.displayed = 0  # number of output lines currently on screen
+        self.term_width = shutil.get_terminal_size().columns
+        self._spinner = itertools.cycle(SPINNER_CHARS)
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        # Print initial title line (will be overwritten by spinner)
+        print(f"{ORANGE}{next(self._spinner)} {label}{RESET}")
+        self._title_on_screen = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def _spin(self):
+        while not self._stop.is_set():
+            self._stop.wait(0.08)
+            if self._stop.is_set():
+                break
+            with self._lock:
+                self._redraw()
+
+    def _redraw(self):
+        """Clear output lines + title, redraw everything."""
+        # Move up over output lines + title line
+        for _ in range(self.displayed + (1 if self._title_on_screen else 0)):
+            sys.stdout.write("\033[A\033[2K")
+        self.displayed = 0
+        # Redraw title with next spinner frame
+        print(f"{ORANGE}{next(self._spinner)} {self.label}{RESET}")
+        self._title_on_screen = True
+        # Redraw output lines
+        for line in self.lines:
+            print(line)
+        self.displayed = len(self.lines)
+        sys.stdout.flush()
+
+    def add_line(self, line):
+        with self._lock:
+            self.lines.append(line.rstrip()[: self.term_width])
+            self._redraw()
+
+    def finish(self, success):
+        """Stop spinner and print final status title."""
+        self._stop.set()
+        self._thread.join()
+        with self._lock:
+            # Clear output lines + title
+            for _ in range(self.displayed + (1 if self._title_on_screen else 0)):
+                sys.stdout.write("\033[A\033[2K")
+            self._title_on_screen = False
+            self.displayed = 0
+            # Print final title with status
+            if success:
+                print(f"{GREEN}✓ {self.label}{RESET}")
+            else:
+                print(f"{RED}✗ {self.label}{RESET}")
+            # Reprint output lines
+            for line in self.lines:
+                print(line)
+            sys.stdout.flush()
+
+
+def _run_cmd(cmd, line_callback=None):
     """Run a command, capturing output. Returns (returncode, output)."""
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    return result.returncode, result.stdout.decode("utf-8", errors="replace")
+    if line_callback is None:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return result.returncode, result.stdout.decode("utf-8", errors="replace")
+
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    output_lines = []
+    for raw_line in proc.stdout:
+        line = raw_line.decode("utf-8", errors="replace")
+        output_lines.append(line)
+        line_callback(line)
+    proc.wait()
+    return proc.returncode, "".join(output_lines)
 
 
-def run_deps_table_checker(fix=False):
+def run_deps_table_checker(fix=False, line_callback=None):
     """Check or fix the dependency versions table."""
     deps_table = REPO_ROOT / "src" / "transformers" / "dependency_versions_table.py"
     setup_py = REPO_ROOT / "setup.py"
     cmd = [sys.executable, str(setup_py), "deps_table_update"]
 
     if fix:
-        return _run_cmd(cmd)
+        return _run_cmd(cmd, line_callback=line_callback)
 
     before = _file_md5(deps_table)
-    rc, output = _run_cmd(cmd)
+    rc, output = _run_cmd(cmd, line_callback=line_callback)
     if rc != 0:
         return rc, output
     after = _file_md5(deps_table)
@@ -106,9 +195,9 @@ def run_deps_table_checker(fix=False):
     return 0, output
 
 
-def run_imports_checker(fix=False):
+def run_imports_checker(fix=False, line_callback=None):
     """Check that all public imports work."""
-    rc, output = _run_cmd([sys.executable, "-c", "from transformers import *"])
+    rc, output = _run_cmd([sys.executable, "-c", "from transformers import *"], line_callback=line_callback)
     if rc != 0:
         return rc, output + "Import failed, this means you introduced unprotected imports!\n"
     return 0, output
@@ -117,22 +206,22 @@ def run_imports_checker(fix=False):
 RUFF_TARGETS = ["examples", "tests", "src", "utils", "scripts", "benchmark", "benchmark_v2", "setup.py", "conftest.py"]
 
 
-def run_ruff_check(fix=False):
+def run_ruff_check(fix=False, line_callback=None):
     """Run ruff linting."""
     cmd = ["ruff", "check", *RUFF_TARGETS]
     if fix:
         cmd += ["--fix", "--exclude", ""]
-    return _run_cmd(cmd)
+    return _run_cmd(cmd, line_callback=line_callback)
 
 
-def run_ruff_format(fix=False):
+def run_ruff_format(fix=False, line_callback=None):
     """Run ruff formatting."""
     cmd = ["ruff", "format", *RUFF_TARGETS]
     if not fix:
         cmd += ["--check"]
     else:
         cmd += ["--exclude", ""]
-    return _run_cmd(cmd)
+    return _run_cmd(cmd, line_callback=line_callback)
 
 
 CUSTOM_RUNNERS = {
@@ -143,9 +232,35 @@ CUSTOM_RUNNERS = {
 }
 
 
-def run_checker(name, fix=False):
+def get_checker_command(name, fix=False):
+    """Return a shell-friendly command string for a checker."""
+    if name == "deps_table":
+        return "python setup.py deps_table_update"
+    if name == "imports":
+        return 'python -c "from transformers import *"'
+    if name == "ruff_check":
+        cmd = ["ruff", "check", *RUFF_TARGETS]
+        if fix:
+            cmd += ["--fix", "--exclude", ""]
+        return " ".join(cmd)
+    if name == "ruff_format":
+        cmd = ["ruff", "format", *RUFF_TARGETS]
+        if not fix:
+            cmd += ["--check"]
+        else:
+            cmd += ["--exclude", ""]
+        return " ".join(cmd)
+
+    _, script, check_args, fix_args = CHECKERS[name]
+    if fix and fix_args is None:
+        return None
+    args = fix_args if fix else check_args
+    return " ".join(["python", f"utils/{script}"] + args)
+
+
+def run_checker(name, fix=False, line_callback=None):
     if name in CUSTOM_RUNNERS:
-        return CUSTOM_RUNNERS[name](fix=fix)
+        return CUSTOM_RUNNERS[name](fix=fix, line_callback=line_callback)
 
     _, script, check_args, fix_args = CHECKERS[name]
     script_path = UTILS_DIR / script
@@ -156,7 +271,7 @@ def run_checker(name, fix=False):
     cmd = [sys.executable, str(script_path)]
     cmd += fix_args if fix else check_args
 
-    return _run_cmd(cmd)
+    return _run_cmd(cmd, line_callback=line_callback)
 
 
 def main():
@@ -197,36 +312,38 @@ def main():
 
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
-    spinner_chars = itertools.cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-    stop_spinner = threading.Event()
-
-    def spin(label):
-        while not stop_spinner.is_set():
-            print(f"\r{label}... {next(spinner_chars)}", end="", flush=True)
-            stop_spinner.wait(0.08)
 
     failures = []
     for name in names:
         label = CHECKERS[name][0]
-        t = None
+        cmd_str = get_checker_command(name, fix=args.fix)
+
         if is_tty:
-            stop_spinner.clear()
-            t = threading.Thread(target=spin, args=(label,))
-            t.start()
+            window = SlidingWindow(label, max_lines=10)
+            if cmd_str:
+                window.add_line(f"$ {cmd_str}")
+            rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
+            window.finish(success=(rc == 0))
+            print()
+            if rc != 0:
+                failures.append(name)
+                if not args.keep_going:
+                    sys.exit(1)
         else:
-            print(f"{label}... ", end="", flush=True)
-        rc, output = run_checker(name, fix=args.fix)
-        if t is not None:
-            stop_spinner.set()
-            t.join()
-        if rc == 0:
-            print(f"\r{label}... OK" if is_tty else "OK")
-        else:
-            print(f"\r{label}... FAILED" if is_tty else "FAILED")
-            print(output)
-            failures.append(name)
-            if not args.keep_going:
-                sys.exit(1)
+            print(f"{label}")
+            if cmd_str:
+                print(f"$ {cmd_str}")
+            rc, output = run_checker(name, fix=args.fix)
+            tail = output.splitlines()[-10:]
+            if tail:
+                print("\n".join(tail))
+            status = "OK" if rc == 0 else "FAILED"
+            print(status)
+            print()
+            if rc != 0:
+                failures.append(name)
+                if not args.keep_going:
+                    sys.exit(1)
 
     if failures:
         print(f"\n{len(failures)} failed: {', '.join(failures)}")
