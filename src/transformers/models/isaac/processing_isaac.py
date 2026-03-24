@@ -210,15 +210,15 @@ class IsaacProcessor(ProcessorMixin):
                 expanded_text += (self.image_token * segment_length) + segments[image_idx + 1]
             expanded_texts.append(expanded_text)
 
-        text_inputs = self.tokenizer(expanded_texts, return_tensors=None, **text_kwargs)
-        self._check_special_mm_tokens(expanded_texts, text_inputs, modalities=["image"])
+        tokenized_text_inputs = self.tokenizer(expanded_texts, return_tensors=None, **text_kwargs)
+        self._check_special_mm_tokens(expanded_texts, tokenized_text_inputs, modalities=["image"])
 
         effective_max_length = self.max_sequence_length
         if truncation and max_length is not None:
             effective_max_length = max_length
 
         for batch_idx, (expected_image_lengths, sample_input_ids_list) in enumerate(
-            zip(expected_image_lengths_per_sample, text_inputs["input_ids"], strict=True)
+            zip(expected_image_lengths_per_sample, tokenized_text_inputs["input_ids"], strict=True)
         ):
             sample_input = torch.tensor(sample_input_ids_list, dtype=torch.long)
             image_positions = sample_input.eq(self.image_pad_token_id).nonzero(as_tuple=False).flatten()
@@ -242,7 +242,8 @@ class IsaacProcessor(ProcessorMixin):
                     vision_token_offsets[batch_idx, image_idx] = kept_start - image_start
                     vision_token_lengths[batch_idx, image_idx] = kept_end - kept_start
 
-        text_inputs = self.tokenizer.pad(
+        # Pad only after Isaac-specific truncation so image span offsets and lengths stay aligned.
+        padded_text_inputs = self.tokenizer.pad(
             {"input_ids": [sample_input.tolist() for sample_input in sample_input_ids]},
             padding=padding,
             max_length=max_length if padding == "max_length" else None,
@@ -251,8 +252,8 @@ class IsaacProcessor(ProcessorMixin):
             return_attention_mask=return_attention_mask,
             return_tensors=TensorType.PYTORCH,
         )
-        input_ids = text_inputs["input_ids"]
-        attention_mask = text_inputs.get("attention_mask")
+        input_ids = padded_text_inputs["input_ids"]
+        attention_mask = padded_text_inputs.get("attention_mask")
         if attention_mask is None:
             attention_mask = input_ids.ne(self.pad_token_id).to(dtype=torch.long)
 
