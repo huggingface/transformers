@@ -52,6 +52,7 @@ import os
 import statistics
 import time
 
+
 # Force single GPU — must be set before any CUDA initialization
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -552,8 +553,8 @@ def main():
 def print_reference_summary(reference_texts: dict[str, str], ref_impl: str) -> None:
     """Print a summary noting that outputs are compared against the reference implementation."""
     print(f"Reference comparison: all decode outputs compared against '{ref_impl}'.")
-    print(f"  MATCH    = identical text (greedy decoding is deterministic)")
-    print(f"  MISMATCH = text differs (FP divergence across attention kernels — check preview for correctness)")
+    print("  MATCH    = identical text (greedy decoding is deterministic)")
+    print("  MISMATCH = text differs (FP divergence across attention kernels — check preview for correctness)")
     print()
 
 
