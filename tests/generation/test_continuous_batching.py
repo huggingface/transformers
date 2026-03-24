@@ -107,7 +107,7 @@ def get_tokenizer_and_model(
     if not hasattr(tokenizer, "pad_token") and hasattr(tokenizer, "eos_token"):
         tokenizer.pad_token = tokenizer.eos_token
     # Load model on CPU
-    model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
+    model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, torch_dtype=dtype)
     model = model.to(device).eval()
     return tokenizer, model
 
@@ -633,7 +633,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
 
         gen_config_regular = GenerationConfig(max_new_tokens=10, do_sample=False, output_scores=True)
-        generate_outputs = model.generate(inputs, generation_config=gen_config_regular, return_dict_in_generate=True)
+        generate_outputs = model.generate(**inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True)
 
         # Compare log_probs for each request, matching by prompt_ids
         num_input_tokens = inputs.input_ids.shape[1]
