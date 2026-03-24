@@ -238,7 +238,7 @@ class IsaacImageProcessor(TorchvisionBackend):
     max_num_patches: int | None = 256
     min_num_patches: int | None = None
     pixel_shuffle_scale: int | None = 1
-    do_pad = False
+    do_pad = True
     do_rescale = True
     do_normalize = True
     image_mean = list(VISION_MEAN)
@@ -267,6 +267,40 @@ class IsaacImageProcessor(TorchvisionBackend):
     ) -> torch.Tensor:
         return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
+    def pad(
+        self,
+        vision_patches: list[list[torch.Tensor]],
+        vision_token_grids: list[list[torch.Tensor]],
+    ) -> dict[str, torch.Tensor]:
+        batch_size = len(vision_patches)
+        first_patch = next(patches for sample_patches in vision_patches for patches in sample_patches)
+        max_images = max(len(sample_patches) for sample_patches in vision_patches)
+        max_patches = max(patches.shape[0] for sample_patches in vision_patches for patches in sample_patches)
+        patch_dim = first_patch.shape[-1]
+        patch_dtype = first_patch.dtype
+        patch_device = first_patch.device
+
+        tensors = {
+            "vision_patches": torch.zeros(
+                (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
+            ),
+            "vision_patch_attention_mask": torch.zeros(
+                (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
+            ),
+            "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
+        }
+
+        for batch_idx, (sample_patches, sample_token_grids) in enumerate(
+            zip(vision_patches, vision_token_grids, strict=True)
+        ):
+            for image_idx, (patches, token_grid) in enumerate(zip(sample_patches, sample_token_grids, strict=True)):
+                patch_count = int(patches.shape[0])
+                tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
+                tensors["vision_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
+                tensors["vision_token_grids"][batch_idx, image_idx] = token_grid
+
+        return tensors
+
     def _preprocess(
         self,
         images: list[list[torch.Tensor]],
@@ -277,6 +311,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         do_normalize: bool | None,
         image_mean: float | Sequence[float] | None,
         image_std: float | Sequence[float] | None,
+        do_pad: bool | None = None,
         disable_grouping: bool | None = None,
         return_tensors: str | TensorType | None = None,
         patch_size: int | None = None,
@@ -358,40 +393,13 @@ class IsaacImageProcessor(TorchvisionBackend):
             for i, key in enumerate(keys)
         }
 
-        first_patch = next(
-            patches for sample_patches in nested_outputs["vision_patches"] for patches in sample_patches
+        if not do_pad:
+            raise ValueError("IsaacImageProcessor doesn't support `do_pad=False` mode.")
+
+        tensors = self.pad(
+            vision_patches=nested_outputs["vision_patches"],
+            vision_token_grids=nested_outputs["vision_token_grids"],
         )
-        max_images = max(len(sample_patches) for sample_patches in nested_outputs["vision_patches"])
-        patch_dim = first_patch.shape[-1]
-        patch_dtype = first_patch.dtype
-        patch_device = first_patch.device
-        max_patches = max(
-            patches.shape[0] for sample_patches in nested_outputs["vision_patches"] for patches in sample_patches
-        )
-
-        tensors = {
-            "vision_patches": torch.zeros(
-                (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
-            ),
-            "vision_patch_attention_mask": torch.zeros(
-                (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
-            ),
-            "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
-        }
-
-        for batch_idx, sample_patches in enumerate(nested_outputs["vision_patches"]):
-            sample_image_count = len(sample_patches)
-            if sample_image_count == 0:
-                continue
-
-            for image_idx, patches in enumerate(sample_patches):
-                patch_count = int(patches.shape[0])
-
-                tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
-                tensors["vision_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
-                tensors["vision_token_grids"][batch_idx, image_idx] = nested_outputs["vision_token_grids"][batch_idx][
-                    image_idx
-                ]
 
         return BatchFeature(data=tensors, tensor_type=return_tensors)
 
