@@ -1,0 +1,1500 @@
+[
+  {
+    "bases": [
+      "deepseek_v3",
+      "qwen3"
+    ],
+    "model": "dots1",
+    "modular_file": "src/transformers/models/dots1/modular_dots1.py"
+  },
+  {
+    "bases": [
+      "clip"
+    ],
+    "model": "metaclip_2",
+    "modular_file": "src/transformers/models/metaclip_2/modular_metaclip_2.py"
+  },
+  {
+    "bases": [
+      "ernie4_5_moe",
+      "glm4v",
+      "mixtral",
+      "qwen2_5_vl",
+      "qwen2_vl"
+    ],
+    "model": "ernie4_5_vl_moe",
+    "modular_file": "src/transformers/models/ernie4_5_vl_moe/modular_ernie4_5_vl_moe.py"
+  },
+  {
+    "bases": [
+      "glm4_moe",
+      "llama"
+    ],
+    "model": "solar_open",
+    "modular_file": "src/transformers/models/solar_open/modular_solar_open.py"
+  },
+  {
+    "bases": [
+      "sam2",
+      "sam2_video"
+    ],
+    "model": "edgetam_video",
+    "modular_file": "src/transformers/models/edgetam_video/modular_edgetam_video.py"
+  },
+  {
+    "bases": [
+      "clip",
+      "llama",
+      "qwen2_vl"
+    ],
+    "model": "mlcd",
+    "modular_file": "src/transformers/models/mlcd/modular_mlcd.py"
+  },
+  {
+    "bases": [
+      "gemma2",
+      "olmo2"
+    ],
+    "model": "olmo3",
+    "modular_file": "src/transformers/models/olmo3/modular_olmo3.py"
+  },
+  {
+    "bases": [
+      "bart",
+      "opt"
+    ],
+    "model": "biogpt",
+    "modular_file": "src/transformers/models/biogpt/modular_biogpt.py"
+  },
+  {
+    "bases": [
+      "mistral"
+    ],
+    "model": "ministral3",
+    "modular_file": "src/transformers/models/ministral3/modular_ministral3.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "cohere",
+    "modular_file": "src/transformers/models/cohere/modular_cohere.py"
+  },
+  {
+    "bases": [],
+    "model": "cohere2_vision",
+    "modular_file": "src/transformers/models/cohere2_vision/modular_cohere2_vision.py"
+  },
+  {
+    "bases": [
+      "mistral"
+    ],
+    "model": "starcoder2",
+    "modular_file": "src/transformers/models/starcoder2/modular_starcoder2.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral",
+      "qwen2"
+    ],
+    "model": "gpt_oss",
+    "modular_file": "src/transformers/models/gpt_oss/modular_gpt_oss.py"
+  },
+  {
+    "bases": [
+      "gemma",
+      "llama",
+      "mixtral",
+      "qwen2_moe"
+    ],
+    "model": "olmoe",
+    "modular_file": "src/transformers/models/olmoe/modular_olmoe.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "gemma",
+    "modular_file": "src/transformers/models/gemma/modular_gemma.py"
+  },
+  {
+    "bases": [
+      "mistral",
+      "qwen2"
+    ],
+    "model": "ministral",
+    "modular_file": "src/transformers/models/ministral/modular_ministral.py"
+  },
+  {
+    "bases": [
+      "clip",
+      "llama",
+      "siglip"
+    ],
+    "model": "aimv2",
+    "modular_file": "src/transformers/models/aimv2/modular_aimv2.py"
+  },
+  {
+    "bases": [
+      "mistral3",
+      "pixtral"
+    ],
+    "model": "lighton_ocr",
+    "modular_file": "src/transformers/models/lighton_ocr/modular_lighton_ocr.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "olmo"
+    ],
+    "model": "olmo2",
+    "modular_file": "src/transformers/models/olmo2/modular_olmo2.py"
+  },
+  {
+    "bases": [
+      "chameleon",
+      "llama",
+      "siglip"
+    ],
+    "model": "emu3",
+    "modular_file": "src/transformers/models/emu3/modular_emu3.py"
+  },
+  {
+    "bases": [
+      "llava",
+      "sam"
+    ],
+    "model": "got_ocr2",
+    "modular_file": "src/transformers/models/got_ocr2/modular_got_ocr2.py"
+  },
+  {
+    "bases": [
+      "gemma",
+      "llama",
+      "mistral"
+    ],
+    "model": "diffllama",
+    "modular_file": "src/transformers/models/diffllama/modular_diffllama.py"
+  },
+  {
+    "bases": [
+      "bamba",
+      "gemma2",
+      "gemma3",
+      "llama",
+      "mixtral",
+      "qwen2_moe",
+      "qwen3_moe"
+    ],
+    "model": "qwen3_next",
+    "modular_file": "src/transformers/models/qwen3_next/modular_qwen3_next.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "nemotron"
+    ],
+    "model": "arcee",
+    "modular_file": "src/transformers/models/arcee/modular_arcee.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "gpt_neox",
+    "modular_file": "src/transformers/models/gpt_neox/modular_gpt_neox.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "wavlm",
+    "modular_file": "src/transformers/models/wavlm/modular_wavlm.py"
+  },
+  {
+    "bases": [
+      "gemma2",
+      "llama",
+      "olmo2"
+    ],
+    "model": "exaone4",
+    "modular_file": "src/transformers/models/exaone4/modular_exaone4.py"
+  },
+  {
+    "bases": [
+      "esm",
+      "llama"
+    ],
+    "model": "evolla",
+    "modular_file": "src/transformers/models/evolla/modular_evolla.py"
+  },
+  {
+    "bases": [
+      "llava"
+    ],
+    "model": "perception_lm",
+    "modular_file": "src/transformers/models/perception_lm/modular_perception_lm.py"
+  },
+  {
+    "bases": [
+      "sam2"
+    ],
+    "model": "edgetam",
+    "modular_file": "src/transformers/models/edgetam/modular_edgetam.py"
+  },
+  {
+    "bases": [
+      "fastspeech2_conformer",
+      "llama"
+    ],
+    "model": "parakeet",
+    "modular_file": "src/transformers/models/parakeet/modular_parakeet.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "granite",
+    "modular_file": "src/transformers/models/granite/modular_granite.py"
+  },
+  {
+    "bases": [
+      "gemma"
+    ],
+    "model": "gemma2",
+    "modular_file": "src/transformers/models/gemma2/modular_gemma2.py"
+  },
+  {
+    "bases": [
+      "mistral"
+    ],
+    "model": "mixtral",
+    "modular_file": "src/transformers/models/mixtral/modular_mixtral.py"
+  },
+  {
+    "bases": [
+      "deformable_detr",
+      "detr"
+    ],
+    "model": "conditional_detr",
+    "modular_file": "src/transformers/models/conditional_detr/modular_conditional_detr.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "phi4_multimodal"
+    ],
+    "model": "timesfm",
+    "modular_file": "src/transformers/models/timesfm/modular_timesfm.py"
+  },
+  {
+    "bases": [
+      "flex_olmo",
+      "glm4_moe",
+      "mixtral"
+    ],
+    "model": "minimax_m2",
+    "modular_file": "src/transformers/models/minimax_m2/modular_minimax_m2.py"
+  },
+  {
+    "bases": [
+      "glm4v"
+    ],
+    "model": "glm46v",
+    "modular_file": "src/transformers/models/glm46v/modular_glm46v.py"
+  },
+  {
+    "bases": [
+      "deepseek_vl",
+      "idefics",
+      "sam"
+    ],
+    "model": "deepseek_vl_hybrid",
+    "modular_file": "src/transformers/models/deepseek_vl_hybrid/modular_deepseek_vl_hybrid.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "parakeet",
+      "t5"
+    ],
+    "model": "lasr",
+    "modular_file": "src/transformers/models/lasr/modular_lasr.py"
+  },
+  {
+    "bases": [
+      "deepseek_v3"
+    ],
+    "model": "longcat_flash",
+    "modular_file": "src/transformers/models/longcat_flash/modular_longcat_flash.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "olmo",
+    "modular_file": "src/transformers/models/olmo/modular_olmo.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mimi"
+    ],
+    "model": "vibevoice_acoustic_tokenizer",
+    "modular_file": "src/transformers/models/vibevoice_acoustic_tokenizer/modular_vibevoice_acoustic_tokenizer.py"
+  },
+  {
+    "bases": [
+      "mistral",
+      "phi"
+    ],
+    "model": "phi3",
+    "modular_file": "src/transformers/models/phi3/modular_phi3.py"
+  },
+  {
+    "bases": [
+      "qwen2_vl",
+      "siglip"
+    ],
+    "model": "video_llama_3",
+    "modular_file": "src/transformers/models/video_llama_3/modular_video_llama_3.py"
+  },
+  {
+    "bases": [
+      "gemma2",
+      "paligemma",
+      "siglip"
+    ],
+    "model": "gemma3",
+    "modular_file": "src/transformers/models/gemma3/modular_gemma3.py"
+  },
+  {
+    "bases": [
+      "colpali"
+    ],
+    "model": "colqwen2",
+    "modular_file": "src/transformers/models/colqwen2/modular_colqwen2.py"
+  },
+  {
+    "bases": [
+      "dinov2",
+      "mask2former",
+      "siglip",
+      "vit"
+    ],
+    "model": "eomt",
+    "modular_file": "src/transformers/models/eomt/modular_eomt.py"
+  },
+  {
+    "bases": [
+      "glm",
+      "phi3"
+    ],
+    "model": "glm4",
+    "modular_file": "src/transformers/models/glm4/modular_glm4.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "moonshine",
+      "wav2vec2"
+    ],
+    "model": "moonshine_streaming",
+    "modular_file": "src/transformers/models/moonshine_streaming/modular_moonshine_streaming.py"
+  },
+  {
+    "bases": [
+      "gemma3",
+      "siglip",
+      "t5gemma"
+    ],
+    "model": "t5gemma2",
+    "modular_file": "src/transformers/models/t5gemma2/modular_t5gemma2.py"
+  },
+  {
+    "bases": [
+      "dac",
+      "pe_audio_video"
+    ],
+    "model": "pe_audio",
+    "modular_file": "src/transformers/models/pe_audio/modular_pe_audio.py"
+  },
+  {
+    "bases": [
+      "chameleon",
+      "glm4v",
+      "glm4v_moe",
+      "qwen2_vl",
+      "siglip"
+    ],
+    "model": "glm_image",
+    "modular_file": "src/transformers/models/glm_image/modular_glm_image.py"
+  },
+  {
+    "bases": [
+      "hunyuan_v1_dense",
+      "llama",
+      "mixtral"
+    ],
+    "model": "hunyuan_v1_moe",
+    "modular_file": "src/transformers/models/hunyuan_v1_moe/modular_hunyuan_v1_moe.py"
+  },
+  {
+    "bases": [
+      "conditional_detr",
+      "deformable_detr",
+      "detr"
+    ],
+    "model": "rt_detr",
+    "modular_file": "src/transformers/models/rt_detr/modular_rt_detr.py"
+  },
+  {
+    "bases": [
+      "resnet",
+      "rt_detr"
+    ],
+    "model": "pp_doclayout_v3",
+    "modular_file": "src/transformers/models/pp_doclayout_v3/modular_pp_doclayout_v3.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mamba2",
+      "zamba"
+    ],
+    "model": "zamba2",
+    "modular_file": "src/transformers/models/zamba2/modular_zamba2.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral"
+    ],
+    "model": "jetmoe",
+    "modular_file": "src/transformers/models/jetmoe/modular_jetmoe.py"
+  },
+  {
+    "bases": [
+      "gemma2",
+      "llama",
+      "mistral"
+    ],
+    "model": "qwen2",
+    "modular_file": "src/transformers/models/qwen2/modular_qwen2.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "hubert",
+    "modular_file": "src/transformers/models/hubert/modular_hubert.py"
+  },
+  {
+    "bases": [
+      "sam"
+    ],
+    "model": "sam_hq",
+    "modular_file": "src/transformers/models/sam_hq/modular_sam_hq.py"
+  },
+  {
+    "bases": [
+      "granite",
+      "jetmoe",
+      "llama",
+      "mixtral"
+    ],
+    "model": "granitemoe",
+    "modular_file": "src/transformers/models/granitemoe/modular_granitemoe.py"
+  },
+  {
+    "bases": [
+      "gemma",
+      "granite",
+      "llama"
+    ],
+    "model": "helium",
+    "modular_file": "src/transformers/models/helium/modular_helium.py"
+  },
+  {
+    "bases": [
+      "gemma2"
+    ],
+    "model": "t5gemma",
+    "modular_file": "src/transformers/models/t5gemma/modular_t5gemma.py"
+  },
+  {
+    "bases": [
+      "deepseek_v3",
+      "exaone4",
+      "olmoe",
+      "qwen2_moe"
+    ],
+    "model": "exaone_moe",
+    "modular_file": "src/transformers/models/exaone_moe/modular_exaone_moe.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "sew",
+    "modular_file": "src/transformers/models/sew/modular_sew.py"
+  },
+  {
+    "bases": [
+    ],
+    "model": "llava_next_video",
+    "modular_file": "src/transformers/models/llava_next_video/modular_llava_next_video.py"
+  },
+  {
+    "bases": [
+      "mamba"
+    ],
+    "model": "falcon_mamba",
+    "modular_file": "src/transformers/models/falcon_mamba/modular_falcon_mamba.py"
+  },
+  {
+    "bases": [],
+    "model": "mask2former",
+    "modular_file": "src/transformers/models/mask2former/modular_mask2former.py"
+  },
+  {
+    "bases": [],
+    "model": "grounding_dino",
+    "modular_file": "src/transformers/models/grounding_dino/modular_grounding_dino.py"
+  },
+  {
+    "bases": [
+      "bamba",
+      "gemma2",
+      "llama"
+    ],
+    "model": "lfm2",
+    "modular_file": "src/transformers/models/lfm2/modular_lfm2.py"
+  },
+  {
+    "bases": [
+      "gemma",
+      "llama",
+      "qwen2"
+    ],
+    "model": "qwen3",
+    "modular_file": "src/transformers/models/qwen3/modular_qwen3.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "data2vec",
+    "modular_file": "src/transformers/models/data2vec/modular_data2vec_audio.py"
+  },
+  {
+    "bases": [
+      "roberta"
+    ],
+    "model": "data2vec",
+    "modular_file": "src/transformers/models/data2vec/modular_data2vec_text.py"
+  },
+  {
+    "bases": [
+      "mixtral",
+      "olmo2",
+      "olmoe"
+    ],
+    "model": "flex_olmo",
+    "modular_file": "src/transformers/models/flex_olmo/modular_flex_olmo.py"
+  },
+  {
+    "bases": [
+      "dinov3_vit",
+      "eomt"
+    ],
+    "model": "eomt_dinov3",
+    "modular_file": "src/transformers/models/eomt_dinov3/modular_eomt_dinov3.py"
+  },
+  {
+    "bases": [
+      "cohere",
+      "gemma2"
+    ],
+    "model": "cohere2",
+    "modular_file": "src/transformers/models/cohere2/modular_cohere2.py"
+  },
+  {
+    "bases": [
+      "deepseek_v3",
+      "llama",
+      "qwen3"
+    ],
+    "model": "youtu",
+    "modular_file": "src/transformers/models/youtu/modular_youtu.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "nemotron"
+    ],
+    "model": "apertus",
+    "modular_file": "src/transformers/models/apertus/modular_apertus.py"
+  },
+  {
+    "bases": [],
+    "model": "dinov3_vit",
+    "modular_file": "src/transformers/models/dinov3_vit/modular_dinov3_vit.py"
+  },
+  {
+    "bases": [
+      "qwen3"
+    ],
+    "model": "pe_audio_video",
+    "modular_file": "src/transformers/models/pe_audio_video/modular_pe_audio_video.py"
+  },
+  {
+    "bases": [
+      "bamba",
+      "gemma2",
+      "granitemoeshared"
+    ],
+    "model": "granitemoehybrid",
+    "modular_file": "src/transformers/models/granitemoehybrid/modular_granitemoehybrid.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "unispeech_sat",
+    "modular_file": "src/transformers/models/unispeech_sat/modular_unispeech_sat.py"
+  },
+  {
+    "bases": [
+      "gemma2",
+      "mixtral"
+    ],
+    "model": "minimax",
+    "modular_file": "src/transformers/models/minimax/modular_minimax.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mistral",
+      "mixtral"
+    ],
+    "model": "jamba",
+    "modular_file": "src/transformers/models/jamba/modular_jamba.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral"
+    ],
+    "model": "phimoe",
+    "modular_file": "src/transformers/models/phimoe/modular_phimoe.py"
+  },
+  {
+    "bases": [
+      "roberta"
+    ],
+    "model": "xlm_roberta",
+    "modular_file": "src/transformers/models/xlm_roberta/modular_xlm_roberta.py"
+  },
+  {
+    "bases": [
+      "bart",
+      "time_series_transformer"
+    ],
+    "model": "informer",
+    "modular_file": "src/transformers/models/informer/modular_informer.py"
+  },
+  {
+    "bases": [
+      "align",
+      "gemma3"
+    ],
+    "model": "modernbert",
+    "modular_file": "src/transformers/models/modernbert/modular_modernbert.py"
+  },
+  {
+    "bases": [
+      "beit"
+    ],
+    "model": "dpt",
+    "modular_file": "src/transformers/models/dpt/modular_dpt.py"
+  },
+  {
+    "bases": [
+      "qwen2_audio"
+    ],
+    "model": "voxtral",
+    "modular_file": "src/transformers/models/voxtral/modular_voxtral.py"
+  },
+  {
+    "bases": [
+      "glm",
+      "llama",
+      "whisper"
+    ],
+    "model": "moonshine",
+    "modular_file": "src/transformers/models/moonshine/modular_moonshine.py"
+  },
+  {
+    "bases": [],
+    "model": "colpali",
+    "modular_file": "src/transformers/models/colpali/modular_colpali.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "qwen2_vl"
+    ],
+    "model": "qwen2_5_vl",
+    "modular_file": "src/transformers/models/qwen2_5_vl/modular_qwen2_5_vl.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral"
+    ],
+    "model": "doge",
+    "modular_file": "src/transformers/models/doge/modular_doge.py"
+  },
+  {
+    "bases": [
+      "llava"
+    ],
+    "model": "lfm2_vl",
+    "modular_file": "src/transformers/models/lfm2_vl/modular_lfm2_vl.py"
+  },
+  {
+    "bases": [
+      "idefics",
+      "janus"
+    ],
+    "model": "deepseek_vl",
+    "modular_file": "src/transformers/models/deepseek_vl/modular_deepseek_vl.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "qwen2_moe"
+    ],
+    "model": "deepseek_v2",
+    "modular_file": "src/transformers/models/deepseek_v2/modular_deepseek_v2.py"
+  },
+  {
+    "bases": [
+      "blip",
+      "blip_2",
+      "chameleon",
+      "idefics",
+      "llama",
+      "siglip"
+    ],
+    "model": "janus",
+    "modular_file": "src/transformers/models/janus/modular_janus.py"
+  },
+  {
+    "bases": [
+      "t5"
+    ],
+    "model": "switch_transformers",
+    "modular_file": "src/transformers/models/switch_transformers/modular_switch_transformers.py"
+  },
+  {
+    "bases": [
+      "roberta"
+    ],
+    "model": "camembert",
+    "modular_file": "src/transformers/models/camembert/modular_camembert.py"
+  },
+  {
+    "bases": [
+      "gemma2",
+      "gemma3",
+      "paligemma",
+      "timm_wrapper"
+    ],
+    "model": "gemma3n",
+    "modular_file": "src/transformers/models/gemma3n/modular_gemma3n.py"
+  },
+  {
+    "bases": [
+      "glm4v"
+    ],
+    "model": "glm_ocr",
+    "modular_file": "src/transformers/models/glm_ocr/modular_glm_ocr.py"
+  },
+  {
+    "bases": [
+      "detr"
+    ],
+    "model": "deformable_detr",
+    "modular_file": "src/transformers/models/deformable_detr/modular_deformable_detr.py"
+  },
+  {
+    "bases": [
+      "clip",
+      "gemma2",
+      "llama",
+      "llama4",
+      "qwen3"
+    ],
+    "model": "nanochat",
+    "modular_file": "src/transformers/models/nanochat/modular_nanochat.py"
+  },
+  {
+    "bases": [
+      "modernbert"
+    ],
+    "model": "modernbert_decoder",
+    "modular_file": "src/transformers/models/modernbert_decoder/modular_modernbert_decoder.py"
+  },
+  {
+    "bases": [
+      "rt_detr",
+      "rt_detr_v2"
+    ],
+    "model": "d_fine",
+    "modular_file": "src/transformers/models/d_fine/modular_d_fine.py"
+  },
+  {
+    "bases": [],
+    "model": "segformer",
+    "modular_file": "src/transformers/models/segformer/modular_segformer.py"
+  },
+  {
+    "bases": [
+      "qwen3_5",
+      "qwen3_next",
+      "qwen3_vl",
+      "qwen3_vl_moe"
+    ],
+    "model": "qwen3_5_moe",
+    "modular_file": "src/transformers/models/qwen3_5_moe/modular_qwen3_5_moe.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral"
+    ],
+    "model": "dbrx",
+    "modular_file": "src/transformers/models/dbrx/modular_dbrx.py"
+  },
+  {
+    "bases": [
+      "deepseek_v3",
+      "glm4_moe"
+    ],
+    "model": "glm4_moe_lite",
+    "modular_file": "src/transformers/models/glm4_moe_lite/modular_glm4_moe_lite.py"
+  },
+  {
+    "bases": [
+      "dinov2",
+      "vit"
+    ],
+    "model": "pixio",
+    "modular_file": "src/transformers/models/pixio/modular_pixio.py"
+  },
+  {
+    "bases": [
+      "llava",
+      "mistral"
+    ],
+    "model": "mistral3",
+    "modular_file": "src/transformers/models/mistral3/modular_mistral3.py"
+  },
+  {
+    "bases": [
+      "bart",
+      "bigbird_pegasus",
+      "mbart"
+    ],
+    "model": "plbart",
+    "modular_file": "src/transformers/models/plbart/modular_plbart.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral",
+      "qwen2_moe"
+    ],
+    "model": "deepseek_v3",
+    "modular_file": "src/transformers/models/deepseek_v3/modular_deepseek_v3.py"
+  },
+  {
+    "bases": [
+      "aimv2",
+      "llama",
+      "llava",
+      "llava_next",
+      "siglip"
+    ],
+    "model": "ovis2",
+    "modular_file": "src/transformers/models/ovis2/modular_ovis2.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "wav2vec2_conformer",
+    "modular_file": "src/transformers/models/wav2vec2_conformer/modular_wav2vec2_conformer.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "llava",
+      "llava_next"
+    ],
+    "model": "aria",
+    "modular_file": "src/transformers/models/aria/modular_aria.py"
+  },
+  {
+    "bases": [],
+    "model": "vipllava",
+    "modular_file": "src/transformers/models/vipllava/modular_vipllava.py"
+  },
+  {
+    "bases": [
+      "ernie4_5",
+      "llama",
+      "mixtral",
+      "qwen3_moe"
+    ],
+    "model": "ernie4_5_moe",
+    "modular_file": "src/transformers/models/ernie4_5_moe/modular_ernie4_5_moe.py"
+  },
+  {
+    "bases": [
+      "vit"
+    ],
+    "model": "ijepa",
+    "modular_file": "src/transformers/models/ijepa/modular_ijepa.py"
+  },
+  {
+    "bases": [
+      "deepseek_v3",
+      "glm4_moe",
+      "glm4_moe_lite"
+    ],
+    "model": "glm_moe_dsa",
+    "modular_file": "src/transformers/models/glm_moe_dsa/modular_glm_moe_dsa.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "csm",
+    "modular_file": "src/transformers/models/csm/modular_csm.py"
+  },
+  {
+    "bases": [
+      "cohere2",
+      "llama",
+      "mllama"
+    ],
+    "model": "blt",
+    "modular_file": "src/transformers/models/blt/modular_blt.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "hunyuan_v1_dense",
+    "modular_file": "src/transformers/models/hunyuan_v1_dense/modular_hunyuan_v1_dense.py"
+  },
+  {
+    "bases": [
+      "superglue"
+    ],
+    "model": "efficientloftr",
+    "modular_file": "src/transformers/models/efficientloftr/modular_efficientloftr.py"
+  },
+  {
+    "bases": [
+      "idefics3"
+    ],
+    "model": "smolvlm",
+    "modular_file": "src/transformers/models/smolvlm/modular_smolvlm.py"
+  },
+  {
+    "bases": [
+      "wav2vec2"
+    ],
+    "model": "unispeech",
+    "modular_file": "src/transformers/models/unispeech/modular_unispeech.py"
+  },
+  {
+    "bases": [
+      "bert",
+      "roberta"
+    ],
+    "model": "xlm_roberta_xl",
+    "modular_file": "src/transformers/models/xlm_roberta_xl/modular_xlm_roberta_xl.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "seed_oss",
+    "modular_file": "src/transformers/models/seed_oss/modular_seed_oss.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "phi3"
+    ],
+    "model": "dia",
+    "modular_file": "src/transformers/models/dia/modular_dia.py"
+  },
+  {
+    "bases": [
+      "layoutlmv2"
+    ],
+    "model": "layoutxlm",
+    "modular_file": "src/transformers/models/layoutxlm/modular_layoutxlm.py"
+  },
+  {
+    "bases": [],
+    "model": "yolos",
+    "modular_file": "src/transformers/models/yolos/modular_yolos.py"
+  },
+  {
+    "bases": [
+      "gpt_oss",
+      "llama",
+      "qwen2_moe"
+    ],
+    "model": "afmoe",
+    "modular_file": "src/transformers/models/afmoe/modular_afmoe.py"
+  },
+  {
+    "bases": [],
+    "model": "bamba",
+    "modular_file": "src/transformers/models/bamba/modular_bamba.py"
+  },
+  {
+    "bases": [],
+    "model": "siglip2",
+    "modular_file": "src/transformers/models/siglip2/modular_siglip2.py"
+  },
+  {
+    "bases": [
+      "bert"
+    ],
+    "model": "roberta",
+    "modular_file": "src/transformers/models/roberta/modular_roberta.py"
+  },
+  {
+    "bases": [
+      "depth_anything"
+    ],
+    "model": "prompt_depth_anything",
+    "modular_file": "src/transformers/models/prompt_depth_anything/modular_prompt_depth_anything.py"
+  },
+  {
+    "bases": [
+      "pe_audio_video"
+    ],
+    "model": "pe_video",
+    "modular_file": "src/transformers/models/pe_video/modular_pe_video.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "nemotron"
+    ],
+    "model": "jais2",
+    "modular_file": "src/transformers/models/jais2/modular_jais2.py"
+  },
+  {
+    "bases": [],
+    "model": "aya_vision",
+    "modular_file": "src/transformers/models/aya_vision/modular_aya_vision.py"
+  },
+  {
+    "bases": [
+      "gemma2"
+    ],
+    "model": "vaultgemma",
+    "modular_file": "src/transformers/models/vaultgemma/modular_vaultgemma.py"
+  },
+  {
+    "bases": [
+      "deepseek_v3",
+      "glm4",
+      "glm4_moe",
+      "glm4v",
+      "gpt_neox",
+      "qwen3_vl_moe"
+    ],
+    "model": "glm4v_moe",
+    "modular_file": "src/transformers/models/glm4v_moe/modular_glm4v_moe.py"
+  },
+  {
+    "bases": [
+      "clip",
+      "cohere",
+      "llama",
+      "superglue",
+      "superpoint"
+    ],
+    "model": "lightglue",
+    "modular_file": "src/transformers/models/lightglue/modular_lightglue.py"
+  },
+  {
+    "bases": [
+      "qwen3_moe",
+      "qwen3_vl"
+    ],
+    "model": "qwen3_vl_moe",
+    "modular_file": "src/transformers/models/qwen3_vl_moe/modular_qwen3_vl_moe.py"
+  },
+  {
+    "bases": [
+      "sam2_video"
+    ],
+    "model": "sam3_tracker_video",
+    "modular_file": "src/transformers/models/sam3_tracker_video/modular_sam3_tracker_video.py"
+  },
+  {
+    "bases": [
+      "cohere",
+      "deepseek_v3",
+      "glm",
+      "gpt_neox"
+    ],
+    "model": "glm4_moe",
+    "modular_file": "src/transformers/models/glm4_moe/modular_glm4_moe.py"
+  },
+  {
+    "bases": [
+      "grounding_dino"
+    ],
+    "model": "mm_grounding_dino",
+    "modular_file": "src/transformers/models/mm_grounding_dino/modular_mm_grounding_dino.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "qwen2_5_vl",
+      "qwen2_audio",
+      "qwen2_vl"
+    ],
+    "model": "qwen2_5_omni",
+    "modular_file": "src/transformers/models/qwen2_5_omni/modular_qwen2_5_omni.py"
+  },
+  {
+    "bases": [
+      "sam2"
+    ],
+    "model": "sam3_tracker",
+    "modular_file": "src/transformers/models/sam3_tracker/modular_sam3_tracker.py"
+  },
+  {
+    "bases": [
+      "wav2vec2",
+      "wav2vec2_conformer"
+    ],
+    "model": "wav2vec2_bert",
+    "modular_file": "src/transformers/models/wav2vec2_bert/modular_wav2vec2_bert.py"
+  },
+  {
+    "bases": [],
+    "model": "dinov2_with_registers",
+    "modular_file": "src/transformers/models/dinov2_with_registers/modular_dinov2_with_registers.py"
+  },
+  {
+    "bases": [
+      "qwen3",
+      "qwen3_next",
+      "qwen3_vl"
+    ],
+    "model": "qwen3_5",
+    "modular_file": "src/transformers/models/qwen3_5/modular_qwen3_5.py"
+  },
+  {
+    "bases": [
+      "bert"
+    ],
+    "model": "ernie",
+    "modular_file": "src/transformers/models/ernie/modular_ernie.py"
+  },
+  {
+    "bases": [],
+    "model": "falcon_h1",
+    "modular_file": "src/transformers/models/falcon_h1/modular_falcon_h1.py"
+  },
+  {
+    "bases": [
+      "rt_detr"
+    ],
+    "model": "hgnet_v2",
+    "modular_file": "src/transformers/models/hgnet_v2/modular_hgnet_v2.py"
+  },
+  {
+    "bases": [
+      "convnext",
+      "dab_detr",
+      "deformable_detr",
+      "llama",
+      "rt_detr",
+      "vit",
+      "vitdet"
+    ],
+    "model": "lw_detr",
+    "modular_file": "src/transformers/models/lw_detr/modular_lw_detr.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "qwen2"
+    ],
+    "model": "cwm",
+    "modular_file": "src/transformers/models/cwm/modular_cwm.py"
+  },
+  {
+    "bases": [
+      "bart",
+      "beit",
+      "llama4",
+      "llava"
+    ],
+    "model": "florence2",
+    "modular_file": "src/transformers/models/florence2/modular_florence2.py"
+  },
+  {
+    "bases": [
+      "sam2"
+    ],
+    "model": "sam2_video",
+    "modular_file": "src/transformers/models/sam2_video/modular_sam2_video.py"
+  },
+  {
+    "bases": [
+      "clip",
+      "janus",
+      "llama",
+      "llava"
+    ],
+    "model": "internvl",
+    "modular_file": "src/transformers/models/internvl/modular_internvl.py"
+  },
+  {
+    "bases": [
+      "audioflamingo3",
+      "glm",
+      "llama"
+    ],
+    "model": "glmasr",
+    "modular_file": "src/transformers/models/glmasr/modular_glmasr.py"
+  },
+  {
+    "bases": [
+    ],
+    "model": "instructblipvideo",
+    "modular_file": "src/transformers/models/instructblipvideo/modular_instructblipvideo.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "phi3"
+    ],
+    "model": "glm",
+    "modular_file": "src/transformers/models/glm/modular_glm.py"
+  },
+  {
+    "bases": [
+      "granitemoe"
+    ],
+    "model": "granitemoeshared",
+    "modular_file": "src/transformers/models/granitemoeshared/modular_granitemoeshared.py"
+  },
+  {
+    "bases": [
+      "mimi",
+      "qwen2_5_omni",
+      "qwen2_moe",
+      "qwen3",
+      "qwen3_moe",
+      "qwen3_vl_moe"
+    ],
+    "model": "qwen3_omni_moe",
+    "modular_file": "src/transformers/models/qwen3_omni_moe/modular_qwen3_omni_moe.py"
+  },
+  {
+    "bases": [
+      "sam2"
+    ],
+    "model": "sam3",
+    "modular_file": "src/transformers/models/sam3/modular_sam3.py"
+  },
+  {
+    "bases": [
+      "glm4",
+      "qwen2_5_vl",
+      "qwen2_vl"
+    ],
+    "model": "glm4v",
+    "modular_file": "src/transformers/models/glm4v/modular_glm4v.py"
+  },
+  {
+    "bases": [
+      "llava"
+    ],
+    "model": "fast_vlm",
+    "modular_file": "src/transformers/models/fast_vlm/modular_fast_vlm.py"
+  },
+  {
+    "bases": [
+      "phi3",
+      "siglip"
+    ],
+    "model": "phi4_multimodal",
+    "modular_file": "src/transformers/models/phi4_multimodal/modular_phi4_multimodal.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "qwen2"
+    ],
+    "model": "smollm3",
+    "modular_file": "src/transformers/models/smollm3/modular_smollm3.py"
+  },
+  {
+    "bases": [
+      "clip",
+      "llama"
+    ],
+    "model": "phi",
+    "modular_file": "src/transformers/models/phi/modular_phi.py"
+  },
+  {
+    "bases": [
+      "maskformer",
+      "sam",
+      "vitdet"
+    ],
+    "model": "sam2",
+    "modular_file": "src/transformers/models/sam2/modular_sam2.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "persimmon",
+    "modular_file": "src/transformers/models/persimmon/modular_persimmon.py"
+  },
+  {
+    "bases": [
+      "rt_detr"
+    ],
+    "model": "rt_detr_v2",
+    "modular_file": "src/transformers/models/rt_detr_v2/modular_rt_detr_v2.py"
+  },
+  {
+    "bases": [
+      "lfm2",
+      "llama",
+      "mixtral",
+      "qwen2_moe"
+    ],
+    "model": "lfm2_moe",
+    "modular_file": "src/transformers/models/lfm2_moe/modular_lfm2_moe.py"
+  },
+  {
+    "bases": [
+      "owlvit"
+    ],
+    "model": "owlv2",
+    "modular_file": "src/transformers/models/owlv2/modular_owlv2.py"
+  },
+  {
+    "bases": [
+      "glm",
+      "llama",
+      "olmo"
+    ],
+    "model": "ernie4_5",
+    "modular_file": "src/transformers/models/ernie4_5/modular_ernie4_5.py"
+  },
+  {
+    "bases": [
+      "encodec",
+      "llama",
+      "mimi",
+      "moshi"
+    ],
+    "model": "kyutai_speech_to_text",
+    "modular_file": "src/transformers/models/kyutai_speech_to_text/modular_kyutai_speech_to_text.py"
+  },
+  {
+    "bases": [
+      "llama"
+    ],
+    "model": "mistral",
+    "modular_file": "src/transformers/models/mistral/modular_mistral.py"
+  },
+  {
+    "bases": [
+      "gemma",
+      "gemma2",
+      "llama",
+      "mixtral"
+    ],
+    "model": "qwen2_moe",
+    "modular_file": "src/transformers/models/qwen2_moe/modular_qwen2_moe.py"
+  },
+  {
+    "bases": [
+      "gemma",
+      "llama"
+    ],
+    "model": "bitnet",
+    "modular_file": "src/transformers/models/bitnet/modular_bitnet.py"
+  },
+  {
+    "bases": [
+      "ernie4_5",
+      "qwen2_5_omni",
+      "qwen2_vl",
+      "siglip",
+      "video_llama_3"
+    ],
+    "model": "paddleocr_vl",
+    "modular_file": "src/transformers/models/paddleocr_vl/modular_paddleocr_vl.py"
+  },
+  {
+    "bases": [],
+    "model": "llava_onevision",
+    "modular_file": "src/transformers/models/llava_onevision/modular_llava_onevision.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "mixtral",
+      "qwen2_moe",
+      "qwen3"
+    ],
+    "model": "qwen3_moe",
+    "modular_file": "src/transformers/models/qwen3_moe/modular_qwen3_moe.py"
+  },
+  {
+    "bases": [
+      "llama",
+      "qwen2_5_vl",
+      "qwen2_vl",
+      "qwen3"
+    ],
+    "model": "qwen3_vl",
+    "modular_file": "src/transformers/models/qwen3_vl/modular_qwen3_vl.py"
+  },
+  {
+    "bases": [
+      "qwen2_audio",
+      "voxtral",
+      "whisper"
+    ],
+    "model": "audioflamingo3",
+    "modular_file": "src/transformers/models/audioflamingo3/modular_audioflamingo3.py"
+  }
+]
