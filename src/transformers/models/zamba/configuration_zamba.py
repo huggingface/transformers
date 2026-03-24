@@ -29,8 +29,6 @@ class ZambaConfig(PreTrainedConfig):
         Dimension of the hidden representations of the inputs to the Attention layer.
     attention_head_dim (`int`, *optional*):
         Dimension of the attention head in the Transformer decoder.
-    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     n_mamba_heads (`int`, *optional*, defaults to 2):
         Number of mamba heads for each mamba layer.
     hidden_mamba_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -49,6 +47,8 @@ class ZambaConfig(PreTrainedConfig):
         Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
         `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
         `True` and kernels are not available
+    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
+        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     """
 
     model_type = "zamba"

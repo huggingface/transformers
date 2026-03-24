@@ -29,11 +29,6 @@ from ...utils import auto_docstring
 @strict
 class GraniteConfig(PreTrainedConfig):
     r"""
-        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-
     ```python
     >>> from transformers import GraniteModel, GraniteConfig
 
@@ -45,7 +40,8 @@ class GraniteConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "granite"
     keys_to_ignore_at_inference = ["past_key_values"]

@@ -32,8 +32,6 @@ class OPTConfig(PreTrainedConfig):
         Whether or not if the linear layers in the attention blocks should use the bias term.
     layer_norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
         Whether or not if the layer norms should have learnable parameters.
-    _remove_final_layer_norm (`bool`, *optional*, defaults to `False`):
-        Whether or not to remove the final layer norm.
 
     Example:
 

@@ -116,7 +116,8 @@ class PatchTSTConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "patchtst"
     attribute_map = {

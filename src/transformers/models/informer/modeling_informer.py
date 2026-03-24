@@ -1230,7 +1230,7 @@ class InformerModel(InformerPreTrainedModel):
             Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these features
             must but known at prediction time.
 
-            The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+            The `num_features` here is equal to `config.num_time_features` + `config.num_dynamic_real_features`.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
@@ -1491,7 +1491,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these features
             must but known at prediction time.
 
-            The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+            The `num_features` here is equal to `config.num_time_features` + `config.num_dynamic_real_features`.
         future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
             Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
             in `[0, 1]`:

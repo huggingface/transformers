@@ -41,17 +41,11 @@ class XLMConfig(PreTrainedConfig):
         on how to use them.
     embed_init_std (`float`, *optional*, defaults to 2048^-0.5):
         The standard deviation of the truncated_normal_initializer for initializing the embedding matrices.
-    bos_index (`int`, *optional*, defaults to 0):
-        The index of the beginning of sentence token in the vocabulary.
-    eos_index (`int`, *optional*, defaults to 1):
-        The index of the end of sentence token in the vocabulary.
-    pad_index (`int`, *optional*, defaults to 2):
-        The index of the padding token in the vocabulary.
     unk_index (`int`, *optional*, defaults to 3):
         The index of the unknown token in the vocabulary.
     mask_index (`int`, *optional*, defaults to 5):
         The index of the masking token in the vocabulary.
-    is_encoder(`bool`, *optional*, defaults to `True`):
+    is_encoder (`bool`, *optional*, defaults to `True`):
         Whether or not the initialized model should be a transformer encoder or decoder as seen in Vaswani et al.
     summary_type (`string`, *optional*, defaults to "first"):
         Argument used when doing sequence summary. Used in the sequence classification and multiple choice models.

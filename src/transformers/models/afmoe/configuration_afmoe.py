@@ -30,8 +30,6 @@ from ...utils import auto_docstring
 )
 class AfmoeConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        The base period of the RoPE embeddings.
     global_attn_every_n_layers (`int`, *optional*, defaults to 4):
         The frequency of full attention layers. Every Nth layer will use full attention, while others use sliding
         window attention.

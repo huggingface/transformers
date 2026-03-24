@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
-       Initial value to use for layer scale.
+        Initial value to use for layer scale.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
         Whether to use the SwiGLU feedforward neural network.
     apply_layernorm (`bool`, *optional*, defaults to `True`):
