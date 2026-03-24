@@ -719,8 +719,10 @@ class MambaCacheLayerMixin(ABC):
 
 
 class MambaLayer(MambaCacheLayerMixin):
-    def lazy_initialization(self, conv_states: torch.Tensor, ssm_states: torch.Tensor) -> None:
+    def lazy_initialization(self, conv_states: torch.Tensor) -> None:
         self.dtype, self.device = conv_states.dtype, conv_states.device
+        # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
+        self.conv_kernel_size = conv_states.shape[-1]
         self.conv_states = torch.tensor([], dtype=self.dtype, device=self.device)
         self.ssm_states = torch.tensor([], dtype=self.dtype, device=self.device)
         self.is_initialized = True
@@ -737,7 +739,7 @@ class MambaLayer(MambaCacheLayerMixin):
         """
         # Lazy initialization
         if not self.is_initialized:
-            self.lazy_initialization(conv_states, conv_states)
+            self.lazy_initialization(conv_states)
 
         # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
         # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
@@ -746,9 +748,13 @@ class MambaLayer(MambaCacheLayerMixin):
             self.conv_states = conv_states
             self.has_previous_state = True
         else:
-            new_conv_states = self.conv_states.roll(shifts=-1, dims=-1)
-            new_conv_states[:, :, -1:] = conv_states
-            self.conv_states = new_conv_states
+            num_new_tokens = conv_states.shape[-1]
+            if num_new_tokens >= self.conv_kernel_size:
+                self.conv_states = conv_states[..., -self.conv_kernel_size :]
+            else:
+                new_conv_states = self.conv_states.roll(shifts=-num_new_tokens, dims=-1)
+                new_conv_states[:, :, -num_new_tokens:] = conv_states
+                self.conv_states = new_conv_states
 
         return self.conv_states
 
@@ -762,12 +768,7 @@ class MambaLayer(MambaCacheLayerMixin):
         Returns:
             `torch.Tensor`: The updated ssm states.
         """
-        # Lazy initialization
-        if not self.is_initialized:
-            self.lazy_initialization(ssm_states, ssm_states)
-
         self.ssm_states = ssm_states
-
         return self.ssm_states
 
 
