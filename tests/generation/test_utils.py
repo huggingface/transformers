@@ -81,6 +81,8 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
+        MambaAndAttentionLayer,
+        MambaLayer,
         QuantoQuantizedLayer,
         StaticCache,
     )
@@ -2616,8 +2618,21 @@ class GenerationTesterMixin:
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-            torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+            self.assertEqual(type(cache1.layers[idx], cache2.layers[idx]))
+            # Mamba layer
+            if isinstance(cache1.layers[idx], MambaLayer):
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            # Mamba + Attention layer
+            elif isinstance(cache1.layers[idx], MambaAndAttentionLayer):
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            # Attention layer
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
 
 @require_torch

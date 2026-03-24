@@ -47,7 +47,6 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, GraniteMoeHybridForCausalLM, GraniteMoeHybridModel
-    from transformers.cache_utils import MambaLayer
 
 
 class GraniteMoeHybridModelTester(BambaModelTester):
@@ -105,24 +104,6 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
-
-    def _check_caches_are_equal(self, cache1: DynamicCache, cache2: DynamicCache):
-        if not isinstance(cache1, DynamicCache) or not isinstance(cache2, DynamicCache):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            # Mamba layer
-            if type(cache1.layers[idx]) is MambaLayer:
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
-                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
-            # Attention layer
-            else:
-                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     def setUp(self):
         self.model_tester = self.model_tester_class(self)

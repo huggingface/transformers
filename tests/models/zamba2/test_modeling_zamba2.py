@@ -40,7 +40,6 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, Zamba2ForCausalLM, Zamba2ForSequenceClassification, Zamba2Model
-    from transformers.cache_utils import MambaLayer
 
 
 class Zamba2ModelTester:
@@ -326,26 +325,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
                 self.assertEqual(past_key_values.layers[idx].keys.shape, attention_shape)
                 self.assertEqual(past_key_values.layers[idx].values.shape, attention_shape)
-
-    def _check_caches_are_equal(self, cache1: DynamicCache, cache2: DynamicCache):
-        if not isinstance(cache1, DynamicCache) or not isinstance(cache2, DynamicCache):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            # Mamba layer
-            if type(cache1.layers[idx]) is MambaLayer:
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
-                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
-            # Hybrid mamba + attention layer
-            else:
-                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
-                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)

@@ -188,20 +188,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             else:
                 self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
 
-    def _check_caches_are_equal(self, cache1: Lfm2HybridConvCache, cache2: Lfm2HybridConvCache):
-        """Text model uses lfm2, which has non-standard cache"""
-        if not isinstance(cache1, Lfm2HybridConvCache) or not isinstance(cache2, Lfm2HybridConvCache):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_cache[idx], cache2.conv_cache[idx])
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
