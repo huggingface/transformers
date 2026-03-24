@@ -67,15 +67,6 @@ class ColModernVBertConfig(PreTrainedConfig):
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )
         elif isinstance(self.vlm_config, dict):
-            sub_sub_configs = [self.vlm_config["text_config"], self.vlm_config["vision_config"]]
-            tie_word_embeddings = {s_s_c.pop("tie_word_embeddings") for s_s_c in sub_sub_configs}
-            tie_word_embeddings.discard(None)
-            if len(tie_word_embeddings) > 1:
-                raise ValueError(
-                    "`tie_word_embeddings` was specified in both text and vision configs but with different values."
-                )
-            if tie_word_embeddings:
-                self.vlm_config["tie_word_embeddings"] = tie_word_embeddings.pop()
             self.vlm_config = CONFIG_MAPPING[self.vlm_config["model_type"]](**self.vlm_config)
 
         if not hasattr(self.vlm_config, "vocab_size"):
