@@ -20,7 +20,8 @@ import re
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
-from ... import initialization as init, TorchvisionBackend
+from ... import TorchvisionBackend
+from ... import initialization as init
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
