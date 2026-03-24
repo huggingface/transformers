@@ -1428,14 +1428,14 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        dynamic_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        static_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
@@ -1443,7 +1443,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        static_compiled_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     @slow

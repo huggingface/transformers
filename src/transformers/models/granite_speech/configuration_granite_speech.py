@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteSpeechEncoderConfig(PreTrainedConfig):
     r"""
     feedforward_mult (`int`, *optional*, defaults to 4):
@@ -69,7 +69,7 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteSpeechConfig(PreTrainedConfig):
     r"""
     has_lora_adapter (`bool`, *optional*, defaults to `True`):

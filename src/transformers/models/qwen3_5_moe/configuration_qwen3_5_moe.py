@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5MoeTextConfig(PreTrainedConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -122,7 +122,7 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5MoeVisionConfig(PreTrainedConfig):
     r"""
     num_position_embeddings (`int`, *optional*, defaults to 2304):
@@ -151,7 +151,7 @@ class Qwen3_5MoeVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5MoeConfig(PreTrainedConfig):
     r"""
     Example:

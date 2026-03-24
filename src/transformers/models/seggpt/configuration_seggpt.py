@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="BAAI/seggpt-vit-large")
-@strict(accept_kwargs=True)
+@strict
 class SegGptConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*):
