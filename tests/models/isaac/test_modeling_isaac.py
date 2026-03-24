@@ -29,16 +29,16 @@ from tests.generation.test_utils import GenerationTesterMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_pipeline_mixin import PipelineTesterMixin
 from transformers import (
-    AutoTokenizer,
     IsaacConfig,
     IsaacForConditionalGeneration,
     IsaacModel,
     PythonBackend,
     is_torch_available,
+    Qwen2Tokenizer,
 )
 from transformers.image_utils import load_image
 from transformers.masking_utils import create_bidirectional_mask
-from transformers.models.isaac.image_processing_isaac import IsaacImageProcessor
+from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessor
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
@@ -790,8 +790,8 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint = _base_reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=BASE_MODEL_REVISION)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.checkpoint, trust_remote_code=True, use_fast=False, revision=BASE_MODEL_REVISION
+        self.tokenizer = Qwen2Tokenizer.from_pretrained(
+            self.checkpoint, trust_remote_code=False, use_fast=False, revision=BASE_MODEL_REVISION
         )
         self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
         self.hf_config.vision_config._attn_implementation = "flash_attention_2"
@@ -1108,7 +1108,7 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint = _reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = Qwen2Tokenizer.from_pretrained(
             self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
         )
         self.processor = create_isaac_processor(self.tokenizer, self.hf_config)

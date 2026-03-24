@@ -14,7 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-30.*
-*This model was added to Hugging Face Transformers in 2025.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -26,31 +25,20 @@ rendered properly in your Markdown viewer.
 
 # Isaac
 
+## Overview
+
 Isaac is Perceptron's vision-language model (VLM) that pairs a SigLIP2 vision encoder with a Qwen3 decoder-only stack. The
-architecture is designed for efficient long-context multimodal interactions, and supports interleaving images with
-text. The vision encoder has variable-resolution capability and with optional pixel shuffle to merge
-neighboring patches before they reach the decoder, which keeps the KV-cache and compute requirements manageable on long
-conversations. Text and vision tokens are unified via the [`TensorStream`](https://github.com/perceptron-ai-inc/perceptron/tree/main/src/perceptron/tensorstream) abstraction so
-that modal boundaries, spatial coordinates, and rescaling parameters are preserved throughout the model stack. For more information, refer to the [technical report](https://github.com/perceptron-ai-inc/perceptron/blob/main/papers/isaac_01.pdf).
-
-Key implementation notes:
-
-- **Packed vision attention** – `IsaacVisionEncoder` keeps track of per-image patch lengths and uses specialized attention
-  kernels with custom `AttentionMaskConverter` utilities so the decoder only applies attention to real patches while supporting
-  both FlashAttention and SDPA.
-- **TensorStream-first pipeline** – `IsaacProcessor` converts chat templates into multimodal streams where every image gets a
-  dedicated event with spatial metadata. `IsaacModel` can embed that stream directly (using `embed_stream`) and automatically
-  derive multi-dimensional RoPE coordinates, so you only need to provide the `tensor_stream` during the first decoding step.
-- **Fast image pre-processing** – `IsaacImageProcessorFast` solves for the closest resolution that fits within the requested context.
+Transformers implementation supports text-only and image-conditioned generation, including prompts with multiple interleaved
+images. Isaac uses variable-resolution image preprocessing and can optionally reduce spatial tokens with pixel shuffle to keep
+long multimodal prompts manageable. For more information, refer to the [technical report](https://github.com/perceptron-ai-inc/perceptron/blob/main/papers/isaac_01.pdf).
 
 Isaac checkpoints are distributed under Perceptron's Non-Production license; please review the license that ships with the
 weights before using them in commercial settings.
 
-## Usage example
+## Usage
 
-`IsaacProcessor` expects that every `<image>` token in the rendered prompt has a
-matching image. The processor returns both standard tokenized inputs and a `TensorStream`. You should pass the stream to the
-model (only the first generation step requires it) alongside the regular tensors.
+Isaac uses explicit image placeholders in the rendered prompt. Every occurrence of `processor.vision_token` (usually
+`<image>`) must have a matching image in the `images` argument.
 
 ```py
 import torch
@@ -68,46 +56,85 @@ model = IsaacForConditionalGeneration.from_pretrained(
 
 images = [Image.open("chart.png"), Image.open("panel.jpg")]
 messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "image": images[0]},
-            {"type": "image", "image": images[1]},
-            {"type": "text", "text": "Compare the two figures and explain what changed."},
-        ],
-    }
+    {"role": "user", "content": "Compare the two figures and explain what changed."},
+    {"role": "user", "content": f"{processor.vision_token}{processor.vision_token}"},
 ]
 
-# Render the chat template to text so we can pass text+images together.
 prompt = processor.apply_chat_template(
     messages,
     tokenize=False,
     add_generation_prompt=True,
-)
+).strip()
 
-# IsaacProcessor builds TensorStream events internally when both text and images are provided.
-batch = processor(text=prompt, images=images, return_tensors="pt")
+inputs = processor(text=prompt, images=images, return_tensors="pt")
+multimodal_keys = (
+    "input_ids",
+    "attention_mask",
+    "mm_token_type_ids",
+    "vision_patches",
+    "vision_patch_attention_mask",
+    "vision_token_grids",
+    "vision_token_offsets",
+    "vision_token_lengths",
+)
+model_inputs = {key: inputs[key].to(model.device) for key in multimodal_keys}
 
 with torch.inference_mode():
-    generated = model.generate(
-        **inputs,
-        tensor_stream=tensor_stream,
+    generated_ids = model.generate(
+        **model_inputs,
         max_new_tokens=256,
-        temperature=0.2,
+        do_sample=False,
         eos_token_id=processor.tokenizer.eos_token_id,
         pad_token_id=processor.tokenizer.eos_token_id,
     )
 
-response = processor.post_process_image_text_to_text(
-    generated,
-    skip_special_tokens=True,
-)[0]
+generated_ids = generated_ids[:, model_inputs["input_ids"].shape[1] :]
+response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
+
+`IsaacProcessor` returns standard multimodal tensors that can be passed directly to the model, including `input_ids`,
+`attention_mask`, `mm_token_type_ids`, `vision_patches`, `vision_patch_attention_mask`, `vision_token_grids`,
+`vision_token_offsets`, `vision_token_lengths`, and `vision_image_attention_mask`.
+
+Important notes:
+
+- Pass the full processor output to `generate()`. Isaac uses the multimodal tensors during prefill and handles cached
+  decoding internally.
+- Batched inputs can mix text-only and multimodal samples. For batched multimodal inputs, pass images as a nested list such
+  as `[[image_a], [image_b, image_c], []]`.
+- If truncation is enabled, the processor keeps the rightmost part of the packed multimodal sequence and updates
+  `vision_token_offsets` and `vision_token_lengths` automatically.
+
+### Post-processing grounded outputs
+
+Isaac can generate grounded points and boxes in tagged text spans. Use `post_process_generation()` to strip the tags and
+recover structured annotations.
+
+```py
+clean_text, annotations = processor.post_process_generation(response, expected="box")
+print(clean_text)
+print(annotations)
+```
+
+Set `expected="point"` to extract point annotations, or leave `expected=None` to collect both points and boxes.
+
+## IsaacVisionConfig
+
+[[autodoc]] IsaacVisionConfig
+
+## IsaacTextConfig
+
+[[autodoc]] IsaacTextConfig
 
 ## IsaacConfig
 
 [[autodoc]] IsaacConfig
+
+## IsaacTextModel
+
+[[autodoc]] IsaacTextModel
+    - forward
 
 ## IsaacModel
 
@@ -122,6 +149,10 @@ print(response)
 ## IsaacProcessor
 
 [[autodoc]] IsaacProcessor
+
+## IsaacImageProcessor
+
+[[autodoc]] IsaacImageProcessor
 
 ## IsaacImageProcessorFast
 
