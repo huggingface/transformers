@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="xlnet/xlnet-large-cased")
-@strict(accept_kwargs=True)
+@strict
 class XLNetConfig(PreTrainedConfig):
     r"""
     ff_activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):
@@ -132,7 +132,7 @@ class XLNetConfig(PreTrainedConfig):
     end_n_top: int = 5
     pad_token_id: int | None = 5
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):

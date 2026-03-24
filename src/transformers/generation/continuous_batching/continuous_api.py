@@ -110,7 +110,6 @@ class ContinuousBatchProcessor:
         """
         self.cache = cache
         self.config = config
-        self.generation_config = generation_config
         self.cb_config = continuous_batching_config
         self.input_queue = input_queue
         self.output_queue = output_queue
@@ -118,6 +117,10 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
+
+        # Generation-related attributes
+        self.do_sample = getattr(generation_config, "do_sample", True)
+        self.return_logprobs = continuous_batching_config.return_logprobs
 
         # Retrieve the size of the sliding window if there is one
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
@@ -140,20 +143,17 @@ class ContinuousBatchProcessor:
             is_flash_attn=is_flash_attention_requested(config=config),
             decode_fast_path_available=self.cache.max_blocks_per_request > 0,
         )
+        varlen_config, decode_config = self.cb_config.varlen_compile_config, self.cb_config.decode_compile_config
 
         # Compile the varlen path if config provided
-        varlen_config = self.cb_config.varlen_compile_config
+        self._compiled_varlen = None
         if varlen_config is not None:
             self._compiled_varlen = torch.compile(self._forward_process_and_sample, **varlen_config.to_dict())
-        else:
-            self._compiled_varlen = None
 
         # Compile the decode path if config provided
-        decode_config = self.cb_config.decode_compile_config
+        self._compiled_decode = None
         if decode_config is not None:
             self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
-        else:
-            self._compiled_decode = None
 
         # Padding is turned on when either cuda graphs or compile is used
         self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
@@ -164,11 +164,11 @@ class ContinuousBatchProcessor:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
             max_cached_graphs = ceil(self.max_cached_graphs / 2)
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
-                cache, config, model_device, model_dtype, max_cached_graphs
+                cache, config, model_device, model_dtype, max_cached_graphs, self.return_logprobs
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache, config, model_device, model_dtype, self.max_cached_graphs
+                cache, config, model_device, model_dtype, self.max_cached_graphs, self.return_logprobs
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
@@ -328,7 +328,7 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        requests_in_batch, new_tokens = self.inputs_and_outputs.prepare_batch_update()
+        requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         for future_state in requests_in_batch:
             state = future_state.state
@@ -348,10 +348,11 @@ class ContinuousBatchProcessor:
                     state.status = RequestStatus.DECODING
 
                 token = new_tokens[current_logits_index]
+                logprob = logprobs[current_logits_index] if logprobs is not None else None
                 current_logits_index += 1
 
                 # Update the request and stop if it is complete
-                is_finished = state.update_and_check_completion(token)
+                is_finished = state.update_and_check_completion(token, logprob)
                 # We mark the completed blocks as such
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
                 if is_finished:
@@ -425,7 +426,7 @@ class ContinuousBatchProcessor:
 
     @traced
     @torch.no_grad()
-    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList, do_sample: bool) -> None:
+    def _generation_step(self, model: nn.Module, logit_processor: LogitsProcessorList) -> None:
         """Perform a single generation step."""
 
         # Retrieve the model kwargs with or without padding
@@ -443,7 +444,7 @@ class ContinuousBatchProcessor:
         if not self.use_cuda_graph:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
-                forward_fn(model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids)
+                forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
 
         # Otherwise, we use create or replay the graph (cuda is available in this path)
         else:
@@ -458,16 +459,17 @@ class ContinuousBatchProcessor:
                 # compute_stream.wait_stream(torch.cuda.current_stream())
                 # Warmup
                 with torch.cuda.stream(compute_stream):
-                    forward_fn(
-                        model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
-                    )
+                    forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
                 # torch.cuda.current_stream().wait_stream(compute_stream)
                 # Capture
                 graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool):
-                    forward_fn(
-                        model, batch_data, logit_processor, do_sample, carry_over_ids, prev_output_ids, output_ids
-                    )
+                # Continuous batching can run multiple manager threads concurrently in one process, but PyTorch's
+                # default capture mode ("global") errors on CUDA actions from other threads. This means capture can be
+                # invalidated even when each manager uses a different device. To avoid this, we use "thread_local" mode.
+                with torch.cuda.graph(
+                    graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"
+                ):
+                    forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
                 # Store
                 self.inputs_and_outputs.set_graph(graph)
 
@@ -480,7 +482,6 @@ class ContinuousBatchProcessor:
         model: nn.Module,
         batch_data: dict,
         logit_processor: LogitsProcessorList,
-        do_sample: bool,
         carry_over_ids: torch.Tensor,
         prev_output_ids: torch.Tensor,
         output_ids: torch.Tensor,
@@ -489,9 +490,8 @@ class ContinuousBatchProcessor:
         function to be easier to trace with OpenTelemetry."""
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
         logits = self._model_forward(model, batch_data)
-        # if self.log_prob_generation:    batch_processor.output_probs.copy_(logits)  # TODO
         probs = self._process_logit(batch_data, logits, logit_processor)
-        self._sample(probs, batch_data, do_sample, output_ids)
+        self._sample(probs, batch_data["logits_indices"], output_ids)
 
     @traced(span_name="model_forward")
     def _model_forward(self, model: nn.Module, batch_data: dict) -> torch.Tensor:
@@ -516,19 +516,40 @@ class ContinuousBatchProcessor:
         return processed_logits_2d.view(batch_size, seq_len, vocab_size)
 
     @traced(span_name="sampling")
-    def _sample(self, probs: torch.Tensor, batch_data: dict, do_sample: bool, output_ids: torch.Tensor) -> None:
-        if do_sample:
-            probs = nn.functional.softmax(probs, dim=-1)
-            # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
-            next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
+    def _sample(self, probs: torch.Tensor, logits_indices: torch.Tensor, output_ids: torch.Tensor) -> None:
+        # Apply softmax if we are sampling or if we are generating log probabilities
+        if self.do_sample or self.return_logprobs:
+            probs = nn.functional.softmax(probs[0], dim=-1)  # shape [seq_len, vocab_size]
+        # Otherwise just remove the batch size dimension, which is always 1
         else:
-            next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
-            next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
-        tokens = next_tokens.size(0)  # Get seq_len dimension
-        #
-        indices = batch_data["logits_indices"][:tokens]
+            probs = probs.squeeze(0)  # shape [seq_len, vocab_size]
+
+        # Retrieve next tokens through sampling or argmax
+        if self.do_sample:
+            next_tokens = torch.multinomial(probs, num_samples=1)  # shape [seq_len, 1]
+        else:
+            next_tokens = torch.argmax(probs, dim=-1, keepdim=True)  # shape [seq_len, 1]
+
+        # Maybe retrieve log probabilities
+        if self.return_logprobs:
+            per_token_probs = probs.gather(dim=1, index=next_tokens).squeeze(-1)
+            logprobs = per_token_probs.float().log()  # shape [seq_len]
+        # And always remove the extra dimension for the gather
+        next_tokens = next_tokens.squeeze(-1)  # shape [seq_len]
+
+        # Get seq_len dimension to slice the logits indices
+        tokens = next_tokens.size(0)
+        # Shuffle the next tokens to match the order of the batch's requests
+        indices = logits_indices[:tokens]
         next_tokens = next_tokens[indices]
-        output_ids[:tokens].copy_(next_tokens)
+        # Copy the next tokens and maybe their logprobs to the static output tensor
+        output_ids[0, :tokens].copy_(next_tokens)
+        if self.return_logprobs:
+            # Shuffle the logprobs the same way as the next tokens
+            logprobs = logprobs[indices]
+            # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
+            # underlying data. It's just a trick to use the same storage for both tensors.
+            output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
 
 
 # Manager Class (User Interface)
@@ -575,8 +596,6 @@ class ContinuousBatchingManager:
         self._request_lock = threading.Lock()
 
         # Generation config related arguments
-        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
-        self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor: LogitsProcessorList = self.model._get_logits_processor(generation_config)
         num_return_sequences = getattr(generation_config, "num_return_sequences", None)
         self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
@@ -596,10 +615,6 @@ class ContinuousBatchingManager:
         self.q_padding_interval_size = self.continuous_batching_config.q_padding_interval_size
         self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
         self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
-
-        # Log probability generation is not supported yet (TODO)
-        if self.log_prob_generation:
-            raise NotImplementedError("log_prob_generation is not supported yet")
 
     @traced
     def start(self) -> None:
@@ -783,7 +798,7 @@ class ContinuousBatchingManager:
         """Perform a single generation step. This is mostly cuda graphed"""
         if self.batch_processor is None:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
-        self.batch_processor._generation_step(self.model, self.logit_processor, self.do_sample)
+        self.batch_processor._generation_step(self.model, self.logit_processor)
 
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""

@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/switch-base-8")
-@strict(accept_kwargs=True)
+@strict
 class SwitchTransformersConfig(PreTrainedConfig):
     r"""
     num_sparse_encoder_layers (`int`, *optional*, defaults to 3):
@@ -84,7 +84,7 @@ class SwitchTransformersConfig(PreTrainedConfig):
     add_router_probs: bool = False
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     bos_token_id: int | None = None
     tie_word_embeddings: bool = True
     is_decoder: bool = False

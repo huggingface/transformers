@@ -141,13 +141,13 @@ class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeVisionEncoderConfig(Qwen3VLMoeVisionConfig):
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -227,7 +227,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -308,7 +308,7 @@ class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
     code_predictor_config (`dict`, *optional*):
@@ -402,7 +402,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
     num_quantizers (`int`, *optional*, defaults to 16):
@@ -458,7 +458,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
     thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
@@ -1409,10 +1409,10 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,

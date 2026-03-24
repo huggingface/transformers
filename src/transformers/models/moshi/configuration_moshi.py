@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="kmhf/hf-moshiko")
-@strict(accept_kwargs=True)
+@strict
 class MoshiDepthConfig(PreTrainedConfig):
     r"""
     input_size (`int`, *optional*, defaults to 4096):
@@ -89,7 +89,7 @@ class MoshiDepthConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="kmhf/hf-moshiko")
-@strict(accept_kwargs=True)
+@strict
 class MoshiConfig(PreTrainedConfig):
     """
     depth_decoder_config (`PreTrainedConfig | dict`, *optional*):

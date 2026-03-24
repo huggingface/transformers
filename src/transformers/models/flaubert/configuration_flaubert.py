@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="flaubert/flaubert_base_uncased")
-@strict(accept_kwargs=True)
+@strict
 class FlaubertConfig(PreTrainedConfig):
     r"""
     pre_norm (`bool`, *optional*, defaults to `False`):
@@ -136,7 +136,7 @@ class FlaubertConfig(PreTrainedConfig):
     lang_id: int = 0
     pad_token_id: int | None = 2
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = True
 
 

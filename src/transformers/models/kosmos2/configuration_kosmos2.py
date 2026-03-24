@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2TextConfig(PreTrainedConfig):
     r"""
     activation_dropout (`float`, *optional*, defaults to 0.0):
@@ -56,12 +56,12 @@ class Kosmos2TextConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_cross_attention: bool = False
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2VisionConfig(PreTrainedConfig):
     model_type = "kosmos_2_vision_model"
     base_config_key = "vision_config"
@@ -81,7 +81,7 @@ class Kosmos2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2-patch14-224")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2Config(PreTrainedConfig):
     r"""
     latent_query_num (`int`, *optional*, defaults to 64):

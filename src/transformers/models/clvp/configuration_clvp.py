@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     use_rotary_embedding (`bool`, *optional*, defaults to `True`):
@@ -98,7 +98,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -174,7 +174,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
     summary_first_dropout: float | int = 0.1
     use_cache: bool = True
     bos_token_id: int | None = 8192
-    eos_token_id: int | None = 8193
+    eos_token_id: int | list[int] | None = 8193
     pad_token_id: int | None = None
     feature_size: int = 80
     use_attention_bias: bool = True
@@ -184,7 +184,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpConfig(PreTrainedConfig):
     r"""
     speech_config (`dict`, *optional*):

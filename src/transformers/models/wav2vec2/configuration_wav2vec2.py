@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/wav2vec2-base-960h")
-@strict(accept_kwargs=True)
+@strict
 class Wav2Vec2Config(PreTrainedConfig):
     r"""
     num_codevectors_per_group (`int`, *optional*, defaults to 320):
@@ -212,7 +212,7 @@ class Wav2Vec2Config(PreTrainedConfig):
     xvector_output_dim: int = 512
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_adapter: bool = False
     adapter_kernel_size: int = 3
     adapter_stride: int = 2

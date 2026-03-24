@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hubert-base-ls960")
-@strict(accept_kwargs=True)
+@strict
 class HubertConfig(PreTrainedConfig):
     r"""
     final_dropout (`float`, *optional*, defaults to 0.1):
@@ -159,7 +159,7 @@ class HubertConfig(PreTrainedConfig):
     classifier_proj_size: int = 256
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
 
     def __post_init__(self, **kwargs):
         self.num_feat_extract_layers = len(self.conv_dim)

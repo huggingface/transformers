@@ -42,7 +42,7 @@ from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 
 
 @auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
-@strict(accept_kwargs=True)
+@strict
 class LightOnOcrConfig(PretrainedConfig):
     r"""
     Example:

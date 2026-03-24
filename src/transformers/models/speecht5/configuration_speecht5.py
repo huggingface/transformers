@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/speecht5_asr")
-@strict(accept_kwargs=True)
+@strict
 class SpeechT5Config(PreTrainedConfig):
     r"""
     positional_dropout (`float`, *optional*, defaults to 0.1):
@@ -175,7 +175,7 @@ class SpeechT5Config(PreTrainedConfig):
     mask_feature_min_masks: int = 0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     decoder_start_token_id: int | None = 2
     num_mel_bins: int = 80
     speech_decoder_prenet_layers: int = 2
@@ -221,7 +221,7 @@ class SpeechT5Config(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/speecht5_asr")
-@strict(accept_kwargs=True)
+@strict
 class SpeechT5HifiGanConfig(PreTrainedConfig):
     r"""
     model_in_dim (`int`, *optional*, defaults to 80):

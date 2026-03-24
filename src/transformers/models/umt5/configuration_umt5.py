@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/umt5-small")
-@strict(accept_kwargs=True)
+@strict
 class UMT5Config(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -56,7 +56,7 @@ class UMT5Config(PreTrainedConfig):
     is_encoder_decoder: bool = True
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     decoder_start_token_id: int | None = 0
     classifier_dropout: float | int = 0.0
     is_decoder: bool = False

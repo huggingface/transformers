@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
-@strict(accept_kwargs=True)
+@strict
 class IdeficsVisionConfig(PreTrainedConfig):
     model_type = "idefics_vision"
     attribute_map = {"hidden_size": "embed_dim"}
@@ -45,7 +45,7 @@ class IdeficsVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
-@strict(accept_kwargs=True)
+@strict
 class IdeficsPerceiverConfig(PreTrainedConfig):
     r"""
     use_resampler (`bool`, *optional*, defaults to `False`):
@@ -73,7 +73,7 @@ class IdeficsPerceiverConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
-@strict(accept_kwargs=True)
+@strict
 class IdeficsConfig(PreTrainedConfig):
     r"""
     alpha_initializer (`str`, *optional*, defaults to `"zeros"`):
@@ -133,7 +133,7 @@ class IdeficsConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     cross_layer_interval: int = 1
     qk_layer_norms: bool = False
