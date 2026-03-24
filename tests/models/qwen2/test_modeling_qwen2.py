@@ -200,7 +200,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION.get_expectation(), text)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
         del model
         backend_empty_cache(torch_device)
