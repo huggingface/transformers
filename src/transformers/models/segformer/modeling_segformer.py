@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -235,6 +235,30 @@ class SegformerMixMLP(nn.Module):
         return hidden_states
 
 
+class SegformerDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class SegformerLayer(GradientCheckpointingLayer):
     """Transformer block with DropPath on both branches and a MixFFN instead of a plain MLP."""
 
@@ -247,7 +271,7 @@ class SegformerLayer(GradientCheckpointingLayer):
             num_attention_heads=num_attention_heads,
             sequence_reduction_ratio=sequence_reduction_ratio,
         )
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = SegformerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixMLP(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
@@ -356,8 +380,8 @@ class SegformerPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
-        # capture_initial_input=False: stage 0's input is raw pixel values, not a meaningful embedding.
-        "hidden_states": OutputRecorder(SegformerStage, capture_initial_input=False),
+        # capture_initial_hidden_state=False: stage 0's input is raw pixel values, not a meaningful embedding.
+        "hidden_states": OutputRecorder(SegformerStage, capture_initial_hidden_state=False),
         "attentions": SegformerAttention,
     }
 

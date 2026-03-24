@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...file_utils import ModelOutput
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, torch_int
@@ -434,6 +434,31 @@ class MaskFormerSwinOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->MaskFormerDropPath
+class MaskFormerDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class MaskFormerSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
@@ -442,7 +467,7 @@ class MaskFormerSwinLayer(nn.Module):
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = MaskFormerSwinAttention(config, dim, num_heads, self.window_size)
-        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = MaskFormerDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = MaskFormerSwinIntermediate(config, dim)
         self.output = MaskFormerSwinOutput(config, dim)

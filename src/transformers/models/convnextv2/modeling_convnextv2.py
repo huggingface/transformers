@@ -19,7 +19,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import DropPath
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutputWithNoAttention,
@@ -106,6 +105,31 @@ class ConvNextV2Embeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->ConvNextV2DropPath
+class ConvNextV2DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class ConvNextV2Layer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
@@ -130,7 +154,7 @@ class ConvNextV2Layer(nn.Module):
         self.act = ACT2FN[config.hidden_act]
         self.grn = ConvNextV2GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = ConvNextV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         residual = features

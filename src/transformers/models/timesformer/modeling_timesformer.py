@@ -21,7 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -249,6 +249,31 @@ class TimesformerOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->TimesformerDropPath
+class TimesformerDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
 class TimesformerLayer(GradientCheckpointingLayer):
     def __init__(self, config: TimesformerConfig, layer_index: int) -> None:
@@ -261,7 +286,7 @@ class TimesformerLayer(GradientCheckpointingLayer):
         ]  # stochastic depth decay rule
         drop_path_rate = drop_path_rates[layer_index]
 
-        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = TimesformerDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = TimeSformerAttention(config)
         self.intermediate = TimesformerIntermediate(config)
         self.output = TimesformerOutput(config)

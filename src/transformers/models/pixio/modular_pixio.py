@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_tracing
@@ -26,6 +26,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import Dinov2Backbone, Dinov2MLP
+from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import ViTAttention, ViTPatchEmbeddings, ViTPreTrainedModel
 
 
@@ -154,13 +155,17 @@ class PixioMLP(Dinov2MLP):
     pass
 
 
+class PixioDropPath(SwinDropPath):
+    pass
+
+
 class PixioLayer(GradientCheckpointingLayer):
     def __init__(self, config: PixioConfig) -> None:
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = PixioAttention(config)
-        self.drop_path = DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = PixioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PixioMLP(config)

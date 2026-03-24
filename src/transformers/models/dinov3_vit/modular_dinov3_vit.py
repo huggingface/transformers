@@ -32,7 +32,7 @@ from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotat
 
 from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -40,6 +40,7 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -303,6 +304,10 @@ class DINOv3ViTGatedMLP(LlamaMLP):
     pass
 
 
+class Dinov3ViTDropPath(SwinDropPath):
+    pass
+
+
 class DINOv3ViTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
@@ -312,7 +317,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
-        self.drop_path = DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 

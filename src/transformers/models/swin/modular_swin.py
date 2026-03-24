@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -36,6 +36,30 @@ from .configuration_swin import SwinConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class SwinDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 @dataclass
@@ -477,7 +501,7 @@ class SwinLayer(nn.Module):
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
 
@@ -665,13 +689,13 @@ class SwinPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
-        # capture_initial_input=True: prepend the embedding input (args[0] of SwinStage 0) so that
+        # capture_initial_hidden_state=True: prepend the embedding input (args[0] of SwinStage 0) so that
         # hidden_states[0] has the same shape as the patch embeddings (num_patches, embed_dim).
-        "hidden_states": OutputRecorder(SwinStage, index=0, capture_initial_input=True),
+        "hidden_states": OutputRecorder(SwinStage, index=0, capture_initial_hidden_state=True),
         # reshaped_hidden_states are collected explicitly by SwinEncoder (per stage) and the stem
         # is prepended in SwinModel.forward, so they are NOT captured via hooks here.
         # index=1: SwinAttention returns (attn_output, attn_weights); capture weights at index 1.
-        "attentions": OutputRecorder(SwinAttention, index=1, capture_initial_input=False),
+        "attentions": OutputRecorder(SwinAttention, index=1, capture_initial_hidden_state=False),
     }
 
     @torch.no_grad()

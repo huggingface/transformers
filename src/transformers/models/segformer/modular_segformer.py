@@ -36,13 +36,14 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import eager_attention_forward
 from .configuration_segformer import SegformerConfig
 
@@ -417,6 +418,10 @@ class SegformerMixMLP(nn.Module):
         return hidden_states
 
 
+class SegformerDropPath(SwinDropPath):
+    pass
+
+
 class SegformerLayer(GradientCheckpointingLayer):
     """Transformer block with DropPath on both branches and a MixFFN instead of a plain MLP."""
 
@@ -429,7 +434,7 @@ class SegformerLayer(GradientCheckpointingLayer):
             num_attention_heads=num_attention_heads,
             sequence_reduction_ratio=sequence_reduction_ratio,
         )
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = SegformerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixMLP(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
@@ -538,8 +543,8 @@ class SegformerPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
-        # capture_initial_input=False: stage 0's input is raw pixel values, not a meaningful embedding.
-        "hidden_states": OutputRecorder(SegformerStage, capture_initial_input=False),
+        # capture_initial_hidden_state=False: stage 0's input is raw pixel values, not a meaningful embedding.
+        "hidden_states": OutputRecorder(SegformerStage, capture_initial_hidden_state=False),
         "attentions": SegformerAttention,
     }
 

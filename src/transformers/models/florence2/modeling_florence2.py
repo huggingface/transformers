@@ -29,7 +29,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_layers import DropPath
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -169,6 +168,30 @@ class Florence2VisionConvEmbed(nn.Module):
         return hidden_states
 
 
+class Florence2DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -257,7 +280,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.channel_attn = Florence2VisionChannelAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             dim_in,
@@ -268,7 +291,7 @@ class Florence2VisionChannelBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape
@@ -393,7 +416,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.window_attn = Florence2VisionWindowAttention(config=config, stage_idx=stage_idx)
-        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path1 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             config.embed_dim[stage_idx],
@@ -404,7 +427,7 @@ class Florence2VisionSpatialBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(config=config, stage_idx=stage_idx)
-        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = Florence2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         batch_size, embed_dim, height, width = hidden_states.shape

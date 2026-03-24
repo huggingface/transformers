@@ -30,7 +30,6 @@ from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_layers import DropPath
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, torch_compilable_check
 from ..auto.modeling_auto import AutoModel
@@ -399,6 +398,30 @@ class MMGroundingDinoBiMultiHeadAttention(nn.Module):
         return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
 
 
+class MMGroundingDinoDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class MMGroundingDinoFusionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -410,7 +433,7 @@ class MMGroundingDinoFusionLayer(nn.Module):
         self.attn = MMGroundingDinoBiMultiHeadAttention(config)
 
         # add layer scale for training stability
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = MMGroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         init_values = 1e-4
         self.vision_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)
         self.text_param = nn.Parameter(init_values * torch.ones(config.d_model), requires_grad=True)

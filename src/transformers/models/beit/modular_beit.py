@@ -21,7 +21,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import DropPath, GradientCheckpointingLayer
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -37,6 +37,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import ViTAttention, ViTEmbeddings, ViTMLP, ViTPatchEmbeddings
 from .configuration_beit import BeitConfig
 
@@ -206,13 +207,17 @@ class BeitMLP(ViTMLP):
     pass
 
 
+class BeitDropPath(SwinDropPath):
+    pass
+
+
 class BeitLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: BeitConfig, drop_path_rate: float = 0.0):
         super().__init__()
         self.config = config
-        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = BeitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = BeitAttention(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

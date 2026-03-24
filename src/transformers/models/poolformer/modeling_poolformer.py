@@ -20,7 +20,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import DropPath
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -68,12 +67,37 @@ class PoolFormerPooling(nn.Module):
         return self.pool(hidden_states) - hidden_states
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->PoolFormerDropPath
+class PoolFormerDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class PoolFormerOutput(nn.Module):
     def __init__(self, config, dropout_prob, hidden_size, intermediate_size):
         super().__init__()
         self.conv1 = nn.Conv2d(hidden_size, intermediate_size, 1)
         self.conv2 = nn.Conv2d(intermediate_size, hidden_size, 1)
-        self.drop = DropPath(dropout_prob)
+        self.drop = PoolFormerDropPath(dropout_prob)
         if isinstance(config.hidden_act, str):
             self.act_fn = ACT2FN[config.hidden_act]
         else:
@@ -100,7 +124,7 @@ class PoolFormerLayer(nn.Module):
         self.after_norm = PoolFormerGroupNorm(num_channels)
 
         # Useful for training neural nets
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = PoolFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(

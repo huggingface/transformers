@@ -20,7 +20,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import DropPath
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -59,6 +58,31 @@ class DINOv3ConvNextLayerNorm(nn.LayerNorm):
         return features
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->Dinov3ConvnextDropPath
+class Dinov3ConvnextDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class DINOv3ConvNextLayer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
@@ -85,7 +109,7 @@ class DINOv3ConvNextLayer(nn.Module):
         self.activation_fn = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Linear(4 * channels, channels)  # can be seen as a 1x1 conv
         self.gamma = nn.Parameter(torch.full((channels,), config.layer_scale_init_value), requires_grad=True)
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ConvnextDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """

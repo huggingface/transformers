@@ -93,31 +93,6 @@ class GradientCheckpointingLayer(nn.Module):
         return super().__call__(*args, **kwargs)
 
 
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample, applied in the main path of residual blocks.
-
-    When ``drop_prob`` is 0 or the module is not in training mode, this is an identity operation.
-    The implementation follows the original paper: `Deep Networks with Stochastic Depth
-    <https://arxiv.org/abs/1603.09382>`_.
-    """
-
-    def __init__(self, drop_prob: float = 0.0) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.drop_prob == 0.0 or not self.training:
-            return hidden_states
-        keep_prob = 1 - self.drop_prob
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
-        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
-        random_tensor = torch.floor(random_tensor + keep_prob)
-        return hidden_states.div(keep_prob) * random_tensor
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"
