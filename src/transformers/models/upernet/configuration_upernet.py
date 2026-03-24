@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="openmmlab/upernet-convnext-tiny")
-@strict(accept_kwargs=True)
+@strict
 class UperNetConfig(PreTrainedConfig):
     r"""
     pool_scales (`tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):

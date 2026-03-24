@@ -19,7 +19,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/OLMoE-1B-7B-0924")
-@strict(accept_kwargs=True)
+@strict
 class OlmoeConfig(PreTrainedConfig):
     r"""
     clip_qkv (`float`, *optional*):

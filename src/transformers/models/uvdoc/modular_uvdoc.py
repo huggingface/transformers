@@ -46,7 +46,7 @@ from ..pp_ocrv5_server_det.modeling_pp_ocrv5_server_det import PPOCRV5ServerDetP
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     stage_configs (Sequence[Sequence[tuple[int, ...] | list[int]]], *optional*, defaults to `(((128, 1),), ((128, 2),),
@@ -126,7 +126,7 @@ class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class UVDocConfig(PreTrainedConfig):
     r"""
     kernel_size (`int`, *optional*, defaults to 5):

@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class GotOcr2VisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -83,7 +83,7 @@ class GotOcr2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class GotOcr2Config(PreTrainedConfig):
     r"""
     Example:

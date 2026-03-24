@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class CLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -73,7 +73,7 @@ class CLIPTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class CLIPVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -118,7 +118,7 @@ class CLIPVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="openai/clip-vit-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class CLIPConfig(PreTrainedConfig):
     r"""
     [`CLIPConfig`] is the configuration class to store the configuration of a [`CLIPModel`]. It is used to instantiate

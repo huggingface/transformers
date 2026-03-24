@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/gpt_bigcode")
-@strict(accept_kwargs=True)
+@strict
 class GPTBigCodeConfig(PreTrainedConfig):
     r"""
     multi_query (`bool`, *optional*, defaults to `True`):
