@@ -19,4 +19,4 @@ jobs:
           Circle-Token: ${{ secrets.CIRCLECI_PAT }}
         run: |
           echo $PR_NUMBER
-          python utils/circleci_trigger.py
+          python temp.py
