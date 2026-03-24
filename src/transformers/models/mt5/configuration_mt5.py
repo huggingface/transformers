@@ -29,8 +29,6 @@ class MT5Config(PreTrainedConfig):
         The maximum distance of the longer sequences for the bucket separation.
     feed_forward_proj (`str`, *optional*, defaults to `"gated-gelu"`):
         Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
-    tokenizer_class (`str`, *optional*, defaults to `"T5Tokenizer"`):
-        The tokenizer's class name.
     """
 
     model_type = "mt5"
@@ -57,7 +55,6 @@ class MT5Config(PreTrainedConfig):
     feed_forward_proj: str = "gated-gelu"
     is_encoder_decoder: bool = True
     use_cache: bool = True
-    tokenizer_class: str = "T5Tokenizer"
     tie_word_embeddings: bool = True
     bos_token_id: int | None = None
     pad_token_id: int | None = 0

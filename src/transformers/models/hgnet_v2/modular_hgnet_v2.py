@@ -41,7 +41,7 @@ from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetConvLayer
 @auto_docstring(checkpoint="ustc-community/dfine_x_coco")
 @strict
 class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
-    """
+    r"""
     stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
         Channel dimensions for the stem layers:
         - First number (3) is input image channels
@@ -49,8 +49,6 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
         - Third number (48) is output stem channels
     stem_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 1, 1, 2, 1)`):
         Stride patterns for the stem layers.
-    stage_downsample_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 2, 2, 2)`):
-        Stride patterns for each stage layer.
     stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
         Input channel dimensions for each stage of the backbone.
         This defines how many channels the input to each stage will have.
@@ -66,6 +64,8 @@ class HGNetV2Config(BackboneConfigMixin, PreTrainedConfig):
     stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
         Indicates whether to downsample the feature maps at each stage.
         If `True`, the spatial dimensions of the feature maps will be reduced.
+    stage_downsample_strides (`Sequence[int | list[int] | tuple[int, ...]]`, *optional*, defaults to `(2, 2, 2, 2)`):
+        Stride patterns for each stage layer.
     stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
         Indicates whether to use light blocks in each stage.
         Light blocks are a variant of convolutional blocks that may have fewer parameters.

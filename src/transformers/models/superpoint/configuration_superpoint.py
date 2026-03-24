@@ -25,8 +25,10 @@ class SuperPointConfig(PreTrainedConfig):
     r"""
     encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):
         The number of channels in each convolutional layer in the encoder.
-    keypoint_decoder_dim (`int`, *optional*, defaults to 65): The output dimension of the keypoint decoder.
-    descriptor_decoder_dim (`int`, *optional*, defaults to 256): The output dimension of the descriptor decoder.
+    keypoint_decoder_dim (`int`, *optional*, defaults to 65):
+        The output dimension of the keypoint decoder.
+    descriptor_decoder_dim (`int`, *optional*, defaults to 256):
+        The output dimension of the descriptor decoder.
     keypoint_threshold (`float`, *optional*, defaults to 0.005):
         The threshold to use for extracting keypoints.
     max_keypoints (`int`, *optional*, defaults to -1):

@@ -53,9 +53,6 @@ class PPLCNetV3Config(PPLCNetConfig):
     reduction (`int`, *optional*, defaults to 4):
         The reduction factor for feature channel dimensions in the squeeze-and-excitation (SE) blocks, used to
         reduce the number of model parameters and computational complexity while maintaining feature representability.
-    class_expand (`int`, *optional*, defaults to 1280):
-        The number of hidden units in the expansion layer of the classification head, used to enhance the model's
-        feature representation capability before the final classification layer.
     divisor (`int`, *optional*, defaults to 8):
         The divisor used to ensure that various model parameters (e.g., channel dimensions, kernel sizes) are
         multiples of this value, promoting efficient model implementation and resource utilization.

@@ -101,7 +101,8 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "voxtral_realtime"
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}

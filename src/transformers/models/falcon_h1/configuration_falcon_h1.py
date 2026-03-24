@@ -30,6 +30,8 @@ class FalconH1Config(PreTrainedConfig):
         logits of the last prompt token are needed for generation. For long sequences, the logits for the entire
         sequence may use a lot of memory so, setting `num_logits_to_keep=1` will reduce memory footprint
         significantly.
+    projectors_bias (`bool`, *optional*, defaults to `False`):
+        Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
     lm_head_multiplier (`float`, *optional*, defaults to 1.0):
         The multiplier for the LM head. This is used to scale the output of the LM head.
     embedding_multiplier (`float`, *optional*, defaults to 1.0):
@@ -49,8 +51,6 @@ class FalconH1Config(PreTrainedConfig):
         The multiplier for the SSM input layer. This is used to scale the output of the SSM input layer.
     ssm_out_multiplier (`float`, *optional*):
         The multiplier for the SSM output layer. This is used to scale the output of the SSM output layer.
-    projectors_bias (`bool`, *optional*, defaults to `False`):
-        Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
     """
 
     model_type = "falcon_h1"

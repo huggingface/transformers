@@ -40,7 +40,8 @@ class PeAudioEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "pe_audio_encoder"
     sub_configs = {"dac_config": AutoConfig}

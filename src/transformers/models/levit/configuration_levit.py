@@ -29,9 +29,6 @@ class LevitConfig(PreTrainedConfig):
         The padding size for the initial convolution layers of patch embedding.
     key_dim (`list[int]`, *optional*, defaults to `[16, 16, 16]`):
         The size of key in each of the encoder blocks.
-    mlp_ratios (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
-        Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
-        encoder blocks.
     attention_ratio (`list[int]`, *optional*, defaults to `[2, 2, 2]`):
         Ratio of the size of the output dimension compared to input dimension of attention layers.
 

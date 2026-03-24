@@ -31,12 +31,12 @@ class ReformerConfig(PreTrainedConfig):
         (`"lsh"`) and a LocalSelfAttention layer (`"local"`).
         For more information on LSHSelfAttention layer, see [LSH Self Attention](reformer#lsh-self-attention). For
         more information on LocalSelfAttention layer, see [Local Self Attention](reformer#local-self-attention).
-    axial_pos_embds (`bool`, *optional*, defaults to `True`):
-        Whether or not to use axial position embeddings. For more information on how axial position embeddings
-        work, see [Axial Position Encodings](reformer#axial-positional-encodings).
     axial_norm_std (`float`, *optional*, defaults to 1.0):
         The standard deviation of the normal_initializer for initializing the weight matrices of the axial
         positional encodings.
+    axial_pos_embds (`bool`, *optional*, defaults to `True`):
+        Whether or not to use axial position embeddings. For more information on how axial position embeddings
+        work, see [Axial Position Encodings](reformer#axial-positional-encodings).
     axial_pos_shape (`list[int]`, *optional*, defaults to `[64, 64]`):
         The position dims of the axial position encodings. During training, the product of the position dims has to
         be equal to the sequence length.
@@ -59,26 +59,24 @@ class ReformerConfig(PreTrainedConfig):
         Seed that can be used to make local sensitive hashing in `LSHSelfAttention` deterministic. This should only
         be set for testing purposed. For evaluation and training purposes `hash_seed` should be left as `None` to
         ensure fully random rotations in local sensitive hashing scheme.
-    local_chunk_length (`int`, *optional*, defaults to 64):
-        Length of chunk which attends to itself in `LocalSelfAttention`. Chunking reduces memory complexity from
-        sequence length x sequence length (self attention) to chunk length x chunk length x sequence length / chunk
-        length (chunked self attention).
     local_num_chunks_before (`int`, *optional*, defaults to 1):
         Number of previous neighbouring chunks to attend to in `LocalSelfAttention` layer to itself.
     local_num_chunks_after (`int`, *optional*, defaults to 0):
         Number of following neighbouring chunks to attend to in `LocalSelfAttention` layer in addition to itself.
     local_attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
         The dropout ratio for the attention probabilities in `LocalSelfAttention`.
+    local_attn_chunk_length (`int`, *optional*, defaults to 64):
+        Length of each chunk in local attention layers.
     lsh_attn_chunk_length (`int`, *optional*, defaults to 64):
         Length of chunk which attends to itself in `LSHSelfAttention`. Chunking reduces memory complexity from
         sequence length x sequence length (self attention) to chunk length x chunk length x sequence length / chunk
         length (chunked self attention).
+    lsh_attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        The dropout ratio for the attention probabilities in `LSHSelfAttention`.
     lsh_num_chunks_before (`int`, *optional*, defaults to 1):
         Number of previous neighbouring chunks to attend to in `LSHSelfAttention` layer to itself.
     lsh_num_chunks_after (`int`, *optional*, defaults to 0):
         Number of following neighbouring chunks to attend to in `LSHSelfAttention` layer to itself.
-    lsh_attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-        The dropout ratio for the attention probabilities in `LSHSelfAttention`.
     num_buckets (`int` or `list[int]`, *optional*):
         Number of buckets, the key query vectors can be "hashed into" using the locality sensitive hashing scheme.
         Each query key vector is hashed into a hash in `1, ..., num_buckets`. The number of buckets can also be
@@ -90,8 +88,6 @@ class ReformerConfig(PreTrainedConfig):
         Number of hashing rounds (e.g., number of random rotations) in Local Sensitive Hashing scheme. The higher
         `num_hashes`, the more accurate the `LSHSelfAttention` becomes, but also the more memory and time intensive
         the hashing becomes.
-    local_attn_chunk_length (`int`, *optional*, defaults to 64):
-        Length of each chunk in local attention layers.
 
     Examples:
 

@@ -64,8 +64,6 @@ class PerceiverConfig(PreTrainedConfig):
         autoencoding model. This excludes the channel dimension.
     output_num_channels (`int`, *optional*, defaults to 512):
         Number of output channels for each modalitiy decoder.
-    _label_trainable_num_channels (`int`, *optional*, defaults to 1024):
-        NNumber of channels in the trainable label.
 
     Example:
 

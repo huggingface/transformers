@@ -34,8 +34,6 @@ class LongT5Config(PreTrainedConfig):
         The number of buckets to use for each attention layer.
     relative_attention_max_distance (`int`, *optional*, defaults to 128):
         The maximum distance of the longer sequences for the bucket separation.
-    dropout_rate (`float`, *optional*, defaults to 0.1):
-        The ratio for all dropout layers.
     feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
         Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. LongT5v1.1 uses the
         `"gated-gelu"` feed forward projection. Original LongT5 implementation uses `"gated-gelu"`.
