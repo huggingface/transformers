@@ -69,7 +69,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.fsdp import apply_fsdp2
+from .integrations.fsdp import initialize_fsdp
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -178,6 +178,7 @@ class LoadStateDictConfig:
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
+    tp_plan: dict[str, str] | None = None
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
 
@@ -3998,9 +3999,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ": PartialState().process_index} where PartialState comes from accelerate library"
             )
 
+        if fsdp_plan is not None and (tp_plan is not None or tp_size is not None):
+            raise ValueError("Combining `fsdp_plan` with tensor parallel loading is not supported yet.")
+
         if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
             device_map, device_mesh, tp_size = initialize_tensor_parallelism(
                 tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
+            )
+
+        if fsdp_plan is not None:
+            device_map, device_mesh, _ = initialize_fsdp(
+                fsdp_plan=fsdp_plan,
+                device_mesh=device_mesh,
+                device_map=device_map,
             )
 
         if gguf_file is not None and not is_accelerate_available():
@@ -4127,14 +4138,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
-            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size)
+        if _torch_distributed_available and device_mesh is not None and (tp_plan is not None or fsdp_plan is not None):
+            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size, fsdp_plan=fsdp_plan)
 
         # Prepare the full device map
-        if device_map is not None:
+        if isinstance(device_map, dict):
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
+        elif device_map is not None:
+            device_map = {"": device_map}
 
         # Finalize model weight initialization
+        active_tp_plan = getattr(model, "_tp_plan", None) if tp_size is not None else None
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4146,6 +4160,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype_plan=dtype_plan,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
+            tp_plan=active_tp_plan,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
             use_safetensors=use_safetensors,
@@ -4155,15 +4170,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
-
-        # Apply FSDP2 if configured (must be after weight loading)
-        if fsdp_plan is not None:
-            if device_mesh is None:
-                raise ValueError(
-                    "`fsdp_plan` was provided but no device mesh is available. "
-                    "Pass `device_mesh` to `from_pretrained`."
-                )
-            model = apply_fsdp2(model, device_mesh, fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -4221,7 +4227,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         expected_keys = list(model.state_dict().keys()) if expected_keys is None else expected_keys
 
         if logger.level >= logging.WARNING:
-            verify_tp_plan(expected_keys, getattr(model, "_tp_plan", None))
+            verify_tp_plan(expected_keys, load_config.tp_plan)
 
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4284,7 +4290,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
-                tp_plan=model._tp_plan,
+                tp_plan=load_config.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 
