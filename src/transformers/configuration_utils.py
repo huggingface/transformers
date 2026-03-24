@@ -293,9 +293,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
+        cls_has_custom_init = "__init__" in cls.__dict__
         cls = dataclass(cls, repr=False)
 
-        if "__init__" not in cls.__dict__:
+        if not cls_has_custom_init:
             # Wrap all subclasses to accept arbitrary kwargs for BC
             # only if the subclass has no custom `__init__`. Most
             # remote code has an init defined, but some model are not
