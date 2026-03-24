@@ -36,10 +36,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
-    from transformers.models.falcon_h1.modeling_falcon_h1 import (
-        FalconHybridMambaAttentionDynamicCache,
-    )
+    from transformers import AutoTokenizer, DynamicCache, FalconH1ForCausalLM, FalconH1Model
+    from transformers.cache_utils import MambaLayer
 
 
 class FalconH1ModelTester:
@@ -206,17 +204,9 @@ class FalconH1ModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = FalconHybridMambaAttentionDynamicCache(
-            config,
-            input_ids.shape[0],
-            model.dtype,
-            devices=[model.device for _ in range(model.config.num_hidden_layers)],
-        )
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -265,26 +255,34 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     )
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, FalconHybridMambaAttentionDynamicCache)
+        self.assertIsInstance(past_key_values, DynamicCache)
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
+        attention_shape = (batch_size, num_heads, seq_length, head_dim)
 
-        self.assertListEqual(
-            [key_tensor.shape for key_tensor in past_key_values.key_cache],
-            [expected_shape] * len(past_key_values.key_cache),
+        conv_kernel_size = config.mamba_d_conv
+        intermediate_size = (
+            config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
         )
-        self.assertListEqual(
-            [value_cache.shape for value_cache in past_key_values.value_cache],
-            [expected_shape] * len(past_key_values.value_cache),
+        conv_shape = (
+            batch_size,
+            intermediate_size + 2 * config.mamba_n_groups * config.mamba_d_state,
+            conv_kernel_size,
         )
+        ssm_shape = (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
+
+        for idx in range(len(past_key_values)):
+            if config.layers_block_type[idx] == "mamba":
+                self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
+                self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
+            else:
+                self.assertEqual(past_key_values.layers[idx].keys.shape, attention_shape)
+                self.assertEqual(past_key_values.layers[idx].values.shape, attention_shape)
 
     def _check_caches_are_equal(self, cache1, cache2):
-        if not isinstance(cache1, FalconHybridMambaAttentionDynamicCache) or not isinstance(
-            cache2, FalconHybridMambaAttentionDynamicCache
-        ):
+        if not isinstance(cache1, DynamicCache) or not isinstance(cache2, DynamicCache):
             raise ValueError("The wrong cache is being used!")
 
         if not len(cache1) == len(cache2):
@@ -292,10 +290,12 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+            if isinstance(cache1.layers[idx], MambaLayer):
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)
