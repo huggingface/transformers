@@ -53,6 +53,7 @@ class ZambaConfig(PreTrainedConfig):
 
     model_type = "zamba"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"layer_types": "layers_block_type"}
 
     vocab_size: int = 32000
     tie_word_embeddings: bool = True
