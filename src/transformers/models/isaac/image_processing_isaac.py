@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from collections.abc import Sequence
 from typing import Any
@@ -214,6 +215,9 @@ class IsaacImageProcessor(TorchvisionBackend):
         size: SizeDict,
         **kwargs,
     ) -> torch.Tensor:
+        if image.dtype == torch.uint8:
+            image = F.interpolate(image.float(), size=(size.height, size.width), mode="bilinear", align_corners=False)
+            return image.clamp(0, 255).round().to(torch.uint8)
         return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
     def pad(
@@ -336,14 +340,13 @@ class IsaacImageProcessor(TorchvisionBackend):
             )
 
         keys = ("vision_patches", "vision_token_grids")
-        nested_outputs = {
-            key: reorder_images(
+        nested_outputs = {}
+        for i, key in enumerate(keys):
+            nested_outputs[key] = reorder_images(
                 {shape: values[i] for shape, values in grouped_outputs.items()},
-                grouped_images_index,
+                dict(grouped_images_index),
                 is_nested=True,
             )
-            for i, key in enumerate(keys)
-        }
 
         if not do_pad:
             raise ValueError("IsaacImageProcessor doesn't support `do_pad=False` mode.")

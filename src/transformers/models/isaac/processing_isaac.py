@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import copy
 import re
 
 from ...feature_extraction_utils import BatchFeature
@@ -136,16 +134,15 @@ class IsaacProcessor(ProcessorMixin):
         max_sequence_length: int = 16384,
         rescale_factor: float | None = None,
     ):
-        """
-        Args:
-            chat_template (`str` or `dict[str, str]`, *optional*):
-                Chat template override forwarded to [`~processing_utils.ProcessorMixin`].
-            vision_token (`str`, *optional*, defaults to `"<image>"`):
-                Placeholder token used inside text prompts to mark image positions.
-            max_sequence_length (`int`, *optional*, defaults to 16384):
-                Maximum packed multimodal sequence length produced by the processor.
-            rescale_factor (`float`, *optional*):
-                Deprecated compatibility argument accepted for backward compatibility.
+        r"""
+        chat_template (`str` or `dict[str, str]`, *optional*):
+            Chat template override forwarded to [`~processing_utils.ProcessorMixin`].
+        vision_token (`str`, *optional*, defaults to `"<image>"`):
+            Placeholder token used inside text prompts to mark image positions.
+        max_sequence_length (`int`, *optional*, defaults to 16384):
+            Maximum packed multimodal sequence length produced by the processor.
+        rescale_factor (`float`, *optional*):
+            Deprecated compatibility argument accepted for backward compatibility.
         """
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
@@ -196,7 +193,7 @@ class IsaacProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        text_kwargs = copy.deepcopy(output_kwargs["text_kwargs"])
+        text_kwargs = output_kwargs["text_kwargs"]
         truncation = text_kwargs.pop("truncation", None)
         max_length = text_kwargs.pop("max_length", None)
         padding = text_kwargs.pop("padding", True)

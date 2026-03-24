@@ -17,7 +17,7 @@
 import pytest
 
 from transformers import PythonBackend
-from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+from transformers.models.isaac.image_processing_isaac import IsaacImageProcessor
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import require_torch
 
@@ -77,7 +77,7 @@ class SimpleIsaacTokenizer(PythonBackend):
 
 
 def _make_processor():
-    return IsaacProcessor(image_processor=IsaacImageProcessorFast(), tokenizer=SimpleIsaacTokenizer())
+    return IsaacProcessor(image_processor=IsaacImageProcessor(), tokenizer=SimpleIsaacTokenizer())
 
 
 @require_torch

@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import copy
 import math
 import re
 from collections.abc import Sequence
@@ -196,15 +195,16 @@ def clean_text_and_extract_points(
     return clean_text, results
 
 
+@auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
 @strict(accept_kwargs=True)
 class IsaacVisionConfig(Siglip2VisionConfig):
-    """Vision configuration for Isaac with Pixel Shuffle support.
-
-    Extends Siglip2VisionConfig with additional fields for pixel shuffle.
-
-    Args:
-        pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
-            Spatial factor applied before pixel shuffle reduces the resolution.
+    r"""
+    num_patches (`int`, *optional*, defaults to 256):
+        The number of patches in the image with the size of (`patch_size`, `patch_size`). The image is resized to
+        fill a maximum of this number of patches while preserving the aspect ratio. If the resulting number of patches
+        is lower, the image is padded in the patch dimension.
+    pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
+        Spatial factor applied before pixel shuffle reduces the resolution.
     """
 
     model_type = "isaac_vision"
@@ -213,8 +213,21 @@ class IsaacVisionConfig(Siglip2VisionConfig):
     pixel_shuffle_scale_factor: int = 1
 
 
+@auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
 @strict(accept_kwargs=True)
 class IsaacTextConfig(Qwen3Config):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import IsaacTextConfig, IsaacTextModel
+
+    >>> configuration = IsaacTextConfig()
+    >>> model = IsaacTextModel(configuration)
+    >>> configuration = model.config
+    ```
+    """
+
     model_type = "isaac_text"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
     max_position_embeddings: int = 32768
@@ -287,6 +300,9 @@ class IsaacImageProcessor(TorchvisionBackend):
         size: SizeDict,
         **kwargs,
     ) -> torch.Tensor:
+        if image.dtype == torch.uint8:
+            image = F.interpolate(image.float(), size=(size.height, size.width), mode="bilinear", align_corners=False)
+            return image.clamp(0, 255).round().to(torch.uint8)
         return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
     def pad(
@@ -409,14 +425,13 @@ class IsaacImageProcessor(TorchvisionBackend):
             )
 
         keys = ("vision_patches", "vision_token_grids")
-        nested_outputs = {
-            key: reorder_images(
+        nested_outputs = {}
+        for i, key in enumerate(keys):
+            nested_outputs[key] = reorder_images(
                 {shape: values[i] for shape, values in grouped_outputs.items()},
-                grouped_images_index,
+                dict(grouped_images_index),
                 is_nested=True,
             )
-            for i, key in enumerate(keys)
-        }
 
         if not do_pad:
             raise ValueError("IsaacImageProcessor doesn't support `do_pad=False` mode.")
@@ -743,62 +758,66 @@ def get_image_size_for_max_num_patches(
         return target_height, target_width
 
 
+@auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
+@strict(accept_kwargs=True)
 class IsaacConfig(PretrainedConfig):
-    """Configuration class for Isaac multimodal model.
+    r"""
+    vision_config (`IsaacVisionConfig` or `dict`, *optional*):
+        Configuration for the Isaac vision tower. Dictionaries are converted to [`IsaacVisionConfig`]. If unset,
+        the default [`IsaacVisionConfig`] is used.
+    text_config (`IsaacTextConfig` or `dict`, *optional*):
+        Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
+    vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
+        Rescale factor applied by the image processor before normalization.
+    max_sequence_length (`int`, *optional*, defaults to 16384):
+        Maximum multimodal sequence length produced by the processor and expected by the model.
+    vision_token (`str`, *optional*, defaults to `"<image>"`):
+        Placeholder string inserted into text prompts to mark image positions.
 
-    This configuration corresponds to checkpoints such as
-    [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+    Example:
 
-    Args:
-        vision_config (`IsaacVisionConfig`, *optional*):
-            Configuration for the Isaac vision tower. If unset, the default [`IsaacVisionConfig`] is used.
-        text_config (`IsaacTextConfig` or `dict`, *optional*):
-            Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
-        vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
-            Rescale factor applied by the image processor before normalization.
-        max_sequence_length (`int`, *optional*, defaults to 16384):
-            Maximum multimodal sequence length produced by the processor and expected by the model.
-        vision_token (`str`, *optional*, defaults to `"<image>"`):
-            Placeholder string inserted into text prompts to mark image positions.
+    ```python
+    >>> from transformers import IsaacConfig, IsaacModel
+
+    >>> configuration = IsaacConfig()
+    >>> model = IsaacModel(configuration)
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "isaac"
     sub_configs = {"vision_config": IsaacVisionConfig, "text_config": IsaacTextConfig}
+    vision_config: IsaacVisionConfig | dict | None = None
+    text_config: IsaacTextConfig | dict | None = None
+    vision_rescale_factor: float = 1 / 255
+    max_sequence_length: int = 16384
+    vision_token: str = "<image>"
 
-    def __init__(
-        self,
-        vision_config: IsaacVisionConfig | None = None,
-        text_config: IsaacTextConfig | dict | None = None,
-        vision_rescale_factor: float = 1 / 255,
-        max_sequence_length: int = 16384,
-        vision_token: str = "<image>",
-        **kwargs,
-    ):
+    def __post_init__(self, **kwargs):
         for key in ("use_cache", "rope_theta", "max_position_embeddings"):
             kwargs.pop(key, None)
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(text_config, IsaacTextConfig):
-            self.text_config = text_config
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
+        elif not isinstance(self.text_config, IsaacTextConfig):
+            raise TypeError(
+                f"text_config must be a dict or an IsaacTextConfig instance, got {type(self.text_config).__name__}."
+            )
 
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, IsaacVisionConfig):
-            self.vision_config = vision_config
-        elif vision_config is None:
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
+        elif not isinstance(self.vision_config, IsaacVisionConfig):
+            raise TypeError(
+                f"vision_config must be a dict or an IsaacVisionConfig instance, got {type(self.vision_config).__name__}."
+            )
 
-        super().__init__(**kwargs)
+        self.vision_rescale_factor = float(self.vision_rescale_factor)
 
-        # Vision normalization parameters
-        self.vision_rescale_factor = float(vision_rescale_factor)
-
-        # Processing parameters
-        self.max_sequence_length = max_sequence_length
-        self.vision_token = vision_token
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -872,7 +891,7 @@ class IsaacProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        text_kwargs = copy.deepcopy(output_kwargs["text_kwargs"])
+        text_kwargs = output_kwargs["text_kwargs"]
         truncation = text_kwargs.pop("truncation", None)
         max_length = text_kwargs.pop("max_length", None)
         padding = text_kwargs.pop("padding", True)

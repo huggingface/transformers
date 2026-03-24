@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-12-30.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-03-24.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -153,7 +153,3 @@ Set `expected="point"` to extract point annotations, or leave `expected=None` to
 ## IsaacImageProcessor
 
 [[autodoc]] IsaacImageProcessor
-
-## IsaacImageProcessorFast
-
-[[autodoc]] IsaacImageProcessorFast

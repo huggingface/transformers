@@ -24,7 +24,7 @@ import torch
 from huggingface_hub import is_offline_mode
 
 from transformers import IsaacConfig, PythonBackend
-from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+from transformers.models.isaac.image_processing_isaac import IsaacImageProcessor
 from transformers.models.isaac.processing_isaac import IsaacProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -202,7 +202,7 @@ def _make_processor_with_max_len(tokenizer, base_config, max_len):
     config = IsaacConfig(**base_config.to_dict())
     config.max_sequence_length = max_len
     vision_config = config.vision_config
-    image_processor = IsaacImageProcessorFast(
+    image_processor = IsaacImageProcessor(
         patch_size=vision_config.patch_size,
         max_num_patches=vision_config.num_patches,
         pixel_shuffle_scale=vision_config.pixel_shuffle_scale_factor,
@@ -221,12 +221,12 @@ def _run_processor(processor, text, images=None):
 
 
 def _make_post_process_processor():
-    return IsaacProcessor(image_processor=IsaacImageProcessorFast(), tokenizer=SimpleIsaacTokenizer())
+    return IsaacProcessor(image_processor=IsaacImageProcessor(), tokenizer=SimpleIsaacTokenizer())
 
 
 def test_processor_prefers_named_image_pad_token():
     processor = IsaacProcessor(
-        image_processor=IsaacImageProcessorFast(), tokenizer=SimpleIsaacTokenizerWithNamedImagePad()
+        image_processor=IsaacImageProcessor(), tokenizer=SimpleIsaacTokenizerWithNamedImagePad()
     )
 
     assert processor.image_token == "<custom_image_pad>"
@@ -346,7 +346,7 @@ def isaac_tokenizer():
 @pytest.fixture
 def isaac_processor(isaac_tokenizer, isaac_tiny_config):
     vision_config = isaac_tiny_config.vision_config
-    image_processor = IsaacImageProcessorFast(
+    image_processor = IsaacImageProcessor(
         patch_size=vision_config.patch_size,
         max_num_patches=vision_config.num_patches,
         pixel_shuffle_scale=vision_config.pixel_shuffle_scale_factor,

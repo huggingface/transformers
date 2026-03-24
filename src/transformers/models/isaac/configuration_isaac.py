@@ -23,17 +23,19 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
+@auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
 @strict(accept_kwargs=True)
 class IsaacVisionConfig(PreTrainedConfig):
-    """Vision configuration for Isaac with Pixel Shuffle support.
-
-    Extends Siglip2VisionConfig with additional fields for pixel shuffle.
-
-    Args:
-        pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
-            Spatial factor applied before pixel shuffle reduces the resolution.
+    r"""
+    num_patches (`int`, *optional*, defaults to 256):
+        The number of patches in the image with the size of (`patch_size`, `patch_size`). The image is resized to
+        fill a maximum of this number of patches while preserving the aspect ratio. If the resulting number of patches
+        is lower, the image is padded in the patch dimension.
+    pixel_shuffle_scale_factor (`int`, *optional*, defaults to 1):
+        Spatial factor applied before pixel shuffle reduces the resolution.
     """
 
     model_type = "isaac_vision"
@@ -54,25 +56,20 @@ class IsaacVisionConfig(PreTrainedConfig):
     pixel_shuffle_scale_factor: int = 1
 
 
+@auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
 @strict(accept_kwargs=True)
 class IsaacTextConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
+    Example:
 
     ```python
-    >>> from transformers import IsaacTextModel, IsaacTextConfig
+    >>> from transformers import IsaacTextConfig, IsaacTextModel
 
-    >>> # Initializing a IsaacText style configuration
     >>> configuration = IsaacTextConfig()
-
-    >>> # Initializing a model from the IsaacText-8B style configuration
     >>> model = IsaacTextModel(configuration)
-
-    >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "isaac_text"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -136,62 +133,66 @@ class IsaacTextConfig(PreTrainedConfig):
         self.validate_layer_type()
 
 
+@auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
+@strict(accept_kwargs=True)
 class IsaacConfig(PretrainedConfig):
-    """Configuration class for Isaac multimodal model.
+    r"""
+    vision_config (`IsaacVisionConfig` or `dict`, *optional*):
+        Configuration for the Isaac vision tower. Dictionaries are converted to [`IsaacVisionConfig`]. If unset,
+        the default [`IsaacVisionConfig`] is used.
+    text_config (`IsaacTextConfig` or `dict`, *optional*):
+        Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
+    vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
+        Rescale factor applied by the image processor before normalization.
+    max_sequence_length (`int`, *optional*, defaults to 16384):
+        Maximum multimodal sequence length produced by the processor and expected by the model.
+    vision_token (`str`, *optional*, defaults to `"<image>"`):
+        Placeholder string inserted into text prompts to mark image positions.
 
-    This configuration corresponds to checkpoints such as
-    [Perceptron/isaac-base](https://huggingface.co/Perceptron/isaac-base).
+    Example:
 
-    Args:
-        vision_config (`IsaacVisionConfig`, *optional*):
-            Configuration for the Isaac vision tower. If unset, the default [`IsaacVisionConfig`] is used.
-        text_config (`IsaacTextConfig` or `dict`, *optional*):
-            Configuration for the text backbone. Dictionaries are converted to [`IsaacTextConfig`].
-        vision_rescale_factor (`float`, *optional*, defaults to 1 / 255):
-            Rescale factor applied by the image processor before normalization.
-        max_sequence_length (`int`, *optional*, defaults to 16384):
-            Maximum multimodal sequence length produced by the processor and expected by the model.
-        vision_token (`str`, *optional*, defaults to `"<image>"`):
-            Placeholder string inserted into text prompts to mark image positions.
+    ```python
+    >>> from transformers import IsaacConfig, IsaacModel
+
+    >>> configuration = IsaacConfig()
+    >>> model = IsaacModel(configuration)
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "isaac"
     sub_configs = {"vision_config": IsaacVisionConfig, "text_config": IsaacTextConfig}
+    vision_config: IsaacVisionConfig | dict | None = None
+    text_config: IsaacTextConfig | dict | None = None
+    vision_rescale_factor: float = 1 / 255
+    max_sequence_length: int = 16384
+    vision_token: str = "<image>"
 
-    def __init__(
-        self,
-        vision_config: IsaacVisionConfig | None = None,
-        text_config: IsaacTextConfig | dict | None = None,
-        vision_rescale_factor: float = 1 / 255,
-        max_sequence_length: int = 16384,
-        vision_token: str = "<image>",
-        **kwargs,
-    ):
+    def __post_init__(self, **kwargs):
         for key in ("use_cache", "rope_theta", "max_position_embeddings"):
             kwargs.pop(key, None)
 
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif isinstance(text_config, IsaacTextConfig):
-            self.text_config = text_config
-        elif text_config is None:
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
             self.text_config = self.sub_configs["text_config"]()
+        elif not isinstance(self.text_config, IsaacTextConfig):
+            raise TypeError(
+                f"text_config must be a dict or an IsaacTextConfig instance, got {type(self.text_config).__name__}."
+            )
 
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif isinstance(vision_config, IsaacVisionConfig):
-            self.vision_config = vision_config
-        elif vision_config is None:
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
+        elif not isinstance(self.vision_config, IsaacVisionConfig):
+            raise TypeError(
+                f"vision_config must be a dict or an IsaacVisionConfig instance, got {type(self.vision_config).__name__}."
+            )
 
-        super().__init__(**kwargs)
+        self.vision_rescale_factor = float(self.vision_rescale_factor)
 
-        # Vision normalization parameters
-        self.vision_rescale_factor = float(vision_rescale_factor)
-
-        # Processing parameters
-        self.max_sequence_length = max_sequence_length
-        self.vision_token = vision_token
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["IsaacConfig", "IsaacTextConfig", "IsaacVisionConfig"]

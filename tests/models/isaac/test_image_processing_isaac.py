@@ -37,7 +37,7 @@ if is_vision_available():
     from PIL import Image
 
 if is_torchvision_available():
-    from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+    from transformers.models.isaac.image_processing_isaac import IsaacImageProcessor
 
 
 def _make_dummy_image(size=(32, 32), color=(255, 0, 0)):
@@ -122,7 +122,7 @@ class IsaacImageProcessingTester:
 @require_vision
 class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = None
-    fast_image_processing_class = IsaacImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = IsaacImageProcessor if is_torchvision_available() else None
     test_slow_image_processor = False
 
     def setUp(self):
@@ -185,7 +185,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         torch.testing.assert_close(eager_encoding["vision_token_grids"], compiled_encoding["vision_token_grids"])
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "do_rescale"))
@@ -200,7 +200,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
 
@@ -224,7 +224,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
 
@@ -248,7 +248,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -276,7 +276,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pass
 
     def test_nested_multi_image_batch_preserves_grids_and_padding(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 **{
                     **self.image_processor_dict,
@@ -322,7 +322,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.testing.assert_close(encoding["vision_patch_attention_mask"].sum(dim=-1), expected_patch_counts)
 
     def test_all_empty_images_returns_zero_sized_tensors(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             encoding = image_processor([[], []], return_tensors="pt")
 
@@ -337,7 +337,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(encoding["vision_token_grids"].dtype, torch.long)
 
     def test_do_resize_false_requires_patch_divisibility(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 **{
                     **self.image_processor_dict,
@@ -350,7 +350,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_processor([[_make_dummy_image(size=(31, 32))]], return_tensors="pt")
 
     def test_pixel_shuffle_scale_requires_divisible_token_grid(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(
                 **{
                     **self.image_processor_dict,
@@ -364,7 +364,7 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image_processor([[_make_dummy_image(size=(32, 16))]], return_tensors="pt")
 
     def test_cast_dtype_device(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
@@ -403,13 +403,13 @@ class IsaacImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @require_torch_accelerator
     @require_vision
     @pytest.mark.torch_compile_test
-    def test_can_compile_fast_image_processor(self):
-        if self.fast_image_processing_class is None:
-            self.skipTest("Skipping compilation test as fast image processor is not defined")
+    def test_can_compile_torchvision_backend(self):
+        if "torchvision" not in self.image_processing_classes:
+            self.skipTest("Skipping compilation test as torchvision backend is not available")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 32, 32), dtype=torch.uint8)
-        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
