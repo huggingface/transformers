@@ -298,10 +298,13 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
 
         self.character_bert = CharacterBertModel(config, add_pooling_layer=False)
         self.cls = CharacterBertOnlyMLMHead(config)
-        # CharacterBERT keeps untied decoder weights; still share the duplicate MLM bias parameter.
-        self.cls.predictions.bias = self.cls.predictions.decoder.bias
 
         self.post_init()
+
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
+        if all_submodels:
+            return super().get_expanded_tied_weights_keys(all_submodels=True)
+        return self._tied_weights_keys.copy()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder

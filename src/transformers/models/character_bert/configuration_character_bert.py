@@ -70,7 +70,7 @@ class CharacterBertConfig(BertConfig):
     character_embedding_dim: int = 16
     character_vocab_size: int = 262
     max_characters_per_token: int = 50
-    character_cnn_filters: tuple[tuple[int, int], ...] = (
+    character_cnn_filters: tuple[tuple[int, int], ...] | list[tuple[int, int]] | list[list[int]] = (
         (1, 32),
         (2, 32),
         (3, 64),
@@ -81,43 +81,15 @@ class CharacterBertConfig(BertConfig):
     )
     num_highway_layers: int = 2
 
-    def __init__(
-        self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        use_cache=True,
-        classifier_dropout=None,
-        is_decoder=False,
-        add_cross_attention=False,
-        bos_token_id=None,
-        eos_token_id=None,
-        tie_word_embeddings=False,
-        character_embedding_dim=16,
-        character_vocab_size=262,
-        max_characters_per_token=50,
-        character_cnn_filters=((1, 32), (2, 32), (3, 64), (4, 128), (5, 256), (6, 512), (7, 1024)),
-        num_highway_layers=2,
-        **kwargs,
-    ):
+    def __post_init__(self, **kwargs):
         legacy_character_embedding_dim = kwargs.pop("character_embeddings_dim", None)
         legacy_character_cnn_filters = kwargs.pop("cnn_filters", None)
         legacy_max_characters_per_token = kwargs.pop("max_word_length", None)
         legacy_mlm_vocab_size = kwargs.pop("mlm_vocab_size", None)
 
-        if legacy_character_embedding_dim is not None and character_embedding_dim == 16:
-            character_embedding_dim = legacy_character_embedding_dim
-        if legacy_character_cnn_filters is not None and character_cnn_filters == (
+        if legacy_character_embedding_dim is not None and self.character_embedding_dim == 16:
+            self.character_embedding_dim = legacy_character_embedding_dim
+        if legacy_character_cnn_filters is not None and self.character_cnn_filters == (
             (1, 32),
             (2, 32),
             (3, 64),
@@ -126,59 +98,33 @@ class CharacterBertConfig(BertConfig):
             (6, 512),
             (7, 1024),
         ):
-            character_cnn_filters = legacy_character_cnn_filters
-        if legacy_max_characters_per_token is not None and max_characters_per_token == 50:
-            max_characters_per_token = legacy_max_characters_per_token
+            self.character_cnn_filters = legacy_character_cnn_filters
+        if legacy_max_characters_per_token is not None and self.max_characters_per_token == 50:
+            self.max_characters_per_token = legacy_max_characters_per_token
 
-        if legacy_mlm_vocab_size is not None and vocab_size == 30522:
-            vocab_size = legacy_mlm_vocab_size
+        if legacy_mlm_vocab_size is not None and self.vocab_size == 30522:
+            self.vocab_size = legacy_mlm_vocab_size
 
-        character_cnn_filters = tuple((int(width), int(channels)) for width, channels in character_cnn_filters)
+        self.character_cnn_filters = tuple(
+            (int(width), int(channels)) for width, channels in self.character_cnn_filters
+        )
 
-        if character_vocab_size != 262:
+        super().__post_init__(**kwargs)
+
+        if self.character_vocab_size != 262:
             raise ValueError(
                 "`character_vocab_size` must be 262 for CharacterBERT byte-level tokenization "
                 "(256 bytes + 6 special characters)."
             )
-        if len(character_cnn_filters) == 0:
+        if len(self.character_cnn_filters) == 0:
             raise ValueError("`character_cnn_filters` must contain at least one convolution specification.")
 
-        widest_filter = max(width for width, _ in character_cnn_filters)
-        if max_characters_per_token < widest_filter:
+        widest_filter = max(width for width, _ in self.character_cnn_filters)
+        if self.max_characters_per_token < widest_filter:
             raise ValueError(
                 "`max_characters_per_token` must be at least the width of the widest character CNN filter "
                 f"({widest_filter})."
             )
-
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            max_position_embeddings=max_position_embeddings,
-            type_vocab_size=type_vocab_size,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            pad_token_id=pad_token_id,
-            use_cache=use_cache,
-            classifier_dropout=classifier_dropout,
-            is_decoder=is_decoder,
-            add_cross_attention=add_cross_attention,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
-        self.character_embedding_dim = character_embedding_dim
-        self.character_vocab_size = character_vocab_size
-        self.max_characters_per_token = max_characters_per_token
-        self.character_cnn_filters = character_cnn_filters
-        self.num_highway_layers = num_highway_layers
 
     @property
     def mlm_vocab_size(self) -> int:
