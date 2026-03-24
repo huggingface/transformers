@@ -193,21 +193,18 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         The momentum for the batch normalization layers
 
     Example:
-        ```python
-        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
+    ```python
+    >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LasrEncoder` configuration
-        >>> configuration = LasrEncoderConfig()
+    >>> # Initializing a `LasrEncoder` configuration
+    >>> configuration = LasrEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LasrEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LasrEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-
-    This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     hidden_size: int = 512
@@ -242,17 +239,15 @@ class LasrCTCConfig(ParakeetCTCConfig):
         of [`LasrForCTC`].
 
     Example:
-        ```python
-        >>> from transformers import LasrForCTC, LasrCTCConfig
-        >>> # Initializing a Lasr configuration
-        >>> configuration = LasrCTCConfig()
-        >>> # Initializing a model from the configuration
-        >>> model = LasrForCTC(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-    This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    ```python
+    >>> from transformers import LasrForCTC, LasrCTCConfig
+    >>> # Initializing a Lasr configuration
+    >>> configuration = LasrCTCConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = LasrForCTC(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     vocab_size: int = 512
@@ -453,13 +448,16 @@ class LasrEncoder(LasrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LasrEncoderModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
         >>> from transformers import AutoProcessor, LasrEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -526,7 +524,7 @@ class LasrForCTC(ParakeetForCTC):
         >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LasrForCTC.from_pretrained(model_id)
 

@@ -301,7 +301,7 @@ outputs.loss.backward()
 ```
 
 </hfoption>
-<hfoption id="With TDTLossNumba">
+<hfoption id="With TDTLossNumba (monkey patch)">
 
 ```py
 import torch
@@ -331,14 +331,9 @@ loss_fn = TDTLossNumba(
 # Create wrapper to adapt NeMo loss to Transformers signature
 def nemo_loss_wrapper(token_logits, duration_logits, targets, logit_lengths, target_lengths, **kwargs):
     """Adapter function that converts Transformers loss signature to NeMo signature."""
-    # Concatenate token and duration logits (NeMo expects combined logits)
     acts = torch.cat([token_logits, duration_logits], dim=-1)
-    
-    # Use actual tensor shape for act_lens (NeMo requires T dimension to match max(act_lens))
-    # The logit_lengths may not exactly match due to padding/masking edge cases
     batch_size, T, U = acts.shape[:3]
     act_lens = torch.full((batch_size,), T, dtype=torch.long, device=acts.device)
-    
     # NeMo requires float32 (Numba doesn't support float16/bfloat16) and int64
     per_sample_losses = nemo_loss_fn(
         acts=acts.float(),
@@ -346,8 +341,6 @@ def nemo_loss_wrapper(token_logits, duration_logits, targets, logit_lengths, tar
         act_lens=act_lens,
         label_lens=target_lengths.long(),
     )
-    
-    # Normalize by target lengths and take mean across batch
     return (per_sample_losses / target_lengths.float()).mean()
 
 # Monkey-patch the model's loss function

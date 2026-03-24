@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Parakeet model configuration."""
 
 from huggingface_hub.dataclasses import strict
 
@@ -43,21 +42,18 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         Whether to scale the input embeddings.
 
     Example:
-        ```python
-        >>> from transformers import ParakeetEncoderModel, ParakeetEncoderConfig
+    ```python
+    >>> from transformers import ParakeetEncoderModel, ParakeetEncoderConfig
 
-        >>> # Initializing a `ParakeetEncoder` configuration
-        >>> configuration = ParakeetEncoderConfig()
+    >>> # Initializing a `ParakeetEncoder` configuration
+    >>> configuration = ParakeetEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = ParakeetEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = ParakeetEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-
-    This configuration class is based on the ParakeetEncoder architecture from NVIDIA NeMo. You can find more details
-    and pre-trained models at [nvidia/parakeet-ctc-1.1b](https://huggingface.co/nvidia/parakeet-ctc-1.1b).
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "parakeet_encoder"
@@ -136,85 +132,59 @@ class ParakeetCTCConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="bezzam/parakeet-tdt-0.6b-v3-hf")
+@strict
 class ParakeetTDTConfig(PreTrainedConfig):
     r"""
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
     num_decoder_layers (`int`, *optional*, defaults to 2):
         Number of LSTM layers in the prediction network.
-    num_duration_bins (`int`, *optional*, defaults to 5):
-        Number of duration bins for predicting token durations.
     durations (`list[int]`, *optional*, defaults to `[0, 1, 2, 3, 4]`):
         Token duration values that can be predicted. Each value represents how many frames a token or blank
         emission spans.
     max_symbols_per_step (`int`, *optional*, defaults to 10):
         Maximum number of symbols to emit per encoder time step during greedy decoding.
-    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
-        The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 8192):
         Blank token id. Different from `pad_token_id` for TDT.
 
     Example:
-        ```python
-        >>> from transformers import ParakeetForTDT, ParakeetTDTConfig
+    ```python
+    >>> from transformers import ParakeetForTDT, ParakeetTDTConfig
 
-        >>> # Initializing a Parakeet TDT configuration
-        >>> configuration = ParakeetTDTConfig()
+    >>> # Initializing a Parakeet TDT configuration
+    >>> configuration = ParakeetTDTConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = ParakeetForTDT(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = ParakeetForTDT(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "parakeet_tdt"
     sub_configs = {"encoder_config": ParakeetEncoderConfig}
 
-    def __init__(
-        self,
-        vocab_size=8193,
-        decoder_hidden_size=640,
-        num_decoder_layers=2,
-        durations=[0, 1, 2, 3, 4],
-        hidden_act="relu",
-        max_symbols_per_step=10,
-        encoder_config: dict | ParakeetEncoderConfig = None,
-        pad_token_id=2,
-        blank_token_id=8192,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.decoder_hidden_size = decoder_hidden_size
-        self.num_decoder_layers = num_decoder_layers
-        self.durations = durations
-        self.hidden_act = hidden_act
-        self.max_symbols_per_step = max_symbols_per_step
+    vocab_size: int = 8193
+    decoder_hidden_size: int = 640
+    num_decoder_layers: int = 2
+    hidden_act: str = "relu"
+    max_symbols_per_step: int = 10
+    durations: list[int] | tuple[int, ...] = (0, 1, 2, 3, 4)
+    encoder_config: dict | PreTrainedConfig | None = None
+    pad_token_id: int = 2
+    blank_token_id: int = 8192
+    is_encoder_decoder: bool = True
 
-        if isinstance(encoder_config, dict):
-            self.encoder_config = ParakeetEncoderConfig(**encoder_config)
-        elif encoder_config is None:
+    def __post_init__(self, **kwargs):
+        if isinstance(self.encoder_config, dict):
+            self.encoder_config = ParakeetEncoderConfig(**self.encoder_config)
+        elif self.encoder_config is None:
             self.encoder_config = ParakeetEncoderConfig()
-        else:
-            self.encoder_config = encoder_config
-
         self.initializer_range = self.encoder_config.initializer_range
-        self.blank_token_id = blank_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = True
-
-        super().__init__(**kwargs)
-
-    @classmethod
-    def from_encoder_config(cls, encoder_config: ParakeetEncoderConfig, **kwargs):
-        r"""
-        Instantiate a [`ParakeetTDTConfig`] (or a derived class) from parakeet encoder model configuration.
-
-        Returns:
-            [`ParakeetTDTConfig`]: An instance of a configuration object
-        """
-        return cls(encoder_config=encoder_config.to_dict(), **kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["ParakeetCTCConfig", "ParakeetEncoderConfig", "ParakeetTDTConfig"]

@@ -508,13 +508,16 @@ class LasrEncoder(LasrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LasrEncoderModelOutput:
         r"""
+        output_attention_mask (`bool`, *optional*):
+            Whether to return the output attention mask.
+
         Example:
 
         ```python
         >>> from transformers import AutoProcessor, LasrEncoder
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> encoder = ParakeetEncoder.from_pretrained(model_id)
 
@@ -700,7 +703,7 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> from transformers import AutoProcessor, LasrForCTC
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = TODO
+        >>> model_id = "google/medasr"
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = LasrForCTC.from_pretrained(model_id)
 
