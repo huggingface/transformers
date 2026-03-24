@@ -1387,14 +1387,11 @@ def gather_state_dict_for_save(
     return result
 
 
-# Cache for module to name mapping to avoid expensive named_modules() calls in hooks
-_modules2names_cache = {}
-
-
 def add_tensor_parallel_hooks_to_module(
     model,
     module,
     current_module_plan,
+    layer_name,
     device_mesh,
 ):
     r"""
@@ -1408,6 +1405,7 @@ def add_tensor_parallel_hooks_to_module(
         model (`PretrainedModel`): The model containing the modules.
         module (`nn.Module`): The current module to which we want to add the hooks.
         current_module_plan (`str` or `None`): The tensor parallel plan for the current module, if any.
+        layer_name (`str`): The qualified name of the current module.
         device_mesh (`dist.device_mesh.DeviceMesh`): The device mesh for distributed communication.
 
     """
@@ -1416,12 +1414,6 @@ def add_tensor_parallel_hooks_to_module(
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
-            if model in _modules2names_cache:
-                modules2names = _modules2names_cache[model]
-            else:
-                modules2names = {v: k for k, v in model.named_modules()}
-                _modules2names_cache[model] = modules2names
-            layer_name = modules2names.get(module, "unknown")
             logger.warning(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP "
                 f"plan: {e}"
@@ -1537,6 +1529,7 @@ def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
                     model,
                     module,
                     plan,
+                    name,
                     device_mesh,
                 )
             module._is_hooked = True
