@@ -262,9 +262,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         `bool`: True if grouped_mm can be used, False otherwise.
     """
     if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
-        weight.device.type == "cpu"
-        and is_torch_less_or_equal("2.10.0")
-        and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
+        weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0
     ):
         # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
         # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
