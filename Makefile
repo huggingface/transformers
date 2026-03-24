@@ -20,7 +20,7 @@ style:
 # Run ty type checker and model structure rules
 typing:
 	python utils/check_types.py $(ty_check_dirs)
-	python utils/check_modeling_structure.py
+	python -m utils.mlinter
 
 # Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
@@ -28,7 +28,7 @@ check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
 	python utils/check_types.py $(ty_check_dirs)
-	python utils/check_modeling_structure.py
+	python -m utils.mlinter
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
