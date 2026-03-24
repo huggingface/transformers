@@ -230,7 +230,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         "vision_patch_attention_mask",
         "vision_token_grids",
     ]
-    valid_kwargs = IsaacImageProcessorFastKwargs
+    valid_kwargs = IsaacImageProcessorKwargs
 
     do_resize = True
     do_center_crop = False
