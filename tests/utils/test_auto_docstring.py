@@ -386,8 +386,8 @@ class DummyForTestImageProcessorFast(TorchvisionBackend):
         pass
 
 
+@strict
 @auto_docstring(custom_intro="A minimal configuration for testing that config docstrings only show own args.")
-@strict(accept_kwargs=True)
 class DummyStrictConfig(PretrainedConfig):
     r"""
     extra_param (`str`, *optional*, defaults to `"test"`):
