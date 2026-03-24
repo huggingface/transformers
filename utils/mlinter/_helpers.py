@@ -186,18 +186,9 @@ def _is_direct_pretrained_config_subclass(class_node: ast.ClassDef) -> bool:
     return False
 
 
-def _has_strict_accept_kwargs_decorator(class_node: ast.ClassDef) -> bool:
+def _has_strict_decorator(class_node: ast.ClassDef) -> bool:
     for decorator in class_node.decorator_list:
-        if not isinstance(decorator, ast.Call):
-            continue
-        try:
-            decorator_name = _simple_name(full_name(decorator.func))
-        except ValueError:
-            continue
-        if decorator_name != "strict" or decorator.args:
-            continue
-        for keyword in decorator.keywords:
-            if keyword.arg != "accept_kwargs":
-                continue
-            return isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+        if isinstance(decorator, ast.Name) and decorator.id == "strict":
+            return True
+
     return False
