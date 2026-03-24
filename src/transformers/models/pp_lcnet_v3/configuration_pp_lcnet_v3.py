@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
-@strict(accept_kwargs=True)
+@strict
 class PPLCNetV3Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):

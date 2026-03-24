@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="llava-hf/llava-onevision-qwen2-7b-ov-hf")
-@strict(accept_kwargs=True)
+@strict
 class LlavaOnevisionConfig(PreTrainedConfig):
     r"""
     vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):

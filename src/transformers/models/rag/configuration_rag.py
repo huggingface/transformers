@@ -21,7 +21,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="")
-@strict(accept_kwargs=True)
+@strict
 class RagConfig(PreTrainedConfig):
     r"""
     title_sep (`str`, *optional*, defaults to  `" / "`):

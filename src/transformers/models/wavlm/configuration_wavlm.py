@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/wavlm-base")
-@strict(accept_kwargs=True)
+@strict
 class WavLMConfig(PreTrainedConfig):
     r"""
     final_dropout (`float`, *optional*, defaults to 0.1):

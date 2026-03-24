@@ -23,7 +23,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
-@strict(accept_kwargs=True)
+@strict
 class MusicgenDecoderConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1
@@ -66,7 +66,7 @@ class MusicgenDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
-@strict(accept_kwargs=True)
+@strict
 class MusicgenConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):
