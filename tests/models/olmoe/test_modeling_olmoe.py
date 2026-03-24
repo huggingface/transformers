@@ -42,6 +42,9 @@ if is_torch_available():
 
 
 class OlmoeModelTester:
+    if is_torch_available():
+        causal_lm_class = OlmoeForCausalLM
+
     def __init__(
         self,
         parent,
@@ -170,10 +173,6 @@ class OlmoeModelTester:
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
-
-
-if is_torch_available():
-    OlmoeModelTester.causal_lm_class = OlmoeForCausalLM
 
 
 @require_torch
