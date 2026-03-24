@@ -61,8 +61,7 @@ class OlmoHybridDynamicCache:
     """
     Cache for hybrid model supporting both attention KV cache and linear attention state.
 
-    Inherits from Qwen3NextDynamicCache. The main difference is that this cache
-    stores separate conv states for q, k, v (instead of a single conv_states list).
+    The main difference is that this cache stores separate conv states for q, k, v (instead of a single conv_states).
     """
 
     is_compileable = False
@@ -155,7 +154,6 @@ class OlmoHybridDynamicCache:
         kv_length = query_length + past_seen_tokens
         return kv_length, kv_offset
 
-    @property
     def has_previous_state(self):
         """We have a previous state if the last linear (conv) layer was already updated."""
         return self.conv_states_q[self.last_linear_layer] is not None
@@ -725,7 +723,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
 
         use_cache = cache_params is not None
-        use_precomputed = use_cache and getattr(cache_params, "has_previous_state", False) and seq_len == 1
+        use_precomputed = use_cache and cache_params.has_previous_state() and seq_len == 1
 
         conv_state_q = cache_params.conv_states_q[self.layer_idx] if cache_params else None
         conv_state_k = cache_params.conv_states_k[self.layer_idx] if cache_params else None

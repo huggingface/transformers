@@ -1199,7 +1199,7 @@ class DynamicCache(Cache):
                 # Since moe layers will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
                 # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skip
                 # the indices we don't need
-                elif layer_type in ("mamba", "conv", "moe"):
+                elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                     layers.append(MambaLayer())
                 elif layer_type == "hybrid":
                     layers.append(MambaAndAttentionLayer())
