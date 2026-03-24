@@ -104,6 +104,7 @@ class LlavaProcessor(ProcessorMixin):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         # try to expand inputs in processing if we have the necessary parts
+        prompt_strings = text
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
             pixel_values = image_inputs["pixel_values"]
