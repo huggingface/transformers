@@ -2539,8 +2539,13 @@ class GenerationTesterMixin:
 
     def _get_mamba_cache_shapes(self, batch_size: int, config):
         # Default mamba cache shape - can vary based on models so this function is convenient to easily check caches
-        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
-        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention cache layers
+        # so the None default values will not be used
+        intermediate_size = getattr(config, "intermediate_size", None)
+        conv_kernel = getattr(config, "conv_kernel", None)
+        state_size = getattr(config, "state_size", None)
+        conv_shape = (batch_size, intermediate_size, conv_kernel)
+        ssm_shape = (batch_size, intermediate_size, state_size)
         return conv_shape, ssm_shape
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
