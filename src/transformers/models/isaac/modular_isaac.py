@@ -1034,6 +1034,7 @@ class IsaacModel(Qwen3PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = False
     _tied_weights_keys = {}
+    _input_embed_layer = "text_model.embed_tokens"
 
     def __init__(self, config: IsaacConfig):
         Qwen3PreTrainedModel.__init__(self, config)
@@ -1047,12 +1048,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         self.rope_deltas = None
 
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        self.text_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring
@@ -1394,6 +1389,8 @@ class IsaacModel(Qwen3PreTrainedModel):
         )
         if computed_position_ids is not None:
             position_ids = computed_position_ids
+        elif past_seen_tokens > 0:
+            position_ids = None
         elif position_ids is not None and past_seen_tokens == 0:
             position_ids = position_ids.to(device=inputs_embeds.device)
             if position_ids.ndim == 2:

@@ -3246,6 +3246,67 @@ class TestGetDecoder(unittest.TestCase):
         assert dec is model.model.language_model, f"LLaVA get_decoder() should return language_model, got {type(dec)}"
 
 
+class TestEmbeddingAccessMixin(unittest.TestCase):
+    def test_get_input_embeddings_supports_dotted_input_embed_layer(self):
+        class NestedEmbeddingModel(PreTrainedModel):
+            config_class = PreTrainedConfig
+            _input_embed_layer = "text_model.embed_tokens"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.text_model = nn.Module()
+                self.text_model.embed_tokens = nn.Embedding(8, 4)
+
+            def forward(self, input_ids=None):
+                return input_ids
+
+        model = NestedEmbeddingModel(PreTrainedConfig())
+
+        assert model.get_input_embeddings() is model.text_model.embed_tokens
+
+    def test_set_input_embeddings_supports_dotted_input_embed_layer(self):
+        class NestedEmbeddingModel(PreTrainedModel):
+            config_class = PreTrainedConfig
+            _input_embed_layer = "text_model.embed_tokens"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.text_model = nn.Module()
+                self.text_model.embed_tokens = nn.Embedding(8, 4)
+
+            def forward(self, input_ids=None):
+                return input_ids
+
+        model = NestedEmbeddingModel(PreTrainedConfig())
+        new_embeddings = nn.Embedding(10, 4)
+
+        model.set_input_embeddings(new_embeddings)
+
+        assert model.get_input_embeddings() is new_embeddings
+        assert model.text_model.embed_tokens is new_embeddings
+
+    def test_invalid_dotted_input_embed_layer_raises(self):
+        class NestedEmbeddingModel(PreTrainedModel):
+            config_class = PreTrainedConfig
+            _input_embed_layer = "text_model.missing_embed_tokens"
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.text_model = nn.Module()
+                self.text_model.embed_tokens = nn.Embedding(8, 4)
+
+            def forward(self, input_ids=None):
+                return input_ids
+
+        model = NestedEmbeddingModel(PreTrainedConfig())
+
+        with self.assertRaises(NotImplementedError):
+            model.get_input_embeddings()
+
+        with self.assertRaises(NotImplementedError):
+            model.set_input_embeddings(nn.Embedding(10, 4))
+
+
 class TestGetEncoder(unittest.TestCase):
     def test_seq2seq_lm_get_encoder_returns_encoder(self):
         cfg = BartConfig(
