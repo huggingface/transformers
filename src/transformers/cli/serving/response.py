@@ -47,7 +47,7 @@ from openai.types.responses import (
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
 from ...utils import logging
-from .utils import BaseHandler, ToolCallParser, _StreamError, detect_tool_format
+from .utils import BaseHandler, ToolCallParser, _StreamError, detect_tool_format, get_processor_inputs_from_messages
 
 
 if TYPE_CHECKING:
@@ -84,9 +84,15 @@ class ResponseHandler(BaseHandler):
 
         model_id, model, processor = self._resolve_model(body)
 
+        # Two-step input conversion (chat completions skips step 1 since messages are already standard):
+        # 1. Normalize Responses API input (string/list/dict + instructions) → standard messages list
+        # 2. Transform message content for the HF processor (VLM image handling, text joining, etc.)
         messages = self._input_to_messages(body)
+        modality = self.model_manager.get_model_modality(model, processor=processor)
+        processor_inputs = get_processor_inputs_from_messages(messages, modality)
+
         inputs = processor.apply_chat_template(
-            messages,
+            processor_inputs,
             add_generation_prompt=True,
             tools=body.get("tools"),
             return_tensors="pt",

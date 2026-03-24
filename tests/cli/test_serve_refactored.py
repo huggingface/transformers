@@ -1629,6 +1629,93 @@ def _make_test_wav(duration: float = 2.0, sample_rate: int = 16000) -> bytes:
     return buf.getvalue()
 
 
+# ---------------------------------------------------------------------------
+# 12. Integration tests — VLM support (need GPU + model)
+# ---------------------------------------------------------------------------
+
+
+def _make_test_image_base64() -> str:
+    """Create a small red 64x64 PNG as a base64 data URL."""
+    import base64
+
+    from PIL import Image
+
+    img = Image.new("RGB", (64, 64), color="red")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
+
+
+@unittest.skipUnless(run_slow and is_vision_available(), "Set RUN_SLOW=1 and install torchvision + PIL")
+@require_openai
+class TestVLM(unittest.TestCase):
+    """Integration tests for VLM (vision-language model) support. Requires torchvision."""
+
+    MODEL = "HuggingFaceTB/SmolVLM-256M-Instruct"
+    PORT = 8881
+
+    @classmethod
+    def setUpClass(cls):
+        import requests as req
+
+        from transformers.cli.serve_refactored import Serve
+
+        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        for _ in range(60):
+            try:
+                if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def test_chat_completion_with_image(self):
+        """Chat completions should accept image_url content and produce a response."""
+        image_url = _make_test_image_base64()
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What color is this image?"},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }
+            ],
+            max_tokens=20,
+        )
+        text = resp.choices[0].message.content
+        self.assertIsNotNone(text)
+        self.assertIn("red", text.lower(), f"Expected 'red' in response, got: {text}")
+
+    def test_responses_with_image(self):
+        """Responses API should accept image_url content and produce a response about the image."""
+        image_url = _make_test_image_base64()
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What color is this image?"},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }
+            ],
+            stream=False,
+            max_output_tokens=20,
+        )
+        self.assertEqual(resp.status, "completed")
+        text = resp.output[0].content[0].text
+        self.assertIn("red", text.lower(), f"Expected 'red' in response, got: {text}")
+
+
 @unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
 @require_openai
 class TestTranscription(unittest.TestCase):
