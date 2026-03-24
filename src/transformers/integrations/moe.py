@@ -263,8 +263,8 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     """
     if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
         weight.device.type == "cpu"
+        # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
         and is_torch_less_or_equal("2.10.0", accept_dev=True)
-        # accept_dev=True is necessary for "+cpu" builds as well
         and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
     ):
         # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
