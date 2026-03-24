@@ -112,6 +112,7 @@ class LwDetrImageLoss(nn.Module):
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
         source_logits = outputs["logits"]
+        dtype = source_logits.dtype
 
         idx = self._get_source_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
@@ -123,21 +124,20 @@ class LwDetrImageLoss(nn.Module):
             box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))[0]
         )
         # Convert to the same dtype as the source logits as box_iou upcasts to float32
-        iou_targets = iou_targets.to(source_logits.dtype)
+        iou_targets = iou_targets.to(dtype)
         pos_ious = iou_targets.clone().detach()
         prob = source_logits.sigmoid()
         # init positive weights and negative weights
         pos_weights = torch.zeros_like(source_logits)
-        neg_weights = prob**gamma
+        # pow promotes to float32 under float16 CUDA autocast; cast back to preserve original dtype
+        neg_weights = prob.pow(gamma).to(dtype)
+        pos_ind = idx + (target_classes_o,)
 
-        pos_ind = list(idx)
-        pos_ind.append(target_classes_o)
+        pos_quality = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
+        pos_quality = torch.clamp(pos_quality, 0.01).detach().to(dtype)
 
-        t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
-        t = torch.clamp(t, 0.01).detach()
-
-        pos_weights[pos_ind] = t
-        neg_weights[pos_ind] = 1 - t
+        pos_weights[pos_ind] = pos_quality
+        neg_weights[pos_ind] = 1 - pos_quality
         loss_ce = -pos_weights * prob.log() - neg_weights * (1 - prob).log()
         loss_ce = loss_ce.sum() / num_boxes
         losses = {"loss_ce": loss_ce}

@@ -124,6 +124,8 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
+    - local: chat_response_parsing
+      title: Response parsing
     title: Chat with models
   - isExpanded: false
     sections:
@@ -163,6 +165,8 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Customization
+  - local: peft
+    title: Parameter-efficient fine-tuning
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -195,8 +199,6 @@
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
-  - local: peft
-    title: PEFT
   title: Training
 - isExpanded: false
   sections:
@@ -972,6 +974,8 @@
         title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
+      - local: model_doc/uvdoc
+        title: UVDoc
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
@@ -1316,6 +1320,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/slanext
+        title: SLANeXt
       - local: model_doc/smollm3
         title: SmolLM3
       - local: model_doc/smolvlm

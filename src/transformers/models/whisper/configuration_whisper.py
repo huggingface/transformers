@@ -46,7 +46,7 @@ NON_SPEECH_TOKENS_MULTI = [
 
 
 @auto_docstring(checkpoint="openai/whisper-tiny")
-@strict(accept_kwargs=True)
+@strict
 class WhisperConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):

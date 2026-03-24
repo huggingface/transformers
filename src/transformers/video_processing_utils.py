@@ -28,8 +28,8 @@ from .image_processing_backends import TorchvisionBackend
 from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
-    PILImageResampling,
     SizeDict,
+    is_vision_available,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
@@ -66,6 +66,9 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as tvF
+
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
 
 logger = logging.get_logger(__name__)
@@ -436,7 +439,7 @@ class BaseVideoProcessor(TorchvisionBackend):
                 - a path to a *directory* containing a video processor file saved using the
                   [`~video_processing_utils.VideoProcessorBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved video processor JSON *file*, e.g.,
+                - a path to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/video_preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
