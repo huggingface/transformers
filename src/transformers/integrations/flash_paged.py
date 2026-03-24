@@ -53,6 +53,7 @@ def paged_attention_forward(
         cu_seq_lens_k = cu_seq_lens_k[layer_type]
         max_seqlen_k = max_seqlen_k[layer_type]
 
+    # Set the correct CUDA context before launching the FlashAttention kernel.
     # If no block table is provided, use flash_attn_varlen_func with read/write indices
     if block_table is None:
         # .update changes the shape of k and v from [1, num_kv_heads, seqlen_kv, head_dim] to [-1, num_kv_heads, head_dim]
@@ -64,19 +65,20 @@ def paged_attention_forward(
             write_index=kwargs["write_index"],
         )
         custom_kwargs = {"s_aux": kwargs.get("s_aux")} if "s_aux" in kwargs else {}
-        attn_output = flash_attn_varlen_func(
-            q.transpose(1, 2).squeeze(0).contiguous(),
-            k.contiguous(),
-            v.contiguous(),
-            cu_seq_lens_q.to(torch.int32),
-            cu_seq_lens_k.to(torch.int32).clone(),
-            max_seqlen_q,
-            max_seqlen_k,
-            softmax_scale=module.scaling,
-            causal=True,  # kind of a must, it automatically aligns the mask for q < k
-            window_size=sliding_window,  # -1 means infinite context window
-            **custom_kwargs,
-        )
+        with torch.cuda.device(q.device):
+            attn_output = flash_attn_varlen_func(
+                q.transpose(1, 2).squeeze(0).contiguous(),
+                k.contiguous(),
+                v.contiguous(),
+                cu_seq_lens_q.to(torch.int32),
+                cu_seq_lens_k.to(torch.int32).clone(),
+                max_seqlen_q,
+                max_seqlen_k,
+                softmax_scale=module.scaling,
+                causal=True,  # kind of a must, it automatically aligns the mask for q < k
+                window_size=sliding_window,  # -1 means infinite context window
+                **custom_kwargs,
+            )
         if isinstance(attn_output, tuple):
             attn_output = attn_output[0]
 
@@ -104,18 +106,19 @@ def paged_attention_forward(
         if "s_aux" in kwargs:
             flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
         # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
-        attn_output = flash_attn_with_kvcache(
-            q=q,
-            k_cache=k_cache,
-            v_cache=v_cache,
-            k=k,
-            v=v,
-            cache_seqlens=cache_seqlens,
-            softmax_scale=module.scaling,
-            causal=True,
-            window_size=sliding_window,
-            **flash_kwargs,
-        )
+        with torch.cuda.device(q.device):
+            attn_output = flash_attn_with_kvcache(
+                q=q,
+                k_cache=k_cache,
+                v_cache=v_cache,
+                k=k,
+                v=v,
+                cache_seqlens=cache_seqlens,
+                softmax_scale=module.scaling,
+                causal=True,
+                window_size=sliding_window,
+                **flash_kwargs,
+            )
         if isinstance(attn_output, tuple):
             attn_output = attn_output[0]
         # Reshape output from [batch_size, 1, num_heads, head_dim] to [batch_size, num_heads, head_dim]

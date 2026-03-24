@@ -64,23 +64,24 @@ def flash_attention_forward(
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else module.is_causal
-
-    attn_output = _flash_attention_forward(
-        query,
-        key,
-        value,
-        attention_mask,
-        query_length=seq_len,
-        is_causal=is_causal,
-        dropout=dropout,
-        softmax_scale=scaling,
-        sliding_window=sliding_window,
-        softcap=softcap,
-        use_top_left_mask=_use_top_left_mask,
-        target_dtype=target_dtype,
-        attn_implementation=module.config._attn_implementation,
-        layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
-        **kwargs,
-    )
+    # Set the correct CUDA context before launching the FlashAttention kernel.
+    with torch.cuda.device(query.device):
+        attn_output = _flash_attention_forward(
+            query,
+            key,
+            value,
+            attention_mask,
+            query_length=seq_len,
+            is_causal=is_causal,
+            dropout=dropout,
+            softmax_scale=scaling,
+            sliding_window=sliding_window,
+            softcap=softcap,
+            use_top_left_mask=_use_top_left_mask,
+            target_dtype=target_dtype,
+            attn_implementation=module.config._attn_implementation,
+            layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
+            **kwargs,
+        )
 
     return attn_output, None
