@@ -27,7 +27,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import is_torch_available
-from .modeling_isaac import BoundingBox, SinglePoint
+from .modeling_isaac import BoundingBox, Polygon, SinglePoint
 
 
 if is_torch_available():
@@ -43,8 +43,11 @@ class IsaacProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-_POINT_OR_BOX_TAG = re.compile(
-    r"<(?P<tag>point|point_box)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
+IsaacAnnotation = SinglePoint | BoundingBox | Polygon
+
+
+_POINT_BOX_OR_POLYGON_TAG = re.compile(
+    r"<(?P<tag>point|point_box|polygon)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
 )
 _ATTR_RE = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
 _COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
@@ -86,12 +89,21 @@ def _parse_box_body(body: str, mention: str | None = None, t: str | None = None)
     return BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=_maybe_float(t))
 
 
+def _parse_polygon_body(body: str, mention: str | None = None, t: str | None = None) -> Polygon:
+    coords = list(_COORD_RE.finditer(body))
+    if len(coords) < 3:
+        raise ValueError(f"Malformed <polygon> tag: {body!r}")
+
+    points = tuple(SinglePoint(x=int(coord.group(1)), y=int(coord.group(2))) for coord in coords)
+    return Polygon(points=points, mention=mention, t=_maybe_float(t))
+
+
 def clean_text_and_extract_points(
     text: str,
     expected: str | None = None,
-) -> tuple[str, list[SinglePoint | BoundingBox]]:
-    results = []
-    for match in _POINT_OR_BOX_TAG.finditer(text or ""):
+) -> tuple[str, list[IsaacAnnotation]]:
+    results: list[IsaacAnnotation] = []
+    for match in _POINT_BOX_OR_POLYGON_TAG.finditer(text or ""):
         tag = match.group("tag").lower()
         attrs = _parse_attrs(match.group("attrs"))
         mention = attrs.get("mention")
@@ -100,12 +112,16 @@ def clean_text_and_extract_points(
             if expected not in (None, "point"):
                 continue
             results.append(_parse_point_body(match.group("body"), mention=mention, t=t))
-        else:
+        elif tag == "point_box":
             if expected not in (None, "box"):
                 continue
             results.append(_parse_box_body(match.group("body"), mention=mention, t=t))
+        else:
+            if expected not in (None, "polygon"):
+                continue
+            results.append(_parse_polygon_body(match.group("body"), mention=mention, t=t))
 
-    clean_text = re.sub(r"\s+", " ", _POINT_OR_BOX_TAG.sub("", text or "")).strip()
+    clean_text = re.sub(r"\s+", " ", _POINT_BOX_OR_POLYGON_TAG.sub("", text or "")).strip()
     return clean_text, results
 
 
@@ -149,7 +165,7 @@ class IsaacProcessor(ProcessorMixin):
         text: str,
         expected: str | None = None,
         cleanup_and_extract: bool = True,
-    ) -> str | tuple[str, list[SinglePoint | BoundingBox]]:
+    ) -> str | tuple[str, list[IsaacAnnotation]]:
         if cleanup_and_extract:
             return clean_text_and_extract_points(text, expected=expected)
         return text

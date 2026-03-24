@@ -69,6 +69,12 @@ class BoundingBox(NamedTuple):
     t: float | None = None
 
 
+class Polygon(NamedTuple):
+    points: tuple[SinglePoint, ...]
+    mention: str | None = None
+    t: float | None = None
+
+
 class IsaacVisionEmbeddings(nn.Module):
     """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences.
 
