@@ -1092,17 +1092,12 @@ class IsaacModel(Qwen3PreTrainedModel):
         hidden_size = self.config.get_text_config().hidden_size
 
         if image_attention_mask.any():
-            vision_kwargs = {
-                key: value
-                for key in ("output_hidden_states", "output_attentions")
-                if (value := kwargs.get(key)) is not None
-            }
             vision_outputs = self.vision_tower(
                 vision_patches=pixel_values[image_attention_mask],
                 vision_token_grids=image_token_grids[image_attention_mask],
                 vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
                 return_dict=True,
-                **vision_kwargs,
+                **kwargs,
             )
             flat_projected_features = self.multimodal_projector(vision_outputs.last_hidden_state)
             max_tokens = flat_projected_features.shape[1]
