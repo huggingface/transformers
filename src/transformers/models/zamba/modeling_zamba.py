@@ -641,7 +641,7 @@ class ZambaPreTrainedModel(PreTrainedModel):
     config: ZambaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ZambaAttentionDecoderLayer", "ZambaMambaDecoderLayer"]
+    _no_split_modules = ["ZambaHybridLayer", "ZambaMambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
     _supports_sdpa = False
