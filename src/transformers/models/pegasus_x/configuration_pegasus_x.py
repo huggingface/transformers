@@ -75,8 +75,8 @@ class PegasusXConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 0
     scale_embedding: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
-    forced_eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
+    forced_eos_token_id: int | list[int] | None = 1
     num_global_tokens: int = 32
     block_size: int = 512
     stagger_local_blocks: bool = True

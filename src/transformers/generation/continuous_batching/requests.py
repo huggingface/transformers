@@ -31,6 +31,12 @@ TMP_TOKEN_ID = -1
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
+# Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
+if logger.propagate:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
@@ -147,6 +153,7 @@ class RequestState:
         default_factory=list
     )  # Initial tokens left to process (initialized in __post_init__)
     generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
+    logprobs: list[float] = field(default_factory=list)  # Log probabilities of the generated tokens
     allocated_blocks: int = 0  # Number of blocks allocated to the request
     position_offset: int = 0  # Current position in the sequence for position_ids
     _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
@@ -216,15 +223,9 @@ class RequestState:
 
     # TODO: this logic seems one token off, check it out
     @traced
-    def update_and_check_completion(self, token_id: int) -> bool:
-        """Update the request with a newly generated token and check for completion.
-
-        Args:
-            token_id: The token ID to add to the output sequence
-
-        Returns:
-            bool: True if the request is now complete, False otherwise
-        """
+    def update_and_check_completion(self, token_id: int, logprob: float | None) -> bool:
+        """Update the request with a newly generated token (and optional log probability of the token) and check for
+        completion. Returns True if the request is now complete, False otherwise."""
         # Only update if we're in decoding state # TODO: seems useless (always true) -- remove this
         if self.status != RequestStatus.DECODING:
             return False
@@ -243,9 +244,10 @@ class RequestState:
             self.generated_tokens.append(token_id)
             self.tokens_to_process = [token_id]  # this works for 2 levels of pipelines, but not sure for more
             current_len += 1
+            if logprob is not None:
+                self.logprobs.append(logprob)
         else:
             logger.warning(f"Request {self.request_id} generated a useless token: {token_id}")
-            self.generated_tokens.pop()
 
         if is_eos or current_len >= self._new_tokens_limit:
             self.status = RequestStatus.FINISHED
@@ -275,7 +277,7 @@ class RequestState:
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,
             generated_tokens=self.generated_tokens,
-            logprobs=[],
+            logprobs=self.logprobs,
             error=self.error,
             status=self.status,
             created_time=self.created_time,
@@ -292,6 +294,7 @@ class RequestState:
             num_children=self.num_children,
             tokens_to_process=self.tokens_to_process[:],
             generated_tokens=self.generated_tokens[:],
+            logprobs=self.logprobs[:],
             allocated_blocks=self.allocated_blocks,
             position_offset=self.position_offset,
             _status=self.status,
@@ -311,18 +314,24 @@ class RequestState:
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
-        the _true_initial_tokens attribute."""
+        the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
         max_new_tokens = None if self.max_new_tokens is None else (self.max_new_tokens - len(self.generated_tokens))
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
+            logprobs=self.logprobs[:],
             num_children=self.num_children,
             record_timestamps=self.record_timestamps,
             max_new_tokens=max_new_tokens,
             eos_token_id=self.eos_token_id,
             streaming=self.streaming,
         )
-        new_state._true_initial_tokens = self._true_initial_tokens + len(self.initial_tokens)
+        # If the request has been soft reset once already, this stays the same
+        if self._true_initial_tokens:
+            new_state._true_initial_tokens = self._true_initial_tokens
+        # Otherwise, we set the true initial tokens to the number of initial tokens
+        else:
+            new_state._true_initial_tokens = len(self.initial_tokens)
         return new_state
 
 

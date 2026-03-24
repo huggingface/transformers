@@ -75,7 +75,7 @@ class MarkupLMConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 0
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_xpath_tag_unit_embeddings: int = 256
     max_xpath_subs_unit_embeddings: int = 1024
     tag_pad_id: int = 216

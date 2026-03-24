@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import AllKwargsForChatTemplate, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
 from ...video_utils import VideoInput
@@ -292,7 +292,8 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         chat_template: str | None = None,
-        **kwargs: Unpack[AllKwargsForChatTemplate],
+        processor_kwargs: dict | None = None,
+        **kwargs,
     ) -> str:
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
@@ -336,10 +337,15 @@ class SmolVLMProcessor(ProcessorMixin):
             # re-assign to the correct default template for BC, if user is not requesting their own template
             chat_template = DEFAULT_CHAT_TEMPLATE
 
-        kwargs.setdefault("num_frames", self.video_processor.num_frames)
-        kwargs.setdefault("fps", self.video_processor.fps)
+        # Users might be passing processor kwargs simply as `**kwargs`
+        if processor_kwargs:
+            processor_kwargs.setdefault("num_frames", self.video_processor.num_frames)
+            processor_kwargs.setdefault("fps", self.video_processor.fps)
+        else:
+            kwargs.setdefault("num_frames", self.video_processor.num_frames)
+            kwargs.setdefault("fps", self.video_processor.fps)
 
-        return super().apply_chat_template(conversation, chat_template, **kwargs)
+        return super().apply_chat_template(conversation, chat_template, processor_kwargs=processor_kwargs, **kwargs)
 
 
 __all__ = ["SmolVLMProcessor"]

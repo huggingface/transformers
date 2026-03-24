@@ -48,9 +48,9 @@ TextNet is the backbone for Fast, but can also be used as an efficient text/imag
 [[autodoc]] TextNetImageProcessor
     - preprocess
 
-## TextNetImageProcessorFast
+## TextNetImageProcessorPil
 
-[[autodoc]] TextNetImageProcessorFast
+[[autodoc]] TextNetImageProcessorPil
     - preprocess
 
 ## TextNetModel

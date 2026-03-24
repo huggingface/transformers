@@ -123,7 +123,7 @@ class Sam2PatchEmbeddings(nn.Module):
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Sam2ImageProcessorFast.__call__`] for details.
+            [`AutoImageProcessor`]. See [`Sam2ImageProcessor.__call__`] for details.
 
     Returns:
         embeddings (`torch.FloatTensor`):
