@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
-@strict(accept_kwargs=True)
+@strict
 class ExaoneMoeConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -94,7 +94,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 53
+    eos_token_id: int | list[int] | None = 53
     pad_token_id: int | None = 0
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None

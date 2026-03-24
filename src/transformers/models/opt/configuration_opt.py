@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/opt-350m")
-@strict(accept_kwargs=True)
+@strict
 class OPTConfig(PreTrainedConfig):
     r"""
     do_layer_norm_before (`bool`, *optional*, defaults to `True`):
@@ -70,7 +70,7 @@ class OPTConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 2
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     enable_bias: bool = True
     layer_norm_elementwise_affine: bool = True
     tie_word_embeddings: bool = True

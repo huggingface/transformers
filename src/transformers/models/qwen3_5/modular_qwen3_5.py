@@ -57,7 +57,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5TextConfig(Qwen3NextConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -123,13 +123,13 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
     deepstack_visual_indexes = AttributeError()
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
     Example:
@@ -522,8 +522,8 @@ class Qwen3_5TextModel(Qwen3NextModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,

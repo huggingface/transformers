@@ -64,7 +64,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nTextConfig(Gemma3TextConfig):
     r"""
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
@@ -204,7 +204,7 @@ class Gemma3nTextConfig(Gemma3TextConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     vocab_offset (`int`, *optional*, defaults to 262272):
@@ -304,7 +304,7 @@ class Gemma3nAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nVisionConfig(TimmWrapperConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -346,7 +346,7 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nConfig(PreTrainedConfig):
     r"""
     audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
@@ -1889,13 +1889,13 @@ class Gemma3nTextModel(Gemma3TextModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            causal_mask = causal_mask_mapping[decoder_layer.attention_type]
-            per_layer_input = per_layer_inputs[:, :, decoder_layer.layer_idx, :]
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            causal_mask = causal_mask_mapping[self.config.layer_types[i]]
+            per_layer_input = per_layer_inputs[:, :, i, :]
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings[decoder_layer.attention_type],
+                position_embeddings[self.config.layer_types[i]],
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,

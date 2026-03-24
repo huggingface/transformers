@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/wavlm-base")
-@strict(accept_kwargs=True)
+@strict
 class WavLMConfig(PreTrainedConfig):
     r"""
     final_dropout (`float`, *optional*, defaults to 0.1):
@@ -205,7 +205,7 @@ class WavLMConfig(PreTrainedConfig):
     num_ctc_classes: int = 80
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_adapter: bool = False
     adapter_kernel_size: int = 3
     adapter_stride: int = 2

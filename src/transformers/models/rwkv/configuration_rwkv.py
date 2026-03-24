@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="RWKV/rwkv-4-169m-pile")
-@strict(accept_kwargs=True)
+@strict
 class RwkvConfig(PreTrainedConfig):
     """
     context_length (`int`, *optional*, defaults to 1024):
@@ -59,7 +59,7 @@ class RwkvConfig(PreTrainedConfig):
     intermediate_size: int | None = None
     layer_norm_epsilon: float = 1e-5
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 0
     rescale_every: int = 6
     tie_word_embeddings: bool = False
     use_cache: bool = True

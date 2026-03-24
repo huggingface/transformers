@@ -25,7 +25,7 @@ from ...utils.type_validators import interval, is_divisible_by
 logger = logging.get_logger(__name__)
 
 
-@strict(accept_kwargs=True)
+@strict
 class StructureModuleConfig(PreTrainedConfig):
     """
     Args:
@@ -78,7 +78,7 @@ class StructureModuleConfig(PreTrainedConfig):
     inf: float | None = 1e5
 
 
-@strict(accept_kwargs=True)
+@strict
 class TrunkConfig(PreTrainedConfig):
     sub_configs = {"structure_module": StructureModuleConfig}
 
@@ -129,7 +129,7 @@ class TrunkConfig(PreTrainedConfig):
             )
 
 
-@strict(accept_kwargs=True)
+@strict
 class EsmFoldConfig(PreTrainedConfig):
     sub_configs = {"trunk": TrunkConfig}
 
@@ -153,7 +153,7 @@ class EsmFoldConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/esm-1b")
-@strict(accept_kwargs=True)
+@strict
 class EsmConfig(PreTrainedConfig):
     r"""
     is_folding_model (`bool`, defaults to `False`):

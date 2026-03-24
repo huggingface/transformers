@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/levit-128S")
-@strict(accept_kwargs=True)
+@strict
 class LevitConfig(PreTrainedConfig):
     r"""
     stride (`int`, *optional*, defaults to 2):

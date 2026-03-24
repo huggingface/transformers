@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/mt5-small")
-@strict(accept_kwargs=True)
+@strict
 class MT5Config(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -61,7 +61,7 @@ class MT5Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
     bos_token_id: int | None = None
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     decoder_start_token_id: int | None = 0
     classifier_dropout: float | int = 0.0
     is_decoder: bool = False

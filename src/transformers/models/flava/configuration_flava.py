@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaImageConfig(PreTrainedConfig):
     r"""
     num_blocks_per_group (`int`, *optional*, defaults to 2):
@@ -71,7 +71,7 @@ class FlavaImageConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -109,7 +109,7 @@ class FlavaTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     use_cls_token (`bool`, *optional*, defaults to `True`):
@@ -147,7 +147,7 @@ class FlavaMultimodalConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaImageCodebookConfig(PreTrainedConfig):
     r"""
     num_groups (`int`, *optional*, defaults to 4):
@@ -183,7 +183,7 @@ class FlavaImageCodebookConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/flava-full")
-@strict(accept_kwargs=True)
+@strict
 class FlavaConfig(PreTrainedConfig):
     r"""
     image_config (`dict`, *optional*):

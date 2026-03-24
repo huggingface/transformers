@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/gpt_bigcode")
-@strict(accept_kwargs=True)
+@strict
 class GPTBigCodeConfig(PreTrainedConfig):
     r"""
     multi_query (`bool`, *optional*, defaults to `True`):
@@ -73,7 +73,7 @@ class GPTBigCodeConfig(PreTrainedConfig):
     scale_attn_weights: bool = True
     use_cache: bool = True
     bos_token_id: int | None = 50256
-    eos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
     pad_token_id: int | None = None
     attention_softmax_in_fp32: bool = True
     scale_attention_softmax_in_fp32: bool = True

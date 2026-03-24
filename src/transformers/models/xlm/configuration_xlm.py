@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="FacebookAI/xlm-mlm-en-2048")
-@strict(accept_kwargs=True)
+@strict
 class XLMConfig(PreTrainedConfig):
     r"""
     gelu_activation (`bool`, *optional*, defaults to `True`):
@@ -138,7 +138,7 @@ class XLMConfig(PreTrainedConfig):
     lang_id: int = 0
     pad_token_id: int | None = 2
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = True
 
 

@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
-@strict(accept_kwargs=True)
+@strict
 class GlmAsrEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -62,7 +62,7 @@ class GlmAsrEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-ASR-Nano-2512")
-@strict(accept_kwargs=True)
+@strict
 class GlmAsrConfig(PreTrainedConfig):
     r"""
     Example:

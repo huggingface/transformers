@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
-@strict(accept_kwargs=True)
+@strict
 class Llama4VisionConfig(PreTrainedConfig):
     r"""
     vision_output_dim (`int`, *optional*, defaults to 7680):
@@ -75,7 +75,7 @@ class Llama4VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
-@strict(accept_kwargs=True)
+@strict
 class Llama4TextConfig(PreTrainedConfig):
     r"""
     intermediate_size_mlp (`int`, *optional*, defaults to 16384):
@@ -151,7 +151,7 @@ class Llama4TextConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 1
@@ -166,7 +166,7 @@ class Llama4TextConfig(PreTrainedConfig):
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     attention_chunk_size: int = 8192
-    layer_types: list[int] | None = None
+    layer_types: list[str] | None = None
     attn_temperature_tuning: bool = True
     floor_scale: int = 8192
     attn_scale: float = 0.1
@@ -203,7 +203,7 @@ class Llama4TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="meta-llama/Llama-4-Scout-17B-16E")
-@strict(accept_kwargs=True)
+@strict
 class Llama4Config(PreTrainedConfig):
     r"""
     boi_token_index (`int`, *optional*, defaults to 200080):

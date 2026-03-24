@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="BAAI/seggpt-vit-large")
-@strict(accept_kwargs=True)
+@strict
 class SEWConfig(PreTrainedConfig):
     r"""
     squeeze_factor (`int`, *optional*, defaults to 2):
@@ -148,7 +148,7 @@ class SEWConfig(PreTrainedConfig):
     classifier_proj_size: int = 256
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
 
     def __post_init__(self, **kwargs):
         self.num_feat_extract_layers = len(self.conv_dim)
