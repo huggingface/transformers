@@ -2583,10 +2583,8 @@ class GenerationTesterMixin:
 
         # Check each layer has the correct shape
         for layer in past_key_values.layers:
-            if isinstance(layer, MambaLayer):
-                self.assertEqual(layer.conv_states.shape, conv_shape)
-                self.assertEqual(layer.ssm_states.shape, ssm_shape)
-            elif isinstance(layer, MambaAndAttentionLayer):
+            # Mamba + Attention layer cache
+            if type(layer) is MambaAndAttentionLayer:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
@@ -2594,6 +2592,11 @@ class GenerationTesterMixin:
                 self.assertEqual(values.shape, attention_shape)
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 self.assertEqual(layer.ssm_states.shape, ssm_shape)
+            # Mamba only layer cache
+            elif type(layer) is MambaLayer:
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.ssm_states.shape, ssm_shape)
+            # Attention only layer type
             else:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
@@ -2639,15 +2642,16 @@ class GenerationTesterMixin:
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            self.assertEqual(type(cache1.layers[idx], cache2.layers[idx]))
-            # Mamba layer
-            if isinstance(cache1.layers[idx], MambaLayer):
-                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
-                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            self.assertEqual(type(cache1.layers[idx]), type(cache2.layers[idx]))
+
             # Mamba + Attention layer
-            elif isinstance(cache1.layers[idx], MambaAndAttentionLayer):
+            if type(cache1.layers[idx]) is MambaAndAttentionLayer:
                 torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
                 torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            # Mamba layer
+            elif type(cache1.layers[idx]) is MambaLayer:
                 torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
                 torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
             # Attention layer
