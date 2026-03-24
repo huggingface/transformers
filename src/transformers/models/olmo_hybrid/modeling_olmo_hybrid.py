@@ -693,7 +693,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Output norm - NOTE: FLA's FusedRMSNormGated uses eps=1e-5 by default
         self.o_norm = (
             OlmoHybridRMSNormGated(self.head_v_dim, eps=1e-5)
-            if FusedRMSNormGated is None
+            if FusedRMSNormGated is None or not torch.cuda.is_available()
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=1e-5,

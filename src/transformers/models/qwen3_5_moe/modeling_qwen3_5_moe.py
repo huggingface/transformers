@@ -480,7 +480,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         self.norm = (
             Qwen3_5MoeRMSNormGated(self.head_v_dim, eps=self.layer_norm_epsilon)
-            if FusedRMSNormGated is None
+            if FusedRMSNormGated is None or not torch.cuda.is_available()
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
