@@ -104,17 +104,17 @@ class CsmConfig(PreTrainedConfig):
     codec_config (`PreTrainedConfig`, *optional*):
         Configuration for the codec.
 
-     ```python
-     >>> from transformers import CsmForConditionalGeneration, CsmConfig
+    ```python
+    >>> from transformers import CsmForConditionalGeneration, CsmConfig
 
-     >>> # Initializing a CsmConfig
-     >>> configuration = CsmConfig()
+    >>> # Initializing a CsmConfig
+    >>> configuration = CsmConfig()
 
-     >>> # Initializing a model
-     >>> model = CsmForConditionalGeneration(configuration)
+    >>> # Initializing a model
+    >>> model = CsmForConditionalGeneration(configuration)
 
-     >>> # Accessing the model configuration
-     >>> configuration = model.config
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```
     """
 

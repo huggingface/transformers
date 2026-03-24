@@ -40,7 +40,7 @@ AUTODOC_FILES = [
     "modeling_*.py",
     "tokenization_*.py",
     "processing_*.py",
-    "image_processing_*_fast.py",
+    "image_processing_pil_*.py",
     "image_processing_*.py",
     "feature_extractor_*.py",
 ]

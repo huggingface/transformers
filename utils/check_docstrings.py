@@ -928,14 +928,13 @@ def _find_corresponding_modular_file(generated_file: str) -> str | None:
     """Return the modular_*.py path for any generated model file, or None.
 
     Handles modeling_*, configuration_*, processing_*, image_processing_* (including
-    the _fast suffix variant).
+    the image_processing_pil_* variant).
     """
     path = Path(generated_file)
     stem = path.stem
-    for prefix in ("modeling_", "configuration_", "processing_", "image_processing_"):
+    for prefix in ("modeling_", "configuration_", "processing_", "image_processing_pil_", "image_processing_"):
         if stem.startswith(prefix):
             model_name = stem[len(prefix) :]
-            model_name = model_name.removesuffix("_fast")
             modular_path = path.parent / f"modular_{model_name}.py"
             return str(modular_path) if modular_path.exists() else None
     return None
