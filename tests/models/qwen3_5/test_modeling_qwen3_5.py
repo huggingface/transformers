@@ -46,7 +46,6 @@ if is_torch_available():
         Qwen3_5TextConfig,
         Qwen3_5TextModel,
     )
-    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DynamicCache
 
 
 class Qwen3_5TextModelTester(CausalLMModelTester):
@@ -300,35 +299,16 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
-        self.assertIsInstance(past_key_values, Qwen3_5DynamicCache)
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
+        num_v_heads = config.linear_num_value_heads
+        num_k_heads = config.linear_num_key_heads
+        head_k_dim = config.linear_key_head_dim
+        head_v_dim = config.linear_value_head_dim
+        intermediate_size = 2 * num_k_heads * head_k_dim + num_v_heads * head_v_dim
 
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        expected_shape = (batch_size, num_heads, seq_length, head_dim)
-
-        attention_layer_indices = past_key_values.transformer_layers
-        self.assertListEqual(
-            [past_key_values.key_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
-        self.assertListEqual(
-            [past_key_values.value_cache[idx].shape for idx in attention_layer_indices],
-            [expected_shape] * len(attention_layer_indices),
-        )
-
-    def _check_caches_are_equal(self, cache1, cache2):
-        "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            if cache1.key_cache[idx] is not None:
-                torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-                torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
+        conv_shape = (batch_size, intermediate_size, config.linear_conv_kernel_dim)
+        ssm_shape = (batch_size, num_v_heads, head_k_dim, head_v_dim)
+        return conv_shape, ssm_shape
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3.5 alternates between attention layers and gated deltanet layers."
