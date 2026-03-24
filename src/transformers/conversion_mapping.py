@@ -113,9 +113,9 @@ def _build_checkpoint_conversion_mapping():
         ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
-            # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            # when saving. TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
             # Note: we don't add `timm_model` when it is part of a bigger VLM, because they already have `timm_model`
-            # saved in state dict keys. Thus the look behind check
+            # saved in state dict keys. Thus the look behind check. Should be fixed by proper `add_prefix`!
             WeightRenaming(
                 source_patterns=r"^(?!(?:model\.|backbone\.|tower\.))(.+)$",
                 target_patterns=r"timm_model.\1",
