@@ -15,8 +15,9 @@ style:
 
 # Runs ty type checker and model structure rules
 typing:
-	python utils/check_types.py $(ty_check_dirs)
-	python -m utils.mlinter
+	@python utils/checkers.py \
+		types,\
+		modeling_structure
 
 # Runs typing, ruff linting/formatting, import-order checks and auto-mappings
 check-code-quality:
