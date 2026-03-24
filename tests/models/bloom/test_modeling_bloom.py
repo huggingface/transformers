@@ -224,7 +224,7 @@ class BloomIntegrationTest(unittest.TestCase):
         # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
         """
         # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_safetensors=False, dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -452,7 +452,9 @@ class BloomIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(torch_device)
+        model = BloomModel.from_pretrained(
+            self.path_bigscience_model, use_safetensors=False, use_cache=False, dtype="auto"
+        ).to(torch_device)
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -477,9 +479,9 @@ class BloomIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
-            torch_device
-        )  # load in bf16
+        model = BloomForCausalLM.from_pretrained(
+            self.path_bigscience_model, use_safetensors=False, use_cache=False, dtype="auto"
+        ).to(torch_device)  # load in bf16
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -518,7 +520,9 @@ class BloomIntegrationTest(unittest.TestCase):
         # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m)
 
@@ -538,7 +542,9 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
@@ -558,7 +564,9 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation_padding(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
@@ -588,7 +596,9 @@ class BloomIntegrationTest(unittest.TestCase):
     def test_batch_generated_text(self):
         path_560m = "bigscience/bloom-560m"
 
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750"
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 

@@ -40,7 +40,8 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
@@ -213,7 +214,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -553,10 +553,13 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        target_dtype = self.convs[0].conv.weight.dtype
+        hidden_states = hidden_states.to(dtype=target_dtype)
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -666,8 +669,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     """
 )
 class Florence2Model(Florence2PreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
@@ -693,7 +694,7 @@ class Florence2Model(Florence2PreTrainedModel):
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
-        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
         return image_outputs
@@ -736,18 +737,8 @@ class Florence2Model(Florence2PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | Florence2Seq2SeqModelOutput:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if encoder_outputs is None:
             if (input_ids is None) ^ (inputs_embeds is not None):
                 raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -756,7 +747,7 @@ class Florence2Model(Florence2PreTrainedModel):
                 inputs_embeds = self.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+                image_features = self.get_image_features(pixel_values).pooler_output
                 image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 special_image_mask = self.get_placeholder_mask(
                     input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -766,9 +757,7 @@ class Florence2Model(Florence2PreTrainedModel):
             encoder_outputs = self.language_model.encoder(
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=True,
+                **kwargs,
             )
 
         if decoder_input_ids is None:
@@ -784,10 +773,7 @@ class Florence2Model(Florence2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            return_dict=True,
+            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -831,7 +817,6 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     """
 )
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
@@ -872,10 +857,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Florence2Seq2SeqLMOutput:
@@ -908,12 +889,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "A green car parked in front of a yellow building."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -934,10 +909,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -972,7 +943,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -984,7 +954,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -992,7 +961,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
@@ -1021,7 +990,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+            image_features = self.get_image_features(pixel_values).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features

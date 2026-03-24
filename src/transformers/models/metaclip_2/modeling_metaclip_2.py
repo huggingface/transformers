@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_metaclip_2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -19,7 +34,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_int
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
 
 
@@ -176,11 +192,6 @@ class MetaClip2Attention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
         self.is_causal = False
@@ -350,6 +361,8 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
         if isinstance(module, nn.Linear) and module.bias is not None:
             init.zeros_(module.bias)
+        if hasattr(module, "logit_scale"):
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 class MetaClip2Encoder(nn.Module):
@@ -418,7 +431,8 @@ class MetaClip2TextTransformer(MetaClip2PreTrainedModel):
         self.eos_token_id = config.eos_token_id
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -434,9 +448,8 @@ class MetaClip2TextTransformer(MetaClip2PreTrainedModel):
 
         attention_mask = create_causal_mask(
             config=self.config,
-            input_embeds=hidden_states,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
             past_key_values=None,
         )
 
@@ -694,10 +707,7 @@ class MetaClip2Output(ModelOutput):
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 # contrastive loss function, adapted from
@@ -973,7 +983,8 @@ class MetaClip2VisionTransformer(MetaClip2PreTrainedModel):
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

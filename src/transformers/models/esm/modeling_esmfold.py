@@ -138,7 +138,7 @@ def is_fp16_enabled(device_type):
     # Autocast world
     autocast_dtype = torch.get_autocast_dtype(device_type)
     fp16_enabled = autocast_dtype == torch.float16
-    fp16_enabled = fp16_enabled and torch.is_autocast_enabled()
+    fp16_enabled = fp16_enabled and torch.is_autocast_enabled(device_type)
 
     return fp16_enabled
 
@@ -2049,6 +2049,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         masking_pattern: torch.Tensor | None = None,
         num_recycles: int | None = None,
         output_hidden_states: bool | None = False,
+        **kwargs,
     ) -> EsmForProteinFoldingOutput:
         r"""
         masking_pattern (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

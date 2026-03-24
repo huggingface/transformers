@@ -64,13 +64,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Hello, I'm a language model" | transformers run --task text-generation --model openai-community/gpt2 --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 One can also serve the model using vLLM with the `transformers backend`.

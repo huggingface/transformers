@@ -87,6 +87,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_kernels_available,
     is_torch_npu_available,
 )
@@ -125,12 +126,6 @@ if is_torch_available():
         T5ForConditionalGeneration,
     )
     from transformers.conversion_mapping import MergeModulelist, WeightConverter, get_model_conversion_mapping
-    from transformers.modeling_attn_mask_utils import (
-        AttentionMaskConverter,
-        _create_4d_causal_attention_mask,
-        _prepare_4d_attention_mask,
-        _prepare_4d_causal_attention_mask,
-    )
     from transformers.modeling_utils import (
         FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
@@ -336,32 +331,6 @@ if is_torch_available():
 
         def forward(self, x):
             return self.head(self.language_model(self.vision_model(x)))
-
-    class Prepare4dCausalAttentionMaskModel(nn.Module):
-        def forward(self, inputs_embeds):
-            batch_size, seq_length, _ = inputs_embeds.shape
-            past_key_values_length = 4
-            attention_mask = _prepare_4d_causal_attention_mask(
-                None, (batch_size, seq_length), inputs_embeds, past_key_values_length
-            )
-            return attention_mask
-
-    class Create4dCausalAttentionMaskModel(nn.Module):
-        def forward(self, inputs_embeds):
-            batch_size, seq_length, _ = inputs_embeds.shape
-            past_key_values_length = 4
-            attention_mask = _create_4d_causal_attention_mask(
-                (batch_size, seq_length),
-                dtype=inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-            return attention_mask
-
-    class Prepare4dAttentionMaskModel(nn.Module):
-        def forward(self, mask, inputs_embeds):
-            attention_mask = _prepare_4d_attention_mask(mask, dtype=inputs_embeds.dtype)
-            return attention_mask
 
     class TestOffline(unittest.TestCase):
         def test_offline(self):
@@ -684,6 +653,15 @@ class ModelUtilsTest(TestCasePlus):
                 TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
 
+        # Check that `from_config` also works and uses the same dtype for all modules
+        config = AutoConfig.from_pretrained(TINY_LLAVA)
+        config.text_config.dtype = torch.float16
+        config.dtype = torch.float32
+        model = LlavaForConditionalGeneration._from_config(config)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.dtype, torch.float32)
+
     def test_model_from_pretrained_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's dtype argument
@@ -783,6 +761,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
 
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -807,6 +788,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
+
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -1508,9 +1492,39 @@ class ModelUtilsTest(TestCasePlus):
                     # Make sure both state dict are the same
                     compare_state_dicts(model.state_dict(), new_model.state_dict())
 
-    def test_tied_weights_are_not_tied_if_both_present(self):
-        """Test that if both the source and target of tied weights are present, we do NOT tie them, and instead
+    def test_tied_weights_are_not_tied_if_both_present_but_different(self):
+        """Test that if both the source and target of tied weights are present and different, we do NOT tie them, and instead
         raise a warning"""
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+        # Just to be sure it's actually tied
+        self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save the config
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                f.write(json.dumps(model.config.to_dict()))
+
+            state_dict = model.state_dict()
+            # Clone every param to make sure nothing is tied -> we save everything
+            state_dict = {k: v.clone() for k, v in state_dict.items()}
+            # Make sure the target tied weights has a different value than the source
+            state_dict["linear_2.weight"] = state_dict["linear_2.weight"] + 2
+            safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+
+            # We should have raised a warning here saying that we will NOT tie the weights
+            self.assertIn("both are present in the checkpoints with different values, so we will NOT tie them", cl.out)
+            # Assert no missing keys
+            self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
+            # It should not be the same weight anymore
+            self.assertIsNot(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            )
+
+    def test_tied_weights_are_tied_if_both_present_and_similar(self):
+        """Test that if both the source and target of tied weights are present but have same values, we tie them"""
         model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
@@ -1524,20 +1538,16 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = {k: v.clone() for k, v in state_dict.items()}
             safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
 
-            logger = logging.get_logger("transformers.modeling_utils")
-            with CaptureLogger(logger) as cl:
-                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
 
-            # We should have raised a warning here saying that we will NOT tie the weights
-            self.assertIn("both are present in the checkpoints, so we will NOT tie them.", cl.out)
             # Assert no missing keys
             self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
-            # It should not be the same weight anymore
-            self.assertIsNot(
-                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            # It should still be the same weight
+            self.assertIs(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are NOT tied but they should be!"
             )
 
-            # Make sure both state dict are the same (the values are still the same, it's just not tied)
+            # Make sure both state dict are the same
             compare_state_dicts(model.state_dict(), new_model.state_dict())
 
     def test_tied_weights_are_missing_if_both_absent(self):
@@ -1796,22 +1806,6 @@ class ModelUtilsTest(TestCasePlus):
             outputs = model(input_ids)
             outputs_from_saved = new_model(input_ids)
             torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
-
-    def test_warning_for_beta_gamma_parameters(self):
-        config = PreTrainedConfig()
-        model = TestModelGammaBeta(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.INFO):
-                _, loading_info = TestModelGammaBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
-
-        missing_keys = loading_info["missing_keys"]
-        unexpected_keys = loading_info["unexpected_keys"]
-        self.assertIn("LayerNorm.gamma", missing_keys)
-        self.assertIn("LayerNorm.weight", unexpected_keys)
-        self.assertIn("LayerNorm.beta", missing_keys)
-        self.assertIn("LayerNorm.bias", unexpected_keys)
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
@@ -2311,7 +2305,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_decoder_only_model_can_be_used_as_encoder(self, attn_implementation: str):
         """Test that most well-behaved decoder models can be used as encoders through the `is_causal` kwarg/config.
         Note that it's enough to test it on Llama, as the entry points are all through general code
-        (masking_utils.py + `check_model_inputs` decorator). This makes it easier as the model need to use both the
+        (masking_utils.py + `capture_outputs` decorator). This makes it easier as the model need to use both the
         mask API from masking_utils.py and the decorator as mentionned above, and we don't know what models follow that
         standard exactly (so we cannot make it easily a common model test)."""
         if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
@@ -2322,6 +2316,9 @@ class ModelUtilsTest(TestCasePlus):
 
         config = LlamaConfig(
             num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
             hidden_size=32,
             intermediate_size=64,
             vocab_size=100,
@@ -2338,7 +2335,7 @@ class ModelUtilsTest(TestCasePlus):
         # so we need this one instead to absorb them
         def create_bidirectional_mask_with_kwargs(
             config,
-            input_embeds,
+            inputs_embeds,
             attention_mask,
             encoder_hidden_states=None,
             or_mask_function=None,
@@ -2346,7 +2343,7 @@ class ModelUtilsTest(TestCasePlus):
             **kwargs,
         ):
             return create_bidirectional_mask(
-                config, input_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
+                config, inputs_embeds, attention_mask, encoder_hidden_states, or_mask_function, and_mask_function
             )
 
         # Explicitly monkey patch the mask creation function + forward the is_causal kwarg to get the expected result
@@ -2783,295 +2780,6 @@ The commit description supports markdown synthax see:
 
 
 @require_torch
-class AttentionMaskTester(unittest.TestCase):
-    def check_non_causal(self, bsz, q_len, kv_len, mask_2d, mask_4d):
-        mask_indices = (mask_2d != 1)[:, None].broadcast_to((bsz, q_len, kv_len))
-        mask_4d_values = mask_4d[:, 0][mask_indices]
-        is_inf = mask_4d_values == -float("inf")
-        is_min = mask_4d_values == torch.finfo(mask_4d.dtype).min
-        assert torch.logical_or(is_inf, is_min).all()
-
-    def check_to_4d(self, mask_converter, q_len, kv_len, additional_mask=None, bsz=3):
-        mask_2d = torch.ones((bsz, kv_len), device=torch_device, dtype=torch.long)
-
-        if additional_mask is not None:
-            for bsz_idx, seq_idx in additional_mask:
-                mask_2d[bsz_idx, seq_idx] = 0
-
-        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len, dtype=torch.float32)
-
-        assert mask_4d.shape == (bsz, 1, q_len, kv_len)
-
-        # make sure there are no overflows
-        assert mask_4d.min() != float("-inf")
-
-        context = mask_converter.sliding_window
-        if mask_converter.is_causal and context is None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
-
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().item() == num_tokens_masked
-            if 0 in mask_2d:
-                # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().item() >= num_tokens_masked
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-        elif not mask_converter.is_causal and context is None:
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().item() == 0
-            if 0 in mask_2d:
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-        elif mask_converter.is_causal and context is not None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
-            num_tokens_masked = bsz * num_tokens_masked
-
-            if 0 not in mask_2d:
-                assert (mask_4d != 0).sum().item() == num_tokens_masked
-            if 0 in mask_2d:
-                # at least causal mask + maybe more
-                assert (mask_4d != 0).sum().item() >= num_tokens_masked
-                self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
-
-    def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
-        mask_4d = mask_converter.to_causal_4d(
-            bsz, query_length=q_len, key_value_length=kv_len, device=torch_device, dtype=torch.float32
-        )
-
-        if q_len == 1 and mask_converter.sliding_window is None:
-            # no causal mask if q_len is 1
-            assert mask_4d is None
-            return
-
-        context = mask_converter.sliding_window
-        if mask_converter.is_causal and context is None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = bsz * (q_len * (q_len - 1) // 2)
-
-            assert (mask_4d != 0).sum().item() == num_tokens_masked
-        elif not mask_converter.is_causal and context is None:
-            assert (mask_4d != 0).sum().item() == 0
-        elif mask_converter.is_causal and context is not None:
-            # k * (k+1) / 2 tokens are masked in triangualar masks
-            num_tokens_masked = (q_len * (q_len - 1) // 2) + self.compute_num_context_mask(kv_len, context, q_len)
-            num_tokens_masked = bsz * num_tokens_masked
-
-            assert (mask_4d != 0).sum().item() == num_tokens_masked
-
-    def compute_num_context_mask(self, kv_len, context, q_len):
-        # This function computes the # of attention tokens that are added for
-        # the sliding window
-        c_mask_len = kv_len - context - 1
-        num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
-        cut_mask_len = max(c_mask_len - q_len, 0)
-        num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
-        return num_mask_triangle - num_cut_mask
-
-    def test_2d_to_4d_causal(self):
-        mask_converter = AttentionMaskConverter(is_causal=True)
-
-        # auto-regressive use case
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-        # check that the mask does not overflow on causal masked tokens
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 0), (1, 0), (1, 1)])
-
-    def test_2d_to_4d(self):
-        mask_converter = AttentionMaskConverter(is_causal=False)
-
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_2d_to_4d_causal_sliding(self):
-        mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=5)
-
-        # auto-regressive use case
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7)
-
-        # same with extra attention masks
-        self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
-
-    def test_causal_mask(self):
-        mask_converter = AttentionMaskConverter(is_causal=True)
-
-        # auto-regressive use case
-        self.check_to_causal(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_causal(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_causal(mask_converter, q_len=7, kv_len=7)
-
-    def test_causal_mask_sliding(self):
-        mask_converter = AttentionMaskConverter(is_causal=True, sliding_window=3)
-
-        # auto-regressive use case
-        self.check_to_causal(mask_converter, q_len=1, kv_len=7)
-        # special auto-regressive case
-        self.check_to_causal(mask_converter, q_len=3, kv_len=7)
-        # non auto-regressive case
-        self.check_to_causal(mask_converter, q_len=7, kv_len=7)
-
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_fullgraph(self):
-        model = Prepare4dCausalAttentionMaskModel()
-
-        inputs_embeds = torch.rand([1, 3, 32])
-        res_non_compiled = model(inputs_embeds)
-
-        compiled_model = torch.compile(model, fullgraph=True)
-
-        res_compiled = compiled_model(inputs_embeds)
-
-        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
-
-        model = Create4dCausalAttentionMaskModel()
-
-        inputs_embeds = torch.rand(2, 4, 16)
-        res_non_compiled = model(inputs_embeds)
-
-        compiled_model = torch.compile(model, fullgraph=True)
-        res_compiled = compiled_model(inputs_embeds)
-
-        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
-
-        model = Prepare4dAttentionMaskModel()
-
-        mask = torch.ones(2, 4)
-        mask[0, :2] = 0
-        inputs_embeds = torch.rand(2, 4, 16)
-
-        res_non_compiled = model(mask, inputs_embeds)
-
-        compiled_model = torch.compile(model, fullgraph=True)
-        res_compiled = compiled_model(mask, inputs_embeds)
-
-        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
-
-    @require_torch
-    @slow
-    def test_unmask_unattended_left_padding(self):
-        attention_mask = torch.Tensor([[0, 0, 1], [1, 1, 1], [0, 1, 1]]).to(torch.int64)
-
-        expanded_mask = torch.Tensor(
-            [
-                [[[0, 0, 0], [0, 0, 0], [0, 0, 1]]],
-                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
-                [[[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
-            ]
-        ).to(torch.int64)
-
-        reference_output = torch.Tensor(
-            [
-                [[[1, 1, 1], [1, 1, 1], [0, 0, 1]]],
-                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
-                [[[1, 1, 1], [0, 1, 0], [0, 1, 1]]],
-            ]
-        ).to(torch.int64)
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=1)
-
-        self.assertTrue(torch.equal(result, reference_output))
-
-        attention_mask = torch.Tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 1]]).to(torch.int64)
-
-        attn_mask_converter = AttentionMaskConverter(is_causal=True)
-        past_key_values_length = 0
-        key_value_length = attention_mask.shape[-1] + past_key_values_length
-
-        expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
-        )
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
-        min_inf = torch.finfo(torch.float32).min
-        reference_output = torch.Tensor(
-            [
-                [
-                    [
-                        [0, 0, 0, 0, 0],
-                        [0, 0, 0, 0, 0],
-                        [min_inf, min_inf, 0, min_inf, min_inf],
-                        [min_inf, min_inf, 0, 0, min_inf],
-                        [min_inf, min_inf, 0, 0, 0],
-                    ]
-                ],
-                [
-                    [
-                        [0, min_inf, min_inf, min_inf, min_inf],
-                        [0, 0, min_inf, min_inf, min_inf],
-                        [0, 0, 0, min_inf, min_inf],
-                        [0, 0, 0, 0, min_inf],
-                        [0, 0, 0, 0, 0],
-                    ]
-                ],
-                [
-                    [
-                        [0, 0, 0, 0, 0],
-                        [min_inf, 0, min_inf, min_inf, min_inf],
-                        [min_inf, 0, 0, min_inf, min_inf],
-                        [min_inf, 0, 0, 0, min_inf],
-                        [min_inf, 0, 0, 0, 0],
-                    ]
-                ],
-            ]
-        )
-
-        self.assertTrue(torch.equal(reference_output, result))
-
-    @require_torch
-    @slow
-    def test_unmask_unattended_right_padding(self):
-        attention_mask = torch.Tensor([[1, 1, 1, 0], [1, 1, 1, 1], [1, 1, 0, 0]]).to(torch.int64)
-
-        attn_mask_converter = AttentionMaskConverter(is_causal=True)
-        past_key_values_length = 0
-        key_value_length = attention_mask.shape[-1] + past_key_values_length
-
-        expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
-        )
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
-
-        self.assertTrue(torch.equal(expanded_mask, result))
-
-    @require_torch
-    @slow
-    def test_unmask_unattended_random_mask(self):
-        attention_mask = torch.Tensor([[1, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1]]).to(torch.int64)
-
-        attn_mask_converter = AttentionMaskConverter(is_causal=True)
-        past_key_values_length = 0
-        key_value_length = attention_mask.shape[-1] + past_key_values_length
-
-        expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
-        )
-
-        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
-
-        self.assertTrue(torch.equal(expanded_mask, result))
-
-
-@require_torch
 class TestAttentionImplementation(unittest.TestCase):
     @unittest.skip("Just a bit annoying")
     def test_error_no_sdpa_available(self):
@@ -3131,7 +2839,7 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
@@ -3154,7 +2862,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 attn_implementation="flash_attention_2",
             )
 
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_kernels_fallback(self):
         if not is_kernels_available():
@@ -3278,9 +2986,6 @@ class TestTensorSharing(TestCasePlus):
 
 
 @require_torch
-@unittest.skip(
-    "These tests are currently failing and need to be fixed, but not sure we want to support this/not sure its even used! Fix this line:https://github.com/huggingface/transformers/blob/b750e6b9eeed5fb9adc2f8c7adb46639c8e41963/src/transformers/core_model_loading.py#L512"
-)
 class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
     This test checks that a model can be saved and loaded that uses the torch extra state API.
@@ -3312,6 +3017,7 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             def __init__(self, config: MyConfig):
                 super().__init__(config)
                 self.my_layer = MyModule()
+                self.post_init()
 
             def forward(self, hidden_states, attention_mask):
                 return self.my_layer(hidden_states, attention_mask)
@@ -3322,8 +3028,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
     @mark.xfail(reason="save and from_pretrained currently only supports tensor extra_state")
     def test_save_and_load_model_with_dict_extra_state(self):
@@ -3359,8 +3070,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
 
 class TestGetDecoder(unittest.TestCase):

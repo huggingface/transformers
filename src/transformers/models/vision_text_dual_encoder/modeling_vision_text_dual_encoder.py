@@ -307,7 +307,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                    - a path to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
                       object should be provided as `config` argument.
 
             text_model_name_or_path (`str`, *optional*):
@@ -316,7 +316,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                    - a path to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
                       object should be provided as `config` argument.
 
             model_args (remaining positional arguments, *optional*):

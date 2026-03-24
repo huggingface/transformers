@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, meshgrid
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_perceiver import PerceiverConfig
 
@@ -724,7 +724,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.input_preprocessor is not None:
             inputs, modality_sizes, inputs_without_pos = self.input_preprocessor(
@@ -914,7 +914,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         elif inputs is None and input_ids is not None:
             inputs = input_ids
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1012,7 +1012,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         elif inputs is None and input_ids is not None:
             inputs = input_ids
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1156,7 +1156,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         elif inputs is None and pixel_values is not None:
             inputs = pixel_values
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1280,7 +1280,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
             inputs = pixel_values
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1404,7 +1404,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
         elif inputs is None and pixel_values is not None:
             inputs = pixel_values
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.perceiver(
             inputs=inputs,
@@ -1530,7 +1530,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         >>> list(logits.shape)
         [1, 368, 496, 2]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:
@@ -1764,7 +1764,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         >>> list(logits["label"].shape)
         [1, 700]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         if labels is not None:
@@ -2512,7 +2512,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
         return torch.linspace(start=output_range[0], end=output_range[1], steps=n_xels_per_dim, dtype=torch.float32)
 
     dim_ranges = [_linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
-    array_index_grid = meshgrid(*dim_ranges, indexing="ij")
+    array_index_grid = torch.meshgrid(*dim_ranges, indexing="ij")
 
     return torch.stack(array_index_grid, dim=-1)
 

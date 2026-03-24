@@ -15,7 +15,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -35,16 +35,14 @@ from ...modeling_rope_utils import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
-from ...utils.generic import check_model_inputs, is_flash_attention_requested, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import (
+    maybe_autocast,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mllama import MllamaConfig, MllamaTextConfig, MllamaVisionConfig
 
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 logger = logging.get_logger(__name__)
 
@@ -209,8 +207,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -419,7 +416,6 @@ class MllamaTextCrossAttention(nn.Module):
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
@@ -438,10 +434,8 @@ class MllamaTextCrossAttention(nn.Module):
             if past_key_values is not None:
                 # if we have a new image + new tokens, we only computed key_states on that new image
                 # we still update the cross key states, past_image, new_image. And use it!
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-        elif cache_position[0] != 0:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        elif past_key_values is not None and past_key_values.get_seq_length() > 0:
             key_states, value_states = (
                 past_key_values.layers[self.layer_idx].keys,
                 past_key_values.layers[self.layer_idx].values,
@@ -532,7 +526,6 @@ class MllamaTextSelfAttention(nn.Module):
         attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
         past_key_values=None,
-        cache_position=None,
         **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -549,9 +542,7 @@ class MllamaTextSelfAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -616,7 +607,6 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
@@ -631,8 +621,6 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_values (`Cache`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -651,7 +639,6 @@ class MllamaSelfAttentionDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -691,7 +678,6 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor]:
@@ -703,7 +689,6 @@ class MllamaCrossAttentionDecoderLayer(GradientCheckpointingLayer):
             attention_mask=cross_attention_mask,
             cross_attention_states=cross_attention_states,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
@@ -852,131 +837,6 @@ class MllamaPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if is_flash_attention_requested(self.config):
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        sequence_length = input_tensor.shape[1]
-        if using_compilable_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
-
 
 @auto_docstring(
     custom_intro="""
@@ -1037,7 +897,8 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         hidden_state = torch.cat([class_embedding, hidden_state], dim=1)
         return hidden_state
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, aspect_ratio_ids: torch.Tensor, aspect_ratio_mask: torch.Tensor, **kwargs
@@ -1209,7 +1070,8 @@ class MllamaTextModel(MllamaPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1223,7 +1085,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -1278,15 +1139,18 @@ class MllamaTextModel(MllamaPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds, cache_position, past_key_values)
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
@@ -1311,7 +1175,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -1357,7 +1220,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1416,7 +1278,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1443,11 +1304,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     """
 )
 class MllamaModel(MllamaPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "language_model.model": "language_model",
-        "model.vision_model": "vision_model",
-    }
-
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1485,7 +1341,6 @@ class MllamaModel(MllamaPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -1546,9 +1401,14 @@ class MllamaModel(MllamaPreTrainedModel):
         else:
             full_text_row_masked_out_mask = None
 
-        if cross_attention_mask is not None and cache_position is not None:
-            cross_attention_mask = cross_attention_mask[:, :, cache_position]
-            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, cache_position]
+        if cross_attention_mask is not None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            current_pos = torch.arange(seq_len, device=device) + past_seen_tokens
+
+            cross_attention_mask = cross_attention_mask[:, :, current_pos]
+            full_text_row_masked_out_mask = full_text_row_masked_out_mask[:, :, current_pos]
 
         outputs = self.language_model(
             input_ids=input_ids,
@@ -1560,7 +1420,6 @@ class MllamaModel(MllamaPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1578,12 +1437,6 @@ class MllamaModel(MllamaPreTrainedModel):
     """,
 )
 class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_model": "model.vision_model",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^language_model.lm_head": "lm_head",
-    }
     # _tied_weights_keys = {"lm_head.weight": "model.language_moddel.embed_tokens.weight"}
 
     def __init__(self, config: MllamaConfig):
@@ -1614,7 +1467,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -1692,7 +1544,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1725,7 +1576,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         cross_attention_mask=None,
         past_key_values=None,
         use_cache=False,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -1743,7 +1593,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
             aspect_ratio_ids=aspect_ratio_ids,
             aspect_ratio_mask=aspect_ratio_mask,
             cross_attention_mask=cross_attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,

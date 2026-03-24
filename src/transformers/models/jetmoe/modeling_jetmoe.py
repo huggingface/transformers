@@ -37,8 +37,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_jetmoe import JetMoeConfig
 
 
@@ -419,8 +419,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -474,7 +473,6 @@ class JetMoeAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -491,9 +489,7 @@ class JetMoeAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -537,7 +533,6 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -550,7 +545,6 @@ class JetMoeDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -577,7 +571,7 @@ class JetMoePreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="gate", index=1),
+        "router_logits": [OutputRecorder(JetMoeAttention, index=2), OutputRecorder(JetMoeTopKGating, index=4)],
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
@@ -611,7 +605,8 @@ class JetMoeModel(JetMoePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -621,7 +616,6 @@ class JetMoeModel(JetMoePreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -633,19 +627,15 @@ class JetMoeModel(JetMoePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -662,7 +652,6 @@ class JetMoeModel(JetMoePreTrainedModel):
                 attention_mask=causal_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -767,6 +756,8 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         self.aux_loss_coef = config.aux_loss_coef
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.tie_word_embeddings = config.tie_word_embeddings
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -782,7 +773,6 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         output_router_logits: bool | None = False,
         **kwargs,
@@ -794,7 +784,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

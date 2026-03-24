@@ -240,9 +240,6 @@ class ZambaModelTester:
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -339,7 +336,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = ZambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -93,7 +93,9 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flute_available,
+    is_fouroversix_available,
     is_fp_quant_available,
     is_fsdp_available,
     is_g2p_en_available,
@@ -215,6 +217,14 @@ _COMMON_MODEL_NAMES_MAP = {
     "token_classification_class": "ForTokenClassification",
 }
 
+# Used in VLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_VLM_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "text_config_class": "TextConfig",
+    "vision_config_class": "VisionConfig",
+    "conditional_generation_class": "ForConditionalGeneration",
+}
+
 
 if is_torch_available():
     import torch
@@ -271,6 +281,7 @@ _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
+_run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
 
 
 def is_staging_test(test_case):
@@ -335,6 +346,22 @@ def is_training_test(test_case):
             return test_case
         else:
             return pytest.mark.is_training_test()(test_case)
+
+
+def is_tensor_parallel_test(test_case):
+    """
+    Decorator marking a test as a tensor parallel test. If RUN_TENSOR_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_tensor_parallel_tests:
+        return unittest.skip(reason="test is tensor parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_tensor_parallel_test()(test_case)
 
 
 def slow(test_case):
@@ -643,6 +670,37 @@ def require_flash_attn_3(test_case):
     These tests are skipped when Flash Attention 3 isn't installed.
     """
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
+
+
+def require_flash_attn_4(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 4.
+
+    These tests are skipped when Flash Attention 4 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_4_available(), "test requires Flash Attention 4")(test_case)
+
+
+def require_all_flash_attn(test_case):
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(
+        all(
+            (
+                flash_attn_available | kernels_available,
+                is_flash_attn_3_available(),
+                is_flash_attn_4_available(),
+            )
+        ),
+        "test requires all mainline Flash Attention packages",
+    )(test_case)
 
 
 def require_peft(test_case):
@@ -1069,6 +1127,16 @@ def require_fp8(test_case):
     )
 
 
+def require_cuda_capability_at_least(major, minor):
+    """Decorator to skip tests when CUDA capability is below the given version."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return unittest.skip("CUDA not available")
+    capability = torch.cuda.get_device_capability()
+    return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
+
+
 def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
     return unittest.skipUnless(
@@ -1297,6 +1365,13 @@ def require_flute_hadamard(test_case):
     )(test_case)
 
 
+def require_fouroversix(test_case):
+    """
+    Decorator marking a test that requires fouroversix
+    """
+    return unittest.skipUnless(is_fouroversix_available(), "test requires fouroversix")(test_case)
+
+
 def require_fp_quant(test_case):
     """
     Decorator marking a test that requires fp_quant and qutlass
@@ -1468,12 +1543,8 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
     training_args = trainer.args
     train_dataloader = trainer.get_train_dataloader()
 
-    initial_training_values = trainer.set_initial_training_values(
-        args=training_args,
-        dataloader=train_dataloader,
-        total_train_batch_size=training_args.per_device_train_batch_size,
-    )
-    steps_per_epoch = initial_training_values[1]
+    initial_training_values = trainer.set_initial_training_values(args=training_args, dataloader=train_dataloader)
+    steps_per_epoch = initial_training_values[5]
 
     return steps_per_epoch
 
@@ -2378,14 +2449,16 @@ def pytest_xdist_worker_id():
 
 def get_torch_dist_unique_port():
     """
-    Returns a port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
+    Returns a free port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
 
-    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the same
-    port at once.
+    Binds to port 0 to let the OS assign an available port, avoiding collisions from hardcoded ports
+    and TCP TIME_WAIT issues between sequential subprocess launches.
     """
-    port = 29500
-    uniq_delta = pytest_xdist_worker_id()
-    return port + uniq_delta
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def nested_simplify(obj, decimals=3):
@@ -2795,7 +2868,7 @@ class HfDocTestParser(doctest.DocTestParser):
     # fmt: on
 
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
-    skip_cuda_tests: bool = bool(os.environ.get("SKIP_CUDA_DOCTEST", "0"))
+    skip_cuda_tests: bool = os.environ.get("SKIP_CUDA_DOCTEST", "0") == "1"
     # !!!!!!!!!!! HF Specific !!!!!!!!!!!
 
     def parse(self, string, name="<string>"):
@@ -3114,7 +3187,7 @@ def cleanup(device: str, gc_collect=False):
     if gc_collect:
         gc.collect()
     backend_empty_cache(device)
-    torch._dynamo.reset()
+    torch.compiler.reset()
 
 
 # Type definition of key used in `Expectations` class.
@@ -3394,7 +3467,7 @@ def _get_call_arguments(code_context):
     Analyze the positional and keyword arguments in a call expression.
 
     This will extract the expressions of the positional and kwyword arguments, and associate them to the positions and
-    the keyword arugment names.
+    the keyword argument names.
     """
 
     def get_argument_name(node):
@@ -3522,7 +3595,7 @@ def _patched_tearDown(self, *args, **kwargs):
     # TODO: How could we show several exceptions in a sinigle test on the terminal? (Maybe not a good idea)
     captured_exceptions = captured_failures[0]["exception"]
     captured_traceback = captured_failures[0]["traceback"]
-    # Show the cpatured information on the terminal.
+    # Show the captured information on the terminal.
     capturued_info = [x["info"] for x in captured_failures]
     capturued_info_str = f"\n\n{'=' * 80}\n\n".join(capturued_info)
 
@@ -3735,7 +3808,7 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
     if not isinstance(t, torch.Tensor):
         t = torch.tensor(t)
 
-    # Simply make the processing below simpler (not to hande both case)
+    # Simply make the processing below simpler (not to handle both cases)
     is_scalar = False
     if t.ndim == 0:
         t = torch.tensor([t])
@@ -3774,8 +3847,8 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         return t_str
 
-    # Otherwise, we separte the representations of every elements along an outer dimension by new lines (after a `,`).
-    # The representatioin each element is obtained by calling this function recursively with corrent `indent_level`.
+    # Otherwise, we separate the representations of each element along an outer dimension by new lines (after a `,`).
+    # The representation of each element is obtained by calling this function recursively with current `indent_level`.
     else:
         t_str = str(t)
 
@@ -3988,7 +4061,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
             # extra conditions for returning one-line representation
             def use_one_line_repr(obj):
-                # interable types
+                # iterable types
                 if type(obj) in (list, tuple, dict):
                     # get all types
                     element_types = []

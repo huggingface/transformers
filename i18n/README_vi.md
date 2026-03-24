@@ -122,7 +122,7 @@ Trong các nhiệm vụ đa phương thức:
 
 Transformers không chỉ là một bộ công cụ để sử dụng các mô hình được huấn luyện trước: đó là một cộng đồng các dự án xây dựng xung quanh nó và Hugging Face Hub. Chúng tôi muốn Transformers giúp các nhà phát triển, nhà nghiên cứu, sinh viên, giáo sư, kỹ sư và bất kỳ ai khác xây dựng những dự án mơ ước của họ.
 
-Để kỷ niệm 100.000 sao của transformers, chúng tôi đã quyết định tập trung vào cộng đồng và tạo ra trang [awesome-transformers](./awesome-transformers.md) liệt kê 100 dự án tuyệt vời được xây dựng xung quanh transformers.
+Để kỷ niệm 100.000 sao của transformers, chúng tôi đã quyết định tập trung vào cộng đồng và tạo ra trang [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) liệt kê 100 dự án tuyệt vời được xây dựng xung quanh transformers.
 
 Nếu bạn sở hữu hoặc sử dụng một dự án mà bạn tin rằng nên được thêm vào danh sách, vui lòng mở một PR để thêm nó!
 
@@ -247,7 +247,7 @@ Chính mô hình là một [Pytorch `nn.Module`](https://pytorch.org/docs/stable
 
 ### Sử dụng pip
 
-Thư viện này được kiểm tra trên Python 3.9+, Flax 0.4.1+, PyTorch 2.1+ và TensorFlow 2.6+.
+Thư viện này được kiểm tra trên Python 3.10+ và PyTorch 2.4+.
 
 Bạn nên cài đặt 🤗 Transformers trong một [môi trường ảo Python](https://docs.python.org/3/library/venv.html). Nếu bạn chưa quen với môi trường ảo Python, hãy xem [hướng dẫn sử dụng](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

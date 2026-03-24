@@ -45,7 +45,8 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_diffllama import DiffLlamaConfig
 
 
@@ -226,7 +227,6 @@ class DiffLlamaAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, target_len, _ = hidden_states.size()
@@ -244,9 +244,7 @@ class DiffLlamaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -255,9 +253,8 @@ class DiffLlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
+        if attention_mask is not None:
+            attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -304,7 +301,6 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, None]:
         if isinstance(past_key_values, StaticCache):
             raise ValueError(
@@ -329,9 +325,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -350,7 +344,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         input_dtype = query_states.dtype
         device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
+            if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_is_quantized"):
@@ -432,7 +426,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool = False,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
@@ -449,9 +442,7 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -539,7 +530,6 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -552,7 +542,6 @@ class DiffLlamaDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -612,7 +601,8 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -621,7 +611,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -634,20 +623,15 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -663,7 +647,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -700,7 +683,6 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -728,7 +710,6 @@ class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

@@ -130,7 +130,7 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
+                Whether or not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -302,7 +302,14 @@ class _BaseAutoModelClass:
                     adapter_config = json.load(f)
 
                     adapter_kwargs["_adapter_model_path"] = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
+                    # Only override the model name/path if the current value doesn't point to a
+                    # complete model with an embedded adapter so that local models with embedded
+                    # adapters will load from the local base model rather than pull the base
+                    # model named in the adapter's config from the hub.
+                    if not os.path.exists(pretrained_model_name_or_path) or not os.path.exists(
+                        os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
+                    ):
+                        pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
 
         if not isinstance(config, PreTrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
@@ -495,6 +502,8 @@ def getattribute_from_module(module, attr):
         return None
     if isinstance(attr, tuple):
         return tuple(getattribute_from_module(module, a) for a in attr)
+    if isinstance(attr, dict):
+        return {k: getattribute_from_module(module, v) for k, v in attr.items()}
     if hasattr(module, attr):
         return getattr(module, attr)
     # Some of the mappings have entries model_type -> object of another model type. In that case we try to grab the

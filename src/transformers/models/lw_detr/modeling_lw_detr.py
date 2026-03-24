@@ -30,15 +30,15 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithCrossAttentions
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import meshgrid
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
@@ -57,8 +57,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -225,25 +224,6 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class LwDetrViTEncoder(nn.Module):
-    def __init__(self, config: LwDetrViTConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> list[torch.Tensor]:
-        list_hidden_states = [hidden_states]
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, **kwargs)
-            list_hidden_states.append(hidden_states)
-        return list_hidden_states
-
-
 class LwDetrViTEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -366,6 +346,25 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
+class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([LwDetrViTLayer(config, idx) for idx in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring()
 class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def __init__(self, config):
@@ -381,7 +380,8 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
     def get_input_embeddings(self) -> LwDetrViTEmbeddings:
         return self.embeddings.projection
 
-    @check_model_inputs
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
         r"""
@@ -425,9 +425,11 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
             .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
-        hidden_states = self.encoder(hidden_states, **kwargs)
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        output = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
+        hidden_states = output.hidden_states
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 hidden_state = (
@@ -444,7 +446,9 @@ class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
                 )
                 feature_maps += (hidden_state,)
 
-        return BackboneOutput(feature_maps=feature_maps)
+        return BackboneOutput(
+            feature_maps=feature_maps, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 class LwDetrConvNormLayer(nn.Module):
@@ -672,8 +676,6 @@ class LwDetrAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, _ = hidden_states.shape
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
         hidden_states_original = hidden_states
         if position_embeddings is not None:
@@ -687,6 +689,8 @@ class LwDetrAttention(nn.Module):
             )
             hidden_states = torch.cat(hidden_states.split(seq_len // self.config.group_detr, dim=1), dim=0)
 
+        attention_input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*attention_input_shape, -1, self.head_dim)
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states_original).view(hidden_shape).transpose(1, 2)
@@ -705,7 +709,7 @@ class LwDetrAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(*attention_input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if self.training:
@@ -1120,7 +1124,8 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         query_pos = self.ref_point_head(query_sine_embed)
         return reference_points_inputs, query_pos
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         inputs_embeds: torch.Tensor | None = None,
@@ -1260,26 +1265,6 @@ class LwDetrModel(LwDetrPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
-    def get_proposal_pos_embed(self, proposals):
-        """Get the position embedding of the proposals."""
-
-        num_pos_feats = self.config.d_model // 2
-        temperature = 10000
-        scale = 2 * math.pi
-
-        # Compute position embeddings in float32 to avoid overflow with large temperature values in fp16
-        proposals_dtype = proposals.dtype
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
-        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-        # batch_size, num_queries, 4
-        proposals = proposals.sigmoid().to(torch.float32) * scale
-        # batch_size, num_queries, 4, 128
-        pos = proposals[:, :, :, None] / dim_t
-        # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        # Convert back to target dtype after all computations are done
-        return pos.to(proposals_dtype)
-
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
 
@@ -1292,8 +1277,10 @@ class LwDetrModel(LwDetrPreTrainedModel):
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
                 - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
                   directly predict a bounding box. (without the need of a decoder)
-                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
-                  sigmoid.
+                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals in [0, 1] space.
+                  Invalid positions (padding or out-of-bounds) are filled with 0.
+                - invalid_mask (Tensor[batch_size, sequence_length, 1]): Boolean mask that is True for invalid positions
+                  (padded pixels or proposals whose coordinates fall outside (0.01, 0.99)).
         """
         batch_size = enc_output.shape[0]
         proposals = []
@@ -1303,7 +1290,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = meshgrid(
+            grid_y, grid_x = torch.meshgrid(
                 torch.linspace(
                     0,
                     height - 1,
@@ -1330,14 +1317,14 @@ class LwDetrModel(LwDetrPreTrainedModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
+        invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
+        output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
         # assign each pixel as an object query
         object_query = enc_output
-        object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
-        object_query = object_query.masked_fill(~output_proposals_valid, float(0))
-        return object_query, output_proposals
+        object_query = object_query.masked_fill(invalid_mask, float(0))
+        return object_query, output_proposals, invalid_mask
 
     @can_return_tuple
     @auto_docstring
@@ -1420,7 +1407,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
         reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
 
-        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+        object_query_embedding, output_proposals, invalid_mask = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
 
@@ -1435,6 +1422,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
             group_object_query = self.enc_output_norm[group_id](group_object_query)
 
             group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
+            group_enc_outputs_class = group_enc_outputs_class.masked_fill(invalid_mask, float("-inf"))
             group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
             group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
 
@@ -1458,9 +1446,9 @@ class LwDetrModel(LwDetrPreTrainedModel):
         object_query_undetach = torch.cat(object_query_undetach, 1)
 
         enc_outputs_class = object_query_undetach
-        enc_outputs_coord_logits = topk_coords_logits
+        enc_outputs_coord_logits = topk_coords_logits_undetach
 
-        reference_points = refine_bboxes(topk_coords_logits_undetach, reference_points)
+        reference_points = refine_bboxes(topk_coords_logits, reference_points)
 
         init_reference_points = reference_points
         decoder_outputs = self.decoder(

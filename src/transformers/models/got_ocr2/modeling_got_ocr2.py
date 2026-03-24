@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import collections
 from dataclasses import dataclass
 
@@ -34,7 +35,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import check_model_inputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
 
@@ -434,7 +436,8 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | GotOcr2VisionEncoderOutput:
@@ -530,10 +533,6 @@ class GotOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class GotOcr2Model(GotOcr2PreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "language_model",
-    }
-
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
@@ -598,18 +597,8 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2ModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -632,10 +621,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -654,12 +640,6 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
     """
 )
 class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_tower": "model.vision_tower",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GotOcr2Config):
@@ -695,10 +675,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2CausalLMOutputWithPast:
@@ -738,12 +714,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         "You should keep in mind what features from the module should be used, especially
         when you're planning to sell a template."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -752,10 +722,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -787,7 +754,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         pixel_values=None,
         attention_mask=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -799,7 +765,6 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -807,7 +772,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
 
         if is_first_iteration or not kwargs.get("use_cache", True):
             # Pixel values are used only in the first iteration if available
-            # In subsquent iterations, they are already merged with text and cached
+            # In subsequent iterations, they are already merged with text and cached
             # NOTE: first iteration doesn't have to be prefill, it can be the first
             # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values

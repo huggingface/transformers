@@ -28,7 +28,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
-from ...utils.generic import can_return_tuple, check_model_inputs, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm
@@ -49,7 +50,7 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     **kwargs,
 ):
     key_states = key
@@ -57,8 +58,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     # No upcasting of the attention weights to float32 in this implementation
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -397,7 +397,8 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor | None = None, **kwargs
@@ -484,15 +485,15 @@ class InternVLModel(LlavaModel):
 
         return vision_features
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -545,9 +546,8 @@ class InternVLModel(LlavaModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InternVLModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -574,7 +574,6 @@ class InternVLModel(LlavaModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 

@@ -122,7 +122,7 @@ limitations under the License.
 
 🤗 Transformers هو أكثر من مجرد مجموعة أدوات لاستخدام النماذج المُدربة مسبقًا: إنه مجتمع من المشاريع المبنية حوله ومركز Hugging Face. نريد أن يمكّن 🤗 Transformers المطورين والباحثين والطلاب والأساتذة والمهندسين وأي شخص آخر من بناء مشاريعهم التي يحلمون بها.
 
-للاحتفال بالـ 100,000 نجمة من النماذج المحولة، قررنا تسليط الضوء على المجتمع، وقد أنشأنا صفحة [awesome-transformers](./awesome-transformers.md) التي تُدرج 100 مشروعًا رائعًا تم بناؤها بالقرب من النماذج المحولة.
+للاحتفال بالـ 100,000 نجمة من النماذج المحولة، قررنا تسليط الضوء على المجتمع، وقد أنشأنا صفحة [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) التي تُدرج 100 مشروعًا رائعًا تم بناؤها بالقرب من النماذج المحولة.
 
 إذا كنت تمتلك أو تستخدم مشروعًا تعتقد أنه يجب أن يكون جزءًا من القائمة، فالرجاء فتح PR لإضافته!
 
@@ -247,7 +247,7 @@ limitations under the License.
 
 ### باستخدام pip
 
-تم اختبار هذا المستودع على Python 3.9+، Flax 0.4.1+، PyTorch 2.1+، و TensorFlow 2.6+.
+تم اختبار هذا المستودع على Python 3.10+ و PyTorch 2.4+.
 
 يجب تثبيت 🤗 Transformers في [بيئة افتراضية](https://docs.python.org/3/library/venv.html). إذا كنت غير معتاد على البيئات الافتراضية Python، فراجع [دليل المستخدم](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

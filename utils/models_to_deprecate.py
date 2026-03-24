@@ -114,6 +114,8 @@ EXTRA_TAGS_MAPPING = {
     "qwen2_vl": ["qwen2_vl_text"],
     "qwen3_vl_moe": ["qwen3_vl_moe_text"],
     "qwen3_vl": ["qwen3_vl_text"],
+    "qwen3_5": ["qwen3_5text"],
+    "qwen3_5_moe": ["qwen3_5_moe_text"],
     "rt_detr": ["rt_detr_resnet"],
     "sam2": ["sam2_hiera_det_model", "sam2_vision_model"],
     "sam": ["sam_hq_vision_model", "sam_vision_model"],

@@ -47,6 +47,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("gemma3n", "Gemma3nAudioFeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
         ("granite_speech", "GraniteSpeechFeatureExtractor"),
+        ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
@@ -76,7 +77,9 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
         ("univnet", "UnivNetFeatureExtractor"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
+        ("voxtral_realtime", "VoxtralRealtimeFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
@@ -258,7 +261,7 @@ class AutoFeatureExtractor:
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
+                - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the

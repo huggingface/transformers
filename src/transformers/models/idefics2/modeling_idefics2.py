@@ -23,14 +23,15 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -186,7 +187,7 @@ def eager_attention_forward(
     attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    **kwargs,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
@@ -194,8 +195,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -437,9 +437,6 @@ class Idefics2PreTrainedModel(PreTrainedModel):
 class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     config: Idefics2VisionConfig
     input_modalities = ("image",)
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
     _can_record_outputs = {
         "hidden_states": Idefics2EncoderLayer,
         "attentions": Idefics2VisionAttention,
@@ -462,7 +459,8 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -489,13 +487,11 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
 
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-        # The call to `_upad_input` in `_flash_attention_forward` is expensive
-        # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
-        # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not is_torchdynamo_compiling() and not torch.any(~patch_attention_mask):
-            patch_attention_mask = None
-        elif not is_flash_attention_requested(self.config):
-            patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
+        patch_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=patch_attention_mask,
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -735,10 +731,10 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
             (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
         )
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
-        attention_mask = (
-            _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if not is_flash_attention_requested(self.config)
-            else attention_mask
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=latents,
+            attention_mask=attention_mask,
         )
 
         compressed_context = latents
@@ -812,7 +808,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         - We get the image hidden states for the image through the vision encoder (and potentially the perceiver), and that hidden state is then projected into the text embedding space.
         We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
-        - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
+        - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -868,7 +864,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
         # Get sequence from the vision encoder
         image_outputs = self.vision_model(
-            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, **kwargs
         )
         image_hidden_states = image_outputs.last_hidden_state
 
@@ -904,7 +900,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | Idefics2BaseModelOutputWithPast:
         r"""
@@ -938,9 +933,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values, pixel_attention_mask, return_dict=True
-            ).pooler_output
+            image_hidden_states = self.get_image_features(pixel_values, pixel_attention_mask, **kwargs).pooler_output
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
 
@@ -960,7 +953,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -1029,10 +1021,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         image_hidden_states: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Idefics2CausalLMOutputWithPast:
@@ -1084,12 +1072,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         ['In this image, we can see the city of New York, and more specifically the Statue of Liberty. In this image, we can see the city of New York, and more specifically the Statue of Liberty.\n\n', 'In which city is that bridge located?\n\nThe bridge is located in the city of Pittsburgh, Pennsylvania.\n\n\nThe bridge is']
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -1101,10 +1083,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            return_dict=True,
             **kwargs,
         )
 
@@ -1134,12 +1112,12 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         pixel_values=None,
         pixel_attention_mask=None,
         image_hidden_states=None,
         logits_to_keep=None,
         is_first_iteration=False,
+        use_cache=False,
         **kwargs,
     ):
         # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
@@ -1150,16 +1128,16 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
+            use_cache=use_cache,
             **kwargs,
         )
 
-        if image_hidden_states is not None or not is_first_iteration:
+        if image_hidden_states is not None or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

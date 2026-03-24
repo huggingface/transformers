@@ -12,57 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import logging
+from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..timm_wrapper import TimmWrapperConfig
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="facebook/pe-av-large")
+@strict(accept_kwargs=True)
 class PeVideoEncoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PeVideoEncoder`]. It is used to instantiate a
-    PeVideoEncoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of pe-av-large.
-    e.g. [facebook/pe-av-large](https://huggingface.co/facebook/pe-av-large)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        vision_config (`Union[PreTrainedConfig, dict]`, *optional*):
-            Configuration for the vision backbone used to extract frame embeddings. If a dictionary is provided, it is
-            used to instantiate a [`~transformers.TimmWrapperConfig`] with the PE default arguments.
-        hidden_size (`int`, *optional*, defaults to 1792):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4800):
-            Dimension of the feedforward layers in the Transformer blocks.
-        num_hidden_layers (`int`, *optional*, defaults to 6):
-            Number of Transformer encoder blocks.
-        num_attention_heads (`int`, *optional*, defaults to 14):
-            Number of attention heads used in each attention layer.
-        num_key_value_heads (`int`, *optional*):
-            Number of key and value heads for grouped-query attention. If unset, this defaults to `num_attention_heads`.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each attention head for query, key, and value projections.
-        hidden_act (`str`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the Transformer blocks.
-        max_position_embeddings (`int`, *optional*, defaults to 10000):
-            Maximum sequence length supported by the rotary position embeddings.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation of the truncated normal initializer for weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            Epsilon used by the RMS normalization layers.
-        rope_parameters (`Union[RopeParameters, dict]`, *optional*, defaults to `{'rope_theta': 20000}`):
-            Parameters for the rotary position embeddings, such as the base `rope_theta`.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias terms in the query, key, value, and output projections.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout ratio applied to attention probabilities.
+    Example:
 
     ```python
     >>> from transformers import PeAudioEncoder, PeAudioEncoderConfig
@@ -89,72 +53,45 @@ class PeVideoEncoderConfig(PreTrainedConfig):
         "initializer_range": 0.02,
     }
 
-    def __init__(
-        self,
-        vision_config: dict | PreTrainedConfig | None = None,
-        hidden_size: int | None = 1792,
-        intermediate_size: int | None = 4800,
-        num_hidden_layers: int | None = 6,
-        num_attention_heads: int | None = 14,
-        num_key_value_heads: int | None = None,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 10000,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-5,
-        rope_parameters: RopeParameters | dict | None = {"rope_theta": 20000},
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+    vision_config: dict | PreTrainedConfig | None = None
+    hidden_size: int = 1792
+    intermediate_size: int = 4800
+    num_hidden_layers: int = 6
+    num_attention_heads: int = 14
+    num_key_value_heads: int | None = None
+    head_dim: int = 128
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 10000
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-5
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
 
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.rope_parameters = rope_parameters
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_theta": 20000}
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "timm_wrapper")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]].from_dict(
-                {**self._default_vision_config_kwargs, **vision_config}
+        if isinstance(self.vision_config, dict):
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "timm_wrapper")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]].from_dict(
+                {**self._default_vision_config_kwargs, **self.vision_config}
             )
-        elif vision_config is None:
-            vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["timm_wrapper"].from_dict(self._default_vision_config_kwargs)
 
-        self.vision_config = vision_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
+@auto_docstring(checkpoint="facebook/pe-av-large")
+@strict(accept_kwargs=True)
 class PeVideoConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PeVideoModel`]. It is used to instantiate a
-    PeVideoModel model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of pe-av-large.
-    e.g. [facebook/pe-av-large](https://huggingface.co/facebook/pe-av-large)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-
-    Args:
-        text_config (`dict` or `PreTrainedConfig`, *optional*):
-            Configuration for the text model component.
-        video_config (`dict` or `PreTrainedConfig`, *optional*):
-            Configuration for the video encoder component.
+    video_config (`dict` or `PreTrainedConfig`, *optional*):
+        Configuration for the video encoder component.
 
     ```python
     >>> from transformers import PeVideoModel, PeVideoConfig
@@ -181,29 +118,24 @@ class PeVideoConfig(PretrainedConfig):
         "num_attention_heads": 16,
     }
 
-    def __init__(
-        self,
-        text_config=None,
-        video_config=None,
-        **kwargs,
-    ):
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "modernbert")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **text_config}
+    text_config: dict | PreTrainedConfig | None = None
+    video_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "modernbert")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
+                **{**self._default_text_config_kwargs, **self.text_config}
             )
-        elif text_config is None:
-            text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["modernbert"](**self._default_text_config_kwargs)
 
-        if isinstance(video_config, dict):
-            video_config = PeVideoEncoderConfig(**video_config)
-        elif video_config is None:
-            video_config = PeVideoEncoderConfig()
+        if isinstance(self.video_config, dict):
+            self.video_config = PeVideoEncoderConfig(**self.video_config)
+        elif self.video_config is None:
+            self.video_config = PeVideoEncoderConfig()
 
-        self.text_config = text_config
-        self.video_config = video_config
-
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["PeVideoEncoderConfig", "PeVideoConfig"]

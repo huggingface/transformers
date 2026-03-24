@@ -45,7 +45,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_electra import ElectraConfig
 
 
@@ -134,7 +135,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -177,7 +177,6 @@ class ElectraSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -195,12 +194,7 @@ class ElectraSelfAttention(nn.Module):
                 current_past_key_values = past_key_values.self_attention_cache
 
             # save all key/value_layer to cache to be re-used for fast auto-regressive generation
-            key_layer, value_layer = current_past_key_values.update(
-                key_layer,
-                value_layer,
-                self.layer_idx,
-                {"cache_position": cache_position},
-            )
+            key_layer, value_layer = current_past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -329,7 +323,6 @@ class ElectraAttention(nn.Module):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -338,7 +331,6 @@ class ElectraAttention(nn.Module):
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self.output(attention_output, hidden_states)
@@ -404,14 +396,12 @@ class ElectraLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         self_attention_output, _ = self.attention(
             hidden_states,
             attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
         attention_output = self_attention_output
@@ -459,7 +449,6 @@ class ElectraEncoder(nn.Module):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         for i, layer_module in enumerate(self.layer):
@@ -469,7 +458,6 @@ class ElectraEncoder(nn.Module):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -579,7 +567,8 @@ class ElectraModel(ElectraPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -592,9 +581,11 @@ class ElectraModel(ElectraPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -607,20 +598,7 @@ class ElectraModel(ElectraPreTrainedModel):
                 else DynamicCache(config=self.config)
             )
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            device = input_ids.device
-            input_shape = input_ids.shape
-        else:
-            device = inputs_embeds.device
-            input_shape = inputs_embeds.shape[:-1]
-
-        seq_length = input_shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -637,7 +615,6 @@ class ElectraModel(ElectraPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -664,28 +641,26 @@ class ElectraModel(ElectraPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        cache_position,
         past_key_values,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 past_key_values=past_key_values,
             )
         else:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
             )
 
         if encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=embedding_output,
+                inputs_embeds=embedding_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
@@ -1329,7 +1304,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         labels: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -1368,7 +1342,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )

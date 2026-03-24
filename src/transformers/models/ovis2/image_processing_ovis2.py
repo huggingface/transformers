@@ -11,94 +11,40 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Image processor class for OVIS2."""
 
 from functools import lru_cache
 
-import numpy as np
+import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
 
-if is_vision_available():
-    import PIL
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
-logger = logging.get_logger(__name__)
-
-
-class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    crop_to_patches (`bool`, *optional*, defaults to `False`):
-        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-        `preprocess` method.
-    min_patches (`int`, *optional*, defaults to 1):
-        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-    max_patches (`int`, *optional*, defaults to 12):
-        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-    use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-        Whether to use the covering area grid to determine the number of patches. Only has an effect if
-        `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
-        `preprocess` method.
-    """
-
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
-    use_covering_area_grid: bool
-
-
-# Similar to image_processing_mllama.get_all_supported_aspect_ratios
+# Helper functions for patch/tile calculations
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the minimum and maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        min_image_tiles (`int`):
-            The minimum number of tiles allowed.
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(1, 4)
-        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
-
-    """
+    """Computes all allowed aspect ratios for a given minimum and maximum number of input tiles."""
     aspect_ratios = []
     for width in range(1, max_image_tiles + 1):
         for height in range(1, max_image_tiles + 1):
             if width * height <= max_image_tiles and width * height >= min_image_tiles:
                 aspect_ratios.append((width, height))
-
-    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
-
-    return aspect_ratios
+    return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
 
 
 @lru_cache(maxsize=100)
@@ -108,21 +54,13 @@ def get_optimal_tiled_canvas(
     min_image_tiles: int,
     max_image_tiles: int,
 ) -> tuple[int, int]:
-    """
-    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
-    original image aspect ratio.
-    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
-    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
-    excessive tiling.
-    """
+    """Find the canvas with the closest aspect ratio to the original image aspect ratio."""
     possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
-
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
     aspect_ratio = original_width / original_height
     area = original_width * original_height
 
-    # find the grid with the best aspect ratio
     best_ratio_diff = float("inf")
     best_grid = (1, 1)
     for grid in possible_tile_arrangements:
@@ -132,11 +70,8 @@ def get_optimal_tiled_canvas(
             best_ratio_diff = ratio_diff
             best_grid = grid
         elif ratio_diff == best_ratio_diff:
-            # if the aspect ratio difference is the same, we favor the grid with more patches
-            # until the area covered by the patches is more than twice the original image area
             if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
                 best_grid = grid
-
     return best_grid
 
 
@@ -174,7 +109,6 @@ def get_min_tile_covering_grid(
 ) -> tuple[int, int]:
     image_height, image_width = image_size
     image_area = image_width * image_height
-
     candidate_tile_grids = get_all_supported_aspect_ratios(1, max_image_tiles)
     evaluated_grids = []
     sufficient_covering_grids = []
@@ -184,354 +118,100 @@ def get_min_tile_covering_grid(
         tile_covering_ratio = (
             sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
         )
-
         evaluated_grids.append((tile_grid, tile_covering_ratio))
         if tile_covering_ratio > covering_threshold:
             sufficient_covering_grids.append((tile_grid, tile_covering_ratio))
 
     if sufficient_covering_grids:
-        # Prefer fewer tiles and higher covering ratio
         return min(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0]
-    else:
-        # Fallback: prefer higher covering even if below threshold
-        return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
+    return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
 
 
-class Ovis2ImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a Ovis2 image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        crop_to_patches (`bool`, *optional*, defaults to `False`):
-            Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-            `preprocess` method.
-        min_patches (`int`, *optional*, defaults to 1):
-            The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-        max_patches (`int`, *optional*, defaults to 12):
-            The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-            set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-            Whether to use the covering area grid to determine the number of patches. Only has an effect if
-            `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
-            `preprocess` method.
+class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+        Whether to use the covering area grid to determine the number of patches. Only has an effect if
+        `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+        `preprocess` method.
     """
 
-    model_input_names = ["pixel_values"]
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    use_covering_area_grid: bool
+
+
+@auto_docstring
+class Ovis2ImageProcessor(TorchvisionBackend):
+    resample = PILImageResampling.BICUBIC
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"height": 384, "width": 384}
+    default_to_square = True
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    crop_to_patches = False
+    min_patches = 1
+    max_patches = 12
+    use_covering_area_grid = True
     valid_kwargs = Ovis2ImageProcessorKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        crop_to_patches: bool = False,
-        min_patches: int = 1,
-        max_patches: int = 12,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        use_covering_area_grid: bool = True,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[Ovis2ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 384, "width": 384}
-        size = get_size_dict(size, default_to_square=True)
 
-        self.do_resize = do_resize
-        self.size = size
-        self.crop_to_patches = crop_to_patches
-        self.min_patches = min_patches
-        self.max_patches = max_patches
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.do_convert_rgb = do_convert_rgb
-
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`Dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        crop_to_patches: bool | None = None,
-        min_patches: int | None = None,
-        max_patches: int | None = None,
-        resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        do_convert_rgb: bool | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-        use_covering_area_grid: bool = True,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Controls the size of the image after `resize`. The shortest edge of the image is resized to
-                `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
-                is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
-                edge equal to `int(size["shortest_edge"] * (1333 / 800))`.
-            crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
-                Whether to crop the image to patches.
-            min_patches (`int`, *optional*, defaults to `self.min_patches`):
-                The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-                set to `True`.
-            max_patches (`int`, *optional*, defaults to `self.max_patches`):
-                The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-                set to `True`.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-                Whether to use the covering area grid to determine the number of patches. Only has an effect if
-                `crop_to_patches` is set to `True`.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        crop_to_patches = crop_to_patches if crop_to_patches is not None else self.crop_to_patches
-        min_patches = min_patches if min_patches is not None else self.min_patches
-        max_patches = max_patches if max_patches is not None else self.max_patches
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        if crop_to_patches and max_patches > 1:
-            images = [
-                self.crop_image_to_patches(
-                    image,
-                    min_patches=min_patches,
-                    max_patches=max_patches,
-                    patch_size=size,
-                    data_format=input_data_format,
-                    use_covering_area_grid=use_covering_area_grid,
-                )
-                for image in images
-            ]
-            grids = [grid for _, grid in images]
-            images = [image for images_list, _ in images for image in images_list]
-        else:
-            grids = [(1, 1)] * len(images)
-
-        for i, image in enumerate(images):
-            if do_resize:
-                images[i] = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
-
-            if do_rescale:
-                images[i] = self.rescale(image=images[i], scale=rescale_factor, input_data_format=input_data_format)
-
-            if do_normalize:
-                images[i] = self.normalize(
-                    image=images[i],
-                    mean=image_mean,
-                    std=image_std,
-                    input_data_format=input_data_format,
-                )
-
-            images[i] = to_channel_dimension_format(images[i], data_format, input_channel_dim=input_data_format)
-
-        encoded_outputs = BatchFeature(data={"pixel_values": images, "grids": grids}, tensor_type=return_tensors)
-
-        return encoded_outputs
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[Ovis2ImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def crop_image_to_patches(
         self,
-        images: np.ndarray,
+        images: "torch.Tensor",
         min_patches: int,
         max_patches: int,
         use_covering_area_grid: bool = True,
-        patch_size: tuple | int | dict | None = None,
-        data_format: ChannelDimension | None = None,
         covering_threshold: float = 0.9,
+        patch_size: SizeDict | None = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
     ):
         """
-        Crop the image to patches and return a list of cropped images.
+        Crop the images to patches and return a list of cropped images.
         The number of patches and their grid arrangement are determined by the original image size,
         the target patch size and the minimum and maximum number of patches.
         The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
 
         Args:
-            images (`np.ndarray`):
-                The image to be cropped.
+            images (`torch.Tensor`):
+                The images to be cropped.
             min_patches (`int`):
                 The minimum number of patches to be extracted from the image.
             max_patches (`int`):
                 The maximum number of patches to be extracted from the image.
             use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-                Whether to use the covering area grid to determine the number of patches.
-            patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
-                The size of the output patches.
-            data_format (`ChannelDimension`, *optional*):
-                The format of the image data. If `None`, the format is inferred from the input image.
+                Whether to use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90%
+                of the image area. If `False`, the closest aspect ratio to the target is used.
             covering_threshold (`float`, *optional*, defaults to `0.9`):
-                The threshold for the covering area grid. If the covering area is less than this value, the grid is
-                considered invalid.
+                The threshold for the covering area. Only has an effect if `use_covering_area_grid` is set to `True`.
+            patch_size (`SizeDict`, *optional*):
+                The size of the output patches.
+            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+                Resampling filter to use if resizing the image.
 
         Returns:
-            List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
+            Tuple[`torch.Tensor`, `list`]: A tuple containing the processed images tensor and the grid information.
         """
-        if data_format is None:
-            data_format = infer_channel_dimension_format(images)
-        images = to_channel_dimension_format(images, ChannelDimension.FIRST, data_format)
-        patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
+        num_image = images.shape[0]
+        patch_size_height, patch_size_width = patch_size.height, patch_size.width
         original_height, original_width = images.shape[-2:]
 
         if use_covering_area_grid:
@@ -545,10 +225,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         else:
             # find the closest aspect ratio to the target
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (original_height, original_width),
-                (patch_size_height, patch_size_width),
-                min_patches,
-                max_patches,
+                (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
             )
 
         # calculate the target width and height
@@ -557,13 +234,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         num_blocks = num_columns * num_rows
 
         # resize the image so that each patch is of patch_size
-        resized_image = self.resize(
-            images,
-            {"height": target_height, "width": target_width},
-            data_format=ChannelDimension.FIRST,
-            input_data_format=ChannelDimension.FIRST,
-        )
-
+        resized_image = self.resize(images, SizeDict(height=target_height, width=target_width), resample=resample)
         # split the image into patches
         processed_images = []
         for i in range(num_blocks):
@@ -577,16 +248,83 @@ class Ovis2ImageProcessor(BaseImageProcessor):
             )
             # split the image
             patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
-            patch_image = to_channel_dimension_format(patch_image, data_format, ChannelDimension.FIRST)
             processed_images.append(patch_image)
 
         if len(processed_images) != 1:
-            thumbnail_img = self.resize(
-                images, patch_size, data_format=data_format, input_data_format=ChannelDimension.FIRST
-            )
+            thumbnail_img = self.resize(images, patch_size, resample=resample)
             processed_images.insert(0, thumbnail_img)
 
-        return processed_images, (num_rows, num_columns)
+        processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
+        grid = [[num_rows, num_columns] for _ in range(num_image)]
+
+        return processed_images, grid
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        crop_to_patches: bool = False,
+        min_patches: int = 1,
+        max_patches: int = 12,
+        use_covering_area_grid: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        if crop_to_patches and max_patches > 1:
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+            processed_images_grouped = {}
+            grids = {}
+            for shape, stacked_images in grouped_images.items():
+                stacked_images, grid = self.crop_image_to_patches(
+                    stacked_images,
+                    min_patches,
+                    max_patches,
+                    patch_size=size,
+                    use_covering_area_grid=use_covering_area_grid,
+                    resample=resample,
+                )
+                processed_images_grouped[shape] = stacked_images
+                grids[shape] = grid
+            images = reorder_images(processed_images_grouped, grouped_images_index)
+            images = [image for images_list in images for image in images_list]
+            grids = reorder_images(grids, grouped_images_index)
+        else:
+            grids = [[1, 1] for _ in range(len(images))]
+
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
 
 
 __all__ = ["Ovis2ImageProcessor"]

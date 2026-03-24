@@ -523,11 +523,7 @@ class LxmertModelTester:
 @require_torch
 class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"feature-extraction": LxmertModel, "question-answering": LxmertForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": LxmertModel} if is_torch_available() else {}
 
     # overwrite function because qa models takes different input label shape
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -547,7 +543,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = LxmertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LxmertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LxmertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

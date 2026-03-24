@@ -14,35 +14,23 @@
 
 """Configuration for Backbone models"""
 
+from huggingface_hub.dataclasses import strict
+
 from ...backbone_utils import BackboneConfigMixin
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="")
+@strict(accept_kwargs=True)
 class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration for a timm backbone [`TimmBackbone`].
-
-    It is used to instantiate a timm backbone model according to the specified arguments, defining the model.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        backbone (`str`, *optional*):
-            The timm checkpoint to load.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        features_only (`bool`, *optional*, defaults to `True`):
-            Whether to output only the features or also the logits.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). Will default to the last stage if unset.
-        freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
-            Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
+    backbone (`str`, *optional*):
+        The timm checkpoint to load.
+    features_only (`bool`, *optional*, defaults to `True`):
+        Whether to output only the features or also the logits.
+    freeze_batch_norm_2d (`bool`, *optional*, defaults to `False`):
+        Converts all `BatchNorm2d` and `SyncBatchNorm` layers of provided module into `FrozenBatchNorm2d`.
 
     Example:
     ```python
@@ -61,25 +49,16 @@ class TimmBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
 
     model_type = "timm_backbone"
 
-    def __init__(
-        self,
-        backbone=None,
-        num_channels=3,
-        features_only=True,
-        out_indices=None,
-        freeze_batch_norm_2d=False,
-        output_stride=None,
-        **kwargs,
-    ):
-        self.backbone = backbone
-        self.num_channels = num_channels
-        self.features_only = features_only
-        self.out_indices = out_indices if out_indices is not None else [-1]
-        self.output_stride = output_stride
-        self.freeze_batch_norm_2d = freeze_batch_norm_2d
+    backbone: str | None = None
+    num_channels: int = 3
+    features_only: bool = True
+    _out_indices: list[int] | None = None
+    freeze_batch_norm_2d: bool = False
+    output_stride: int | None = None
 
-        # self._out_features = kwargs.pop("out_features", None)
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        self.out_indices = self.out_indices if self.out_indices is not None else [-1]
+        super().__post_init__(**kwargs)
 
     @property
     def out_indices(self):

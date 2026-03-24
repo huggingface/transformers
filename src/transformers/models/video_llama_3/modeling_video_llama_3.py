@@ -33,8 +33,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import check_model_inputs, is_flash_attention_requested
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
 
@@ -136,8 +142,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -436,7 +441,8 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -527,7 +533,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 @auto_docstring
 class VideoLlama3Model(VideoLlama3PreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     _can_compile_fullgraph = False
@@ -660,7 +665,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3ModelOutputWithPast:
         r"""
@@ -710,7 +714,6 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -760,7 +763,6 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
 
 
 class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _can_compile_fullgraph = False
 
@@ -827,7 +829,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_compression_mask: torch.BoolTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
@@ -862,7 +863,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -891,7 +891,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values: torch.Tensor | None = None,
@@ -911,7 +910,6 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -1112,8 +1110,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

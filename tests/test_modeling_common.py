@@ -89,6 +89,7 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_kernels,
     require_non_hpu,
     require_torch,
@@ -112,6 +113,7 @@ from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
+from transformers.utils.output_capturing import CompileableContextVar
 
 from .generation.test_utils import GenerationTesterMixin
 
@@ -628,7 +630,13 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__:
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+        if (
+            "init_range" in key
+            or "initializer_range" in key
+            or "_std" in key
+            or "initializer_factor" in key
+            or ("layer_scale" in key and key != "use_layer_scale")
+        ):
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -797,6 +805,7 @@ class ModelTesterMixin:
             "DPTModelTest": 4,  # `test_modeling_dpt_hybrid.py`: not able to get it work after change `num_hidden_layers` and `neck_hidden_sizes`
             # Nothing we can't do
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
         }
@@ -913,61 +922,39 @@ class ModelTesterMixin:
                     )
 
     def test_keep_in_fp32_modules(self):
-        """Test that the flag `_keep_in_fp32_modules` is correctly respected."""
+        """Test that the flag `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict`  is correctly respected."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
-                if len(model._keep_in_fp32_modules) == 0:
+                if len(model._keep_in_fp32_modules) == 0 and len(model._keep_in_fp32_modules_strict) == 0:
                     self.skipTest(
-                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules attribute defined"
+                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules or _keep_in_fp32_modules_strict attribute defined"
                     )
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
 
-                    # Test when reloading in fp16 -> should be upcasted to fp32
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
-                    for name, param in model.state_dict().items():
-                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules):
-                            self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
-                        else:
-                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
-
-                    # Test when reloading in bf16 -> should stay bf16
-                    model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-                    for name, param in model.state_dict().items():
-                        self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
-
-    def test_keep_in_fp32_modules_strict(self):
-        """Test that the flag `_keep_in_fp32_modules_strict` is correctly respected."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                model = model_class(copy.deepcopy(config))
-                if len(model._keep_in_fp32_modules_strict) == 0:
-                    self.skipTest(
-                        reason=f"{model_class.__name__} class has no _keep_in_fp32_modules_strict attribute defined"
+                    self.assertFalse(
+                        model._keep_in_fp32_modules & model._keep_in_fp32_modules_strict,
+                        "We found a layer in both the `_keep_in_fp32_modules` and `_keep_in_fp32_modules_strict` lists. Please remove it from one of the two lists.",
                     )
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    model.save_pretrained(tmpdirname)
-
-                    # Test when reloading in fp16 -> should be upcasted to fp32
-                    model = model_class.from_pretrained(tmpdirname, dtype=torch.float16)
+                    # When reloading in fp16, keep_in_fp32_modules AND keep_in_fp32_modules_strict should be upcasted
+                    all_fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
                     for name, param in model.state_dict().items():
-                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
+                        if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32_modules):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
-                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT")
+                            self.assertTrue(param.dtype == torch.float16, f"{name} was upcasted but it should NOT be")
 
-                    # Test when reloading in bf16 -> should also be upcasted to fp32
+                    # When reloading in bf16, only keep_in_fp32_modules_strict should be upcasted
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                     for name, param in model.state_dict().items():
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
-                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT")
+                            self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1759,6 +1746,17 @@ class ModelTesterMixin:
         # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
+    def _set_subconfig_attributes(self, config, attribute_name, value):
+        """Helper function to recursively set a config attr to a given value"""
+        for k in config.sub_configs:
+            if (
+                self._is_composite and attribute_name == "output_attentions" and k == "vision_config"
+            ):  # skip because it's not needed and causes errors e.g with Timm
+                continue
+            if getattr(config, k) is not None:
+                setattr(getattr(config, k), attribute_name, value)
+                self._set_subconfig_attributes(getattr(config, k), attribute_name, value)
+
     def test_attention_outputs(self):
         if not self.has_attentions:
             self.skipTest(reason="Model does not output attentions")
@@ -1793,14 +1791,7 @@ class ModelTesterMixin:
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            for k in config.sub_configs:
-                if (
-                    self._is_composite and k == "vision_config"
-                ):  # skip because it's not needed and causes errors e.g with Timm
-                    continue
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_attentions = True
-
+            self._set_subconfig_attributes(config, "output_attentions", True)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1941,28 +1932,16 @@ class ModelTesterMixin:
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
-            for k in config.sub_configs:
-                if getattr(config, k) is not None:
-                    getattr(config, k).output_hidden_states = True
-
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
-        for k in config.sub_configs:
-            if getattr(config, k) is not None:
-                getattr(config, k).output_hidden_states = True
+        self._set_subconfig_attributes(config, "output_hidden_states", True)
 
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
-
-        for k in config.sub_configs:
-            if (
-                self._is_composite and k == "vision_config"
-            ):  # skip because it's not needed and causes errors e.g with Timm
-                continue
-            if getattr(config, k) is not None:
-                getattr(config, k).output_attentions = self.has_attentions
+        self._set_subconfig_attributes(config, "output_attentions", self.has_attentions)
 
         # force eager attention to support output attentions
         if self.has_attentions:
@@ -3421,6 +3400,22 @@ class ModelTesterMixin:
     def test_flash_attn_3_inference_equivalence_right_padding(self):
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_3", padding_side="right")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_4_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="left")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="right")
+
     def test_attn_implementation_composite_models(self):
         """
         Tests if composite models can receive a dict object as attn_implementation, where each key should be
@@ -3627,6 +3622,7 @@ class ModelTesterMixin:
                 "jamba",
                 "kosmos-2",
                 "mllama",
+                "lighton_ocr",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -3824,6 +3820,12 @@ class ModelTesterMixin:
     def test_flash_attn_3_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    def test_flash_attn_4_can_dispatch_composite_models(self):
+        self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_4")
+
     @require_flash_attn
     @require_torch_accelerator
     @require_bitsandbytes
@@ -3899,9 +3901,6 @@ class ModelTesterMixin:
 
         if not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
-
-        if torch_device == "xpu":
-            self.skipTest("XPU FA2 currently does not support backward.")
 
         torch.compiler.reset()
         dtype = torch.float16
@@ -3994,6 +3993,13 @@ class ModelTesterMixin:
     def test_flash_attn_3_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_3")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    def test_flash_attn_4_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_4")
+
     def test_sliding_window_mask(self):
         """Tests that we can control the sliding window attention behavior of a model."""
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4062,11 +4068,6 @@ class ModelTesterMixin:
             config._attn_implementation = attn_implementation
 
         model = cls(config).to(device=torch_device)
-
-        # torch._grouped_mm still only supports bfloat16 when used with torch.compile
-        # bfloat16 is problematic with precisions so we keep an implementation with full precision
-        if model.config._experts_implementation == "grouped_mm":
-            model.set_experts_implementation("batched_mm")
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),
@@ -4198,6 +4199,10 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+                if model_class.__name__ == "VideoMAEForPreTraining":
+                    # this model computes the loss unconditionally
+                    continue
+
                 if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
                 else:
@@ -4249,9 +4254,9 @@ class ModelTesterMixin:
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
             if hasattr(config, "attention_dropout"):
-                config.attention_dropout = 0
+                config.attention_dropout = 0.0
             if hasattr(config, "attention_probs_dropout_prob"):
-                config.attention_probs_dropout_prob = 0
+                config.attention_probs_dropout_prob = 0.0
 
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
@@ -4493,6 +4498,7 @@ class ModelTesterMixin:
                 self.skipTest(reason="No subconfigs so the test does not make sense")
             # Need to deepcopy here to avoid changing the _attn_implementation in-place
             model = model_class(copy.deepcopy(config))
+            subconfig_keys_seen = set()
 
             for submodule in model.modules():
                 # This is a submodel
@@ -4505,11 +4511,13 @@ class ModelTesterMixin:
                         if (
                             subconfig_from_model_config is not None
                             and subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__
+                            and subconfig_key not in subconfig_keys_seen
                         ):
                             # Since some composite models have different submodels parameterized by 2 of the same config
                             # class instances, we need to check against a list of matching classes, and check that at least
                             # 1 is the exact object (instead of checking immediately for similar object)
                             matching_sub_configs.append(subconfig_from_model_config)
+                            subconfig_keys_seen.add(subconfig_key)
 
                     # Both should be exactly the same object, that is when instantiating the submodel when should
                     # absolutely not copy the subconfig
@@ -4726,6 +4734,13 @@ class ModelTesterMixin:
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
                     for source_pattern in conversion.source_patterns:
+                        # Some patterns are written for gen-model only and won't be applied on base model
+                        if "lm_head" in source_pattern and model_class not in [
+                            *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+                        ]:
+                            continue
+
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
@@ -5252,30 +5267,36 @@ class ModelTesterMixin:
                 outputs = model.get_audio_features(**inputs_dict)
 
             if return_dict in (True, None):
-                self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutputWithPooling"
+                )
                 self.assertTrue(
                     hasattr(outputs, "last_hidden_state"),
-                    "get_audio_features() must return a BaseModelOutput with last_hidden_state",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with last_hidden_state",
                 )
                 self.assertTrue(
                     hasattr(outputs, "pooler_output"),
-                    "get_audio_features() must return a BaseModelOutput with pooler_output",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with pooler_output",
                 )
                 self.assertTrue(
                     hasattr(outputs, "hidden_states"),
-                    "get_audio_features() must return a BaseModelOutput with hidden_states",
+                    "get_audio_features() must return a BaseModelOutputWithPooling with hidden_states",
                 )
                 if self.has_attentions:
                     self.assertTrue(
                         hasattr(outputs, "attentions"),
-                        "get_audio_features() must return a BaseModelOutput with attentions",
+                        "get_audio_features() must return a BaseModelOutputWithPooling with attentions",
                     )
 
                 if getattr(self, "skip_test_audio_features_output_shape", False):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = inputs_dict["input_features"].shape[0]
+
+                if "input_features" in inputs_dict:
+                    batch_size = inputs_dict["input_features"].shape[0]
+                else:
+                    batch_size = inputs_dict["input_values"].shape[0]
                 self.assertEqual(
                     last_hidden_state_shape[0],
                     batch_size,
@@ -5500,6 +5521,81 @@ class ModelTesterMixin:
 
             check_attentions_output(inputs_dict, config, model_class)
 
+    def test_capture_outputs_decorator(self):
+        """Test that the decorator `capture_outputs` is not chained, and that only the base models use it.
+        Also test that we can return all the needed outputs, i.e. the kwargs are passed and the custom `XXXOutput`
+        classes accept the necessary keys.
+        Chaining the calls to `capture_outputs` for the same output is not allowed because:
+            1) useless - because the class above in the graph can simply reuse the already collected outputs
+            2) dangerous - as outputs WILL be mixed up between the callers, i.e. the first call to the decorator will
+                capture and return only the portion of the outputs that was not captured by the second `capture_outputs`
+                call for that output.
+        Note that chaining on different outputs (i.e. first call is set to capture "hidden_states" and 2nd to capture "attentions"
+        is allowed, as we do not mix up outputs in this case.)
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        COUNTER = defaultdict(lambda: 0)
+        origional_set = CompileableContextVar.set
+        origional_reset = CompileableContextVar.reset
+
+        # Every time we enter the `capture_outputs` decorator, we first call `set`, and then `reset`. So if we end
+        # up calling `set` twice in a row before `reset`, it means we chained the calls to `capture_outputs` which is
+        # an illegal practice
+        def new_set(self, value):
+            nonlocal COUNTER
+            for k in value.keys():
+                COUNTER[k] += 1
+            if any(v > 1 for v in COUNTER.values()):
+                raise ValueError("You're calling `capture_outputs` several time in a chain!")
+            return origional_set(self, value)
+
+        def new_reset(self, token):
+            nonlocal COUNTER
+            current_val = self.context_var.get()
+            for k in current_val.keys():
+                COUNTER[k] -= 1
+            origional_reset(self, token)
+
+        for model_class in self.all_model_classes:
+            # Reset the counter in case one subtest fails and thus does not clean it up correctly
+            COUNTER = defaultdict(lambda: 0)
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config)).to(device=torch_device)
+                model.eval()
+
+                recordable_outputs = [
+                    (module._can_record_outputs or {}).keys()
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                ]
+                recordable_outputs = set().union(*recordable_outputs)
+                # If we don't use the `capture_outputs` decorator, this test has no use
+                if len(recordable_outputs) == 0:
+                    self.skipTest("No usage of the `capture_outputs` decorator.")
+
+                # Prepare inputs
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                return_all = {}
+                # For attentions, any of those capturable are captured by `output_attentions`
+                if any(x in recordable_outputs for x in ("attentions", "cross_attentions", "mask_decoder_attentions")):
+                    return_all["output_attentions"] = True
+                if "hidden_states" in recordable_outputs:
+                    return_all["output_hidden_states"] = True
+                if "router_logits" in recordable_outputs:
+                    return_all["output_router_logits"] = True
+
+                # Merge them (SwitchTransformers provides `output_router_logits` in `inputs` as well so we need to avoid
+                # passing it twice)
+                all_inputs = {**inputs, **return_all}
+
+                # If we don't trigger the exception of the new set, then all good
+                with patch.object(CompileableContextVar, "set", new=new_set):
+                    with patch.object(CompileableContextVar, "reset", new=new_reset):
+                        with torch.no_grad():
+                            _ = model(**all_inputs)
+
 
 global_rng = random.Random()
 
@@ -5528,9 +5624,9 @@ def seeded_weight_init():
         # `_init_weights` so that it can add the seed for composite models as well)
         original_initialize_weights = PreTrainedModel._initialize_weights
 
-        def seeded_initialize_weights(self, module):
+        def seeded_initialize_weights(*args, **kwargs):
             set_seed(42)
-            original_initialize_weights(self, module)
+            original_initialize_weights(*args, **kwargs)
 
         PreTrainedModel._initialize_weights = seeded_initialize_weights
 
@@ -5547,7 +5643,7 @@ def skip_weight_init():
         original_initialize_weights = PreTrainedModel._initialize_weights
 
         # Just do nothing instead
-        def skip_initialize_weights(self, module):
+        def skip_initialize_weights(*args, **kwargs):
             pass
 
         PreTrainedModel._initialize_weights = skip_initialize_weights

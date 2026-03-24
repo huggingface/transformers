@@ -82,6 +82,7 @@ class DownloadKwargs(TypedDict, total=False):
     revision: str | None
     subfolder: str
     commit_hash: str | None
+    tqdm_class: type | None
 
 
 # Determine default cache directory.
@@ -168,7 +169,8 @@ def define_sagemaker_information():
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
     runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
-    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
+    training_job_arn = os.getenv("TRAINING_JOB_ARN")
+    account_id = training_job_arn.split(":")[4] if training_job_arn is not None else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
@@ -294,8 +296,9 @@ def cached_files(
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: str | None = None,
+    tqdm_class: type | None = None,
     **deprecated_kwargs,
-) -> str | None:
+) -> list[str] | None:
     """
     Tries to locate several files in a local folder and repo, downloads and cache them if necessary.
 
@@ -428,6 +431,7 @@ def cached_files(
                 proxies=proxies,
                 token=token,
                 local_files_only=local_files_only,
+                tqdm_class=tqdm_class,
             )
         else:
             snapshot_download(
@@ -441,6 +445,7 @@ def cached_files(
                 proxies=proxies,
                 token=token,
                 local_files_only=local_files_only,
+                tqdm_class=tqdm_class,
             )
 
     except Exception as e:
@@ -708,6 +713,10 @@ class PushToHubMixin:
             revision=revision,
         )
 
+    def save_pretrained(self, *args, **kwargs):
+        # explicit contract
+        raise NotImplementedError(f"{self.__class__.__name__} must implement `save_pretrained` to use `push_to_hub`.")
+
     def push_to_hub(
         self,
         repo_id: str,
@@ -836,6 +845,7 @@ def get_checkpoint_shard_files(
     revision=None,
     subfolder="",
     _commit_hash=None,
+    tqdm_class=None,
     **deprecated_kwargs,
 ):
     """
@@ -878,6 +888,7 @@ def get_checkpoint_shard_files(
         revision=revision,
         subfolder=subfolder,
         _commit_hash=_commit_hash,
+        tqdm_class=tqdm_class,
     )
 
     return cached_filenames, sharded_metadata

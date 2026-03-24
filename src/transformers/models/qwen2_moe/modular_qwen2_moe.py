@@ -34,8 +34,8 @@ from ...modeling_layers import (
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import check_model_inputs
-from ...utils.output_capturing import OutputRecorder
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma.modeling_gemma import GemmaMLP
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
@@ -125,7 +125,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
 
-        expert_output += shared_expert_output
+        expert_output = expert_output + shared_expert_output
         expert_output = expert_output.reshape(batch_size, sequence_length, hidden_dim)
         return expert_output
 
@@ -164,7 +164,8 @@ class Qwen2MoeModel(MixtralModel):
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2MoeRotaryEmbedding(config=config)
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -174,7 +175,6 @@ class Qwen2MoeModel(MixtralModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -186,23 +186,18 @@ class Qwen2MoeModel(MixtralModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": inputs_embeds,
+                "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
@@ -222,7 +217,6 @@ class Qwen2MoeModel(MixtralModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

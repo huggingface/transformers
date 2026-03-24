@@ -35,15 +35,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-    torch_compilable_check,
-    torch_int,
-)
-from ...utils.generic import check_model_inputs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
 
@@ -255,8 +249,7 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -452,7 +445,8 @@ class JanusVisionModel(JanusPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -885,7 +879,8 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def encode(self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]) -> JanusVQVAEModelOutput:
         hidden_states = self.encoder(pixel_values)
         conv_hidden_states = self.quant_conv(hidden_states)
@@ -1040,7 +1035,6 @@ class JanusModel(JanusPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1068,7 +1062,6 @@ class JanusModel(JanusPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
@@ -1116,7 +1109,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1137,7 +1129,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -1167,7 +1158,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         logits_to_keep=None,
         is_first_iteration=False,
         **kwargs,
@@ -1179,14 +1169,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # Pixel values are used only in the first iteration if available
-        # In subsquent iterations, they are already merged with text and cached
+        # In subsequent iterations, they are already merged with text and cached
         # NOTE: first iteration doesn't have to be prefill, it can be the first
         # iteration with a question and cached system prompt (continue generate from cache)
         if is_first_iteration or not kwargs.get("use_cache", True):
@@ -1310,8 +1299,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
-        model_kwargs = self._get_initial_cache_position(seq_len, device, model_kwargs)
-
         if model_kwargs.get("past_key_values", None) is None:
             # Prepare cache if not provided.
             model_kwargs["past_key_values"] = self._prepare_static_cache(
@@ -1344,7 +1331,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
             if "attention_mask" in model_inputs:
                 model_inputs["attention_mask"] = model_inputs["attention_mask"].to(inputs_embeds.device)
-            model_inputs["cache_position"] = model_inputs["cache_position"].to(inputs_embeds.device)
 
             outputs = self.model.language_model(
                 **model_inputs,
@@ -1352,7 +1338,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 output_hidden_states=output_hidden_states,
             )
 
-            # Update model_kwargs like cache_position for next generation.
+            # Update model_kwargs like attention_mask for next generation.
             model_kwargs = self._update_model_kwargs_for_generation(outputs, model_kwargs)
             hidden_state = outputs.last_hidden_state[:, -1, :].clone()
 

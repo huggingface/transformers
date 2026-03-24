@@ -82,7 +82,7 @@ Esplora oggi stesso l'[Hub](https://huggingface.com/) per trovare un modello e u
 
 ## Installazione
 
-Transformers funziona con Python 3.9+ e [PyTorch](https://pytorch.org/get-started/locally/) 2.1+.
+Transformers funziona con Python 3.10+ e [PyTorch](https://pytorch.org/get-started/locally/) 2.4+.
 
 Crea e attiva un ambiente virtuale con [venv](https://docs.python.org/3/library/venv.html) o [uv](https://docs.astral.sh/uv/), un pacchetto Python veloce basato su Rust e un gestore di progetti.
 
@@ -252,7 +252,7 @@ Hugging Face Hub. Vogliamo che Transformers consenta a sviluppatori, ricercatori
 di realizzare i propri progetti dei sogni.
 
 Per celebrare le 100.000 stelle di Transformers, abbiamo voluto puntare i riflettori sulla
-comunità con la pagina [awesome-transformers](./awesome-transformers.md), che elenca 100
+comunità con la pagina [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md), che elenca 100
 incredibili progetti realizzati con Transformers.
 
 Se possiedi o utilizzi un progetto che ritieni debba essere inserito nell'elenco, apri una PR per aggiungerlo!
