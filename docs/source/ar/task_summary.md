@@ -221,15 +221,6 @@
 
 في الأيام الأولى، كانت نماذج الترجمة في الغالب أحادية اللغة، ولكن مؤخرًا، كان هناك اهتمام متزايد بالنماذج متعددة اللغات التي يمكنها الترجمة بين العديد من أزواج اللغات.
 
-```py
->>> from transformers import pipeline
-
->>> text = "translate English to French: Hugging Face is a community-based open-source platform for machine learning."
->>> translator = pipeline(task="translation", model="google-t5/t5-small")
->>> translator(text)
-[{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
-```
-
 ### نمذجة اللغة
 
 نمذجة اللغة (Language Modeling) هي مهمة التنبؤ بالكلمة التالية في تسلسل نصي. لقد أصبح مهمة NLP شائعة للغاية لأن النموذج اللغوي المسبق التدريب يمكن أن يتم ضبطه بشكل دقيق للعديد من مهام الأخرى. في الآونة الأخيرة، كان هناك الكثير من الاهتمام بنماذج اللغة الكبيرة (LLMs) التي توضح التعلم من الصفر أو من عدد قليل من الأمثلة (Zero-shot or Few-shot Learning). وهذا يعني أن النموذج يمكنه حل المهام التي لم يتم تدريبه عليها بشكل صريح! يمكن استخدام نماذج اللغة لإنشاء نص سلس ومقنع، على الرغم من أنه يجب أن تكون حذرًا لأن النص قد لا يكون دائمًا دقيقًا.

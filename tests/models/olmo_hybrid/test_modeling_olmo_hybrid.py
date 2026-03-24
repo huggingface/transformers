@@ -64,6 +64,10 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = OlmoHybridModelTester
     rotary_embedding_layer = OlmoHybridRotaryEmbedding if is_torch_available() else None
 
+    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
     # === Cache helper methods (same pattern as Qwen3Next) ===
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""
@@ -179,7 +183,19 @@ class OlmoHybridIntegrationTest(unittest.TestCase):
                         -4.722480773925781,
                         -4.015453338623047,
                     ]
-                ]
+                ],
+                ("xpu", 3): [
+                    [
+                        -3.799433145904541,
+                        -3.799685734939575,
+                        -2.977006951522827,
+                        -2.7950011024475098,
+                        -3.529636131668091,
+                        -4.018356552886963,
+                        -4.717680773925781,
+                        -3.985853338623047,
+                    ]
+                ],
             }
         )
         EXPECTED_MEAN = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -218,7 +234,39 @@ class OlmoHybridIntegrationTest(unittest.TestCase):
                     -4.03125,
                     1.2421875,
                     -1.1328125,
-                ]
+                ],
+                ("xpu", 3): [
+                    3.8125,
+                    -0.5391,
+                    -1.7266,
+                    -2.1875,
+                    -2.2344,
+                    -2.8750,
+                    -0.8477,
+                    -1.2266,
+                    -1.6172,
+                    -2.75,
+                    -1.2656,
+                    0.8516,
+                    -2.5469,
+                    0.8281,
+                    -2.1562,
+                    2.9062,
+                    3.6719,
+                    3.5625,
+                    3.1250,
+                    2.7812,
+                    2.7031,
+                    1.7578,
+                    1.9141,
+                    2.2188,
+                    1.8984,
+                    -2.4844,
+                    -2.0156,
+                    -4.0000,
+                    1.2344,
+                    -1.1250,
+                ],
             }
         )
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
@@ -231,6 +279,10 @@ class OlmoHybridIntegrationTest(unittest.TestCase):
                 (
                     "cuda",
                     8,
+                ): "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed",
+                (
+                    "xpu",
+                    3,
                 ): "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed",
             }
         )

@@ -14,7 +14,7 @@
 
 import copy
 import weakref
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
 import torch
@@ -387,7 +387,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
         self.prev_target_ids_len: int | None = None
-        self.prev_assistant_ids = None
+        self.prev_assistant_ids: torch.LongTensor | None = None
         self.target_lookbehind = self.assistant_generation_config.target_lookbehind
         self.assistant_lookbehind = self.assistant_generation_config.assistant_lookbehind
 
@@ -591,7 +591,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self, input_ids: torch.LongTensor, assistant_sequences: torch.LongTensor
     ) -> torch.LongTensor:
         """Processes assistant outputs to obtain target input IDs."""
-        num_prev_assistant = self.prev_assistant_ids.shape[1]
+        prev_assistant_ids = cast(torch.LongTensor, self.prev_assistant_ids)
+        num_prev_assistant = prev_assistant_ids.shape[1]
         start_assistant_look_index = num_prev_assistant - self.assistant_lookbehind
 
         new_target_ids_from_window = self.convert_source_tokens_to_target_tokens(
@@ -721,7 +722,7 @@ class AssistantToTargetTranslator:
         self.assistant_prune_lm_head = assistant_prune_lm_head and assistant_model is not None
         if len(self._suppress_input_ids) > 0:
             # the assistant vocab is not a subset of the target vocab
-            if self.assistant_prune_lm_head:
+            if self.assistant_prune_lm_head and assistant_model is not None:
                 self.assistant_overlap_token_ids = torch.tensor(
                     list(self.target_to_assistant_input_ids.values()),
                     dtype=torch.long,
@@ -1138,7 +1139,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                 break
 
         # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
-        if not match_found or len(chosen_ids) == 0:
+        if not match_found or chosen_ids is None or len(chosen_ids) == 0:
             return input_ids, None
 
         # Now need extend input_ids with chosen_ids

@@ -32,6 +32,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -47,6 +48,9 @@ if is_torch_available():
 
 
 class DeepseekV3ModelTester:
+    if is_torch_available():
+        causal_lm_class = DeepseekV3ForCausalLM
+
     def __init__(
         self,
         parent,
@@ -80,7 +84,10 @@ class DeepseekV3ModelTester:
         hidden_act="silu",
         max_position_embeddings=512,
         initializer_range=0.02,
-        attention_probs_dropout_prob=0.1,
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        attention_probs_dropout_prob=0.0,
         type_vocab_size=16,
         type_sequence_label_size=2,
         num_labels=3,
@@ -207,7 +214,9 @@ class DeepseekV3ModelTester:
 
 
 @require_torch
-class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DeepseekV3ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase, TensorParallelTesterMixin
+):
     all_model_classes = (
         (
             DeepseekV3Model,
@@ -240,7 +249,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = DeepseekV3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=32)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""

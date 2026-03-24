@@ -121,9 +121,9 @@ Image.fromarray(depth.astype("uint8"))
 [[autodoc]] ZoeDepthImageProcessor
     - preprocess
 
-## ZoeDepthImageProcessorFast
+## ZoeDepthImageProcessorPil
 
-[[autodoc]] ZoeDepthImageProcessorFast
+[[autodoc]] ZoeDepthImageProcessorPil
     - preprocess
 
 ## ZoeDepthForDepthEstimation

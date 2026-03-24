@@ -76,13 +76,6 @@ print(f"Predicted label: {predicted_label}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "This restaurant has amazing food." | transformers run --task text-classification --model bhadresh-savani/electra-base-emotion --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes

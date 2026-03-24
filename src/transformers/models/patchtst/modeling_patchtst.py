@@ -1150,7 +1150,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1303,7 +1303,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         >>> loss.backward()
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # past_values: [bs x num_channels x num_patches x d_model] or
         # [bs x num_channels x (num_patches+1) x d_model] if use cls_token
@@ -1436,7 +1436,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         >>> labels = outputs.prediction_logits
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         model_output = self.model(
             past_values=past_values,
@@ -1662,7 +1662,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         >>> prediction_outputs = outputs.prediction_outputs
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # get model output
         model_output = self.model(
@@ -1884,7 +1884,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         >>> regression_outputs = outputs.regression_outputs
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         model_output = self.model(
             past_values=past_values,

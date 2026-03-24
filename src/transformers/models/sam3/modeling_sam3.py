@@ -792,6 +792,7 @@ class Sam3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    config: Sam3ViTConfig
     _can_record_outputs = {
         "hidden_states": Sam3ViTLayer,
         "attentions": Sam3ViTRoPEAttention,
@@ -2111,9 +2112,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {
-        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
-    }
+    base_model_prefix = "detector_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",

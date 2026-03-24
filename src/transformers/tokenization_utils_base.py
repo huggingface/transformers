@@ -1495,7 +1495,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                   using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
+                - (**Deprecated**, not applicable to all derived classes) a path to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   `./my_model_directory/vocab.txt`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -1669,9 +1669,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
-            other_pattern = r"tekken\.json|tokenizer\.model\.*"
+            other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
+                getattr(cls, "VOCAB_FILES_NAMES", {}).keys()
+            )
             if match := re.search(other_pattern, "\n".join(remote_files)):
-                vocab_files["vocab_file"] = match.group()
+                if "spm_file" in vocab_files:
+                    vocab_files["spm_file"] = match.group()
+                else:
+                    vocab_files["vocab_file"] = match.group()
 
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():

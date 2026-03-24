@@ -67,13 +67,6 @@ print(tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "UN Chief says there is no military solution in Syria" | transformers run --task "translation_en_to_fr" --model facebook/nllb-200-distilled-600M --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.

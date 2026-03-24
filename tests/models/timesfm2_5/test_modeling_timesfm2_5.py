@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 import unittest
 
 import numpy as np
@@ -22,7 +23,7 @@ from transformers import TimesFm2_5Config, is_torch_available
 from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
+from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -44,7 +45,7 @@ class TimesFm2_5ModelTester:
         rms_norm_eps: float = 1e-6,
         quantiles: list[float] = [0.1, 0.5, 0.9],
         output_quantile_len: int = 16,
-        is_training: bool = False,
+        is_training: bool = True,
         batch_size: int = 2,
     ):
         self.parent = parent
@@ -105,6 +106,7 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = False
     test_inputs_embeds = False
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = TimesFm2_5ModelTester(self)
@@ -271,6 +273,14 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
 
         if self.has_attentions and outputs.attentions is not None:
             self.assertIsNotNone(attentions.grad)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels:
+            batch_size = inputs_dict["past_values"].shape[0]
+            rng = random.Random(42)
+            inputs_dict["future_values"] = floats_tensor([batch_size, self.model_tester.horizon_length], rng=rng)
+        return inputs_dict
 
 
 @require_torch

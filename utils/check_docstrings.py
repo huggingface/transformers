@@ -51,6 +51,7 @@ from git import Repo
 from transformers import logging
 from transformers.utils import direct_transformers_import
 from transformers.utils.auto_docstring import (
+    ConfigArgs,
     ImageProcessorArgs,
     ModelArgs,
     ModelOutputArgs,
@@ -82,6 +83,11 @@ class DecoratedItem:
     init_def_line: int | None = None  # 1-based line number of __init__ def (if has_init)
     is_model_output: bool = False  # Whether the class inherits from ModelOutput
     is_processor: bool = False  # Whether the class inherits from ProcessorMixin
+    is_config: bool = False  # Whether the class inherits from PreTrainedConfig
+
+    # Name fields – used to match the item against the corresponding modular_*.py source
+    name: str = ""  # class or function name
+    class_name: str | None = None  # enclosing class name (None for top-level items)
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -104,15 +110,10 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
-    "GlmMoeDsaConfig",
+    "Mxfp4Config",
     "GlmAsrProcessor",
     "AudioFlamingo3Processor",
-    "ApertusConfig",
-    "Mxfp4Config",
-    "Qwen3OmniMoeConfig",
-    "Exaone4Config",
-    "SmolLM3Config",
-    "Gemma3nVisionConfig",
+    "FourOverSixConfig",
     "Llama4Processor",
     # Deprecated
     "InputExample",
@@ -122,19 +123,9 @@ OBJECTS_TO_IGNORE = {
     "AlbertModel",
     "AlbertTokenizerFast",
     "AlignTextModel",
-    "AlignVisionConfig",
-    "AudioClassificationPipeline",
-    "AutoformerConfig",
-    "AutomaticSpeechRecognitionPipeline",
-    "BarkCoarseConfig",
-    "BarkConfig",
-    "BarkFineConfig",
-    "BarkSemanticConfig",
-    "BartConfig",
     "BartTokenizerFast",
     "BarthezTokenizerFast",
     "BeitModel",
-    "BertConfig",
     "BertJapaneseTokenizer",
     "CohereTokenizer",
     "DebertaTokenizer",
@@ -171,180 +162,103 @@ OBJECTS_TO_IGNORE = {
     "CodeLlamaTokenizerFast",
     "BertModel",
     "BertTokenizerFast",
-    "BigBirdConfig",
     "BigBirdForQuestionAnswering",
     "BigBirdModel",
-    "BigBirdPegasusConfig",
     "BigBirdTokenizerFast",
     "BitImageProcessor",
-    "BlenderbotConfig",
-    "BlenderbotSmallConfig",
     "BlenderbotSmallTokenizerFast",
     "BlenderbotTokenizerFast",
-    "Blip2VisionConfig",
-    "BlipTextConfig",
-    "BlipVisionConfig",
-    "BloomConfig",
-    "BLTConfig",
-    "BLTPatcherConfig",
-    "BridgeTowerTextConfig",
-    "BridgeTowerVisionConfig",
     "BrosModel",
-    "CamembertConfig",
     "CamembertModel",
     "CamembertTokenizerFast",
     "CanineModel",
     "CanineTokenizer",
     "ChineseCLIPTextModel",
-    "ClapTextConfig",
-    "ConditionalDetrConfig",
     "ConditionalDetrImageProcessor",
-    "ConvBertConfig",
     "ConvBertTokenizerFast",
-    "ConvNextConfig",
-    "ConvNextV2Config",
     "CpmAntTokenizer",
-    "CvtConfig",
     "CvtModel",
     "DeiTImageProcessor",
     "DPRReaderTokenizer",
     "DPRReaderTokenizerFast",
     "DPTModel",
-    "Data2VecAudioConfig",
-    "Data2VecTextConfig",
     "Data2VecTextModel",
     "Data2VecVisionModel",
     "DataCollatorForLanguageModeling",
-    "DebertaConfig",
-    "DebertaV2Config",
     "DebertaV2Tokenizer",
     "DebertaV2TokenizerFast",
-    "DecisionTransformerConfig",
-    "DeformableDetrConfig",
     "DeformableDetrImageProcessor",
     "DeiTModel",
     "DepthEstimationPipeline",
-    "DetaConfig",
     "DetaImageProcessor",
-    "DetrConfig",
     "DetrImageProcessor",
     "DinatModel",
-    "DINOv3ConvNextConfig",
-    "DINOv3ViTConfig",
-    "DistilBertConfig",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
     "DonutSwinModel",
     "EarlyStoppingCallback",
-    "EfficientFormerConfig",
     "EfficientFormerImageProcessor",
-    "EfficientNetConfig",
-    "ElectraConfig",
     "ElectraTokenizerFast",
     "EncoderDecoderModel",
     "ErnieMModel",
     "ErnieModel",
     "ErnieMTokenizer",
-    "EsmConfig",
     "EsmModel",
-    "FNetConfig",
     "FNetModel",
     "FNetTokenizerFast",
-    "FSMTConfig",
     "FeatureExtractionPipeline",
     "FillMaskPipeline",
-    "FlaubertConfig",
-    "FlavaConfig",
     "FlavaForPreTraining",
     "FlavaImageModel",
     "FlavaImageProcessor",
     "FlavaMultimodalModel",
-    "FlavaTextConfig",
     "FlavaTextModel",
     "FocalNetModel",
     "FunnelTokenizerFast",
-    "GPTBigCodeConfig",
-    "GPTJConfig",
-    "GPTNeoXConfig",
-    "GPTNeoXJapaneseConfig",
     "GPTNeoXTokenizerFast",
-    "GPTSanJapaneseConfig",
-    "GitConfig",
-    "GitVisionConfig",
-    "Glm4vVisionConfig",
-    "Glm4vMoeVisionConfig",
-    "GraphormerConfig",
-    "GroupViTTextConfig",
-    "GroupViTVisionConfig",
     "HerbertTokenizerFast",
-    "HubertConfig",
     "HubertForCTC",
-    "IBertConfig",
     "IBertModel",
-    "IdeficsConfig",
     "IdeficsProcessor",
     "IJepaModel",
     "ImageClassificationPipeline",
     "ImageFeatureExtractionPipeline",
-    "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
-    "InformerConfig",
-    "JukeboxPriorConfig",
     "JukeboxTokenizer",
-    "LEDConfig",
     "LEDTokenizerFast",
-    "LasrEncoderConfig",
     "LasrFeatureExtractor",
     "LasrTokenizer",
     "LayoutLMForQuestionAnswering",
     "LayoutLMTokenizerFast",
-    "LayoutLMv2Config",
     "LayoutLMv2ForQuestionAnswering",
     "LayoutLMv2TokenizerFast",
-    "LayoutLMv3Config",
     "LayoutLMv3ImageProcessor",
     "LayoutLMv3TokenizerFast",
     "LayoutXLMTokenizerFast",
-    "LevitConfig",
-    "LiltConfig",
     "LiltModel",
-    "LongT5Config",
-    "LongformerConfig",
     "LongformerModel",
     "LongformerTokenizerFast",
     "LukeModel",
     "LukeTokenizer",
     "LxmertTokenizerFast",
-    "M2M100Config",
     "M2M100Tokenizer",
     "MarkupLMProcessor",
     "MaskGenerationPipeline",
     "MBart50TokenizerFast",
-    "MBartConfig",
     "MCTCTFeatureExtractor",
-    "MPNetConfig",
     "MPNetModel",
     "MPNetTokenizerFast",
-    "MT5Config",
     "MT5TokenizerFast",
-    "MarianConfig",
     "MarianTokenizer",
-    "MarkupLMConfig",
     "MarkupLMModel",
     "MarkupLMTokenizer",
     "MarkupLMTokenizerFast",
-    "Mask2FormerConfig",
-    "MaskFormerConfig",
     "MaxTimeCriteria",
-    "MegaConfig",
     "MegaModel",
-    "MegatronBertConfig",
     "MegatronBertForPreTraining",
     "MegatronBertModel",
-    "MLCDVisionConfig",
-    "MobileBertConfig",
     "MobileBertModel",
     "MobileBertTokenizerFast",
     "MobileNetV1ImageProcessor",
@@ -354,175 +268,104 @@ OBJECTS_TO_IGNORE = {
     "MobileViTModel",
     "MobileViTV2Model",
     "MLukeTokenizer",
-    "MraConfig",
-    "MusicgenDecoderConfig",
     "MusicgenForConditionalGeneration",
     "MusicgenMelodyForConditionalGeneration",
-    "MvpConfig",
     "MvpTokenizerFast",
     "MT5Tokenizer",
     "NatModel",
     "NerPipeline",
-    "NezhaConfig",
     "NezhaModel",
-    "NllbMoeConfig",
     "NllbTokenizer",
     "NllbTokenizerFast",
-    "NystromformerConfig",
-    "OPTConfig",
     "ObjectDetectionPipeline",
     "OneFormerProcessor",
-    "OpenAIGPTTokenizerFast",
-    "OpenLlamaConfig",
-    "PLBartConfig",
-    "ParakeetCTCConfig",
-    "LasrCTCConfig",
-    "PegasusConfig",
     "PegasusTokenizer",
     "PegasusTokenizerFast",
-    "PegasusXConfig",
     "PerceiverImageProcessor",
     "PerceiverModel",
     "PerceiverTokenizer",
-    "PersimmonConfig",
     "Pipeline",
-    "Pix2StructConfig",
-    "Pix2StructTextConfig",
     "PLBartTokenizer",
-    "Pop2PianoConfig",
     "PreTrainedTokenizer",
     "PreTrainedTokenizerBase",
     "PreTrainedTokenizerFast",
     "PrefixConstrainedLogitsProcessor",
-    "ProphetNetConfig",
-    "QDQBertConfig",
     "QDQBertModel",
-    "RagConfig",
     "RagModel",
     "RagRetriever",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
-    "ReformerConfig",
     "ReformerTokenizerFast",
-    "RegNetConfig",
-    "RemBertConfig",
     "RemBertModel",
     "RemBertTokenizer",
     "RemBertTokenizerFast",
-    "RetriBertConfig",
     "RetriBertTokenizerFast",
-    "RoCBertConfig",
     "RoCBertModel",
     "RoCBertTokenizer",
-    "RoFormerConfig",
-    "RobertaConfig",
     "RobertaModel",
-    "RobertaPreLayerNormConfig",
     "RobertaPreLayerNormModel",
     "RobertaTokenizerFast",
-    "SEWConfig",
-    "SEWDConfig",
     "SEWDForCTC",
     "SEWForCTC",
-    "SamConfig",
-    "SamPromptEncoderConfig",
-    "SamHQConfig",
-    "SamHQPromptEncoderConfig",
-    "SeamlessM4TConfig",  # use of unconventional markdown
-    "SeamlessM4Tv2Config",  # use of unconventional markdown
+    # use of unconventional markdown
+    # use of unconventional markdown
     "Seq2SeqTrainingArguments",
-    "Speech2Text2Config",
     "Speech2Text2Tokenizer",
     "Speech2TextTokenizer",
     "SpeechEncoderDecoderModel",
-    "SpeechT5Config",
     "SpeechT5Model",
-    "SplinterConfig",
     "SplinterTokenizerFast",
     "SqueezeBertTokenizerFast",
     "Swin2SRImageProcessor",
     "Swinv2Model",
-    "SwitchTransformersConfig",
-    "T5Config",
     "T5Tokenizer",
     "T5TokenizerFast",
     "TableQuestionAnsweringPipeline",
-    "TableTransformerConfig",
-    "TapasConfig",
     "TapasModel",
     "TapasTokenizer",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
-    "TimeSeriesTransformerConfig",
     "TokenClassificationPipeline",
-    "TrOCRConfig",
     "Phi4MultimodalProcessor",
     "TrainerState",
     "TrainingArguments",
-    "TrajectoryTransformerConfig",
     "TvltImageProcessor",
-    "UMT5Config",
-    "UperNetConfig",
     "UperNetForSemanticSegmentation",
     "ViTHybridImageProcessor",
     "ViTHybridModel",
     "ViTMSNModel",
     "ViTModel",
     "VideoClassificationPipeline",
-    "ViltConfig",
     "ViltForImagesAndTextClassification",
     "ViltModel",
     "VisionEncoderDecoderModel",
     "VisionTextDualEncoderModel",
-    "VisualBertConfig",
     "VisualBertModel",
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
     "Wav2Vec2BertForCTC",
     "Wav2Vec2CTCTokenizer",
-    "Wav2Vec2Config",
-    "Wav2Vec2ConformerConfig",
     "Wav2Vec2ConformerForCTC",
     "Wav2Vec2FeatureExtractor",
     "Wav2Vec2PhonemeCTCTokenizer",
-    "WavLMConfig",
     "WavLMForCTC",
-    "WhisperConfig",
     "WhisperFeatureExtractor",
     "WhisperForAudioClassification",
-    "XCLIPTextConfig",
-    "XCLIPVisionConfig",
-    "XGLMConfig",
     "XGLMModel",
     "XGLMTokenizerFast",
-    "XLMConfig",
-    "XLMProphetNetConfig",
-    "XLMRobertaConfig",
     "XLMRobertaModel",
     "XLMRobertaTokenizerFast",
-    "XLMRobertaXLConfig",
     "XLMRobertaXLModel",
-    "XLNetConfig",
     "XLNetTokenizerFast",
-    "XmodConfig",
     "XmodModel",
     "YolosImageProcessor",
     "YolosModel",
-    "YosoConfig",
     "ZeroShotAudioClassificationPipeline",
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
     "ZeroShotObjectDetectionPipeline",
-    "Llama4TextConfig",
-    "BltConfig",
-    "BltPatcherConfig",
-    "HiggsAudioV2Config",
-    "HiggsAudioV2TokenizerConfig",
-    "MoonshineStreamingConfig",
-    "MoonshineStreamingEncoderConfig",
     "VoxtralRealtimeFeatureExtractor",
-    "VoxtralRealtimeEncoderConfig",
 }
 # In addition to the objects above, we also ignore objects with certain prefixes. If you add an item to the list
 # below, make sure to add a comment explaining why.
@@ -1008,6 +851,8 @@ def find_matching_model_files(check_all: bool = False):
     potential_files += glob.glob(image_processing_glob_pattern)
     processing_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/processing_*.py")
     potential_files += glob.glob(processing_glob_pattern)
+    configuration_glob_pattern = os.path.join(PATH_TO_TRANSFORMERS, "models/**/configuration_*.py")
+    potential_files += glob.glob(configuration_glob_pattern)
     matching_files = []
     for file_path in potential_files:
         if os.path.isfile(file_path):
@@ -1045,6 +890,238 @@ def get_args_in_dataclass(lines, dataclass_content):
     return args_in_dataclass
 
 
+def _normalize_docstring_code_fences(raw_doc: str) -> str:
+    """
+    Normalise raw docstring text (including the r\"\"\"...\"\"\" delimiters).
+
+    One fix is applied: a closing ``` is inserted before the final \"\"\" when
+    a code block is still open (unclosed fence).  Detection of bare code blocks
+    (without an 'Example:' heading) is handled by the updated _re_example_or_return
+    pattern in auto_docstring.py, which now also splits at ``` lines.
+    """
+    lines = raw_doc.split("\n")
+    result: list[str] = []
+    in_code_block = False
+
+    for line in lines:
+        stripped = line.strip()
+        indent = line[: len(line) - len(line.lstrip())]
+
+        if not in_code_block and stripped.startswith("```"):
+            in_code_block = True
+
+        elif in_code_block and stripped == "```":
+            in_code_block = False
+
+        elif in_code_block and stripped.endswith('"""'):
+            if not stripped.startswith("```"):
+                # Unclosed fence – insert closing ``` before the triple-quote line
+                result.append(f"{indent}```")
+            in_code_block = False
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
+def _find_corresponding_modular_file(generated_file: str) -> str | None:
+    """Return the modular_*.py path for any generated model file, or None.
+
+    Handles modeling_*, configuration_*, processing_*, image_processing_* (including
+    the image_processing_pil_* variant).
+    """
+    path = Path(generated_file)
+    stem = path.stem
+    for prefix in ("modeling_", "configuration_", "processing_", "image_processing_pil_", "image_processing_"):
+        if stem.startswith(prefix):
+            model_name = stem[len(prefix) :]
+            modular_path = path.parent / f"modular_{model_name}.py"
+            return str(modular_path) if modular_path.exists() else None
+    return None
+
+
+def _node_has_docstring(node) -> bool:
+    """Return True when the AST node's body starts with a string-literal docstring."""
+    return (
+        node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    )
+
+
+def _propagate_fixes_to_modular(
+    generated_file: str,
+    decorated_items: list,
+    overwrite: bool = False,
+) -> bool:
+    """After fixing docstrings in a generated file, propagate the same fixes to the
+    corresponding modular_*.py source file.
+
+    For each @auto_docstring item processed in *generated_file*, we look for the
+    same class/method (by name) in the modular source.  If the modular item has an
+    *explicit* docstring we sync it using the *generated* file as the ground truth:
+
+    - Arg descriptions come from the generated docstring (which was just fixed/reordered).
+      Descriptions present in the modular docstring take priority over the generated ones
+      (modular is the source), but args that exist in the generated docstring and were
+      missing from the modular (e.g. stripped by a previous bug) are restored.
+    - The Example/Returns section is taken from the modular docstring (modular-specific).
+    - Arg order follows gen_item.args (the generated file's annotation order).
+
+    If the modular item has *no* docstring it was inherited and we leave it untouched.
+
+    Returns True when the modular file was (or would be) changed.
+    """
+    modular_file = _find_corresponding_modular_file(generated_file)
+    if not modular_file:
+        return False
+
+    try:
+        with open(modular_file, encoding="utf-8") as f:
+            modular_content = f.read()
+        modular_tree = ast.parse(modular_content)
+        with open(generated_file, encoding="utf-8") as f:
+            generated_content = f.read()
+    except (OSError, SyntaxError):
+        return False
+
+    modular_lines = modular_content.split("\n")
+    gen_lines = generated_content.split("\n")
+
+    # Build a lookup: (class_name_or_None, item_name) -> (method_node, class_node_or_None)
+    lookup: dict[tuple, tuple] = {}
+    for node in modular_tree.body:
+        if isinstance(node, ast.ClassDef):
+            lookup[(None, node.name)] = (node, None)
+            for child in node.body:
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    lookup[(node.name, child.name)] = (child, node)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            lookup[(None, node.name)] = (node, None)
+
+    # Collect (docstring_start_0based, docstring_end_0based, new_lines) for each fix
+    fixes: list[tuple[int, int, list[str]]] = []
+
+    for gen_item in decorated_items:
+        key = (gen_item.class_name, gen_item.name)
+        entry = lookup.get(key)
+        if entry is None:
+            continue
+
+        mod_node, _mod_class_node = entry
+
+        # Find the "active" node containing the docstring
+        # For class items with __init__: the docstring lives in __init__
+        # For config classes (no __init__):  the docstring lives at class-body level
+        # For function items: the node itself carries the docstring
+        if gen_item.kind == "class" and gen_item.has_init:
+            active_node = next(
+                (m for m in mod_node.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"),
+                None,
+            )
+            if active_node is None:
+                continue
+        elif gen_item.kind == "class":
+            active_node = mod_node
+        else:
+            active_node = mod_node
+
+        # Skip if the modular item has no explicit docstring – it was inherited
+        if not _node_has_docstring(active_node):
+            continue
+
+        # Locate the docstring in modular_lines (0-based)
+        body_start_1based = active_node.body[0].lineno
+        sig_end_0based = body_start_1based - 1  # 0-based index of the docstring line
+        if sig_end_0based >= len(modular_lines):
+            continue
+        if '"""' not in modular_lines[sig_end_0based]:
+            continue
+        doc_end_0based = _find_docstring_end_line(modular_lines, sig_end_0based)
+        if doc_end_0based is None:
+            continue
+
+        # Parse the modular docstring to get its current arg descriptions and remaining section
+        mod_doc_raw = _normalize_docstring_code_fences("\n".join(modular_lines[sig_end_0based : doc_end_0based + 1]))
+        mod_args_dict, mod_remaining = parse_docstring(mod_doc_raw)
+
+        # Parse the generated docstring to get the authoritative (fixed) arg descriptions.
+        # gen_item.body_start_line is 1-based and points to the first line of the body
+        # (which is always the docstring for @auto_docstring items).
+        gen_doc_start_0 = gen_item.body_start_line - 1
+        gen_doc_end_0 = _find_docstring_end_line(gen_lines, gen_doc_start_0)
+        if gen_doc_end_0 is not None and '"""' in gen_lines[gen_doc_start_0]:
+            gen_doc_raw = _normalize_docstring_code_fences("\n".join(gen_lines[gen_doc_start_0 : gen_doc_end_0 + 1]))
+            gen_args_dict, gen_remaining = parse_docstring(gen_doc_raw)
+        else:
+            gen_args_dict, gen_remaining = {}, ""
+
+        # Merge: generated docstring is the base (has all args, already fixed/reordered),
+        # modular descriptions take priority where both have the same arg.
+        merged = dict(gen_args_dict)
+        merged.update(mod_args_dict)
+
+        # Order merged args by gen_item.args (generated annotation order).
+        # Extra args that are only in modular (not yet in generated) are appended at the end.
+        ordered: dict = {}
+        for arg in gen_item.args:
+            if arg in merged:
+                ordered[arg] = merged[arg]
+        for arg, info in mod_args_dict.items():
+            if arg not in ordered:
+                ordered[arg] = info
+
+        # Prefer the modular's remaining section (its Example/Returns are modular-specific).
+        # Fall back to the generated remaining only when the modular has none.
+        remaining = mod_remaining or gen_remaining
+
+        # Build the new docstring string (mirrors generate_new_docstring_for_signature logic)
+        if not ordered and not remaining:
+            continue
+        new_doc = 'r"""\n'
+        for arg, info in ordered.items():
+            additional_info = info.get("additional_info") or ""
+            description = info.get("description", "")
+            if description.endswith('"""'):
+                description = "\n".join(description.split("\n")[:-1])
+            new_doc += f"{arg} ({info['type']}{additional_info}):{description}\n"
+        close_doc = True
+        if remaining:
+            if remaining.endswith('"""'):
+                # remaining already contains the closing """; don't add it separately
+                close_doc = False
+            end_remaining = "\n" if close_doc else ""
+            new_doc += f"{set_min_indent(remaining, 0)}{end_remaining}"
+        if close_doc:
+            new_doc += '"""'
+
+        # Indent to match the modular docstring's own indentation
+        raw_doc_line = modular_lines[sig_end_0based]
+        output_indent = len(raw_doc_line) - len(raw_doc_line.lstrip())
+        new_docstring = set_min_indent(new_doc, output_indent)
+
+        old_lines = modular_lines[sig_end_0based : doc_end_0based + 1]
+        new_lines = new_docstring.split("\n")
+        if old_lines == new_lines:
+            continue
+
+        fixes.append((sig_end_0based, doc_end_0based, new_lines))
+
+    if not fixes:
+        return False
+
+    # Apply fixes in reverse line order so earlier line numbers stay valid
+    fixes.sort(key=lambda x: x[0], reverse=True)
+    for start, end, new_lines in fixes:
+        modular_lines[start : end + 1] = new_lines
+
+    if overwrite:
+        with open(modular_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(modular_lines))
+    return True
+
+
 def generate_new_docstring_for_signature(
     lines,
     args_in_signature,
@@ -1079,7 +1156,8 @@ def generate_new_docstring_for_signature(
     if docstring_start_line is not None:
         docstring_end_line = _find_docstring_end_line(lines, docstring_start_line)
         docstring_content = lines[docstring_start_line : docstring_end_line + 1]
-        parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
+        raw_doc = _normalize_docstring_code_fences("\n".join(docstring_content))
+        parsed_docstring, remaining_docstring = parse_docstring(raw_doc)
         args_docstring_dict.update(parsed_docstring)
     else:
         docstring_end_line = None
@@ -1128,7 +1206,7 @@ def generate_new_docstring_for_signature(
         arg: args_docstring_dict[arg] for arg in args_docstring_dict if arg not in docstring_args_ro_remove
     }
 
-    # Fill missing args
+    # Fill missing args (only when the item carries an explicit @auto_docstring decorator)
     for arg in args_in_signature:
         if (
             arg not in args_docstring_dict
@@ -1254,8 +1332,16 @@ def generate_new_docstring_for_class(
         args_in_signature = get_args_in_dataclass(lines, dataclass_content)
         output_docstring_indent = 4
         source_args_doc = [ModelOutputArgs]
+    elif item.is_config:
+        # Config class (PreTrainedConfig subclass) - args are class-level type annotations,
+        # docstring is at class body level (no __init__ in source; @strict generates one at runtime).
+        current_line_end = item.def_line - 1  # Convert to 0-based
+        sig_end_line = current_line_end + 1
+        args_in_signature = item.args
+        output_docstring_indent = 4
+        source_args_doc = [ConfigArgs]
     else:
-        # Class has no __init__ and is not a ModelOutput - nothing to document
+        # Class has no __init__ and is not a ModelOutput or Config - nothing to document
         return "", None, None, [], [], []
 
     docstring_start_line = sig_end_line if '"""' in lines[sig_end_line] else None
@@ -1336,6 +1422,7 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
         init_def_line = None
         is_model_output = False
         is_processor = False
+        is_config = False
 
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # For functions/methods, extract args directly
@@ -1345,13 +1432,15 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                 is_processor = True
         elif isinstance(node, ast.ClassDef):
             # For classes, look for __init__ method and check if it's a ModelOutput or Processor
-            # Check if class inherits from ModelOutput or ProcessorMixin
+            # Check if class inherits from ModelOutput, ProcessorMixin, or PreTrainedConfig
             for base in node.bases:
                 if isinstance(base, ast.Name):
                     if "ModelOutput" in base.id:
                         is_model_output = True
                     elif "ProcessorMixin" in base.id or "Processor" in base.id:
                         is_processor = True
+                    elif base.id == "PreTrainedConfig":
+                        is_config = True
             # Look for __init__ method in the class body
             for class_item in node.body:
                 if isinstance(class_item, ast.FunctionDef) and class_item.name == "__init__":
@@ -1361,6 +1450,24 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                     # Update body_start_line to be the __init__ body start
                     body_start_line = class_item.body[0].lineno if class_item.body else class_item.lineno + 1
                     break
+            # For config classes (PreTrainedConfig subclasses), extract class-level type annotations as args.
+            # These use @strict from huggingface_hub which generates __init__ from annotations, so there is
+            # no explicit __init__ in the source. The docstring and parameters live at the class body level.
+            if is_config and not has_init:
+                for class_item in node.body:
+                    if isinstance(class_item, ast.AnnAssign) and isinstance(class_item.target, ast.Name):
+                        attr_name = class_item.target.id
+                        if attr_name.startswith("_"):
+                            continue
+                        # Skip ClassVar annotations (class-level metadata, not config parameters)
+                        ann = class_item.annotation
+                        if (
+                            isinstance(ann, ast.Subscript)
+                            and isinstance(ann.value, ast.Name)
+                            and ann.value.id == "ClassVar"
+                        ):
+                            continue
+                        arg_names.append(attr_name)
 
         decorated_items.append(
             DecoratedItem(
@@ -1374,6 +1481,9 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
                 init_def_line=init_def_line,
                 is_model_output=is_model_output,
                 is_processor=is_processor,
+                is_config=is_config,
+                name=node.name,
+                class_name=parent_class_name,
             )
         )
 
@@ -1855,6 +1965,12 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
                     overwrite=overwrite,
                 )
             )
+
+        # Propagate docstring fixes to the corresponding modular_*.py source so that
+        # the fixes survive the next modular-converter regeneration run.  We only
+        # touch a modular item when it carries an *explicit* docstring – items without
+        # one inherit their docs from a parent class and must be left alone.
+        _propagate_fixes_to_modular(candidate_file, decorated_items, overwrite=overwrite)
 
         # Process TypedDict kwargs (separate pass to avoid line number conflicts)
         # This runs AFTER @auto_docstring processing is complete

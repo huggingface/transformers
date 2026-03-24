@@ -11,12 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 from math import floor, gcd, sqrt
+from typing import Any
 
 import torch
 
 from ...configuration_utils import PreTrainedConfig
-from ...generation.configuration_utils import GenerationConfig
+from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
@@ -117,23 +119,20 @@ class PagedAttentionCache:
     def __init__(
         self,
         config: PreTrainedConfig,
-        generation_config: GenerationConfig,
+        continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
         dtype: torch.dtype = torch.float16,
         tp_size: int | None = None,
-        allow_block_sharing: bool = True,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
 
         Args:
             config: Model configuration
-            generation_config: Generation configuration containing cache parameters
+            continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
-            allow_block_sharing: A flag to allow block sharing. If the model has some full attention layers, then prefix
-                sharing is enabled as well.
         """
         self.config = config
         self.dtype = dtype
@@ -145,8 +144,10 @@ class PagedAttentionCache:
         head_dim = getattr(config, "head_dim", None)
         self.head_dim: int = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
 
-        # Extract cache dimensions
-        self.block_size = getattr(generation_config, "block_size", 32)
+        # Extract cache dimensions. Default used to be 32, now it's 256 to be compatible with flash_with_kvcache.
+        self.block_size = continuous_batching_config.block_size
+        if self.block_size <= 0:
+            raise ValueError(f"Block size must be positive, but got {self.block_size}")
 
         # Group layers depending on the attention mix
         layer_groups, group_types = group_layers_by_attn_type(config)
@@ -190,11 +191,9 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
-            num_blocks=getattr(generation_config, "num_blocks", None),
-            max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(
-                generation_config, "max_memory", 0.8
-            ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
+            num_blocks=continuous_batching_config.num_blocks,
+            max_batch_tokens=continuous_batching_config.max_batch_tokens,
+            max_memory_percent=continuous_batching_config.max_memory_percent,
             cache_dtype=self.dtype,
         )
 
@@ -206,6 +205,17 @@ class PagedAttentionCache:
             f"PagedAttentionCache initialized with {self.num_blocks = }, {self.block_size = }, {page_size = }, "
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
+
+        # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
+        # means a max sequence length of 4096 tokens for the fast decode path.
+        max_blocks_per_request = continuous_batching_config.max_blocks_per_request
+        if max_blocks_per_request is None:
+            max_blocks_per_request = 0
+            # logger.info( TODO: uncomment when we have good defaults
+            #     f"max_blocks_per_request was not set, using {max_blocks_per_request}. This means max sequence "
+            #     f"length for the decode fast path is {max_blocks_per_request * self.block_size}."
+            # )
+        self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
@@ -222,7 +232,7 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self.allow_block_sharing = allow_block_sharing
+        self.allow_block_sharing = continuous_batching_config.allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
         self.num_full_attention_groups = 0
         self.num_sliding_attention_groups = 0
@@ -230,7 +240,7 @@ class PagedAttentionCache:
 
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
-                cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
+                cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=self.allow_block_sharing)
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
@@ -241,9 +251,12 @@ class PagedAttentionCache:
             self.group_cache_managers.append(cm)
 
         # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
-        self.use_prefix_sharing = allow_block_sharing and group_types == ["full_attention"]
+        self.use_prefix_sharing = self.allow_block_sharing and group_types == ["full_attention"]
         self._block_manager = BlockManager(num_blocks, self.block_size)
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
+
+        # For block table support, we lazy init the name of the block table key
+        self._block_table_key = None
 
     def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
         """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
@@ -307,6 +320,12 @@ class PagedAttentionCache:
             read_indices.extend(indices)
             indices = cm.get_write_indices(request_id, past_length, query_length)
             write_indices.extend(indices)
+
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        for i, cm in enumerate(self.group_cache_managers):
+            cm.fill_block_table(request_id, past_length, query_length, block_table[i])
 
     @traced
     def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
@@ -372,6 +391,22 @@ class PagedAttentionCache:
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
+
+    def get_block_table_key(self, flash_attn_with_kvcache_fn: Any) -> str:
+        """A function to get the name of the block table key for the given flash_attn_with_kvcache_fn. The function's
+        signature is only inspected once. This is necessary because different version of flash have different names for
+        the block table key."""
+        if self._block_table_key is None:
+            kwarg_names = inspect.signature(flash_attn_with_kvcache_fn).parameters.keys()
+            if "block_table" in kwarg_names:
+                self._block_table_key = "block_table"
+            elif "page_table" in kwarg_names:
+                self._block_table_key = "page_table"
+            else:
+                raise ValueError(
+                    f"flash_attn_with_kvcache_fn does not have a block_table or page_table argument: {inspect.signature(flash_attn_with_kvcache_fn)}"
+                )
+        return self._block_table_key
 
     def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
         """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the

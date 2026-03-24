@@ -36,8 +36,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_big_bird import BigBirdConfig
 
 
@@ -157,8 +160,7 @@ class BigBirdSelfAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
-        output_attentions=False,
-        cache_position=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
@@ -250,10 +252,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        output_attentions=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        # Currently this `class` can't be used in decoder.
-
         batch_size, seqlen, _ = hidden_states.size()
         to_seq_length = from_seq_length = seqlen
         from_block_size = to_block_size = self.block_size
@@ -300,7 +300,6 @@ class BigBirdBlockSparseAttention(nn.Module):
             seed=self.seed,
             plan_from_length=None,
             plan_num_rand_blocks=None,
-            output_attentions=output_attentions,
         )
 
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
@@ -343,7 +342,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         seed,
         plan_from_length,
         plan_num_rand_blocks,
-        output_attentions,
     ):
         # BigBird block-sparse attention as suggested in paper
 
@@ -650,46 +648,28 @@ class BigBirdBlockSparseAttention(nn.Module):
         context_layer = torch.transpose(context_layer, 1, 2)
 
         # this is just for visualizing; forward pass doesn't depend on following code
-        if output_attentions:
-            # TODO(PVP): need to verify if below code is correct
-            attention_probs = torch.zeros(
-                bsz, n_heads, from_seq_len, to_seq_len, dtype=torch.float, device=context_layer.device
-            )
+        # TODO(PVP): need to verify if below code is correct
+        attention_probs = torch.zeros(
+            bsz, n_heads, from_seq_len, to_seq_len, dtype=context_layer.dtype, device=context_layer.device
+        )
 
-            # 1st query block
-            # corresponding to `first_context_layer`
-            attention_probs[:, :, :from_block_size, :] = first_attn_weights  # all keys global
+        # 1st query block
+        # corresponding to `first_context_layer`
+        attention_probs[:, :, :from_block_size, :] = first_attn_weights  # all keys global
 
-            # 2nd query block
-            # corresponding to `second_context_layer`
-            attention_probs[:, :, from_block_size : 2 * from_block_size, : 3 * to_block_size] = second_attn_weights[
-                :, :, :, : 3 * to_block_size
-            ]  # 1st three key blocks (global + sliding)
-            attention_probs[:, :, from_block_size : 2 * from_block_size, -to_block_size:] = second_attn_weights[
-                :, :, :, 3 * to_block_size : 4 * to_block_size
-            ]  # last key block (global)
-            # random keys
-            for p1, i1, w1 in zip(range(bsz), rand_attn, second_attn_weights):
-                # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-                for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                    # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                    attn_probs_view = attention_probs.view(
-                        bsz,
-                        n_heads,
-                        from_seq_len // from_block_size,
-                        from_block_size,
-                        to_seq_len // to_block_size,
-                        to_block_size,
-                    )
-                    right_slice = w2[:, 4 * to_block_size :]
-                    attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(
-                        from_block_size, n_rand_blocks, to_block_size
-                    )
-
-            # Middle query blocks
-            # corresponding to `context_layer`
-            # sliding keys
-            for q_idx in range(from_seq_len // from_block_size - 4):
+        # 2nd query block
+        # corresponding to `second_context_layer`
+        attention_probs[:, :, from_block_size : 2 * from_block_size, : 3 * to_block_size] = second_attn_weights[
+            :, :, :, : 3 * to_block_size
+        ]  # 1st three key blocks (global + sliding)
+        attention_probs[:, :, from_block_size : 2 * from_block_size, -to_block_size:] = second_attn_weights[
+            :, :, :, 3 * to_block_size : 4 * to_block_size
+        ]  # last key block (global)
+        # random keys
+        for p1, i1, w1 in zip(range(bsz), rand_attn, second_attn_weights):
+            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
+            for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
                 attn_probs_view = attention_probs.view(
                     bsz,
                     n_heads,
@@ -697,51 +677,40 @@ class BigBirdBlockSparseAttention(nn.Module):
                     from_block_size,
                     to_seq_len // to_block_size,
                     to_block_size,
-                )[:, :, 2:-2, :, 1:-1, :]
-                right_slice = attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size]
-                attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
-                    bsz, n_heads, from_block_size, 3, to_block_size
-                )  # inner_band_product
-            # global keys (corresponding to 1st key block)
-            attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
-                :, :, :, :, :to_block_size
-            ].view(bsz, n_heads, -1, to_block_size)  # first_band_product
-            # global keys (corresponding to last key block)
-            attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
-                :, :, :, :, -to_block_size:
-            ].view(bsz, n_heads, -1, to_block_size)  # last_band_product
-            # random keys
-            for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
-                # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-                for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                    # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
-                    for q_idx in range(1, len(i2) - 1):
-                        attn_probs_view = attention_probs.view(
-                            bsz,
-                            n_heads,
-                            from_seq_len // from_block_size,
-                            from_block_size,
-                            to_seq_len // to_block_size,
-                            to_block_size,
-                        )
-                        right_slice = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size]
-                        attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(
-                            from_block_size, n_rand_blocks, to_block_size
-                        )
+                )
+                right_slice = w2[:, 4 * to_block_size :]
+                attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
 
-            # Second-last query block
-            # corresponding to `second_last_context_layer`
-            attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
-                :, :, :, :to_block_size
-            ]  # 1st key block (global)
-            attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = (
-                second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]
-            )  # last three blocks (global + sliding)
-            # random keys
-            for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
-                # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
-                for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                    # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+        # Middle query blocks
+        # corresponding to `context_layer`
+        # sliding keys
+        for q_idx in range(from_seq_len // from_block_size - 4):
+            attn_probs_view = attention_probs.view(
+                bsz,
+                n_heads,
+                from_seq_len // from_block_size,
+                from_block_size,
+                to_seq_len // to_block_size,
+                to_block_size,
+            )[:, :, 2:-2, :, 1:-1, :]
+            right_slice = attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size]
+            attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(
+                bsz, n_heads, from_block_size, 3, to_block_size
+            )  # inner_band_product
+        # global keys (corresponding to 1st key block)
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
+            :, :, :, :, :to_block_size
+        ].view(bsz, n_heads, -1, to_block_size)  # first_band_product
+        # global keys (corresponding to last key block)
+        attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
+            :, :, :, :, -to_block_size:
+        ].view(bsz, n_heads, -1, to_block_size)  # last_band_product
+        # random keys
+        for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
+            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
+            for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                for q_idx in range(1, len(i2) - 1):
                     attn_probs_view = attention_probs.view(
                         bsz,
                         n_heads,
@@ -750,17 +719,40 @@ class BigBirdBlockSparseAttention(nn.Module):
                         to_seq_len // to_block_size,
                         to_block_size,
                     )
-                    right_slice = w2[:, 4 * to_block_size :]
-                    attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(
+                    right_slice = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size]
+                    attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(
                         from_block_size, n_rand_blocks, to_block_size
                     )
 
-            # last query block
-            # corresponding to `last_context_layer`
-            attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
+        # Second-last query block
+        # corresponding to `second_last_context_layer`
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, :to_block_size] = second_last_attn_weights[
+            :, :, :, :to_block_size
+        ]  # 1st key block (global)
+        attention_probs[:, :, -2 * from_block_size : -from_block_size, -3 * to_block_size :] = (
+            second_last_attn_weights[:, :, :, to_block_size : 4 * to_block_size]
+        )  # last three blocks (global + sliding)
+        # random keys
+        for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
+            # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
+            for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                attn_probs_view = attention_probs.view(
+                    bsz,
+                    n_heads,
+                    from_seq_len // from_block_size,
+                    from_block_size,
+                    to_seq_len // to_block_size,
+                    to_block_size,
+                )
+                right_slice = w2[:, 4 * to_block_size :]
+                attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(
+                    from_block_size, n_rand_blocks, to_block_size
+                )
 
-        else:
-            attention_probs = None
+        # last query block
+        # corresponding to `last_context_layer`
+        attention_probs[:, :, -from_block_size:, :] = last_attn_weights  # all keys global
 
         return context_layer, attention_probs
 
@@ -1173,14 +1165,13 @@ class BigBirdAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
-        output_attentions=False,
         # block_sparse config
         band_mask=None,
         from_mask=None,
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
-        cache_position=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         # fp16 compatibility
         if band_mask is not None:
@@ -1190,25 +1181,23 @@ class BigBirdAttention(nn.Module):
         if to_mask is not None:
             to_mask = to_mask.to(hidden_states.dtype)
         if self.attention_type == "original_full":
-            self_outputs = self.self(
+            attention_output, attn_weights = self.self(
                 hidden_states,
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
+                **kwargs,
             )
         else:
             if encoder_hidden_states is not None:
                 raise ValueError("BigBird cannot be used as a decoder when config.attention_type != 'original_full'")
-            self_outputs = self.self(
-                hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
+            attention_output, attn_weights = self.self(
+                hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, **kwargs
             )
 
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        attention_output = self.output(attention_output, hidden_states)
+        return attention_output, attn_weights
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BigBird
@@ -1284,26 +1273,22 @@ class BigBirdLayer(GradientCheckpointingLayer):
         to_mask=None,
         blocked_encoder_mask=None,
         past_key_values=None,
-        output_attentions=False,
-        cache_position=None,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attention_outputs = self.attention(
+        attention_output, _ = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
             band_mask=band_mask,
             from_mask=from_mask,
             to_mask=to_mask,
             from_blocked_mask=blocked_encoder_mask,
             to_blocked_mask=blocked_encoder_mask,
-            cache_position=cache_position,
+            **kwargs,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
@@ -1312,22 +1297,19 @@ class BigBirdLayer(GradientCheckpointingLayer):
                     " cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
-            cross_attention_outputs = self.crossattention(
+            attention_output, _ = self.crossattention(
                 attention_output,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                cache_position=cache_position,
+                **kwargs,
             )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
 
-        return (layer_output,) + outputs
+        return layer_output
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -1366,74 +1348,32 @@ class BigBirdEncoder(nn.Module):
         encoder_attention_mask=None,
         past_key_values=None,
         use_cache=None,
-        output_attentions=False,
-        output_hidden_states=False,
         band_mask=None,
         from_mask=None,
         to_mask=None,
         blocked_encoder_mask=None,
-        return_dict=True,
-        cache_position=None,
-    ) -> BaseModelOutputWithPastAndCrossAttentions | tuple:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
-                attention_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                band_mask,
-                from_mask,
-                to_mask,
-                blocked_encoder_mask,
-                past_key_values,
-                output_attentions,
-                cache_position,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                band_mask=band_mask,
+                from_mask=from_mask,
+                to_mask=to_mask,
+                blocked_encoder_mask=blocked_encoder_mask,
+                past_key_values=past_key_values,
+                **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    past_key_values,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1512,6 +1452,10 @@ class BigBirdPreTrainedModel(PreTrainedModel):
     config: BigBirdConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
+    _can_record_outputs = {
+        "hidden_states": BigBirdLayer,
+        "attentions": (BigBirdSelfAttention, BigBirdBlockSparseAttention),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1633,6 +1577,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
         self.attention_type = value
         self.encoder.set_attention_type(value)
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -1645,21 +1591,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
         encoder_attention_mask: torch.FloatTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
-        **kwargs,  # NOOP kwargs, for now
-    ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.FloatTensor]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
+        if not self.config.is_decoder:
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1765,23 +1699,20 @@ class BigBirdModel(BigBirdPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        encoder_outputs = self.encoder(
+        encoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             band_mask=band_mask,
             from_mask=from_mask,
             to_mask=to_mask,
             blocked_encoder_mask=blocked_encoder_mask,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.last_hidden_state
 
         pooler_output = self.activation(self.pooler(sequence_output[:, 0, :])) if (self.pooler is not None) else None
 
@@ -1790,16 +1721,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
 
-        if not return_dict:
-            return (sequence_output, pooler_output) + encoder_outputs[1:]
-
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooler_output,
             past_key_values=encoder_outputs.past_key_values,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )
 
     @staticmethod
@@ -1906,6 +1831,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1916,11 +1842,8 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.FloatTensor | None = None,
         next_sentence_label: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> BigBirdForPreTrainingOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BigBirdForPreTrainingOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1949,20 +1872,17 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         >>> prediction_logits = outputs.prediction_logits
         >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output, pooled_output = outputs[:2]
+        sequence_output = outputs.last_hidden_state
+        pooled_output = outputs.pooler_output
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
@@ -1973,10 +1893,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         if next_sentence_label is not None and total_loss is not None:
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = total_loss + next_sentence_loss
-
-        if not return_dict:
-            output = (prediction_scores, seq_relationship_score) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return BigBirdForPreTrainingOutput(
             loss=total_loss,
@@ -2016,6 +1932,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2027,11 +1944,8 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> MaskedLMOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -2079,9 +1993,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         1.99
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2089,22 +2001,16 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         prediction_scores = self.cls(sequence_output)
 
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -2144,6 +2050,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2157,22 +2064,16 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
-    ) -> CausalLMOutputWithCrossAttentions | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2182,14 +2083,10 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.cls(hidden_states[:, slice_indices, :])
@@ -2197,10 +2094,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -2253,6 +2146,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2262,11 +2156,8 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -2308,20 +2199,16 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         1.13
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         logits = self.classifier(sequence_output)
 
         loss = None
@@ -2347,10 +2234,6 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -2371,6 +2254,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2380,11 +2264,8 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> MultipleChoiceModelOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -2415,7 +2296,6 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -2428,18 +2308,16 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             else None
         )
 
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        pooled_output = outputs[1]
+        pooled_output = outputs.pooler_output
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
@@ -2449,10 +2327,6 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,
@@ -2478,6 +2352,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2487,29 +2362,22 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> TokenClassifierOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
 
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
@@ -2518,10 +2386,6 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -2568,6 +2432,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -2579,11 +2444,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> BigBirdForQuestionAnsweringModelOutput | tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BigBirdForQuestionAnsweringModelOutput:
         r"""
         question_lengths (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             The lengths of the questions in the batch.
@@ -2625,8 +2487,6 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         >>> loss = outputs.loss
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         seqlen = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
 
         if question_lengths is None and input_ids is not None:
@@ -2643,18 +2503,16 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             logits_mask[:, 0] = False
             logits_mask.unsqueeze_(2)
 
-        outputs = self.bert(
+        outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         logits = self.qa_classifier(sequence_output)
 
         if logits_mask is not None:
@@ -2681,10 +2539,6 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
 
         return BigBirdForQuestionAnsweringModelOutput(
             loss=total_loss,
