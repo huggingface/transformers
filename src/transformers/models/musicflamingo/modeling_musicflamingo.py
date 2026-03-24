@@ -21,6 +21,7 @@
 
 from collections.abc import Callable
 from math import pi
+from typing import Optional
 
 import torch
 from torch import Tensor, broadcast_tensors, nn
@@ -68,7 +69,11 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         self.register_buffer("position_angles", position_angles, persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: MusicFlamingoConfig, device=None) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(
+        config: MusicFlamingoConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -84,10 +89,16 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters["rope_theta"]
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = config.head_dim
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim))
-        return inv_freq, 1.0
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
@@ -172,13 +183,9 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     cos = cos.to(hidden_states)
     sin = sin.to(hidden_states)
     rot_dim = cos.shape[-1]
-    if rot_dim > hidden_states.shape[-1]:
-        raise ValueError(
-            f"feature dimension {hidden_states.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
-        )
 
-    rotated = hidden_states[..., :rot_dim]
     passthrough = hidden_states[..., rot_dim:]
+    rotated = hidden_states[..., :rot_dim]
     rotated = (rotated * cos) + (rotate_half(rotated) * sin)
     return torch.cat((rotated, passthrough), dim=-1).to(original_dtype)
 

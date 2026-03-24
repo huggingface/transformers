@@ -25,17 +25,14 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
-from ..llama.modeling_llama import LlamaRotaryEmbedding
-
-
-logger = logging.get_logger(__name__)
+from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
@@ -182,18 +179,14 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     cos = cos.to(hidden_states)
     sin = sin.to(hidden_states)
     rot_dim = cos.shape[-1]
-    if rot_dim > hidden_states.shape[-1]:
-        raise ValueError(
-            f"feature dimension {hidden_states.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
-        )
 
-    rotated = hidden_states[..., :rot_dim]
     passthrough = hidden_states[..., rot_dim:]
+    rotated = hidden_states[..., :rot_dim]
     rotated = (rotated * cos) + (rotate_half(rotated) * sin)
     return torch.cat((rotated, passthrough), dim=-1).to(original_dtype)
 
 
-class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
+class MusicFlamingoRotaryEmbedding(MoonshineRotaryEmbedding):
     """Rotary time embedding module used by MusicFlamingo checkpoints.
 
     This is a checkpoint-faithful integration, not a direct implementation of the RoTE formulation described in
@@ -206,15 +199,6 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
         super().__init__(config, device=device)
         position_angles = self._compute_position_angles(self.inv_freq)
         self.register_buffer("position_angles", position_angles, persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(config: MusicFlamingoConfig, device=None):
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = config.head_dim
-        dim = int(head_dim * partial_rotary_factor)
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim))
-        return inv_freq, 1.0
 
     def _compute_position_angles(self, inv_freq):
         positions = torch.arange(int(self.max_seq_len_cached), device=inv_freq.device, dtype=inv_freq.dtype)
