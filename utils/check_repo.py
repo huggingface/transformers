@@ -260,6 +260,7 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+        "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     ]
 )
 
@@ -484,6 +485,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
+    "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
 ]
 
 
@@ -1188,6 +1190,9 @@ def ignore_undocumented(name: str) -> bool:
         return True
     # BLT models are internal building blocks, tested implicitly through BltForCausalLM
     if name.startswith("Blt"):
+        return True
+    # image_processing_*_fast are backward-compat module aliases, not public objects.
+    if name.startswith("image_processing_") and name.endswith("_fast"):
         return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True

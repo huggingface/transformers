@@ -252,6 +252,7 @@ else:
             ("tvp", {"torchvision": "TvpImageProcessor", "pil": "TvpImageProcessorPil"}),
             ("udop", {"torchvision": "LayoutLMv3ImageProcessor", "pil": "LayoutLMv3ImageProcessorPil"}),
             ("upernet", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
+            ("uvdoc", {"torchvision": "UVDocImageProcessor"}),
             ("video_llama_3", {"torchvision": "VideoLlama3ImageProcessor", "pil": "VideoLlama3ImageProcessorPil"}),
             ("video_llava", {"pil": "VideoLlavaImageProcessor"}),
             ("videomae", {"torchvision": "VideoMAEImageProcessor", "pil": "VideoMAEImageProcessorPil"}),
@@ -587,7 +588,7 @@ class AutoImageProcessor:
                 - a path to a *directory* containing a image processor file saved using the
                   [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved image processor JSON *file*, e.g.,
+                - a path to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
