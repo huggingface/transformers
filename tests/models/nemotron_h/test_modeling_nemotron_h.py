@@ -361,6 +361,43 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         ssm_shape = (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
         return conv_shape, ssm_shape
 
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        # Raise a useful error, asking to explicitly override the method
+        if not isinstance(past_key_values, DynamicCache):
+            raise ValueError("The cache does not use the correct Cache")
+
+        # Use the correct config
+        config = config.get_text_config(decoder=True)
+
+        # (batch, kv heads, seq_length, head_dim)
+        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
+        hidden_size = getattr(config, "d_model", config.hidden_size)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+
+        # For cross attention cache, the seq_length depends on the model, so we remove that dim
+        attention_shape = (batch_size, num_kv_heads, seq_length, head_dim)
+        # For mamba layers
+        conv_shape, ssm_shape = self._get_mamba_cache_shapes(batch_size, config)
+
+        # Check each layer has the correct shape
+        for layer, layer_type in zip(past_key_values.layers, config.layer_types):
+            # Moe layers have a default attention cache instantiated, but it stays empty as the layer does not use it
+            if layer_type == "moe":
+                self.assertEqual(layer.keys, None)
+                self.assertEqual(layer.values, None)
+            # Attention layer cache
+            elif layer_type == "attention":
+                self.assertEqual(layer.keys.shape, attention_shape)
+                self.assertEqual(layer.values.shape, attention_shape)
+            # Mamba layer cache
+            elif layer_type == "mamba":
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.ssm_states.shape, ssm_shape)
+            else:
+                raise ValueError("Unknown layer type.")
+
     def setUp(self):
         self.model_tester = NemotronHModelTester(self)
         self.config_tester = ConfigTester(
