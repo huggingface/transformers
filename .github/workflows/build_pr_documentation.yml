@@ -1,39 +1,22 @@
-name: Build PR Documentation
+name: Change PR to draft
 
 on:
   pull_request:
-  merge_group:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
 
 jobs:
-  build:
-    if: github.event_name == 'pull_request'
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@main
-    with:
-      commit_sha: ${{ github.event.pull_request.head.sha }}
-      pr_number: ${{ github.event.number }}
-      package: transformers
-      languages: en
-
-  # Satisfy required check in merge queue without actually building docs
-  skip_merge_queue:
-    if: github.event_name == 'merge_group'
-    runs-on: ubuntu-latest
+  convert_pr_to_draft:
+    runs-on: ubuntu-22.04
+    name: Convert PR to draft
     steps:
-      - run: echo "Skipping doc build in merge queue"
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: "2"
 
-  doc_build_status_check:
-    needs: [build, skip_merge_queue]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          if [[ "${{ needs.build.result }}" == "success" || "${{ needs.build.result }}" == "skipped" ]] && \
-             [[ "${{ needs.skip_merge_queue.result }}" == "success" || "${{ needs.skip_merge_queue.result }}" == "skipped" ]]; then
-            echo "OK"
-          else
-            exit 1
-          fi
+      - name: Convert PR to draft
+        shell: bash
+        env:
+          Circle-Token: ${{ secrets.CIRCLECI_PAT }}
+        run: |
+          echo $PR_NUMBER
+          python utils/circleci_trigger.py
