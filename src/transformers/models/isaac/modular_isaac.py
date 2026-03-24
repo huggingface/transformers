@@ -814,13 +814,43 @@ class IsaacProcessor(ProcessorMixin):
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def _build_batch(
+    def post_process_generation(
+        self,
+        text: str,
+        expected: str | None = None,
+        cleanup_and_extract: bool = True,
+    ) -> str | tuple[str, list[SinglePoint | BoundingBox]]:
+        if cleanup_and_extract:
+            return clean_text_and_extract_points(text, expected=expected)
+        return text
+
+    def post_process_image_text_to_text(
+        self,
+        generated_outputs,
+        skip_special_tokens: bool = True,
+        cleanup_and_extract: bool = False,
+        expected: str | None = None,
+        **kwargs,
+    ):
+        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+        return [
+            self.post_process_generation(text, expected=expected, cleanup_and_extract=cleanup_and_extract)
+            for text in generated_texts
+        ]
+
+    def __call__(
         self,
         text: str | list[str],
         images: ImageInput | None = None,
-        text_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, torch.Tensor | None]:
-        text_kwargs = copy.deepcopy(text_kwargs) if text_kwargs is not None else {}
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
+        **kwargs,
+    ) -> BatchFeature:
+        output_kwargs = self._merge_kwargs(
+            IsaacProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        text_kwargs = copy.deepcopy(output_kwargs["text_kwargs"])
         truncation = text_kwargs.pop("truncation", None)
         max_length = text_kwargs.pop("max_length", None)
         padding = text_kwargs.pop("padding", True)
@@ -932,56 +962,18 @@ class IsaacProcessor(ProcessorMixin):
         vision_patches = image_inputs["vision_patches"]
         vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
 
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
-            "vision_patches": vision_patches,
-            "vision_patch_attention_mask": vision_patch_attention_mask,
-            "vision_token_grids": vision_token_grids,
-            "vision_token_offsets": vision_token_offsets,
-            "vision_token_lengths": vision_token_lengths,
-            "vision_image_attention_mask": vision_image_attention_mask,
-        }
-
-    def post_process_generation(
-        self,
-        text: str,
-        expected: str | None = None,
-        cleanup_and_extract: bool = True,
-    ) -> str | tuple[str, list[SinglePoint | BoundingBox]]:
-        if cleanup_and_extract:
-            return clean_text_and_extract_points(text, expected=expected)
-        return text
-
-    def post_process_image_text_to_text(
-        self,
-        generated_outputs,
-        skip_special_tokens: bool = True,
-        cleanup_and_extract: bool = False,
-        expected: str | None = None,
-        **kwargs,
-    ):
-        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-        return [
-            self.post_process_generation(text, expected=expected, cleanup_and_extract=cleanup_and_extract)
-            for text in generated_texts
-        ]
-
-    def __call__(
-        self,
-        text: str | list[str],
-        images: ImageInput | None = None,
-        return_tensors: str | TensorType | None = TensorType.PYTORCH,
-        **kwargs,
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            IsaacProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
         return BatchFeature(
-            data=self._build_batch(text=text, images=images, text_kwargs=output_kwargs["text_kwargs"]),
+            data={
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "mm_token_type_ids": mm_token_type_ids,
+                "vision_patches": vision_patches,
+                "vision_patch_attention_mask": vision_patch_attention_mask,
+                "vision_token_grids": vision_token_grids,
+                "vision_token_offsets": vision_token_offsets,
+                "vision_token_lengths": vision_token_lengths,
+                "vision_image_attention_mask": vision_image_attention_mask,
+            },
             tensor_type=return_tensors,
         )
 
