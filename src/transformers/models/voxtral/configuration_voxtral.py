@@ -38,7 +38,8 @@ class VoxtralEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "voxtral_encoder"
 

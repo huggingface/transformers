@@ -98,24 +98,25 @@ class CsmConfig(PreTrainedConfig):
     audio_eos_token_id (`int`, *optional*, defaults to 128003):
         End of stream token id for audio in the text input.
     tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
-         Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
+        Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
     depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
-         Configuration for the depth decoder.
+        Configuration for the depth decoder.
     codec_config (`PreTrainedConfig`, *optional*):
         Configuration for the codec.
 
-     ```python
-     >>> from transformers import CsmForConditionalGeneration, CsmConfig
+    ```python
+    >>> from transformers import CsmForConditionalGeneration, CsmConfig
 
-     >>> # Initializing a CsmConfig
-     >>> configuration = CsmConfig()
+    >>> # Initializing a CsmConfig
+    >>> configuration = CsmConfig()
 
-     >>> # Initializing a model
-     >>> model = CsmForConditionalGeneration(configuration)
+    >>> # Initializing a model
+    >>> model = CsmForConditionalGeneration(configuration)
 
-     >>> # Accessing the model configuration
-     >>> configuration = model.config
-     ```"""
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
 
     model_type = "csm"
     base_config_key = "csm_config"

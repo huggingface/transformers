@@ -36,12 +36,6 @@ class KyutaiSpeechToTextConfig(PreTrainedConfig):
         Padding token id for codebook tokens.
     codec_config (`PreTrainedConfig`, *optional*):
         Configuration for the codec.
-    kwargs (*optional*):
-        Dictionary of keyword arguments. Notably:
-            - **audio_encoder_config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
-              defines the audio encoder config.
-            - **depth__config** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that
-              defines the depth decoder config.
 
     Example:
     ```python

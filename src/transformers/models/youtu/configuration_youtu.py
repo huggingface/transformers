@@ -35,10 +35,10 @@ from ...utils import auto_docstring
 @strict
 class YoutuConfig(PreTrainedConfig):
     r"""
-    embedding_initializer_range (`float`, *optional*):
-        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
+    embedding_initializer_range (`float`, *optional*):
+        The standard deviation of the truncated_normal_initializer for initializing all embedding matrices.
 
     ```python
     >>> from transformers import YoutuModel, YoutuConfig

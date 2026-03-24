@@ -29,6 +29,12 @@ class EfficientNetConfig(PreTrainedConfig):
         Scaling coefficient for network depth at each stage.
     depth_divisor (`int`, *optional*, defaults to 8):
         A unit of network width.
+    kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
+        List of kernel sizes to be used in each block.
+    out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
+        List of output channel sizes to be used in each block for convolutional layers.
+    depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
+        List of block indices with square padding.
     num_block_repeats (`list[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
         List of the number of times each block is to repeated.
     expand_ratios (`list[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
@@ -38,16 +44,10 @@ class EfficientNetConfig(PreTrainedConfig):
     pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
         Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
         `"max"`]
-    drop_connect_rate (`float`, *optional*, defaults to 0.2):
-        The drop rate for skip connections.
-    kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
-        List of kernel sizes to be used in each block.
-    out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
-        List of output channel sizes to be used in each block for convolutional layers.
-    depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
-        List of block indices with square padding.
     batch_norm_momentum (`float`, *optional*, defaults to 0.99):
         The momentum used by the batch normalization layers.
+    drop_connect_rate (`float`, *optional*, defaults to 0.2):
+        The drop rate for skip connections.
 
     Example:
     ```python

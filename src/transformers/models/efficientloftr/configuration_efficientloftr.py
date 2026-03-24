@@ -35,6 +35,8 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         The stride of the aggregation of query states in the fusion network
     kv_aggregation_stride (`int`, *optional*, defaults to 4):
         The stride of the aggregation of key and value states in the fusion network
+    num_attention_layers (`int`, *optional*, defaults to 4):
+        Number of attention layers in the LocalFeatureTransformer
     mlp_activation_function (`str`, *optional*, defaults to `"leaky_relu"`):
         Activation function used in the attention mlp layer.
     coarse_matching_skip_softmax (`bool`, *optional*, defaults to `False`):
@@ -53,8 +55,6 @@ class EfficientLoFTRConfig(PreTrainedConfig):
         The size of the slice used to divide the fine features for the first and second fine matching stages.
     fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
         The temperature to apply to the fine similarity matrix
-    num_attention_layers (`int`, *optional*, defaults to 4):
-        Number of attention layers in the LocalFeatureTransformer
 
     Examples:
         ```python

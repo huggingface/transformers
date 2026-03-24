@@ -24,10 +24,6 @@ from ...utils import auto_docstring
 @strict
 class Qwen3Config(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 28):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
-
     ```python
     >>> from transformers import Qwen3Model, Qwen3Config
 
@@ -39,7 +35,8 @@ class Qwen3Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "qwen3"
     keys_to_ignore_at_inference = ["past_key_values"]

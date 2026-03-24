@@ -326,7 +326,7 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
 @strict
 class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
-    """
+    r"""
     model_config ([`FastSpeech2ConformerConfig | dict`], *optional*):
         Configuration of the text-to-speech model.
     vocoder_config ([`FastSpeech2ConformerHiFiGanConfig | dict`], *optional*):

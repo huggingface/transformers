@@ -36,10 +36,10 @@ class LayoutLMv3Config(PreTrainedConfig):
         The number of relative position bins to be used in the self-attention mechanism.
     max_rel_pos (`int`, *optional*, defaults to 128):
         The maximum number of relative positions to be used in the self-attention mechanism.
-    max_rel_2d_pos (`int`, *optional*, defaults to 256):
-        The maximum number of relative 2D positions in the self-attention mechanism.
     rel_2d_pos_bins (`int`, *optional*, defaults to 64):
         The number of 2D relative position bins in the self-attention mechanism.
+    max_rel_2d_pos (`int`, *optional*, defaults to 256):
+        The maximum number of relative 2D positions in the self-attention mechanism.
     has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
         Whether or not to use a spatial attention bias in the self-attention mechanism.
     text_embed (`bool`, *optional*, defaults to `True`):

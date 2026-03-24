@@ -60,21 +60,20 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
 @strict
 class SLANeXtConfig(PreTrainedConfig):
-    """
-    Args:
-        vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
-            Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
-        post_conv_in_channels (`int`, *optional*, defaults to 256):
-            Number of input channels for the post-encoder convolution layer.
-        post_conv_out_channels (`int`, *optional*, defaults to 512):
-            Number of output channels for the post-encoder convolution layer.
-        out_channels (`int`, *optional*, defaults to 50):
-            Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
-            tokens the model can predict.
-        hidden_size (`int`, *optional*, defaults to 512):
-            Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
-        max_text_length (`int`, *optional*, defaults to 500):
-            Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
+    r"""
+    vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):
+        Configuration for the vision encoder. If `None`, a default [`SLANeXtVisionConfig`] is used.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 512):
+        Number of output channels for the post-encoder convolution layer.
+    out_channels (`int`, *optional*, defaults to 50):
+        Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
+        tokens the model can predict.
+    hidden_size (`int`, *optional*, defaults to 512):
+        Dimensionality of the hidden states in the attention GRU cell and the structure/location prediction heads.
+    max_text_length (`int`, *optional*, defaults to 500):
+        Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
     """
 
     model_type = "slanext"
