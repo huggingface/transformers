@@ -20,6 +20,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
+from ...backbone_utils import BackboneMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -34,7 +35,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..swin.modeling_swin import SwinDropPath

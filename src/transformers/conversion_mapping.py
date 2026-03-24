@@ -38,6 +38,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
     "audio-spectrogram-transformer": "vit",
     "deit": "vit",
+    "ijepa": "vit",
     "pixio": "vit",
     "vit_mae": "vit",
     "vit_msn": "vit",
