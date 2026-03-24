@@ -13,7 +13,7 @@ print(os.environ.get("Circle-Token", "")[:5])
 
 headers = {
     'content-type': "application/json",
-    'Circle-Token': os.environ.get("CIRCLECI_PAT", ""),
+    'Circle-Token': os.environ.get("Circle-Token", ""),
 }
 
 conn.request("POST", "/api/v2/project/gh/huggingface/transformers/pipeline", payload, headers)
