@@ -3226,7 +3226,7 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
             param_type = documented_params[param_name]["type"]
         optional = documented_params[param_name]["optional"]
         shape = documented_params[param_name].get("shape", None)
-        shape_string = shape if shape else ""
+        shape_string = shape or ""
         additional_info = documented_params[param_name]["additional_info"] or ""
         description = f"{documented_params[param_name]['description']}\n"
     elif param_name in source_args_dict:
@@ -3329,10 +3329,10 @@ def _process_regular_parameters(
             )
         else:
             missing_args[param_name] = {
-                "type": param_type if param_type else "<fill_type>",
+                "type": param_type or "<fill_type>",
                 "optional": optional,
                 "shape": shape_string,
-                "description": description if description else "\n    <fill_description>",
+                "description": description or "\n    <fill_description>",
                 "default": param_default,
             }
             undocumented_parameters.append(
@@ -4280,9 +4280,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             docstring += set_min_indent(f"\n{docstring_init}", indent_level)
         elif is_dataclass or is_config:
             # No init function, we have a data class
-            docstring += docstring_args if docstring_args else "\nArgs:\n"
+            docstring += docstring_args or "\nArgs:\n"
             source_args_dict = get_args_doc_from_source(ModelOutputArgs)
-            doc_class = cls.__doc__ if cls.__doc__ else ""
+            doc_class = cls.__doc__ or ""
             documented_kwargs = parse_docstring(doc_class)[0]
             for param_name, param_type_annotation in cls.__annotations__.items():
                 param_type, optional = process_type_annotation(param_type_annotation, param_name)

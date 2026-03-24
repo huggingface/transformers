@@ -1188,7 +1188,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
         else:
-            sequence = ids + (pair_ids if pair_ids else [])
+            sequence = ids + (pair_ids or [])
             token_type_ids = [0] * len(sequence)
 
         # Build output

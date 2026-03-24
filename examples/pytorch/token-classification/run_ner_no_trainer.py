@@ -419,7 +419,7 @@ def main():
         config = CONFIG_MAPPING[args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
-    tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
+    tokenizer_name_or_path = args.tokenizer_name or args.model_name_or_path
     if not tokenizer_name_or_path:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
