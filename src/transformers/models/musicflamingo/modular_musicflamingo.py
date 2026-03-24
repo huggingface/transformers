@@ -77,8 +77,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
 
         if self.rope_parameters is None:
             self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
-        # TODO (ebezzam) remove when checkpoint is updated
-        self.rope_parameters["partial_rotary_factor"] = 0.2
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
 
