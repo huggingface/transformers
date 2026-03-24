@@ -20,9 +20,11 @@ import re
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
+from huggingface_hub.dataclasses import strict
+
 from ... import TorchvisionBackend
 from ... import initialization as init
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import (
@@ -172,6 +174,7 @@ def clean_text_and_extract_points(
     return clean_text, results
 
 
+@strict(accept_kwargs=True)
 class IsaacVisionConfig(Siglip2VisionConfig):
     """Vision configuration for Isaac with Pixel Shuffle support.
 
@@ -185,21 +188,17 @@ class IsaacVisionConfig(Siglip2VisionConfig):
     model_type = "isaac_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        pixel_shuffle_scale_factor=1,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
-        # Add our custom fields
-        self.pixel_shuffle_scale_factor = pixel_shuffle_scale_factor
+    pixel_shuffle_scale_factor: int = 1
 
 
+@strict(accept_kwargs=True)
 class IsaacTextConfig(Qwen3Config):
     model_type = "isaac_text"
+    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
-    def __init__(self, **super_kwargs):
-        super().__init__(ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"}, **super_kwargs)
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
