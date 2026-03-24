@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5TextConfig(PreTrainedConfig):
     model_type = "kosmos_2_5_text_model"
     base_config_key = "text_config"
@@ -55,7 +55,7 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
     patch_embed_hidden_size (`int`, *optional*, defaults to 768):
@@ -100,7 +100,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5Config(PreTrainedConfig):
     r"""
     latent_query_num (`int`, *optional*, defaults to 2048):

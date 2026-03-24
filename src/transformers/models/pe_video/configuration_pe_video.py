@@ -23,7 +23,7 @@ from ..timm_wrapper import TimmWrapperConfig
 
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
-@strict(accept_kwargs=True)
+@strict
 class PeVideoEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -87,7 +87,7 @@ class PeVideoEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
-@strict(accept_kwargs=True)
+@strict
 class PeVideoConfig(PretrainedConfig):
     r"""
     video_config (`dict` or `PreTrainedConfig`, *optional*):

@@ -35,7 +35,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
-@strict(accept_kwargs=True)
+@strict
 class Glm4MoeLiteConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

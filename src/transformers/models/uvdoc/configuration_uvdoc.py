@@ -30,7 +30,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     resnet_head (`Sequence[list[int] | tuple[int, ...]]`, *optional*, defaults to `((3, 32), (32, 32))`):
@@ -110,7 +110,7 @@ class UVDocBackboneConfig(BackboneConfigMixin, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/UVDoc_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class UVDocConfig(PreTrainedConfig):
     r"""
     padding_mode (`str`, *optional*, defaults to `"reflect"`):

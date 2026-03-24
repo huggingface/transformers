@@ -23,7 +23,7 @@ from ..auto.configuration_auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
-@strict(accept_kwargs=True)
+@strict
 class MusicgenDecoderConfig(PreTrainedConfig):
     model_type = "musicgen_decoder"
     base_config_key = "decoder_config"
@@ -60,7 +60,7 @@ class MusicgenDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/musicgen-small")
-@strict(accept_kwargs=True)
+@strict
 class MusicgenConfig(PreTrainedConfig):
     r"""
     text_encoder (`Union[dict, `PretrainedConfig`]`):

@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
-@strict(accept_kwargs=True)
+@strict
 class MiniMaxConfig(PreTrainedConfig):
     r"""
     block_size (`int`, *optional*, defaults to 256):

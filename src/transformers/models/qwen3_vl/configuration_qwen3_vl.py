@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 3584):
@@ -55,7 +55,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -103,7 +103,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLConfig(PreTrainedConfig):
     r"""
     Example:

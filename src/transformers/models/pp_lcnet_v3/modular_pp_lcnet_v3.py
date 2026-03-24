@@ -36,7 +36,7 @@ from ..pp_lcnet.modeling_pp_lcnet import (
 
 
 @auto_docstring(checkpoint="PaddlePaddle/Not_yet_released")
-@strict(accept_kwargs=True)
+@strict
 class PPLCNetV3Config(PPLCNetConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):

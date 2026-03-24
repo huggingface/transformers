@@ -20,7 +20,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="""
     AFMoE is an Adaptive Feedforward MoE (Mixture of Experts) model with token-choice routing, shared experts, and a

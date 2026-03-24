@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hubert-base-ls960")
-@strict(accept_kwargs=True)
+@strict
 class HubertConfig(PreTrainedConfig):
     r"""
     feat_proj_layer_norm (`bool`, *optional*, defaults to `True`):

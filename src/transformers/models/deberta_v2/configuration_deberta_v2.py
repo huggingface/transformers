@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/deberta-v2-xlarge")
-@strict(accept_kwargs=True)
+@strict
 class DebertaV2Config(PreTrainedConfig):
     r"""
     relative_attention (`bool`, *optional*, defaults to `True`):

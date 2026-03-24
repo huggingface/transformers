@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="xlnet/xlnet-large-cased")
-@strict(accept_kwargs=True)
+@strict
 class XLNetConfig(PreTrainedConfig):
     r"""
     ff_activation (`str` or `Callable`, *optional*, defaults to `"gelu"`):

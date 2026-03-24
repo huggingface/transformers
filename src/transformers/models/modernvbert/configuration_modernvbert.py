@@ -28,7 +28,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="ModernVBERT/modernvbert")
-@strict(accept_kwargs=True)
+@strict
 class ModernVBertConfig(PreTrainedConfig):
     r"""
     pixel_shuffle_factor (`int | None`, *optional*, defaults to 4):

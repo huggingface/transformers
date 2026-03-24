@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
-@strict(accept_kwargs=True)
+@strict
 class EomtConfig(ViTConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

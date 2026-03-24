@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/cvt-13")
-@strict(accept_kwargs=True)
+@strict
 class CvtConfig(PreTrainedConfig):
     r"""
     patch_stride (`list[int]`, *optional*, defaults to `[4, 2, 2]`):

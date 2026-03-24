@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
-@strict(accept_kwargs=True)
+@strict
 class EomtConfig(PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

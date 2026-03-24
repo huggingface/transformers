@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="UsefulSensors/moonshine-tiny")
-@strict(accept_kwargs=True)
+@strict
 class MoonshineConfig(PreTrainedConfig):
     r"""
     encoder_num_key_value_heads (`int`, *optional*):

@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="OpenGVLab/pvt_v2_b0")
-@strict(accept_kwargs=True)
+@strict
 class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     num_encoder_blocks (`[int]`, *optional*, defaults to 4):

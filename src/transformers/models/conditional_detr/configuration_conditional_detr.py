@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="microsoft/conditional-detr-resnet-50")
-@strict(accept_kwargs=True)
+@strict
 class ConditionalDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 100):

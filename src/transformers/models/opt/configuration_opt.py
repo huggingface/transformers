@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/opt-350m")
-@strict(accept_kwargs=True)
+@strict
 class OPTConfig(PreTrainedConfig):
     r"""
     do_layer_norm_before (`bool`, *optional*, defaults to `True`):

@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PekingU/rtdetr_r18vd")
-@strict(accept_kwargs=True)
+@strict
 class RTDetrV2Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):

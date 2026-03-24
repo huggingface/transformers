@@ -29,7 +29,7 @@ ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 @auto_docstring(checkpoint="Intel/zoedepth-nyu")
-@strict(accept_kwargs=True)
+@strict
 class ZoeDepthConfig(PreTrainedConfig):
     r"""
     readout_type (`str`, *optional*, defaults to `"project"`):

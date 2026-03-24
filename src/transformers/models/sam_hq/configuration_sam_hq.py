@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -50,7 +50,7 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -115,7 +115,7 @@ class SamHQVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -149,7 +149,7 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

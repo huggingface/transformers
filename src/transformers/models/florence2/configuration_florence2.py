@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
     depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
@@ -84,7 +84,7 @@ class Florence2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:

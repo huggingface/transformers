@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen1.5-MoE-A2.7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2MoeConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):

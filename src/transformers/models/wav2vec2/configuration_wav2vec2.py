@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/wav2vec2-base-960h")
-@strict(accept_kwargs=True)
+@strict
 class Wav2Vec2Config(PreTrainedConfig):
     r"""
     feat_proj_dropout (`float`, *optional*, defaults to 0.0):

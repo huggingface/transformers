@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
-@strict(accept_kwargs=True)
+@strict
 class Emu3VQVAEConfig(PreTrainedConfig):
     r"""
     embed_dim (`int`, *optional*, defaults to 4):
@@ -74,7 +74,7 @@ class Emu3VQVAEConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
-@strict(accept_kwargs=True)
+@strict
 class Emu3TextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -119,7 +119,7 @@ class Emu3TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Emu3-community/Emu3-Chat-hf")
-@strict(accept_kwargs=True)
+@strict
 class Emu3Config(PreTrainedConfig):
     r"""
     vocabulary_map (`dict`, *optional*):

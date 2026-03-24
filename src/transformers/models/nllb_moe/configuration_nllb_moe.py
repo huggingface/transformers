@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/nllb-moe-54b")
-@strict(accept_kwargs=True)
+@strict
 class NllbMoeConfig(PreTrainedConfig):
     r"""
     router_bias (`bool`, *optional*, defaults to `False`):

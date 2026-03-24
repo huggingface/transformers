@@ -56,7 +56,7 @@ selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_updat
 
 
 @auto_docstring(checkpoint="tiiuae/falcon-mamba-7b")
-@strict(accept_kwargs=True)
+@strict
 class FalconMambaConfig(MambaConfig):
     r"""
     expand (`int`, *optional*, defaults to 2):

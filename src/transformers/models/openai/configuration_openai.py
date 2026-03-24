@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="openai-community/openai-gpt")
-@strict(accept_kwargs=True)
+@strict
 class OpenAIGPTConfig(PreTrainedConfig):
     r"""
     afn (`str` or `Callable`, *optional*, defaults to `"gelu"`):

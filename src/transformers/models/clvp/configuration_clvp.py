@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpEncoderConfig(PreTrainedConfig):
     r"""
     use_rotary_embedding (`bool`, *optional*, defaults to `True`):
@@ -99,7 +99,7 @@ class ClvpEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpDecoderConfig(PreTrainedConfig):
     r"""
     max_text_tokens (`int`, *optional*, defaults to 404):
@@ -181,7 +181,7 @@ class ClvpDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="susnato/clvp_dev")
-@strict(accept_kwargs=True)
+@strict
 class ClvpConfig(PreTrainedConfig):
     r"""
     speech_config (`dict`, *optional*):

@@ -69,7 +69,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
-@strict(accept_kwargs=True)
+@strict
 class Glm4vVisionConfig(PreTrainedConfig):
     r"""
     out_hidden_size (`int`, *optional*, defaults to 4096):
@@ -111,7 +111,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
-@strict(accept_kwargs=True)
+@strict
 class Glm4vTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -171,7 +171,7 @@ class Glm4vTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.1V-9B-Thinking")
-@strict(accept_kwargs=True)
+@strict
 class Glm4vConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 151339):

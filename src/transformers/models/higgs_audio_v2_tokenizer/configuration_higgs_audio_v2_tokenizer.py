@@ -30,7 +30,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-tokenizer")
-@strict(accept_kwargs=True)
+@strict
 class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     r"""
     target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2]`):

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16")
-@strict(accept_kwargs=True)
+@strict
 class NemotronHConfig(PreTrainedConfig):
     r"""
     layers_block_type (`list`, *optional*):

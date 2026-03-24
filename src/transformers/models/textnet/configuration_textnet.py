@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="czczup/textnet-base")
-@strict(accept_kwargs=True)
+@strict
 class TextNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     stem_kernel_size (`int`, *optional*, defaults to 3):

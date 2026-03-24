@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
 @auto_docstring(checkpoint="ustc-community/dfine-xlarge-coco")
-@strict(accept_kwargs=True)
+@strict
 class DFineConfig(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):

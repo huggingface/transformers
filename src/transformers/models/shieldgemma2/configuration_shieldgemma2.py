@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="google/shieldgemma-2-4b-it")
-@strict(accept_kwargs=True)
+@strict
 class ShieldGemma2Config(PreTrainedConfig):
     r"""
     tie_word_embeddings (`bool`, *optional*):

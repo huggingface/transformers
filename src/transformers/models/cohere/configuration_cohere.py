@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
-@strict(accept_kwargs=True)
+@strict
 class CohereConfig(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):

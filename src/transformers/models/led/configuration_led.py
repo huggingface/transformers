@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/led-base-16384")
-@strict(accept_kwargs=True)
+@strict
 class LEDConfig(PreTrainedConfig):
     r"""
     max_encoder_position_embeddings (`int`, *optional*, defaults to 16384):

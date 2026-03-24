@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/recurrentgemma-2b")
-@strict(accept_kwargs=True)
+@strict
 class RecurrentGemmaConfig(PreTrainedConfig):
     r"""
     lru_width (`int` or `None`, *optional*):

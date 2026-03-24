@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_vl"
     base_config_key = "vision_config"
@@ -42,7 +42,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2VLTextConfig(PreTrainedConfig):
     r"""
     ```python
@@ -133,7 +133,7 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2VLConfig(PreTrainedConfig):
     r"""
     Example:

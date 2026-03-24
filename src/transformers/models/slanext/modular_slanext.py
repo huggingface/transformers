@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class SLANeXtVisionConfig(GotOcr2VisionConfig):
     image_size: int = 512
 
@@ -58,7 +58,7 @@ class SLANeXtVisionAttention(GotOcr2VisionAttention):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/SLANeXt_wired_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class SLANeXtConfig(PreTrainedConfig):
     r"""
     vision_config (`dict` or [`SLANeXtVisionConfig`], *optional*):

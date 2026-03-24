@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tiiuae/Falcon-H1-1.5B-Deep-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class FalconH1Config(PreTrainedConfig):
     r"""
     num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):

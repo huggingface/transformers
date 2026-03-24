@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -83,7 +83,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
     patch_embed_hidden_size (`int`, *optional*, defaults to 768):
@@ -138,7 +138,7 @@ class Pix2StructVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructConfig(PreTrainedConfig):
     r"""
     is_vqa (`bool`, *optional*, defaults to `False`):

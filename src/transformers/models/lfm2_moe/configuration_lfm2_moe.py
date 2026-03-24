@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM2-8B-A1B")
-@strict(accept_kwargs=True)
+@strict
 class Lfm2MoeConfig(PreTrainedConfig):
     r"""
     conv_bias (`bool`, *optional*, defaults to `False`):

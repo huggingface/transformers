@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Helsinki-NLP/opus-mt-en-de")
-@strict(accept_kwargs=True)
+@strict
 class MarianConfig(PreTrainedConfig):
     r"""
     decoder_vocab_size (`int`, *optional*):

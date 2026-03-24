@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="tencent/Youtu-LLM-2B")
-@strict(accept_kwargs=True)
+@strict
 class YoutuConfig(DeepseekV3Config):
     r"""
     rope_interleave (`bool`, *optional*, defaults to `True`):

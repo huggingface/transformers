@@ -172,7 +172,7 @@ class PI0Processor(PaligemmaProcessor):
 
 
 @auto_docstring(checkpoint="lerobot/pi0_base")
-@strict(accept_kwargs=True)
+@strict
 class PI0Config(PreTrainedConfig):
     r"""
     vlm_config (`dict`, *optional*):

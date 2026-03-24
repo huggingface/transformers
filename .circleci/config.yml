@@ -184,7 +184,7 @@ jobs:
             - run: python utils/check_docstrings.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
-            - run: python utils/check_modeling_structure.py
+            - run: python -m utils.mlinter
             - run: python utils/check_inits.py
             - run: python utils/check_pipeline_typing.py
             - run: python utils/check_config_docstrings.py

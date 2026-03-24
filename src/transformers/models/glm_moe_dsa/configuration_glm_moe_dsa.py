@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
-@strict(accept_kwargs=True)
+@strict
 class GlmMoeDsaConfig(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

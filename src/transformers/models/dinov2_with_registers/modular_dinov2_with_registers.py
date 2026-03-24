@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
-@strict(accept_kwargs=True)
+@strict
 class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):

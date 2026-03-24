@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="vinvino02/glpn-kitti")
-@strict(accept_kwargs=True)
+@strict
 class GLPNConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):

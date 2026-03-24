@@ -29,7 +29,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusVisionConfig(PreTrainedConfig):
     r"""
     projection_dropout (`float`, *optional*, defaults to 0.0):
@@ -62,7 +62,7 @@ class JanusVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusVQVAEConfig(PreTrainedConfig):
     r"""
     base_channels (`int`, *optional*, defaults to 128):
@@ -101,7 +101,7 @@ class JanusVQVAEConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusConfig(PreTrainedConfig):
     r"""
     Example:

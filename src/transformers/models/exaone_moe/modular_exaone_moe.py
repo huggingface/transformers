@@ -43,7 +43,7 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
-@strict(accept_kwargs=True)
+@strict
 class ExaoneMoeConfig(Exaone4Config):
     r"""
     sliding_window_pattern (`str`, *optional*, defaults to 4):

@@ -29,7 +29,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 11):
@@ -73,7 +73,7 @@ class Qwen2_5OmniVisionEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -119,7 +119,7 @@ class Qwen2_5OmniAudioEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -203,7 +203,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     r"""
     position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -287,7 +287,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     r"""
     tts_text_start_token_id (`int`, *optional*, defaults to 151860):
@@ -400,7 +400,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
     r"""
     ff_mult (`int`, *optional*, defaults to 2):
@@ -465,7 +465,7 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
     r"""
     mel_dim (`int`, *optional*, defaults to 80):
@@ -493,7 +493,7 @@ class Qwen2_5OmniBigVGANConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     r"""
     dit_config ([`DiT_Args`], *optional*):
@@ -555,7 +555,7 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5OmniConfig(PreTrainedConfig):
     r"""
     thinker_config (`dict`, *optional*):

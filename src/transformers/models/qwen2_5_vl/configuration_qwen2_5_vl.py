@@ -32,7 +32,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     r"""
     tokens_per_second (`int`, *optional*, defaults to 41):
@@ -65,7 +65,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5_VLTextConfig(PreTrainedConfig):
     r"""
     ```python
@@ -156,7 +156,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5_VLConfig(PreTrainedConfig):
     r"""
     Example:

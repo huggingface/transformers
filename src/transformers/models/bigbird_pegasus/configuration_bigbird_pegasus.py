@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/bigbird-pegasus-large-arxiv")
-@strict(accept_kwargs=True)
+@strict
 class BigBirdPegasusConfig(PreTrainedConfig):
     r"""
     attention_type (`str`, *optional*, defaults to `"block_sparse"`):

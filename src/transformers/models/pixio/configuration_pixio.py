@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/pixio-huge")
-@strict(accept_kwargs=True)
+@strict
 class PixioConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     apply_layernorm (`bool`, *optional*, defaults to `True`):

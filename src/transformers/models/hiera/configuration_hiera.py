@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hiera-base-224")
-@strict(accept_kwargs=True)
+@strict
 class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     patch_stride (`list(int)`, *optional*, defaults to `[4, 4]`):

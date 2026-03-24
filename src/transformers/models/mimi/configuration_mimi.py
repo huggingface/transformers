@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="kyutai/mimi")
-@strict(accept_kwargs=True)
+@strict
 class MimiConfig(PreTrainedConfig):
     r"""
     audio_channels (`int`, *optional*, defaults to 1):
