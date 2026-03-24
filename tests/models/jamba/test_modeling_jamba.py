@@ -322,7 +322,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else {}
     )
 
-    def _get_mamba_cache_shapes(batch_size: int, config):
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
         conv_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_conv)
         ssm_shape = (batch_size, config.mamba_expand * config.hidden_size, config.mamba_d_state)
         return conv_shape, ssm_shape

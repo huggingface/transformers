@@ -302,7 +302,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                 loss_padfree = res_padfree.loss
                 torch.testing.assert_close(loss_padded, loss_padfree)
 
-    def _get_mamba_cache_shapes(batch_size: int, config):
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
         conv_shape = (
             batch_size,
             config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * config.mamba_d_state,

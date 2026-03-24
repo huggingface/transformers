@@ -51,7 +51,7 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
-    def _get_mamba_cache_shapes(batch_size: int, config):
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
         conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
         ssm_shape = (1,)
         return conv_shape, ssm_shape

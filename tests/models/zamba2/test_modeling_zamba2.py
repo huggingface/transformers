@@ -298,7 +298,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
 
-    def _get_mamba_cache_shapes(batch_size: int, config):
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
         intermediate_size = config.mamba_expand * config.hidden_size
         conv_shape = (
             batch_size,

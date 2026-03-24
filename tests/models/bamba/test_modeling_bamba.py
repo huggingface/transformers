@@ -279,7 +279,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def _get_mamba_cache_shapes(batch_size: int, config):
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
         # For mamba layers
         conv_shape = (
             batch_size,

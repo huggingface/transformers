@@ -352,7 +352,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else {}
     )
 
-    def _get_mamba_cache_shapes(batch_size: int, config):
+    def _get_mamba_cache_shapes(self, batch_size: int, config):
         intermediate_size = config.mamba_num_heads * config.mamba_head_dim
         conv_shape = (
             batch_size,
