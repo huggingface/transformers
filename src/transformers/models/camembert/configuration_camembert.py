@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="almanach/camembert-base")
-@strict(accept_kwargs=True)
+@strict
 class CamembertConfig(PreTrainedConfig):
     r"""
     Example:

@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="karpathy/nanochat-d32")
-@strict(accept_kwargs=True)
+@strict
 class NanoChatConfig(PretrainedConfig):
     r"""
     Example:

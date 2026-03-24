@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/resnet-50")
-@strict(accept_kwargs=True)
+@strict
 class ResNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layer_type (`str`, *optional*, defaults to `"bottleneck"`):
