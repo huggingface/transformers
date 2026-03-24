@@ -32,7 +32,6 @@ from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
-from .tokenization_utils_base import PreTrainedTokenizerBase
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
