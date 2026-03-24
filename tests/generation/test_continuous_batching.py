@@ -608,26 +608,16 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_log_probs(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
         """Test that log probabilities match between continuous batching and regular generate."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        max_new_tokens = 10
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
         user_messages = ["What is 2+2?", "Hello world"]
-        chats = [[{"role": "user", "content": msg}] for msg in user_messages]
-        tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
-        input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
+        input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
-        # Load model for CB generation
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa", torch_dtype=torch.float32)
-        model = model.to(torch_device).eval()
-        eos_token_id = model.config.eos_token_id
-
-        gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=eos_token_id)
+        gen_config = GenerationConfig(max_new_tokens=10, do_sample=False)
 
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
             use_async_batching=use_async_batching,
-            allow_block_sharing=False,
             return_logprobs=True,
         )
 
@@ -640,15 +630,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model = model.to(torch_device).eval()
 
         # Run regular generate with output_scores to get logits
-        inputs = tokenizer.apply_chat_template(
-            chats, add_generation_prompt=True, return_tensors="pt", padding=True, return_dict=True
-        )
-        gen_config_regular = GenerationConfig(
-            max_new_tokens=max_new_tokens, do_sample=False, output_scores=True, eos_token_id=eos_token_id
-        )
-        generate_outputs = model.generate(
-            **inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True
-        )
+        inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
+
+        gen_config_regular = GenerationConfig(max_new_tokens=10, do_sample=False, output_scores=True)
+        generate_outputs = model.generate(inputs, generation_config=gen_config_regular, return_dict_in_generate=True)
 
         # Compare log_probs for each request, matching by prompt_ids
         num_input_tokens = inputs.input_ids.shape[1]
@@ -702,22 +687,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         try:
             # Prepare inputs
-            tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-            if hasattr(tokenizer, "eos_token"):
-                tokenizer.pad_token = tokenizer.eos_token
-            user_messages = [
-                "What is 2+2?",
-                "What is the capital of France?",
-            ]
-            chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
-            tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
-            input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
-
-            # Load model
-            model = AutoModelForCausalLM.from_pretrained(
-                model_id, attn_implementation="flash_attention_2", torch_dtype="auto"
-            )
-            model = model.to(torch_device).eval()
+            tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device)
+            user_messages = ["What is 2+2?", "What is the capital of France?"]
+            input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
             # Create ContinuousBatchingConfig with use_default_compile_configs=True
             cb_config = ContinuousBatchingConfig(use_default_compile_configs=True)
@@ -741,9 +713,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
             # Test that generation works with default compile configs
             outputs = model.generate_batch(
-                inputs=input_ids,
-                generation_config=gen_config,
-                continuous_batching_config=cb_config,
+                inputs=input_ids, generation_config=gen_config, continuous_batching_config=cb_config
             )
 
             # Verify we got outputs for all requests
