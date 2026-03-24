@@ -195,6 +195,7 @@ class IsaacVisionConfig(Siglip2VisionConfig):
 class IsaacTextConfig(Qwen3Config):
     model_type = "isaac_text"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+    max_position_embeddings: int = 32768
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
@@ -755,12 +756,6 @@ class IsaacConfig(PretrainedConfig):
             self.vision_config = self.sub_configs["vision_config"]()
 
         super().__init__(**kwargs)
-
-        # Mirror frequently accessed composite-level attributes.
-        self.use_cache = self.text_config.use_cache
-        self.rope_theta = self.text_config.rope_parameters["rope_theta"]
-        self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
-        self.text_config.max_position_embeddings = self.max_position_embeddings
 
         # Vision normalization parameters
         self.vision_rescale_factor = float(vision_rescale_factor)
