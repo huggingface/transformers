@@ -385,7 +385,6 @@ class NemotronHMamba2Mixer(nn.Module):
 
         # Convolution sequence transformation
         if use_precomputed_state:
-            gate = gate.unsqueeze(1)
             conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
             hidden_states = torch.sum(conv_state * self.conv1d.weight[:, 0, :], dim=-1)
             if self.use_conv_bias:

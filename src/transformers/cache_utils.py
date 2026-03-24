@@ -715,7 +715,13 @@ class MambaCacheLayerMixin(ABC):
         """Reorders the cache for beam search, given the selected beam indices."""
         if self.has_previous_state:
             self.conv_states = self.conv_states.index_select(0, beam_idx.to(self.device))
-            self.ssm_states = self.ssm_states.index_select(0, beam_idx.to(self.device))
+            # ssm_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
+            if self.ssm_states.numel() > 0:
+                self.ssm_states = self.ssm_states.index_select(0, beam_idx.to(self.device))
+
+    def crop(self, max_length: int):
+        # We don't crop the mamba cache, so simply do nothing
+        pass
 
 
 class MambaLayer(MambaCacheLayerMixin):
@@ -777,10 +783,16 @@ class MambaAndAttentionLayer(MambaLayer, DynamicLayer):
         DynamicLayer.__init__(self)
         MambaLayer.__init__(self)
 
-    def lazy_initialization(self, states_1: torch.Tensor, states_2: torch.Tensor | None = None) -> None:
-        MambaLayer.lazy_initialization(self, states_1)
-        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+    def lazy_initialization(self, states1: torch.Tensor, states2: torch.Tensor | None = None) -> None:
+        MambaLayer.lazy_initialization(self, states1)
+        DynamicLayer.lazy_initialization(self, states1, states2)
+
+    def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
+        # We need this as lazy initialization may be called first from `update` from the attention part, so the inferred
+        # conv_kernel_size may not be correct - make sure we grab the correct one during the first call to `update_conv_state`
+        if not self.has_previous_state:
+            self.conv_kernel_size = conv_states.shape[-1]
+        super().update_conv_state(conv_states, **kwargs)
 
     def reset(self) -> None:
         MambaLayer.reset(self)
