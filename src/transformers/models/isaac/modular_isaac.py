@@ -1088,48 +1088,47 @@ class IsaacModel(Qwen3PreTrainedModel):
         else:
             image_attention_mask = image_attention_mask.to(dtype=torch.bool)
 
+        torch_compilable_check(
+            image_attention_mask.any(),
+            "IsaacModel.get_image_features expects at least one active image slot; text-only inputs should skip this method.",
+        )
+
         batch_size, max_images = pixel_values.shape[:2]
         hidden_size = self.config.get_text_config().hidden_size
 
-        if image_attention_mask.any():
-            vision_outputs = self.vision_tower(
-                vision_patches=pixel_values[image_attention_mask],
-                vision_token_grids=image_token_grids[image_attention_mask],
-                vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
-                return_dict=True,
-                **kwargs,
-            )
-            flat_projected_features = self.multimodal_projector(vision_outputs.last_hidden_state)
-            max_tokens = flat_projected_features.shape[1]
-            projected_features = flat_projected_features.new_zeros((batch_size, max_images, max_tokens, hidden_size))
-            projected_features[image_attention_mask] = flat_projected_features
-            feature_device = flat_projected_features.device
-            offsets = (
-                image_token_offsets.to(dtype=torch.long)
-                if image_token_offsets is not None
-                else torch.zeros((batch_size, max_images), device=feature_device, dtype=torch.long)
-            )
-            lengths = (
-                image_token_lengths.to(dtype=torch.long)
-                if image_token_lengths is not None
-                else torch.full((batch_size, max_images), max_tokens, device=feature_device, dtype=torch.long)
-            )
-            flat_offsets = offsets[image_attention_mask]
-            flat_lengths = lengths[image_attention_mask]
-            token_positions = torch.arange(flat_lengths.max(), device=feature_device, dtype=torch.long)
-            gather_positions = flat_offsets[:, None] + token_positions[None, :]
-            gather_mask = token_positions[None, :] < flat_lengths[:, None]
-            image_features = flat_projected_features[
-                torch.arange(flat_projected_features.shape[0], device=feature_device, dtype=torch.long)[:, None],
-                gather_positions,
-            ][gather_mask]
-            hidden_states = vision_outputs.hidden_states
-            attentions = vision_outputs.attentions
-        else:
-            projected_features = pixel_values.new_zeros((batch_size, max_images, 0, hidden_size))
-            image_features = pixel_values.new_zeros((0, hidden_size))
-            hidden_states = None
-            attentions = None
+        vision_outputs = self.vision_tower(
+            vision_patches=pixel_values[image_attention_mask],
+            vision_token_grids=image_token_grids[image_attention_mask],
+            vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
+            return_dict=True,
+            **kwargs,
+        )
+        flat_projected_features = self.multimodal_projector(vision_outputs.last_hidden_state)
+        max_tokens = flat_projected_features.shape[1]
+        projected_features = flat_projected_features.new_zeros((batch_size, max_images, max_tokens, hidden_size))
+        projected_features[image_attention_mask] = flat_projected_features
+        feature_device = flat_projected_features.device
+        offsets = (
+            image_token_offsets.to(dtype=torch.long)
+            if image_token_offsets is not None
+            else torch.zeros((batch_size, max_images), device=feature_device, dtype=torch.long)
+        )
+        lengths = (
+            image_token_lengths.to(dtype=torch.long)
+            if image_token_lengths is not None
+            else torch.full((batch_size, max_images), max_tokens, device=feature_device, dtype=torch.long)
+        )
+        flat_offsets = offsets[image_attention_mask]
+        flat_lengths = lengths[image_attention_mask]
+        token_positions = torch.arange(flat_lengths.max(), device=feature_device, dtype=torch.long)
+        gather_positions = flat_offsets[:, None] + token_positions[None, :]
+        gather_mask = token_positions[None, :] < flat_lengths[:, None]
+        image_features = flat_projected_features[
+            torch.arange(flat_projected_features.shape[0], device=feature_device, dtype=torch.long)[:, None],
+            gather_positions,
+        ][gather_mask]
+        hidden_states = vision_outputs.hidden_states
+        attentions = vision_outputs.attentions
 
         return BaseModelOutputWithPooling(
             last_hidden_state=projected_features,
