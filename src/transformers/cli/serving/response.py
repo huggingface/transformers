@@ -97,6 +97,7 @@ class ResponseHandler(BaseHandler):
             tools=body.get("tools"),
             return_tensors="pt",
             return_dict=True,
+            tokenize=True,
         ).to(model.device)
 
         gen_config = self._build_generation_config(body, model.generation_config, processor)
