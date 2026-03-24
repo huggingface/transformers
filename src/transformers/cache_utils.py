@@ -1195,7 +1195,11 @@ class DynamicCache(Cache):
                 # states they should return - only the mask changes to make them different at the end!
                 if layer_type in ("sliding_attention", "chunked_attention"):
                     layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
-                elif layer_type in ("mamba", "conv"):
+                # Note: we want moe layers to be MambaLayer, so that we can correctly grab sequence length etc from attention layers.
+                # Since moe layers will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
+                # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skip
+                # the indices we don't need
+                elif layer_type in ("mamba", "conv", "moe"):
                     layers.append(MambaLayer())
                 elif layer_type == "hybrid":
                     layers.append(MambaAndAttentionLayer())

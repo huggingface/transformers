@@ -924,7 +924,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state) or (
+        if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             mamba_mask = None

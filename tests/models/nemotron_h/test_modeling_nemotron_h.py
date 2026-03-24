@@ -383,10 +383,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # Check each layer has the correct shape
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            # Moe layers have a default attention cache instantiated, but it stays empty as the layer does not use it
+            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
             if layer_type == "moe":
-                self.assertEqual(layer.keys, None)
-                self.assertEqual(layer.values, None)
+                self.assertEqual(layer.conv_states, None)
+                self.assertEqual(layer.ssm_states, None)
             # Attention layer cache
             elif layer_type == "attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
