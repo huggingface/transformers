@@ -772,6 +772,26 @@ class MambaLayer(MambaCacheLayerMixin):
         return self.ssm_states
 
 
+class MambaAndAttentionLayer(MambaLayer, DynamicLayer):
+    def __init__(self):
+        DynamicLayer.__init__(self)
+        MambaLayer.__init__(self)
+
+    def lazy_initialization(self, states_1: torch.Tensor, states_2: torch.Tensor | None = None) -> None:
+        MambaLayer.lazy_initialization(self, states_1)
+        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+
+    def reset(self) -> None:
+        MambaLayer.reset(self)
+        DynamicLayer.reset(self)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        MambaLayer.reorder_cache(self, beam_idx)
+        DynamicLayer.reorder_cache(self, beam_idx)
+
+
 class Cache:
     """
     A `Cache` is mostly a list of `CacheLayerMixin` objects, one per model layer. It serves as a container for
@@ -942,8 +962,8 @@ class Cache:
         if layer_idx >= len(self.layers):
             return 0
 
-        # For Hybrid attention-mamba caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
-        if isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+        # For alternating attention-mamba caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
+        if not isinstance(self.layers[layer_idx], CacheLayerMixin):
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
@@ -977,6 +997,11 @@ class Cache:
                     "`has_previous_state` can only be called on Mamba layers, and the current Cache seem to only contain "
                     "Attention layers."
                 )
+        elif not isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+            raise ValueError(
+                f"You called `has_previous_state` on layer index {layer_idx}, but this layer is an Attention layer, which "
+                "does not support calling it."
+            )
 
         return self.layers[layer_idx].has_previous_state
 
@@ -991,8 +1016,8 @@ class Cache:
         if layer_idx >= len(self.layers):
             return query_length, 0
 
-        # For Hybrid attention-mamba caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
-        if isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+        # For alternating attention-mamba caches, `get_mask_sizes` needs to use attention layer idx when called with default layer_idx
+        if not isinstance(self.layers[layer_idx], CacheLayerMixin):
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
@@ -1163,6 +1188,8 @@ class DynamicCache(Cache):
                     layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
                 elif layer_type in ("mamba", "conv"):
                     layers.append(MambaLayer())
+                elif layer_type == "hybrid":
+                    layers.append(MambaAndAttentionLayer())
                 else:
                     layers.append(DynamicLayer())
 
