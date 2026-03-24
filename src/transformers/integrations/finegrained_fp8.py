@@ -20,7 +20,6 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
-from ..utils.import_utils import is_tracing
 from .hub_kernels import get_kernel
 from .moe import ExpertsInterface, use_experts_implementation
 
@@ -57,26 +56,18 @@ def _get_triton_kernel():
 
 
 def _get_deepgemm_kernel():
-    """Lazily load the DeepGEMM kernel (try HuggingFace Hub first, then installed package).
-
-    Returns a namespace with at least:
-      - fp8_gemm_nt(a, b, d) — single FP8 GEMM
-      - m_grouped_fp8_gemm_nt_contiguous(a, b, d, grouped_layout)
-      - per_token_cast_to_fp8(x, use_ue8m0) -> (fp8_data, scale_factors)
-    """
+    """Lazily load the DeepGEMM kernel"""
     global _deepgemm_kernel, _deepgemm_kernel_available, _deepgemm_m_alignment, _deepgemm_use_psum_layout
 
     if _deepgemm_kernel_available is None:
         try:
             _deepgemm_kernel = get_kernel("kernels-community/deep-gemm")
-            # psum_layout is only supported on Blackwell (SM100+)
+            # psum_layout optimization is only supported on Blackwell (SM100+)
             _deepgemm_use_psum_layout = torch.cuda.get_device_capability()[0] >= 10
-            _deepgemm_m_alignment = _deepgemm_kernel.get_m_alignment_for_contiguous_layout()
+            _deepgemm_m_alignment = _deepgemm_kernel.get_m_alignment_for_contiguous_layout()  # always 128
             _deepgemm_kernel_available = True
         except Exception as e:
-            logger.warning_once(
-                f"Failed to load DeepGEMM from Hub: {e}. DeepGEMM-optimized paths will be unavailable."
-            )
+            logger.warning_once(f"Failed to load DeepGEMM from Hub: {e}. DeepGEMM paths will be unavailable.")
             _deepgemm_kernel_available = False
 
     return _deepgemm_kernel
@@ -109,29 +100,6 @@ def w8a8_fp8_matmul(
         output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
         deepgemm.fp8_gemm_nt((A_2d, As_2d), (B, Bs), output)
         return output.view(A.shape[:-1] + (B.shape[0],))
-
-    # Ensure correct CUDA device context for Triton JIT on multi-GPU
-    torch.cuda.set_device(A.device)
-
-    # TODO(kernels-community/finegrained-fp8): remove once the hub tensor-scale kernel
-    # handles non-power-of-2 dimensions internally (e.g. N=320 for MLA kv_a_proj).
-    # The kernel uses tl.arange(0, N) which requires N to be a power of 2.
-    if block_size is None:
-        N, K = B.shape
-        n_needs_pad = (N % 128 != 0) and (N & (N - 1)) != 0
-        k_needs_pad = (K % 128 != 0) and (K & (K - 1)) != 0
-        if n_needs_pad or k_needs_pad:
-            orig_N = N
-            if n_needs_pad:
-                pad_n = ((N + 127) // 128 * 128) - N
-                B = F.pad(B, [0, 0, 0, pad_n])
-            if k_needs_pad:
-                pad_k = ((K + 127) // 128 * 128) - K
-                B = F.pad(B, [0, pad_k])
-                A = F.pad(A, [0, pad_k])
-            kernel = _get_triton_kernel()
-            result = kernel.w8a8_fp8_matmul(A, B, As, Bs, None, output_dtype)
-            return result[..., :orig_N]
 
     kernel = _get_triton_kernel()
     return kernel.w8a8_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
@@ -218,9 +186,14 @@ def fp8_batched_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "batched_mm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+
     kernel = _get_triton_kernel()
     device = hidden_states.device
-    torch.cuda.set_device(device)
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
@@ -275,8 +248,13 @@ def fp8_grouped_mm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "grouped_mm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+
     kernel = _get_triton_kernel()
-    torch.cuda.set_device(hidden_states.device)
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -303,8 +281,6 @@ def fp8_grouped_mm_experts_forward(
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
-    allow_sync = not is_tracing()
-
     # --- Up projection per expert (FP8 grouped) ---
     proj_out = kernel.w8a8_fp8_matmul_grouped(
         selected_hidden_states_g,
@@ -313,7 +289,6 @@ def fp8_grouped_mm_experts_forward(
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
-        allow_sync=allow_sync,
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating or activation
@@ -332,7 +307,6 @@ def fp8_grouped_mm_experts_forward(
         tokens_per_expert=tokens_per_expert,
         block_size=self.block_size,
         offsets=offsets,
-        allow_sync=allow_sync,
     )  # (S, hidden_dim)
 
     # Apply routing weights
@@ -352,38 +326,39 @@ def _build_contiguous_layout(expert_ids_sorted: torch.Tensor, num_experts: int, 
     """Build a TMA-aligned contiguous layout for DeepGEMM grouped GEMM.
 
     Returns:
-        row_map: (S,) mapping from sorted token index to padded row index
-        grouped_layout: (total_m,) per-row expert id on Hopper, (num_experts,) cumulative counts on Blackwell
-        total_m: total number of rows including padding
+        row_map: (num_tokens,) mapping from sorted token index to padded row index
+        grouped_layout: (total_rows,) per-row expert id on Hopper, (num_experts,) cumulative counts on Blackwell
+        total_rows: total number of rows including alignment padding
     """
-    S = expert_ids_sorted.size(0)
     device = expert_ids_sorted.device
+    num_tokens = expert_ids_sorted.size(0)
     tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
-    aligned_tpe = ((tokens_per_expert + alignment - 1) // alignment) * alignment
-    # Upper bound avoids GPU→CPU sync during torch.compile / CUDA graph capture
-    total_m = S + min(S, num_experts) * (alignment - 1) if is_tracing() else int(aligned_tpe.sum().item())
+    aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
+    # Upper bound avoids GPU→CPU sync; padding rows are skipped by DeepGEMM.
+    total_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
 
-    pad = aligned_tpe - tokens_per_expert
-    row_map = torch.arange(S, device=device) + (pad.cumsum(0) - pad)[expert_ids_sorted]
+    padding_per_expert = aligned_tokens_per_expert - tokens_per_expert
+    cumulative_padding = padding_per_expert.cumsum(0) - padding_per_expert
+    row_map = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
 
     if _deepgemm_use_psum_layout:
         # Blackwell: compact (num_experts,) cumulative actual token counts
         grouped_layout = tokens_per_expert.cumsum(0).int()
     else:
-        # Hopper: full (total_m,) per-row expert id, -1 for padding
-        grouped_layout = torch.full((total_m,), -1, device=device, dtype=torch.int32)
+        # Hopper: full (total_rows,) per-row expert id, -1 for padding
+        grouped_layout = torch.full((total_rows,), -1, device=device, dtype=torch.int32)
         grouped_layout[row_map] = expert_ids_sorted.int()
 
-    return row_map, grouped_layout, total_m
+    return row_map, grouped_layout, total_rows
 
 
 def _pad_for_contiguous_layout(
-    x: torch.Tensor, scales: torch.Tensor, row_map: torch.Tensor, total_m: int
+    x: torch.Tensor, scales: torch.Tensor, row_map: torch.Tensor, total_rows: int
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Scatter FP8 activations and scales into the padded contiguous layout."""
-    a_padded = torch.zeros(total_m, x.shape[1], device=x.device, dtype=x.dtype)
+    a_padded = torch.zeros(total_rows, x.shape[1], device=x.device, dtype=x.dtype)
     a_padded[row_map] = x
-    sf_padded = torch.zeros(total_m, scales.shape[1], device=x.device, dtype=torch.float32)
+    sf_padded = torch.zeros(total_rows, scales.shape[1], device=x.device, dtype=torch.float32)
     sf_padded[row_map] = scales
     return a_padded, sf_padded
 
@@ -399,6 +374,16 @@ def fp8_deepgemm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "deepgemm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+    if self.block_size is None:
+        raise ValueError(
+            "DeepGEMM requires block-wise quantization (block_size=[128, 128]), "
+            "but got per-tensor quantization (block_size=None)."
+        )
     assert self.block_size[0] == self.block_size[1] == 128, (
         f"DeepGEMM requires block_size=(128, 128), got {self.block_size}"
     )
@@ -424,14 +409,16 @@ def fp8_deepgemm_experts_forward(
     selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Build TMA-aligned contiguous layout for DeepGEMM
-    row_map, grouped_layout, total_m = _build_contiguous_layout(expert_ids_g, self.num_experts, _deepgemm_m_alignment)
+    row_map, grouped_layout, total_rows = _build_contiguous_layout(
+        expert_ids_g, self.num_experts, _deepgemm_m_alignment
+    )
 
     # --- Up projection per expert (DeepGEMM grouped contiguous) ---
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
     act_fp8, act_scales = deepgemm.utils.per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
-    act_fp8, act_scales = _pad_for_contiguous_layout(act_fp8, act_scales, row_map, total_m)
-    proj_out = torch.zeros(total_m, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    act_fp8, act_scales = _pad_for_contiguous_layout(act_fp8, act_scales, row_map, total_rows)
+    proj_out = torch.zeros(total_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
     deepgemm.m_grouped_fp8_gemm_nt_contiguous(
         (act_fp8, act_scales),
         (w_up, ws_up),
@@ -449,7 +436,7 @@ def fp8_deepgemm_experts_forward(
     # --- Down projection per expert (DeepGEMM grouped contiguous) ---
     # proj_out is already in the padded layout from the up projection — just quantize
     proj_fp8, proj_scales = deepgemm.utils.per_token_cast_to_fp8(proj_out, use_ue8m0=False)
-    proj_out = torch.zeros(total_m, hidden_dim, device=device, dtype=torch.bfloat16)
+    proj_out = torch.zeros(total_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm.m_grouped_fp8_gemm_nt_contiguous(
         (proj_fp8, proj_scales),
         (self.down_proj, self.down_proj_scale_inv),
