@@ -14,11 +14,12 @@
 from dataclasses import dataclass
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
+from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
@@ -53,6 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@strict(accept_kwargs=True)
 class RfDetrDinov2Config(Dinov2Config):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -88,17 +90,21 @@ class RfDetrDinov2Config(Dinov2Config):
 
     model_type = "rf_detr_dinov2"
 
-    def __init__(self, num_windows: int = 4, **super_kwargs):
-        super().__init__(**super_kwargs)
+    num_windows: int = 4
 
-        self.num_windows = num_windows
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
+        )
         window_block_indexes = set(range(self._out_indices[-1] + 1))
         window_block_indexes.difference_update(self._out_indices)
-        window_block_indexes = list(window_block_indexes)
-        self.window_block_indexes = window_block_indexes
+        self.window_block_indexes = list(window_block_indexes)
+        BackboneConfigMixin.__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
+@strict(accept_kwargs=True)
 class RfDetrConfig(PreTrainedConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):
@@ -166,56 +172,53 @@ class RfDetrConfig(PreTrainedConfig):
     sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {"hidden_size": "d_model"}
 
-    def __init__(
-        self,
-        # backbone
-        backbone_config=None,
-        # projector
-        hidden_expansion=0.5,
-        c2f_num_blocks=3,
-        activation_function="silu",
-        layer_norm_eps=1e-5,
-        # decoder
-        d_model=256,
-        dropout=0.1,
-        decoder_ffn_dim=2048,
-        decoder_n_points=4,
-        decoder_layers: int = 3,
-        decoder_self_attention_heads: int = 8,
-        decoder_cross_attention_heads: int = 16,
-        decoder_activation_function="relu",
-        # model
-        num_queries=300,
-        num_feature_levels=1,
-        attention_bias=True,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        group_detr: int = 13,
-        init_std=0.02,
-        disable_custom_kernels=True,
-        # loss
-        class_cost=2,
-        bbox_cost=5,
-        giou_cost=2,
-        class_loss_coefficient=1,
-        mask_loss_coefficient=1,
-        dice_loss_coefficient=1,
-        bbox_loss_coefficient=5,
-        giou_loss_coefficient=2,
-        eos_coefficient=0.1,
-        focal_alpha=0.25,
-        auxiliary_loss=True,
-        mask_point_sample_ratio=16,
-        # segmentation
-        mask_downsample_ratio=4,
-        mask_class_loss_coefficient=5.0,
-        mask_dice_loss_coefficient=5.0,
-        segmentation_head_activation_function="gelu",
-        **kwargs,
-    ):
-        # backbone
-        backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=backbone_config,
+    # backbone
+    backbone_config: dict | PreTrainedConfig | None = None
+    # projector
+    hidden_expansion: float = 0.5
+    c2f_num_blocks: int = 3
+    activation_function: str = "silu"
+    layer_norm_eps: float = 1e-5
+    # decoder
+    d_model: int = 256
+    dropout: float = 0.1
+    decoder_ffn_dim: int = 2048
+    decoder_n_points: int = 4
+    decoder_layers: int = 3
+    decoder_self_attention_heads: int = 8
+    decoder_cross_attention_heads: int = 16
+    decoder_activation_function: str = "relu"
+    # model
+    num_queries: int = 300
+    num_feature_levels: int = 1
+    attention_bias: bool = True
+    attention_dropout: float = 0.0
+    activation_dropout: float = 0.0
+    group_detr: int = 13
+    init_std: float = 0.02
+    disable_custom_kernels: bool = True
+    # loss
+    class_cost: int | float = 2
+    bbox_cost: int | float = 5
+    giou_cost: int | float = 2
+    class_loss_coefficient: int | float = 1
+    mask_loss_coefficient: int | float = 1
+    dice_loss_coefficient: int | float = 1
+    bbox_loss_coefficient: int | float = 5
+    giou_loss_coefficient: int | float = 2
+    eos_coefficient: float = 0.1
+    focal_alpha: float = 0.25
+    auxiliary_loss: bool = True
+    mask_point_sample_ratio: int = 16
+    # segmentation
+    mask_downsample_ratio: int = 4
+    mask_class_loss_coefficient: int | float = 5.0
+    mask_dice_loss_coefficient: int | float = 5.0
+    segmentation_head_activation_function: str = "gelu"
+
+    def __post_init__(self, **kwargs):
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
             default_config_type="rf_detr_dinov2",
             default_config_kwargs={
                 "attention_probs_dropout_prob": 0.0,
@@ -240,54 +243,8 @@ class RfDetrConfig(PreTrainedConfig):
             },
             **kwargs,
         )
-
-        self.backbone_config = backbone_config
-
-        # projector
-        self.activation_function = activation_function
-        self.hidden_expansion = hidden_expansion
-        self.c2f_num_blocks = c2f_num_blocks
-        self.layer_norm_eps = layer_norm_eps
-        # decoder
-        self.d_model = d_model
-        self.dropout = dropout
-        self.num_queries = num_queries
-        self.num_feature_levels = num_feature_levels
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_activation_function = decoder_activation_function
-        self.decoder_self_attention_heads = decoder_self_attention_heads
-        self.decoder_cross_attention_heads = decoder_cross_attention_heads
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        # model
-        self.init_std = init_std
-        self.group_detr = group_detr
-        # Loss
-        self.auxiliary_loss = auxiliary_loss
-        # Hungarian matcher
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        # Loss coefficients
-        self.class_loss_coefficient = class_loss_coefficient
-        self.mask_loss_coefficient = mask_loss_coefficient
-        self.dice_loss_coefficient = dice_loss_coefficient
-        self.bbox_loss_coefficient = bbox_loss_coefficient
-        self.giou_loss_coefficient = giou_loss_coefficient
-        self.mask_class_loss_coefficient = mask_class_loss_coefficient
-        self.mask_dice_loss_coefficient = mask_dice_loss_coefficient
-        self.eos_coefficient = eos_coefficient
-        self.focal_alpha = focal_alpha
-        self.disable_custom_kernels = disable_custom_kernels
-        self.mask_point_sample_ratio = mask_point_sample_ratio
-        # segmentation
-        self.mask_downsample_ratio = mask_downsample_ratio
         self.intermediate_size = self.d_model * 4
-        self.segmentation_head_activation_function = segmentation_head_activation_function
-        super().__init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class RfDetrDinov2Embeddings(Dinov2Embeddings):
