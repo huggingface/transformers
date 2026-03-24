@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -45,10 +45,11 @@ logger = logging.get_logger(__name__)
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutput] to include the output attention mask since sequence length is not preserved in the model's forward.
+    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
+    is not preserved in the model's forward.
     """
 )
-class ParakeetEncoderModelOutput(BaseModelOutput):
+class ParakeetEncoderModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.Tensor | None = None
 
 
@@ -843,11 +844,9 @@ class ParakeetTDTDecoder(nn.Module):
         cell_state: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         input_ids = input_ids.to(self.decoder_projector.weight.device)
-        if hidden_state is not None and cell_state is not None:
-            hidden_cell_states = (hidden_state, cell_state)
-        else:
-            hidden_cell_states = None
-
+        hidden_cell_states = (
+            (hidden_state, cell_state) if hidden_state is not None and cell_state is not None else None
+        )
         embeddings = self.embedding(input_ids)
         lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
         decoder_output = self.decoder_projector(lstm_output)
@@ -859,23 +858,16 @@ class ParakeetTDTJointNetwork(nn.Module):
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__()
-        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        # Combined head outputs both token logits and duration logits
         self.head = nn.Linear(config.decoder_hidden_size, config.vocab_size + len(config.durations))
         self.vocab_size = config.vocab_size
 
     def forward(
         self,
         decoder_output: torch.Tensor,
-        encoder_output: torch.Tensor | None = None,
-        projected_encoder_output: torch.Tensor | None = None,
+        encoder_output: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if projected_encoder_output is None:
-            if encoder_output is None:
-                raise ValueError("Either encoder_output or projected_encoder_output must be provided.")
-            projected_encoder_output = self.encoder_projector(encoder_output)
-        joint_output = self.activation(projected_encoder_output + decoder_output)
+        joint_output = self.activation(encoder_output + decoder_output)
         logits = self.head(joint_output)
         token_logits = logits[..., : self.vocab_size]
         duration_logits = logits[..., self.vocab_size :]
@@ -885,24 +877,19 @@ class ParakeetTDTJointNetwork(nn.Module):
 @dataclass
 class ParakeetTDTGenerateOutput(ModelOutput):
     """
-    Outputs of Parakeet TDT model generation.
+    Outputs of Parakeet TDT generation.
 
     Args:
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
-            if all batches finished early due to the `eos_token_id`.
+            Generated token sequences.
         token_timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token-level timestamps in seconds indicating when each token was emitted. Only returned when
-            `return_timestamps=True` is passed to `generate()`.
+            Per-token frame indices. Returned when `return_timestamps=True`.
         token_durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Token-level durations in frames indicating how many frames each token spans. Only returned when
-            `return_timestamps=True` is passed to `generate()`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
-            `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions from the encoder.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple of tuples (one element for each layer of the encoder) of `torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`. Hidden states from the encoder.
+            Per-token durations in frames. Returned when `return_timestamps=True`.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*):
+            Encoder attention weights per layer.
+        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
+            Encoder hidden states per layer.
     """
 
     sequences: torch.LongTensor
@@ -915,26 +902,30 @@ class ParakeetTDTGenerateOutput(ModelOutput):
 @dataclass
 class ParakeetTDTOutput(ModelOutput):
     """
-    Output structure for Parakeet TDT forward pass.
+    Output of the Parakeet TDT forward pass.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Last hidden state from the encoder.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Hidden states from the encoder.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Attention mask for the encoder.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, vocab_size + num_durations)`, *optional*):
-            Joint token and duration logits computed from the encoder and decoder outputs. Only returned when `labels` are provided to the forward pass.
         loss (`torch.FloatTensor`, *optional*):
-            The loss computed from the TDT loss function. Only returned when `labels` are provided to the forward pass.
+            TDT loss, returned when `labels` are provided.
+        logits (`torch.FloatTensor`):
+            Joint token and duration logits. Shape is `(batch, T, U+1, vocab+durations)` for training
+            or `(batch, 1, 1, vocab+durations)` for single-step inference.
+        encoder_outputs (`ParakeetEncoderModelOutput`, *optional*):
+            Encoder outputs with `pooler_output` containing projected hidden states.
+        decoder_output (`torch.FloatTensor`, *optional*):
+            Decoder LSTM output, reused during blank-skipping in generation.
+        decoder_hidden_state (`torch.FloatTensor`, *optional*):
+            Decoder LSTM hidden state.
+        decoder_cell_state (`torch.FloatTensor`, *optional*):
+            Decoder LSTM cell state.
     """
 
-    last_hidden_state: torch.Tensor
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
+    encoder_outputs: "ParakeetEncoderModelOutput | None" = None
+    decoder_output: torch.FloatTensor | None = None
+    decoder_hidden_state: torch.FloatTensor | None = None
+    decoder_cell_state: torch.FloatTensor | None = None
 
 
 # TODO (ebezzam) eventually move to audio_utils or loss_utils for common usage?
@@ -1077,22 +1068,56 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
+        self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.decoder = ParakeetTDTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
         self.loss_function = tdt_loss
 
         self.post_init()
 
+    def get_audio_features(
+        self,
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ParakeetEncoderModelOutput:
+        encoder_outputs = self.encoder(
+            input_features=input_features,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        encoder_outputs.pooler_output = self.encoder_projector(encoder_outputs.last_hidden_state)
+        return encoder_outputs
+
     @auto_docstring
     @can_return_tuple
     def forward(
         self,
-        input_features: torch.Tensor,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        input_ids: torch.LongTensor | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | None = None,
+        encoder_frame_ids: torch.LongTensor | None = None,
+        decoder_output: torch.Tensor | None = None,
+        decoder_hidden_state: torch.Tensor | None = None,
+        decoder_cell_state: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTOutput:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            Decoder input token ids for single-step inference.
+        encoder_outputs (`ParakeetEncoderModelOutput`, *optional*):
+            Pre-computed encoder outputs with `pooler_output` containing projected hidden states.
+        encoder_frame_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Encoder frame indices for the joint network during generation.
+        decoder_output (`torch.Tensor`, *optional*):
+            Pre-computed decoder LSTM output, reused during blank-skipping.
+        decoder_hidden_state (`torch.Tensor`, *optional*):
+            Decoder LSTM hidden state from a previous step.
+        decoder_cell_state (`torch.Tensor`, *optional*):
+            Decoder LSTM cell state from a previous step.
+
         Example:
 
         ```python
@@ -1110,32 +1135,58 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         >>> outputs = model(**inputs)
         ```
         """
+        # 1. Encode + project
+        if encoder_outputs is None:
+            if input_features is None:
+                raise ValueError("Either `input_features` or `encoder_outputs` must be provided.")
+            if labels is not None:
+                kwargs.setdefault("output_attention_mask", True)
+            encoder_outputs = self.get_audio_features(
+                input_features=input_features,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        projected_encoder_output = encoder_outputs.pooler_output
+
         if labels is not None:
-            kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-
-        loss, logits = None, None
-        if labels is not None:
-            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
-
-            # Prepare labels for TDT loss
-            target_lengths = (labels != self.config.pad_token_id).sum(-1)
-
-            # Get joint decoder outputs
+            # for training: [blank, labels...] for training
             blank_tokens = torch.full(
                 (labels.shape[0], 1), self.config.blank_token_id, dtype=labels.dtype, device=labels.device
             )
-            decoder_input = torch.cat([blank_tokens, labels], dim=1)
-            decoder_output, _, _ = self.decoder(decoder_input)
-            token_logits, duration_logits = self.joint(
-                decoder_output=decoder_output.unsqueeze(1),
-                encoder_output=encoder_outputs.last_hidden_state.unsqueeze(2),
+            input_ids = torch.cat([blank_tokens, labels], dim=1)
+        elif input_ids is None and decoder_output is None:
+            # for inference: start with blank token if not provided
+            input_ids = torch.full(
+                (projected_encoder_output.shape[0], 1),
+                self.config.blank_token_id,
+                dtype=torch.long,
+                device=projected_encoder_output.device,
             )
 
+        if decoder_output is None:
+            decoder_output, decoder_hidden_state, decoder_cell_state = self.decoder(
+                input_ids, decoder_hidden_state, decoder_cell_state
+            )
+
+        if encoder_frame_ids is not None:
+            batch_indices = torch.arange(projected_encoder_output.shape[0], device=projected_encoder_output.device)
+            safe_frame_ids = torch.clamp(encoder_frame_ids, max=projected_encoder_output.shape[1] - 1)
+            encoder_for_joint = projected_encoder_output[batch_indices, safe_frame_ids].unsqueeze(1)
+            decoder_for_joint = decoder_output
+        else:
+            encoder_for_joint = projected_encoder_output.unsqueeze(2)
+            decoder_for_joint = decoder_output.unsqueeze(1)
+
+        token_logits, duration_logits = self.joint(
+            decoder_output=decoder_for_joint,
+            encoder_output=encoder_for_joint,
+        )
+        logits = torch.cat([token_logits, duration_logits], dim=-1)
+
+        loss = None
+        if labels is not None:
+            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
+            target_lengths = (labels != self.config.pad_token_id).sum(-1)
             loss = self.loss_function(
                 token_logits=token_logits.float(),
                 duration_logits=duration_logits.float(),
@@ -1146,14 +1197,14 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 durations=self.config.durations,
                 reduction="mean",
             )
-            logits = torch.cat([token_logits, duration_logits], dim=-1)
 
         return ParakeetTDTOutput(
             loss=loss,
             logits=logits,
-            last_hidden_state=encoder_outputs.last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            encoder_outputs=encoder_outputs,
+            decoder_output=decoder_output,
+            decoder_hidden_state=decoder_hidden_state,
+            decoder_cell_state=decoder_cell_state,
         )
 
     @torch.no_grad()
@@ -1200,39 +1251,35 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         >>> print("Timestamped tokens:", decoded_timestamps)
         ```
         """
-        kwargs["return_dict"] = True
         if return_timestamps:
             return_dict_in_generate = True
-        outputs = self.forward(
+
+        # Initial forward: encode + blank prediction
+        outputs: ParakeetTDTOutput = self.forward(
             input_features=input_features,
             attention_mask=attention_mask,
+            return_dict=True,
             **kwargs,
         )
+        encoder_outputs = outputs.encoder_outputs
+        batch_size, sequence_length = encoder_outputs.pooler_output.shape[:2]
+        device = encoder_outputs.pooler_output.device
 
-        # greedy TDT decoding, `GreedyBatchedTDTLabelLoopingComputer.torch_impl` in NeMo
-        encoder_hidden_states = outputs.last_hidden_state
-        batch_size, sequence_length = encoder_hidden_states.shape[:2]
-        device = encoder_hidden_states.device
         if attention_mask is not None:
             encoder_attention_mask = self._get_output_attention_mask(attention_mask, target_length=sequence_length)
             valid_lengths = encoder_attention_mask.sum(dim=1).int()
         else:
             valid_lengths = torch.full((batch_size,), sequence_length, dtype=torch.int, device=device)
+        decoder_output = outputs.decoder_output
+        decoder_hidden_state = outputs.decoder_hidden_state
+        decoder_cell_state = outputs.decoder_cell_state
 
-        # Initialization
-        prev_tokens = torch.full((batch_size, 1), self.config.blank_token_id, dtype=torch.long, device=device)
-        decoder_output, hidden_state, cell_state = self.decoder(prev_tokens)
-        decoder_output = decoder_output.to(device)
-        hidden_state = hidden_state.to(device)
-        cell_state = cell_state.to(device)
-
-        batch_indices = torch.arange(batch_size, device=device)
+        vocab_size = self.config.vocab_size
         time_indices = torch.zeros(batch_size, dtype=torch.long, device=device)
         time_indices_current_labels = torch.zeros(batch_size, dtype=torch.long, device=device)
         active_mask = time_indices < valid_lengths
         active_mask_prev = torch.zeros_like(active_mask)
 
-        zeros_symbols = torch.zeros(batch_size, dtype=torch.long, device=device)
         symbols_per_step = torch.zeros(batch_size, dtype=torch.long, device=device)
         last_label_time = torch.full((batch_size,), -1, dtype=torch.long, device=device)
         max_output_len = sequence_length * self.config.max_symbols_per_step
@@ -1244,48 +1291,44 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             all_frame_indices = torch.zeros((batch_size, max_output_len), dtype=torch.long, device=device)
             all_durations_tensor = torch.zeros((batch_size, max_output_len), dtype=torch.long, device=device)
 
-        # separately call encoder projection to avoid redundant computation inside loop
-        projected_encoder_output = self.joint.encoder_projector(encoder_hidden_states).to(device)
-
         while active_mask.any():
             active_mask_prev.copy_(active_mask)
-            safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
-            projected_encoder_frames = projected_encoder_output[batch_indices, safe_time_indices].unsqueeze(1)
 
-            token_logits, duration_logits = self.joint(
-                decoder_output,
-                projected_encoder_output=projected_encoder_frames,
+            outputs = self.forward(
+                encoder_outputs=encoder_outputs,
+                encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
+                decoder_output=decoder_output,
+                decoder_hidden_state=decoder_hidden_state,
+                decoder_cell_state=decoder_cell_state,
+                return_dict=True,
             )
-            token_logits = token_logits.squeeze(1).to(device)
-            duration_logits = duration_logits.squeeze(1).to(device)
-            tokens = token_logits.argmax(dim=-1)
-            durations = duration_logits.argmax(dim=-1)
+            logits = outputs.logits.squeeze(1)
+            tokens = logits[..., :vocab_size].argmax(dim=-1)
+            durations = logits[..., vocab_size:].argmax(dim=-1)
 
-            # Force blank duration >= 1 to guarantee forward progress
             blank_mask = active_mask_prev & (tokens == self.config.blank_token_id)
-            durations = durations.masked_fill(blank_mask & (durations == 0), 1)
+            durations = durations.masked_fill(blank_mask & (durations == 0), 1)  # ensure forward progress
 
-            # Save pre-advance position for timestamp recording
             time_indices_current_labels.copy_(time_indices)
-
-            # Advance time for all active elements
             time_indices = time_indices + durations.masked_fill(~active_mask, 0)
-            safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
             active_mask = time_indices < valid_lengths
             advance_mask = active_mask & blank_mask
 
-            # Inner loop: skip past consecutive blanks to find non-blank
+            # Skip consecutive blanks
             while advance_mask.any():
                 time_indices_current_labels = torch.where(advance_mask, time_indices, time_indices_current_labels)
-                projected_encoder_frames = projected_encoder_output[batch_indices, safe_time_indices].unsqueeze(1)
 
-                token_logits, duration_logits = self.joint(
-                    decoder_output, projected_encoder_output=projected_encoder_frames
+                outputs = self.forward(
+                    encoder_outputs=encoder_outputs,
+                    encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
+                    decoder_output=decoder_output,
+                    decoder_hidden_state=decoder_hidden_state,
+                    decoder_cell_state=decoder_cell_state,
+                    return_dict=True,
                 )
-                token_logits = token_logits.squeeze(1).to(device)
-                duration_logits = duration_logits.squeeze(1).to(device)
-                more_tokens = token_logits.argmax(dim=-1)
-                more_durations = duration_logits.argmax(dim=-1)
+                logits = outputs.logits.squeeze(1)
+                more_tokens = logits[..., :vocab_size].argmax(dim=-1)
+                more_durations = logits[..., vocab_size:].argmax(dim=-1)
                 tokens = torch.where(advance_mask, more_tokens, tokens)
                 durations = torch.where(advance_mask, more_durations, durations)
 
@@ -1293,11 +1336,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 durations = durations.masked_fill(blank_mask & (durations == 0), 1)
 
                 time_indices = torch.where(advance_mask, time_indices + durations, time_indices)
-                safe_time_indices = torch.clamp(time_indices, max=sequence_length - 1)
                 active_mask = time_indices < valid_lengths
                 advance_mask = active_mask & blank_mask
 
-            # Record results for non-blank tokens found
             emit_mask = active_mask_prev & (tokens != self.config.blank_token_id)
             emit_indices = token_counts[emit_mask]
             all_tokens_tensor[emit_mask, emit_indices] = tokens[emit_mask]
@@ -1306,22 +1347,24 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 all_durations_tensor[emit_mask, emit_indices] = durations[emit_mask]
             token_counts += emit_mask.long()
 
-            new_decoder_output, new_hidden_state, new_cell_state = self.decoder(
-                tokens.unsqueeze(1), hidden_state, cell_state
+            # Update decoder state for emitted tokens
+            outputs = self.forward(
+                input_ids=tokens.unsqueeze(1),
+                encoder_outputs=encoder_outputs,
+                encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
+                decoder_hidden_state=decoder_hidden_state,
+                decoder_cell_state=decoder_cell_state,
+                return_dict=True,
             )
-            new_decoder_output = new_decoder_output.to(device)
-            new_hidden_state = new_hidden_state.to(device)
-            new_cell_state = new_cell_state.to(device)
 
-            emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
-            decoder_output = torch.where(emit_mask_expanded, new_decoder_output, decoder_output)
             emit_mask_state = emit_mask.view(1, batch_size, 1)
-            hidden_state = torch.where(emit_mask_state, new_hidden_state, hidden_state)
-            cell_state = torch.where(emit_mask_state, new_cell_state, cell_state)
+            decoder_hidden_state = torch.where(emit_mask_state, outputs.decoder_hidden_state, decoder_hidden_state)
+            decoder_cell_state = torch.where(emit_mask_state, outputs.decoder_cell_state, decoder_cell_state)
+            emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
+            decoder_output = torch.where(emit_mask_expanded, outputs.decoder_output, decoder_output)
 
-            # Track symbols emitted per time step; force advance when max_symbols reached
             time_changed = time_indices_current_labels != last_label_time
-            symbols_per_step = torch.where(time_changed, zeros_symbols, symbols_per_step)
+            symbols_per_step = torch.where(time_changed, 0, symbols_per_step)
             symbols_per_step = torch.where(emit_mask, symbols_per_step + 1, symbols_per_step)
             last_label_time = torch.where(emit_mask, time_indices_current_labels, last_label_time)
             force_advance = active_mask & (symbols_per_step >= self.config.max_symbols_per_step)
@@ -1329,7 +1372,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             symbols_per_step = symbols_per_step.masked_fill(force_advance, 0)
             active_mask = time_indices < valid_lengths
 
-        # Guard against edge case where no tokens were decoded (e.g. silent audio)
         max_len = max(token_counts.max().item(), 1)
         sequences = all_tokens_tensor[:, :max_len]
         token_timestamps, token_durations = None, None
@@ -1342,8 +1384,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 sequences=sequences,
                 token_timestamps=token_timestamps,
                 token_durations=token_durations,
-                attentions=outputs.attentions,
-                hidden_states=outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+                hidden_states=encoder_outputs.hidden_states,
             )
         return sequences
 

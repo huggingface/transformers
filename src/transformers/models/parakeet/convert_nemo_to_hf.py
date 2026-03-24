@@ -53,7 +53,7 @@ NEMO_TO_HF_WEIGHT_MAPPING = {
 NEMO_TDT_WEIGHT_MAPPING = {
     r"decoder\.prediction\.embed\.": r"decoder.embedding.",
     r"decoder\.prediction\.dec_rnn\.lstm\.": r"decoder.lstm.",
-    r"joint\.enc\.": r"joint.encoder_projector.",
+    r"joint\.enc\.": r"encoder_projector.",
     r"joint\.pred\.": r"decoder.decoder_projector.",
     r"joint\.joint_net\.2\.": r"joint.head.",
 }

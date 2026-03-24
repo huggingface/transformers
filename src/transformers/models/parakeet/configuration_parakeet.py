@@ -249,6 +249,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
         self.initializer_range = self.encoder_config.initializer_range
         self.blank_token_id = blank_token_id
         self.pad_token_id = pad_token_id
+        self.is_encoder_decoder = True
 
         super().__init__(**kwargs)
 
