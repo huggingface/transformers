@@ -820,7 +820,6 @@ class IsaacProcessor(ProcessorMixin):
         chat_template: str | dict[str, str] | None = None,
         vision_token: str = "<image>",
         max_sequence_length: int = 16384,
-        rescale_factor: float | None = None,
     ):
         """
         Args:
@@ -830,8 +829,6 @@ class IsaacProcessor(ProcessorMixin):
                 Placeholder token used inside text prompts to mark image positions.
             max_sequence_length (`int`, *optional*, defaults to 16384):
                 Maximum packed multimodal sequence length produced by the processor.
-            rescale_factor (`float`, *optional*):
-                Deprecated compatibility argument accepted for backward compatibility.
         """
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
@@ -1082,7 +1079,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         image_patch_attention_mask: torch.Tensor | None = None,
         image_token_offsets: torch.Tensor | None = None,
         image_token_lengths: torch.Tensor | None = None,
-        image_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -1097,18 +1093,13 @@ class IsaacModel(Qwen3PreTrainedModel):
                 Start offsets inside each per-image embedding sequence, shaped `(batch_size, max_images)`.
             image_token_lengths (`torch.Tensor`, *optional*):
                 Number of image tokens to gather per image for placeholder scattering, shaped `(batch_size, max_images)`.
-            image_attention_mask (`torch.Tensor`, *optional*):
-                Mask indicating which image slots are populated, shaped `(batch_size, max_images)`.
         """
         image_token_grids = image_token_grids.to(dtype=torch.long)
         patch_attention_mask = image_patch_attention_mask.to(dtype=torch.long)
-        if image_attention_mask is None:
-            if image_token_lengths is not None:
-                image_attention_mask = image_token_lengths > 0
-            else:
-                image_attention_mask = image_token_grids.any(dim=-1)
+        if image_token_lengths is not None:
+            image_attention_mask = image_token_lengths > 0
         else:
-            image_attention_mask = image_attention_mask.to(dtype=torch.bool)
+            image_attention_mask = image_token_grids.any(dim=-1)
 
         torch_compilable_check(
             image_attention_mask.any(),
@@ -1336,7 +1327,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -1361,9 +1351,6 @@ class IsaacModel(Qwen3PreTrainedModel):
                 Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
             vision_token_lengths (`torch.LongTensor`, *optional*):
                 Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
-            image_attention_mask (`torch.LongTensor`, *optional*):
-                Backward-compatible override for populated image slots. When omitted, the model derives it from
-                `vision_token_lengths > 0`.
         """
         created_inputs_embeds = inputs_embeds is None
         if created_inputs_embeds:
@@ -1383,7 +1370,6 @@ class IsaacModel(Qwen3PreTrainedModel):
                 image_patch_attention_mask=image_patch_attention_mask,
                 image_token_offsets=vision_token_offsets,
                 image_token_lengths=vision_token_lengths,
-                image_attention_mask=image_attention_mask,
                 return_dict=True,
             )
             image_features = image_outputs.pooler_output.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
@@ -1459,7 +1445,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -1486,9 +1471,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
         vision_token_lengths (`torch.LongTensor`, *optional*):
             Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
-        image_attention_mask (`torch.LongTensor`, *optional*):
-            Backward-compatible override for populated image slots. When omitted, the model derives it from
-            `vision_token_lengths > 0`.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1498,7 +1480,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             vision_token_grids=vision_token_grids,
             vision_token_offsets=vision_token_offsets,
             vision_token_lengths=vision_token_lengths,
-            image_attention_mask=image_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1534,7 +1515,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        image_attention_mask: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         is_first_iteration=False,
         use_cache=True,

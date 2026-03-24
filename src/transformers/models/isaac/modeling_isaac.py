@@ -1161,7 +1161,6 @@ class IsaacModel(PreTrainedModel):
         image_patch_attention_mask: torch.Tensor | None = None,
         image_token_offsets: torch.Tensor | None = None,
         image_token_lengths: torch.Tensor | None = None,
-        image_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -1176,18 +1175,13 @@ class IsaacModel(PreTrainedModel):
                 Start offsets inside each per-image embedding sequence, shaped `(batch_size, max_images)`.
             image_token_lengths (`torch.Tensor`, *optional*):
                 Number of image tokens to gather per image for placeholder scattering, shaped `(batch_size, max_images)`.
-            image_attention_mask (`torch.Tensor`, *optional*):
-                Mask indicating which image slots are populated, shaped `(batch_size, max_images)`.
         """
         image_token_grids = image_token_grids.to(dtype=torch.long)
         patch_attention_mask = image_patch_attention_mask.to(dtype=torch.long)
-        if image_attention_mask is None:
-            if image_token_lengths is not None:
-                image_attention_mask = image_token_lengths > 0
-            else:
-                image_attention_mask = image_token_grids.any(dim=-1)
+        if image_token_lengths is not None:
+            image_attention_mask = image_token_lengths > 0
         else:
-            image_attention_mask = image_attention_mask.to(dtype=torch.bool)
+            image_attention_mask = image_token_grids.any(dim=-1)
 
         torch_compilable_check(
             image_attention_mask.any(),
@@ -1415,7 +1409,6 @@ class IsaacModel(PreTrainedModel):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -1440,9 +1433,6 @@ class IsaacModel(PreTrainedModel):
                 Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
             vision_token_lengths (`torch.LongTensor`, *optional*):
                 Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
-            image_attention_mask (`torch.LongTensor`, *optional*):
-                Backward-compatible override for populated image slots. When omitted, the model derives it from
-                `vision_token_lengths > 0`.
         """
         created_inputs_embeds = inputs_embeds is None
         if created_inputs_embeds:
@@ -1462,7 +1452,6 @@ class IsaacModel(PreTrainedModel):
                 image_patch_attention_mask=image_patch_attention_mask,
                 image_token_offsets=vision_token_offsets,
                 image_token_lengths=vision_token_lengths,
-                image_attention_mask=image_attention_mask,
                 return_dict=True,
             )
             image_features = image_outputs.pooler_output.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
@@ -1543,7 +1532,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        image_attention_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -1570,9 +1558,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             Start offsets inside the per-image vision embedding sequence, shape `(batch_size, max_images)`.
         vision_token_lengths (`torch.LongTensor`, *optional*):
             Number of vision tokens to consume per image, shape `(batch_size, max_images)`.
-        image_attention_mask (`torch.LongTensor`, *optional*):
-            Backward-compatible override for populated image slots. When omitted, the model derives it from
-            `vision_token_lengths > 0`.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1582,7 +1567,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             vision_token_grids=vision_token_grids,
             vision_token_offsets=vision_token_offsets,
             vision_token_lengths=vision_token_lengths,
-            image_attention_mask=image_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1618,7 +1602,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         image_token_grids: torch.LongTensor | None = None,
         vision_token_offsets: torch.LongTensor | None = None,
         vision_token_lengths: torch.LongTensor | None = None,
-        image_attention_mask: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         is_first_iteration=False,
         use_cache=True,

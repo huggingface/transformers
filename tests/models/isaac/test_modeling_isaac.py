@@ -38,7 +38,7 @@ from transformers import (
 )
 from transformers.image_utils import load_image
 from transformers.masking_utils import create_bidirectional_mask
-from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessor
+from transformers.models.isaac.image_processing_isaac import IsaacImageProcessor
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
@@ -230,7 +230,6 @@ def create_isaac_processor(
     processor_params = {
         "vision_token": isaac_config.vision_token,
         "max_sequence_length": isaac_config.max_sequence_length,
-        "rescale_factor": isaac_config.vision_rescale_factor,
     }
 
     return IsaacProcessor(
@@ -439,7 +438,6 @@ class IsaacModelTester:
                 (self.batch_size, 1, num_image_patches), device=torch_device, dtype=torch.long
             ),
             "image_token_grids": torch.tensor([[[2, 2]]] * self.batch_size, device=torch_device, dtype=torch.long),
-            "image_attention_mask": torch.ones((self.batch_size, 1), device=torch_device, dtype=torch.long),
         }
         if labels is not None:
             inputs_dict["labels"] = labels
@@ -534,7 +532,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             dtype=torch.long,
         )
         image_patch_attention_mask = torch.ones((2, 2, 4), device=torch_device, dtype=torch.long)
-        image_attention_mask = torch.tensor([[1, 1], [1, 0]], device=torch_device, dtype=torch.long)
         image_token_offsets = torch.tensor([[1, 0], [2, 0]], device=torch_device, dtype=torch.long)
         image_token_lengths = torch.tensor([[2, 1], [1, 0]], device=torch_device, dtype=torch.long)
 
@@ -543,7 +540,6 @@ class IsaacModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 pixel_values=pixel_values,
                 image_token_grids=image_token_grids,
                 image_patch_attention_mask=image_patch_attention_mask,
-                image_attention_mask=image_attention_mask,
                 image_token_offsets=image_token_offsets,
                 image_token_lengths=image_token_lengths,
                 return_dict=True,
@@ -1082,7 +1078,7 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         self.checkpoint = _reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
         self.tokenizer = Qwen2Tokenizer.from_pretrained(
-            self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
+            self.checkpoint, trust_remote_code=False, use_fast=False, revision=MODEL_REVISION
         )
         self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
         self.hf_config.vision_config._attn_implementation = "flash_attention_2"
