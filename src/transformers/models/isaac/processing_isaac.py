@@ -303,7 +303,7 @@ class IsaacProcessor(ProcessorMixin):
         vision_image_attention_mask = vision_token_lengths.gt(0).to(dtype=torch.long)
 
         vision_patches = image_inputs["vision_patches"]
-        vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
+        image_patch_attention_mask = image_inputs["image_patch_attention_mask"]
 
         return BatchFeature(
             data={
@@ -311,7 +311,7 @@ class IsaacProcessor(ProcessorMixin):
                 "attention_mask": attention_mask,
                 "mm_token_type_ids": mm_token_type_ids,
                 "vision_patches": vision_patches,
-                "vision_patch_attention_mask": vision_patch_attention_mask,
+                "image_patch_attention_mask": image_patch_attention_mask,
                 "vision_token_grids": vision_token_grids,
                 "vision_token_offsets": vision_token_offsets,
                 "vision_token_lengths": vision_token_lengths,

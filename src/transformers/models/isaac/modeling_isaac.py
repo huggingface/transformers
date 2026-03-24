@@ -458,7 +458,7 @@ class IsaacVisionTransformer(PreTrainedModel):
         self,
         vision_patches: torch.Tensor,
         vision_token_grids: torch.Tensor,
-        vision_patch_attention_mask: torch.Tensor,
+        image_patch_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -467,7 +467,7 @@ class IsaacVisionTransformer(PreTrainedModel):
                 Patches shaped `(num_images, max_patches, patch_dim)`.
             vision_token_grids (`torch.Tensor`):
                 Token grids shaped `(num_images, 2)` with per-image `(H_tokens, W_tokens)`.
-            vision_patch_attention_mask (`torch.Tensor`):
+            image_patch_attention_mask (`torch.Tensor`):
                 Patch mask shaped `(num_images, max_patches)`.
 
         Returns:
@@ -476,13 +476,13 @@ class IsaacVisionTransformer(PreTrainedModel):
         hidden_states = self.embeddings(
             vision_patches,
             vision_token_grids,
-            attention_mask=vision_patch_attention_mask,
+            attention_mask=image_patch_attention_mask,
         )
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
-            attention_mask=vision_patch_attention_mask,
+            attention_mask=image_patch_attention_mask,
         )
         encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask, **kwargs)
         hidden_states = self.post_layernorm(encoder_outputs.last_hidden_state)
@@ -1200,7 +1200,7 @@ class IsaacModel(PreTrainedModel):
         vision_outputs = self.vision_tower(
             vision_patches=pixel_values[image_attention_mask],
             vision_token_grids=image_token_grids[image_attention_mask],
-            vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
+            image_patch_attention_mask=patch_attention_mask[image_attention_mask],
             return_dict=True,
             **kwargs,
         )
@@ -1410,7 +1410,6 @@ class IsaacModel(PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
-        vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
         image_token_grids: torch.LongTensor | None = None,
@@ -1431,10 +1430,8 @@ class IsaacModel(PreTrainedModel):
                 follows the standard convention `0 -> text`, `1 -> image`. Treated as text-only when omitted.
             vision_patches (`torch.FloatTensor`, *optional*):
                 Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
-            vision_patch_attention_mask (`torch.LongTensor`, *optional*):
-                Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
             image_patch_attention_mask (`torch.LongTensor`, *optional*):
-                Alias for `vision_patch_attention_mask`.
+                Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
             vision_token_grids (`torch.LongTensor`, *optional*):
                 Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
             image_token_grids (`torch.LongTensor`, *optional*):
@@ -1462,7 +1459,7 @@ class IsaacModel(PreTrainedModel):
             image_outputs = self.get_image_features(
                 pixel_values=vision_patches,
                 image_token_grids=vision_token_grids,
-                image_patch_attention_mask=vision_patch_attention_mask,
+                image_patch_attention_mask=image_patch_attention_mask,
                 image_token_offsets=vision_token_offsets,
                 image_token_lengths=vision_token_lengths,
                 image_attention_mask=image_attention_mask,
@@ -1541,7 +1538,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
         image_token_grids: torch.LongTensor | None = None,
@@ -1564,10 +1560,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
         pixel_values (`torch.FloatTensor`, *optional*):
             Alias for `vision_patches` accepted by generic image-feature and generation helpers.
-        vision_patch_attention_mask (`torch.LongTensor`, *optional*):
-            Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
         image_patch_attention_mask (`torch.LongTensor`, *optional*):
-            Alias for `vision_patch_attention_mask`.
+            Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
         vision_token_grids (`torch.LongTensor`, *optional*):
             Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
         image_token_grids (`torch.LongTensor`, *optional*):
@@ -1584,7 +1578,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             mm_token_type_ids=mm_token_type_ids,
             vision_patches=vision_patches,
-            vision_patch_attention_mask=vision_patch_attention_mask,
+            image_patch_attention_mask=image_patch_attention_mask,
             vision_token_grids=vision_token_grids,
             vision_token_offsets=vision_token_offsets,
             vision_token_lengths=vision_token_lengths,
@@ -1619,7 +1613,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
         image_token_grids: torch.LongTensor | None = None,
@@ -1632,9 +1625,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> dict[str, Any]:
         if vision_patches is None:
-            vision_patch_attention_mask = (
-                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
-            )
             vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -1649,7 +1639,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         multimodal_inputs = {
             "mm_token_type_ids": mm_token_type_ids,
             "vision_patches": vision_patches,
-            "vision_patch_attention_mask": vision_patch_attention_mask,
+            "image_patch_attention_mask": image_patch_attention_mask,
             "vision_token_grids": vision_token_grids,
             "vision_token_offsets": vision_token_offsets,
             "vision_token_lengths": vision_token_lengths,

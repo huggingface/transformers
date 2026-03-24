@@ -25,8 +25,9 @@ from typing import Any
 
 from ... import TorchvisionBackend
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import ImagesKwargs, SizeDict, group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, PILImageResampling, make_nested_list_of_images
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, make_nested_list_of_images
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
@@ -177,7 +178,7 @@ class IsaacImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     model_input_names = [
         "vision_patches",
-        "vision_patch_attention_mask",
+        "image_patch_attention_mask",
         "vision_token_grids",
     ]
     valid_kwargs = IsaacImageProcessorKwargs
@@ -237,7 +238,7 @@ class IsaacImageProcessor(TorchvisionBackend):
             "vision_patches": torch.zeros(
                 (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
             ),
-            "vision_patch_attention_mask": torch.zeros(
+            "image_patch_attention_mask": torch.zeros(
                 (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
             ),
             "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
@@ -249,7 +250,7 @@ class IsaacImageProcessor(TorchvisionBackend):
             for image_idx, (patches, token_grid) in enumerate(zip(sample_patches, sample_token_grids, strict=True)):
                 patch_count = int(patches.shape[0])
                 tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
-                tensors["vision_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
+                tensors["image_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
                 tensors["vision_token_grids"][batch_idx, image_idx] = token_grid
 
         return tensors
@@ -281,7 +282,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         if all(len(sample_images) == 0 for sample_images in images):
             tensors = {
                 "vision_patches": torch.zeros((batch_size, 0, 0, 0), dtype=torch.float32),
-                "vision_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
+                "image_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
                 "vision_token_grids": torch.zeros((batch_size, 0, 2), dtype=torch.long),
             }
             return BatchFeature(data=tensors, tensor_type=return_tensors)

@@ -244,7 +244,7 @@ def to_model_multimodal_inputs(processor_output, device):
     keys = (
         "mm_token_type_ids",
         "vision_patches",
-        "vision_patch_attention_mask",
+        "image_patch_attention_mask",
         "vision_token_grids",
         "vision_token_offsets",
         "vision_token_lengths",

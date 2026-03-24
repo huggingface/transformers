@@ -26,17 +26,8 @@ from ... import initialization as init
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
-from ...image_processing_utils_fast import (
-    ImagesKwargs,
-    SizeDict,
-    group_images_by_shape,
-    reorder_images,
-)
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    make_nested_list_of_images,
-)
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, make_nested_list_of_images
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -45,7 +36,7 @@ from ...models.qwen3.modeling_qwen3 import (
     Qwen3ForCausalLM,
     Qwen3PreTrainedModel,
 )
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import TensorType, auto_docstring, torch_compilable_check
 from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
 from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
@@ -262,7 +253,7 @@ class IsaacImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BILINEAR
     model_input_names = [
         "vision_patches",
-        "vision_patch_attention_mask",
+        "image_patch_attention_mask",
         "vision_token_grids",
     ]
     valid_kwargs = IsaacImageProcessorKwargs
@@ -322,7 +313,7 @@ class IsaacImageProcessor(TorchvisionBackend):
             "vision_patches": torch.zeros(
                 (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
             ),
-            "vision_patch_attention_mask": torch.zeros(
+            "image_patch_attention_mask": torch.zeros(
                 (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
             ),
             "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
@@ -334,7 +325,7 @@ class IsaacImageProcessor(TorchvisionBackend):
             for image_idx, (patches, token_grid) in enumerate(zip(sample_patches, sample_token_grids, strict=True)):
                 patch_count = int(patches.shape[0])
                 tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
-                tensors["vision_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
+                tensors["image_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
                 tensors["vision_token_grids"][batch_idx, image_idx] = token_grid
 
         return tensors
@@ -366,7 +357,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         if all(len(sample_images) == 0 for sample_images in images):
             tensors = {
                 "vision_patches": torch.zeros((batch_size, 0, 0, 0), dtype=torch.float32),
-                "vision_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
+                "image_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
                 "vision_token_grids": torch.zeros((batch_size, 0, 2), dtype=torch.long),
             }
             return BatchFeature(data=tensors, tensor_type=return_tensors)
@@ -605,7 +596,7 @@ class IsaacVisionTransformer(PreTrainedModel):
         self,
         vision_patches: torch.Tensor,
         vision_token_grids: torch.Tensor,
-        vision_patch_attention_mask: torch.Tensor,
+        image_patch_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -614,7 +605,7 @@ class IsaacVisionTransformer(PreTrainedModel):
                 Patches shaped `(num_images, max_patches, patch_dim)`.
             vision_token_grids (`torch.Tensor`):
                 Token grids shaped `(num_images, 2)` with per-image `(H_tokens, W_tokens)`.
-            vision_patch_attention_mask (`torch.Tensor`):
+            image_patch_attention_mask (`torch.Tensor`):
                 Patch mask shaped `(num_images, max_patches)`.
 
         Returns:
@@ -623,13 +614,13 @@ class IsaacVisionTransformer(PreTrainedModel):
         hidden_states = self.embeddings(
             vision_patches,
             vision_token_grids,
-            attention_mask=vision_patch_attention_mask,
+            attention_mask=image_patch_attention_mask,
         )
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
-            attention_mask=vision_patch_attention_mask,
+            attention_mask=image_patch_attention_mask,
         )
         encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask, **kwargs)
         hidden_states = self.post_layernorm(encoder_outputs.last_hidden_state)
@@ -1001,7 +992,7 @@ class IsaacProcessor(ProcessorMixin):
         vision_image_attention_mask = vision_token_lengths.gt(0).to(dtype=torch.long)
 
         vision_patches = image_inputs["vision_patches"]
-        vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
+        image_patch_attention_mask = image_inputs["image_patch_attention_mask"]
 
         return BatchFeature(
             data={
@@ -1009,7 +1000,7 @@ class IsaacProcessor(ProcessorMixin):
                 "attention_mask": attention_mask,
                 "mm_token_type_ids": mm_token_type_ids,
                 "vision_patches": vision_patches,
-                "vision_patch_attention_mask": vision_patch_attention_mask,
+                "image_patch_attention_mask": image_patch_attention_mask,
                 "vision_token_grids": vision_token_grids,
                 "vision_token_offsets": vision_token_offsets,
                 "vision_token_lengths": vision_token_lengths,
@@ -1130,7 +1121,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         vision_outputs = self.vision_tower(
             vision_patches=pixel_values[image_attention_mask],
             vision_token_grids=image_token_grids[image_attention_mask],
-            vision_patch_attention_mask=patch_attention_mask[image_attention_mask],
+            image_patch_attention_mask=patch_attention_mask[image_attention_mask],
             return_dict=True,
             **kwargs,
         )
@@ -1340,7 +1331,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
-        vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
         image_token_grids: torch.LongTensor | None = None,
@@ -1361,10 +1351,8 @@ class IsaacModel(Qwen3PreTrainedModel):
                 follows the standard convention `0 -> text`, `1 -> image`. Treated as text-only when omitted.
             vision_patches (`torch.FloatTensor`, *optional*):
                 Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
-            vision_patch_attention_mask (`torch.LongTensor`, *optional*):
-                Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
             image_patch_attention_mask (`torch.LongTensor`, *optional*):
-                Alias for `vision_patch_attention_mask`.
+                Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
             vision_token_grids (`torch.LongTensor`, *optional*):
                 Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
             image_token_grids (`torch.LongTensor`, *optional*):
@@ -1392,7 +1380,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             image_outputs = self.get_image_features(
                 pixel_values=vision_patches,
                 image_token_grids=vision_token_grids,
-                image_patch_attention_mask=vision_patch_attention_mask,
+                image_patch_attention_mask=image_patch_attention_mask,
                 image_token_offsets=vision_token_offsets,
                 image_token_lengths=vision_token_lengths,
                 image_attention_mask=image_attention_mask,
@@ -1466,7 +1454,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
         image_token_grids: torch.LongTensor | None = None,
@@ -1489,10 +1476,8 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             Padded per-image patch vectors of shape `(batch_size, max_images, max_patches, patch_dim)`.
         pixel_values (`torch.FloatTensor`, *optional*):
             Alias for `vision_patches` accepted by generic image-feature and generation helpers.
-        vision_patch_attention_mask (`torch.LongTensor`, *optional*):
-            Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
         image_patch_attention_mask (`torch.LongTensor`, *optional*):
-            Alias for `vision_patch_attention_mask`.
+            Mask for valid patch entries in `vision_patches`, shaped `(batch_size, max_images, max_patches)`.
         vision_token_grids (`torch.LongTensor`, *optional*):
             Per-image patch grids `(h, w)` with shape `(batch_size, max_images, 2)`.
         image_token_grids (`torch.LongTensor`, *optional*):
@@ -1509,7 +1494,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             input_ids=input_ids,
             mm_token_type_ids=mm_token_type_ids,
             vision_patches=vision_patches,
-            vision_patch_attention_mask=vision_patch_attention_mask,
+            image_patch_attention_mask=image_patch_attention_mask,
             vision_token_grids=vision_token_grids,
             vision_token_offsets=vision_token_offsets,
             vision_token_lengths=vision_token_lengths,
@@ -1544,7 +1529,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         mm_token_type_ids: torch.LongTensor | None = None,
         vision_patches: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        vision_patch_attention_mask: torch.Tensor | None = None,
         image_patch_attention_mask: torch.Tensor | None = None,
         vision_token_grids: torch.LongTensor | None = None,
         image_token_grids: torch.LongTensor | None = None,
@@ -1557,9 +1541,6 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         **kwargs,
     ) -> dict[str, Any]:
         if vision_patches is None:
-            vision_patch_attention_mask = (
-                image_patch_attention_mask if vision_patch_attention_mask is None else vision_patch_attention_mask
-            )
             vision_token_grids = image_token_grids if vision_token_grids is None else vision_token_grids
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -1574,7 +1555,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
         multimodal_inputs = {
             "mm_token_type_ids": mm_token_type_ids,
             "vision_patches": vision_patches,
-            "vision_patch_attention_mask": vision_patch_attention_mask,
+            "image_patch_attention_mask": image_patch_attention_mask,
             "vision_token_grids": vision_token_grids,
             "vision_token_offsets": vision_token_offsets,
             "vision_token_lengths": vision_token_lengths,

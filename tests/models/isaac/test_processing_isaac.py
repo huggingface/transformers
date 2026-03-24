@@ -43,7 +43,7 @@ ISAAC_OUTPUT_KEYS = {
     "attention_mask",
     "mm_token_type_ids",
     "vision_patches",
-    "vision_patch_attention_mask",
+    "image_patch_attention_mask",
     "vision_token_grids",
     "vision_token_offsets",
     "vision_token_lengths",
@@ -241,7 +241,7 @@ def _assert_common(outputs, batch_size=1):
     attention_mask = outputs["attention_mask"]
     mm_token_type_ids = outputs["mm_token_type_ids"]
     vision_patches = outputs["vision_patches"]
-    vision_patch_attention_mask = outputs["vision_patch_attention_mask"]
+    image_patch_attention_mask = outputs["image_patch_attention_mask"]
     vision_token_grids = outputs["vision_token_grids"]
     vision_token_offsets = outputs["vision_token_offsets"]
     vision_token_lengths = outputs["vision_token_lengths"]
@@ -254,7 +254,7 @@ def _assert_common(outputs, batch_size=1):
     assert attention_mask.dtype == torch.long
     assert mm_token_type_ids.dtype == torch.long
 
-    assert vision_patches.shape[:2] == vision_patch_attention_mask.shape[:2]
+    assert vision_patches.shape[:2] == image_patch_attention_mask.shape[:2]
     assert vision_patches.shape[0] == batch_size
     assert vision_token_grids.shape == (batch_size, vision_patches.shape[1], 2)
     assert vision_token_offsets.shape == (batch_size, vision_patches.shape[1])
@@ -265,7 +265,7 @@ def _assert_common(outputs, batch_size=1):
 
 
 def _assert_no_vision(outputs, batch_index=0):
-    assert outputs["vision_patch_attention_mask"][batch_index].sum().item() == 0
+    assert outputs["image_patch_attention_mask"][batch_index].sum().item() == 0
     assert outputs["vision_token_grids"][batch_index].sum().item() == 0
     assert outputs["vision_token_offsets"][batch_index].sum().item() == 0
     assert outputs["vision_token_lengths"][batch_index].sum().item() == 0
@@ -277,7 +277,7 @@ def _assert_vision_segments(outputs, expected_segments, batch_index=0):
     active_segments = int(outputs["vision_image_attention_mask"][batch_index].sum().item())
     assert active_segments == expected_segments
     assert torch.all(outputs["vision_token_lengths"][batch_index, :expected_segments] > 0)
-    assert torch.all(outputs["vision_patch_attention_mask"][batch_index, :expected_segments].sum(dim=-1) > 0)
+    assert torch.all(outputs["image_patch_attention_mask"][batch_index, :expected_segments].sum(dim=-1) > 0)
 
 
 def _count_modality(outputs, modality_value, batch_index=0):
