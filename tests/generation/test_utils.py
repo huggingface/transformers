@@ -2567,15 +2567,16 @@ class GenerationTesterMixin:
 
         # (batch, kv heads, seq_length, head_dim)
         # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
-        num_heads = getattr(config, "num_key_value_heads", getattr(config, "num_attention_heads", 1))
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
-        head_dim = getattr(config, "head_dim", hidden_size // num_heads)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
         attention_shape = (
-            (batch_size, num_heads, seq_length, head_dim)
+            (batch_size, num_kv_heads, seq_length, head_dim)
             if seq_length is not None
-            else (batch_size, num_heads, head_dim)
+            else (batch_size, num_kv_heads, head_dim)
         )
 
         # For mamba layers
