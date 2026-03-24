@@ -18,7 +18,6 @@ import unittest
 
 import pytest
 from huggingface_hub.errors import StrictDataclassClassValidationError
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, NemotronHConfig, NemotronHForCausalLM, is_torch_available
 from transformers.testing_utils import (
