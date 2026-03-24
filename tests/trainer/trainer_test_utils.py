@@ -334,8 +334,8 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = nn.Parameter(torch.tensor(config.a).float())
-            self.b = nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.as_tensor(config.a).float())
+            self.b = nn.Parameter(torch.as_tensor(config.b).float())
             self.double_output = config.double_output
             self.post_init()
 
@@ -385,8 +385,8 @@ if is_torch_available():
 
         def __init__(self, config):
             super().__init__(config)
-            self.a = nn.Parameter(torch.tensor(config.a).float())
-            self.b = nn.Parameter(torch.tensor(config.b).float())
+            self.a = nn.Parameter(torch.as_tensor(config.a).float())
+            self.b = nn.Parameter(torch.as_tensor(config.b).float())
             self.random_torch = config.random_torch
             self.post_init()
 

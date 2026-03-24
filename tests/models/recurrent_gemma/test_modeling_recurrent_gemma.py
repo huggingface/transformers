@@ -42,6 +42,10 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
 
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.block_types = ("recurrent", "attention")
+
 
 @require_torch
 class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
 import json
 import os
 import re
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
+from packaging import version
 from torch import nn
 
 from transformers import (
@@ -463,7 +465,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
@@ -484,7 +485,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -503,7 +503,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -529,7 +528,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear4bit")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -547,7 +545,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 module = peft_model.model.decoder.layers[0].self_attn.v_proj
                 self.assertTrue(module.__class__.__name__ == "Linear8bitLt")
-                self.assertTrue(peft_model.hf_device_map is not None)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)
@@ -934,6 +931,42 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     output_peft = model(inputs).logits
                 # should be different
                 assert not torch.allclose(output_base, output_peft, atol=atol, rtol=rtol)
+
+    def test_mixtral_lora_conversion(self):
+        if version.parse(importlib.metadata.version("peft")) < version.parse("0.19.0"):
+            self.skipTest("For this test to pass, PEFT 0.19 is required.")
+
+        inputs = torch.arange(10).view(1, -1).to(0)
+        model_name = "hf-internal-testing/Mixtral-tiny"
+        adapter_name = "peft-internal-testing/mixtral-pre-v5-lora"
+
+        # original logits were:
+        # tensor([[[ 0.2676,  0.3870,  0.2956,  ...,  0.4624,  0.1966,  0.2539],
+        #          [-0.6706, -0.0969, -0.6240,  ..., -0.0201,  0.7099, -0.3099],
+        #          [ 0.0663,  0.1653,  0.7189,  ...,  0.5905,  0.0649,  0.5839],
+        #          ...,
+        #          [-0.2712, -0.6451, -0.0219,  ..., -0.4344,  0.5471, -0.9355],
+        #          [-0.3607,  0.4526,  0.2750,  ...,  0.1082,  0.7179,  0.8487],
+        #          [ 0.5826, -0.1407, -0.3131,  ...,  0.1026,  0.6878, -0.3382]]],
+        #        device='cuda:0')
+        expected_logits_0_to_3 = torch.Tensor(
+            [
+                [0.2676, 0.3870, 0.2956],
+                [-0.6706, -0.0969, -0.6240],
+                [0.0663, 0.1653, 0.7189],
+            ]
+        ).to(device=torch_device, dtype=torch.float16)
+
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        model.load_adapter(adapter_name)
+        model.to(torch_device)
+        model.eval()
+        with torch.inference_mode():
+            output = model(inputs).logits
+
+        # a little bit of deviation but that's fine
+        atol, rtol = 1e-3, 1e-4
+        assert torch.allclose(output[0, :3, :3], expected_logits_0_to_3, atol=atol, rtol=rtol)
 
 
 @require_peft

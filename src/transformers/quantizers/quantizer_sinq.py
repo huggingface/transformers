@@ -45,6 +45,7 @@ class SinqHfQuantizer(HfQuantizer):
     """
 
     requires_parameters_quantization: bool = True
+    quantization_config: SinqConfig
 
     def __init__(self, quantization_config: SinqConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)

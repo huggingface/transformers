@@ -80,6 +80,7 @@ CORE_FILES = (
     "src/transformers/core_model_loading.py",
     "src/transformers/cache_utils.py",
     "src/transformers/generation/utils.py",
+    "src/transformers/utils/output_capturing.py",
 )
 
 
@@ -915,6 +916,33 @@ def create_module_to_test_map(reverse_map: dict[str, list[str]] | None = None) -
     return test_map
 
 
+def get_repo_utils_tests() -> list[str]:
+    """
+    Return the list of repo utils tests.
+
+    Returns:
+        `List[str]`: The repo utils test files.
+    """
+    repo_utils_dir = PATH_TO_TESTS / "repo_utils"
+    if not repo_utils_dir.is_dir():
+        return []
+    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in repo_utils_dir.glob("test_*.py"))
+
+
+def should_run_repo_utils_tests(modified_files: list[str]) -> bool:
+    """
+    Return whether repo utils tests should be scheduled based on the modified files.
+
+    Args:
+        modified_files (`List[str]`):
+            The list of modified files relative to the repo root.
+
+    Returns:
+        `bool`: Whether repo utils tests should run.
+    """
+    return any(path.startswith("utils/") for path in modified_files)
+
+
 def _print_list(l) -> str:
     """
     Pretty print a list of elements with one line per element and a - starting each line.
@@ -980,13 +1008,15 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
         for f in modified_files + impacted_files:
             if f in test_map:
                 test_files_to_run.extend(test_map[f])
-        test_files_to_run = sorted(set(test_files_to_run))
-        # Remove repo utils tests
-        test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "repo_utils"]
-        # Remove SageMaker tests
-        test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
-        # Make sure we did not end up with a test file that was removed
-        test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
+
+    if should_run_repo_utils_tests(modified_files):
+        test_files_to_run.extend(get_repo_utils_tests())
+
+    test_files_to_run = sorted(set(test_files_to_run))
+    # Remove SageMaker tests
+    test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
+    # Make sure we did not end up with a test file that was removed
+    test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
     print(f"\n### TEST TO RUN ###\n{_print_list(test_files_to_run)}")
 
@@ -1064,7 +1094,7 @@ JOB_TO_TEST_FILE = {
     "examples_torch": r"examples/pytorch/.*test_.*",
     "tests_exotic_models": r"tests/models/.*(?=layoutlmv|nat|deta|udop|nougat).*",
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
-    # "repo_utils": r"tests/[^models].*test.*", TODO later on we might want to do
+    "tests_repo_utils": r"tests/repo_utils/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",

@@ -387,8 +387,8 @@ class TensorParallelTesterMixin(ABC):
         if not is_torch_greater_or_equal("2.9"):
             self.skipTest("Tensor parallel tests require torch >= 2.9")
 
-        if torch.cuda.is_available():
-            self.skipTest("Tensor parallel mixin tests are CPU-only and should not run on GPU machines")
+        if torch.cuda.is_available() or torch.xpu.is_available():
+            self.skipTest("Tensor parallel mixin tests are CPU-only and should not run on GPU or XPU machines")
 
         if os.cpu_count() < self.tensor_parallel_size:
             self.skipTest(

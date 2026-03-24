@@ -230,18 +230,6 @@ pip install transformers datasets evaluate rouge_score
 >>> text = "summarize: The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country. It'll lower the deficit and ask the ultra-wealthy and corporations to pay their fair share. And no one making under $400,000 per year will pay a penny more in taxes."
 ```
 
-أبسط طريقة لتجربة نموذجك المضبوط للاستدلال هي استخدامه في [`pipeline`]. استخدم `pipeline` للتلخيص باستخدام نموذجك، ومرر نصك إليه:
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline("summarization", model="username/my_awesome_billsum_model")
->>> summarizer(text)
-[{"summary_text": "The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country."}]
-```
-
-يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
-
 قسم النص وإرجع `input_ids` كتنسورات PyTorch:
 
 ```py

@@ -447,7 +447,6 @@ class CamembertForCausalLM(RobertaForCausalLM):
         labels: torch.LongTensor | None = None,
         past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -495,7 +494,6 @@ class CamembertForCausalLM(RobertaForCausalLM):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )

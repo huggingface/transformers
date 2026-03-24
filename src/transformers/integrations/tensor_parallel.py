@@ -55,7 +55,7 @@ def initialize_tensor_parallelism(
         # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
         device_type = torch._C._get_accelerator().type
         if device_type == "mps":
-            device_type = "cpu"  # fallback
+            raise RuntimeError("Tensor parallelism is not supported on MPS devices.")
         current_device = getattr(torch, device_type)
         if not torch.distributed.is_initialized():
             try:
@@ -63,7 +63,7 @@ def initialize_tensor_parallelism(
                 local_rank = int(os.environ["LOCAL_RANK"])
                 world_size = int(os.environ["WORLD_SIZE"])
 
-                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
+                backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl", "neuron": "neuron"}
                 backend = backend_map.get(device_type)
 
                 torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
@@ -82,13 +82,6 @@ def initialize_tensor_parallelism(
             index = current_device.current_device()
             tp_device = torch.device(device_type, index)
             device_map = tp_device
-            # Silence output for non-primary ranks
-            if index > 0:
-                import sys
-
-                sys.stdout = open(os.devnull, "w")
-                sys.stderr = open(os.devnull, "w")
-
         else:
             tp_device = torch.device(device_type)
             device_map = device_type or {}
@@ -648,11 +641,11 @@ class TensorParallelLayer:
         self.device_mesh = device_mesh
         self.empty_param = empty_param
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh): ...
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        raise NotImplementedError
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh): ...
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        raise NotImplementedError
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -753,12 +746,10 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     backward hook to all-reduce the parameter gradient.
     """
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         return outputs
 
     def shard_tensor(self, param, tensor_idx=None, device=None, dtype=None):
@@ -976,7 +967,7 @@ class EmbeddingParallel(TensorParallelLayer):
             input_mask = mod._input_mask
             # Use multiplication instead of in-place assignment to preserve gradients
             mask_expanded = input_mask.unsqueeze(-1).expand_as(outputs)
-            outputs = outputs * (~mask_expanded).float()
+            outputs = outputs * (~mask_expanded).to(outputs.dtype)
             del mod._input_mask
 
         return all_reduce_forward(outputs, device_mesh)
@@ -1098,12 +1089,10 @@ class RouterParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         return inputs[0] if inputs else inputs
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         """
         Imagine if you had 4 tokens, top_k = 4, and 128experts.
         With EP = 8. The num_local_expert should be 128/8 = 16
@@ -1173,8 +1162,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         # inputs = (hidden_states, top_k_index, top_k_weights)
         hidden_states = inputs[0]
         top_k_index = inputs[1]
@@ -1190,8 +1178,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
 
         return (hidden_states, top_k_index, top_k_weights)
 
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
         # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
@@ -1213,8 +1200,7 @@ class MoeIdentityExpertParallel(TensorParallelLayer):
     input by world_size to compensate.
     """
 
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
         input_tensor = inputs[0] if inputs else inputs
         # TODO(fmom): when 2D-device mesh, need to select a //-ism axis to divide the input tensor by.
         return input_tensor / device_mesh.size()
@@ -1232,6 +1218,7 @@ class ParallelInterface(GeneralInterface):
     _global_mapping = (
         {
             "embedding_rowwise": EmbeddingParallel(embedding_dim_sharding=0),
+            "embedding_colwise": EmbeddingParallel(embedding_dim_sharding=1),
             "colwise_gather_output": ColwiseParallel(gather_output=True),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
@@ -1261,6 +1248,7 @@ class ParallelInterface(GeneralInterface):
         "rowwise_split_input": -1,
         "packed_rowwise": -1,
         "embedding_rowwise": 0,
+        "embedding_colwise": 1,
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
@@ -1275,10 +1263,19 @@ class ParallelInterface(GeneralInterface):
         "rowwise_split_input": None,
         "packed_rowwise": None,
         "embedding_rowwise": None,
+        "embedding_colwise": None,
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
     }
+
+    @classmethod
+    def register_plan_to_weight_dim(cls, key: str, value: int | None):
+        cls.plan_to_weight_dim[key] = value
+
+    @classmethod
+    def register_plan_to_bias_dim(cls, key: str, value: int | None):
+        cls.plan_to_bias_dim[key] = value
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()

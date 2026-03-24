@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitNetQuantConfig
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 
@@ -38,6 +39,7 @@ class BitNetHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
+    quantization_config: "BitNetQuantConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

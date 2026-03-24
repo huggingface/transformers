@@ -578,6 +578,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         hidden_states = hidden_states.permute(0, 2, 1)
 
         # attention mask downsampling
+        output_attention_mask = None
         if attention_mask is not None:
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
@@ -607,7 +608,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         return MoonshineEncoderModelOutput(
             last_hidden_state=hidden_states,
-            attention_mask=output_attention_mask.int() if attention_mask is not None else None,
+            attention_mask=output_attention_mask.int() if output_attention_mask is not None else None,
         )
 
 
