@@ -633,8 +633,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Run regular generate with output_scores to get logits
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
 
-        gen_config_regular = GenerationConfig(max_new_tokens=10, do_sample=False, output_scores=True, eos_token_id=tokenizer.eos_token_id)
-        generate_outputs = model.generate(**inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True)
+        gen_config_regular = GenerationConfig(
+            max_new_tokens=10, do_sample=False, output_scores=True, eos_token_id=tokenizer.eos_token_id
+        )
+        generate_outputs = model.generate(
+            **inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True
+        )
 
         # Compare log_probs for each request, matching by prompt_ids
         num_input_tokens = inputs.input_ids.shape[1]
