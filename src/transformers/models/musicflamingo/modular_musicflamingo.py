@@ -46,8 +46,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
-    audio_rotary_dim (`int`, *optional*, defaults to 256):
-        Number of audio encoder channels used by MusicFlamingo rotary time embeddings per axis.
     audio_frame_step (`float`, *optional*, defaults to 0.01):
         Duration in seconds of one input mel frame (trained with hop_length 160 at sampling_rate 16000).
 
@@ -74,16 +72,18 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
 
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
-    audio_rotary_dim: int = 256
     audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200}
-        self.max_position_embeddings = self.rope_parameters["rope_theta"]
-
         super().__post_init__(**kwargs)
+
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
+        # TODO (ebezzam) remove when checkpoint is updated
+        self.rope_parameters["partial_rotary_factor"] = 0.2
+        self.max_position_embeddings = self.rope_parameters["rope_theta"]
+        self.head_dim = self.audio_config.hidden_size
 
 
 class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
@@ -209,10 +209,11 @@ class MusicFlamingoRotaryEmbedding(LlamaRotaryEmbedding):
 
     @staticmethod
     def compute_default_rope_parameters(config: MusicFlamingoConfig, device=None):
-        dim = config.audio_rotary_dim
-        inv_freq = 1.0 / (
-            config.rope_parameters["rope_theta"] ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
-        )
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = config.head_dim
+        dim = int(head_dim * partial_rotary_factor)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim))
         return inv_freq, 1.0
 
     def _compute_position_angles(self, inv_freq):
@@ -401,19 +402,31 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         >>> print(decoded_outputs)
         ["This track is an uplifting Eurodance-style Trance-Pop anthem..."]
         ```"""
-        super().forward(
-            input_ids=input_ids,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(
+                input_features, input_features_mask, input_ids=input_ids, return_dict=True
+            ).pooler_output
+
+            # replace text-audio token placeholders with audio embeddings
+            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
+
+        outputs: CausalLMOutputWithPast = self.language_model(
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
+        return outputs
 
 
 __all__ = [

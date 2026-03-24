@@ -82,10 +82,11 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        dim = config.audio_rotary_dim
-        inv_freq = 1.0 / (
-            config.rope_parameters["rope_theta"] ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim)
-        )
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = config.head_dim
+        dim = int(head_dim * partial_rotary_factor)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device, dtype=torch.float) / dim))
         return inv_freq, 1.0
 
     @torch.no_grad()
@@ -324,16 +325,12 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         >>> print(decoded_outputs)
         ["This track is an uplifting Eurodance-style Trance-Pop anthem..."]
         ```"""
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(
-                input_features,
-                input_features_mask,
-                input_ids=input_ids,
-                return_dict=True,
+                input_features, input_features_mask, input_ids=input_ids, return_dict=True
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
