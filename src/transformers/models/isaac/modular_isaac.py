@@ -1081,17 +1081,15 @@ class IsaacModel(Qwen3PreTrainedModel):
             image_attention_mask (`torch.Tensor`, *optional*):
                 Mask indicating which image slots are populated, shaped `(batch_size, max_images)`.
         """
-        device = self.text_model.embed_tokens.weight.device
-        pixel_values = pixel_values.to(device=device)
-        image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
-        patch_attention_mask = image_patch_attention_mask.to(device=device, dtype=torch.long)
+        image_token_grids = image_token_grids.to(dtype=torch.long)
+        patch_attention_mask = image_patch_attention_mask.to(dtype=torch.long)
         if image_attention_mask is None:
             if image_token_lengths is not None:
-                image_attention_mask = image_token_lengths.to(device=device, dtype=torch.long) > 0
+                image_attention_mask = image_token_lengths > 0
             else:
                 image_attention_mask = image_token_grids.any(dim=-1)
         else:
-            image_attention_mask = image_attention_mask.to(device=device, dtype=torch.bool)
+            image_attention_mask = image_attention_mask.to(dtype=torch.bool)
 
         batch_size, max_images = pixel_values.shape[:2]
         hidden_size = self.config.get_text_config().hidden_size
@@ -1113,23 +1111,24 @@ class IsaacModel(Qwen3PreTrainedModel):
             max_tokens = flat_projected_features.shape[1]
             projected_features = flat_projected_features.new_zeros((batch_size, max_images, max_tokens, hidden_size))
             projected_features[image_attention_mask] = flat_projected_features
+            feature_device = flat_projected_features.device
             offsets = (
-                image_token_offsets.to(device=device, dtype=torch.long)
+                image_token_offsets.to(dtype=torch.long)
                 if image_token_offsets is not None
-                else torch.zeros((batch_size, max_images), device=device, dtype=torch.long)
+                else torch.zeros((batch_size, max_images), device=feature_device, dtype=torch.long)
             )
             lengths = (
-                image_token_lengths.to(device=device, dtype=torch.long)
+                image_token_lengths.to(dtype=torch.long)
                 if image_token_lengths is not None
-                else torch.full((batch_size, max_images), max_tokens, device=device, dtype=torch.long)
+                else torch.full((batch_size, max_images), max_tokens, device=feature_device, dtype=torch.long)
             )
             flat_offsets = offsets[image_attention_mask]
             flat_lengths = lengths[image_attention_mask]
-            token_positions = torch.arange(flat_lengths.max(), device=device, dtype=torch.long)
+            token_positions = torch.arange(flat_lengths.max(), device=feature_device, dtype=torch.long)
             gather_positions = flat_offsets[:, None] + token_positions[None, :]
             gather_mask = token_positions[None, :] < flat_lengths[:, None]
             image_features = flat_projected_features[
-                torch.arange(flat_projected_features.shape[0], device=device, dtype=torch.long)[:, None],
+                torch.arange(flat_projected_features.shape[0], device=feature_device, dtype=torch.long)[:, None],
                 gather_positions,
             ][gather_mask]
             hidden_states = vision_outputs.hidden_states
@@ -1153,7 +1152,7 @@ class IsaacModel(Qwen3PreTrainedModel):
         inputs_embeds: torch.FloatTensor,
         image_features: torch.FloatTensor,
     ) -> torch.BoolTensor:
-        image_token_mask = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long) == 1
+        image_token_mask = mm_token_type_ids.to(dtype=torch.long) == 1
         n_image_tokens = image_token_mask.sum()
         image_token_mask = image_token_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         torch_compilable_check(
@@ -1200,11 +1199,11 @@ class IsaacModel(Qwen3PreTrainedModel):
 
         device = attention_mask.device
         batch_size, seq_len = attention_mask.shape
-        mm_token_type_ids = mm_token_type_ids.to(device=device, dtype=torch.long)
-        image_token_grids = image_token_grids.to(device=device, dtype=torch.long)
-        image_token_offsets = image_token_offsets.to(device=device, dtype=torch.long)
-        image_token_lengths = image_token_lengths.to(device=device, dtype=torch.long)
-        attention_mask = attention_mask.to(device=device, dtype=torch.long)
+        mm_token_type_ids = mm_token_type_ids.to(dtype=torch.long)
+        image_token_grids = image_token_grids.to(dtype=torch.long)
+        image_token_offsets = image_token_offsets.to(dtype=torch.long)
+        image_token_lengths = image_token_lengths.to(dtype=torch.long)
+        attention_mask = attention_mask.to(dtype=torch.long)
         image_attention_mask = image_token_lengths > 0
 
         position_ids = torch.zeros((3, batch_size, seq_len), device=device, dtype=torch.long)
@@ -1281,7 +1280,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             return position_ids
 
         if position_ids is not None and past_seen_tokens == 0:
-            position_ids = position_ids.to(device=inputs_embeds.device)
             if position_ids.ndim == 2:
                 return position_ids.view(1, position_ids.shape[0], -1).expand(3, -1, -1)
             if position_ids.ndim == 3 and position_ids.shape[0] in (1, 4):
@@ -1372,7 +1370,7 @@ class IsaacModel(Qwen3PreTrainedModel):
             batch_size, seq_len = inputs_embeds.shape[:2]
             mm_token_type_ids = torch.full((batch_size, seq_len), 0, device=inputs_embeds.device, dtype=torch.long)
         else:
-            mm_token_type_ids = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long)
+            mm_token_type_ids = mm_token_type_ids.to(dtype=torch.long)
 
         image_token_mask = mm_token_type_ids == 1
         if created_inputs_embeds and torch.any(image_token_mask):
