@@ -69,6 +69,11 @@ print(actions)
 [[autodoc]] PI0Processor
     - __call__
 
+## PI0ImageProcessor
+
+[[autodoc]] PI0ImageProcessor
+    - preprocess
+
 ## PI0Model
 
 [[autodoc]] PI0Model

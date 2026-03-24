@@ -78,7 +78,7 @@ class LEDConfig(PreTrainedConfig):
     classifier_dropout: float | int = 0.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     attention_window: list[int] | int = 512
     tie_word_embeddings: bool = True
 

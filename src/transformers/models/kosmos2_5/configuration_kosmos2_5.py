@@ -56,7 +56,7 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")

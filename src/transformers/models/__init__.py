@@ -321,6 +321,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_chart2table import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
     from .pp_lcnet import *
@@ -376,6 +377,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
     from .solar_open import *
@@ -413,6 +415,7 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .uvdoc import *
     from .vaultgemma import *
     from .vibevoice_asr import *
     from .video_llama_3 import *

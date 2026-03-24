@@ -95,7 +95,7 @@ class GPT2Config(PreTrainedConfig):
     scale_attn_weights: bool = True
     use_cache: bool = True
     bos_token_id: int | None = 50256
-    eos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
     pad_token_id: int | None = None
     scale_attn_by_inverse_layer_idx: bool = False
     reorder_and_upcast_attn: bool = False

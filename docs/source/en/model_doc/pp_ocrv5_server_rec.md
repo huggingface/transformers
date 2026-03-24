@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Model Architecture
 
-PP-OCRv5_server_rec is one of the PP-OCRv5_rec series, the latest generation of text recognition models developed by the PaddleOCR team. It is designed to efficiently and accurately support the recognition of Simplified Chinese, Traditional Chinese, English, Japanese, as well as complex text scenarios such as handwriting, vertical text, pinyin, and rare characters with a single model. While maintaining recognition performance, it also balances inference speed and model robustness, providing efficient and accurate technical support for document understanding in various scenarios. 
+PP-OCRv5_server_rec is one of the PP-OCRv5_rec series, the latest generation of text recognition models developed by the PaddleOCR team. It is designed to efficiently and accurately support the recognition of Simplified Chinese, Traditional Chinese, English, Japanese, as well as complex text scenarios such as handwriting, vertical text, pinyin, and rare characters with a single model. While maintaining recognition performance, it also balances inference speed and model robustness, providing efficient and accurate technical support for document understanding in various scenarios.
 
 ## Usage
 
@@ -109,6 +109,6 @@ for result in results:
 
 [[autodoc]] PPOCRV5MobileRecEncoderWithSVTR
 
-## PPOCRV5ServerRecImageProcessorFast
+## PPOCRV5ServerRecImageProcessor
 
-[[autodoc]] PPOCRV5ServerRecImageProcessorFast
+[[autodoc]] PPOCRV5ServerRecImageProcessor

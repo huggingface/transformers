@@ -66,7 +66,7 @@ class GPTNeoConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     use_cache: bool = True
     bos_token_id: int | None = 50256
-    eos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
     pad_token_id: int | None = None
     tie_word_embeddings: bool = True
 

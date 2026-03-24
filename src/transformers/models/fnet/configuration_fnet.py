@@ -62,7 +62,7 @@ class FNetConfig(PreTrainedConfig):
     tpu_short_seq_length: int = 512
     pad_token_id: int | None = 3
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
 
 

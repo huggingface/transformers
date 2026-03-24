@@ -14,18 +14,9 @@
 
 import unittest
 
-from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_torch_available():
-    pass
-
-if is_torchvision_available():
-    from transformers import CHMv2ImageProcessorFast
 
 
 class CHMv2ImageProcessingTester:
@@ -85,9 +76,6 @@ class CHMv2ImageProcessingTester:
 @require_torch
 @require_vision
 class CHMv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = None
-    fast_image_processing_class = CHMv2ImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = CHMv2ImageProcessingTester(self)

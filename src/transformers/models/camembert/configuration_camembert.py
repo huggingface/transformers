@@ -60,6 +60,7 @@ class CamembertConfig(PreTrainedConfig):
     classifier_dropout: float | int | None = None
     is_decoder: bool = False
     add_cross_attention: bool = False
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["CamembertConfig"]

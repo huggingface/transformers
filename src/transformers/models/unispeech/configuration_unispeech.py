@@ -180,7 +180,7 @@ class UniSpeechConfig(PreTrainedConfig):
     num_ctc_classes: int = 80
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     replace_prob: float = 0.5
 
     def __post_init__(self, **kwargs):
