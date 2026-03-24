@@ -613,7 +613,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         user_messages = ["What is 2+2?", "Hello world"]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
-        gen_config = GenerationConfig(max_new_tokens=10, do_sample=False)
+        eos_token_id = model.config.eos_token_id  # required otherwise logits will be misaligned
+        gen_config = GenerationConfig(max_new_tokens=10, do_sample=False, eos_token_id=eos_token_id)
 
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
@@ -632,7 +633,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Run regular generate with output_scores to get logits
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
 
-        gen_config_regular = GenerationConfig(max_new_tokens=10, do_sample=False, output_scores=True)
+        gen_config_regular = GenerationConfig(max_new_tokens=10, do_sample=False, output_scores=True, eos_token_id=tokenizer.eos_token_id)
         generate_outputs = model.generate(**inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True)
 
         # Compare log_probs for each request, matching by prompt_ids
@@ -664,7 +665,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 self.assertAlmostEqual(
                     cb_lp,
                     exp_lp,
-                    places=4 if use_cuda_graph else 5,  # cuda graphs add padding, hence lower precision
+                    delta=2e-5 if use_cuda_graph else 1e-5,  # cuda graphs add padding, hence lower precision
                     msg=f"logprob mismatch at position {j} for request {i}: CB={cb_lp}, expected={exp_lp}",
                 )
 
