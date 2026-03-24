@@ -267,6 +267,7 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
         # before PyTorch 2.11, torch.grouped_mm on CPU required 16 bytes alignment which is not
         # guaranteed for tensors loaded using memmap (e.g. using safetensors lazy tensor loading)
+        # issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
     return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
