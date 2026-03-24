@@ -271,7 +271,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         self,
         images: list[list[torch.Tensor]],
         do_resize: bool,
-        interpolation: Any | None,
+        resample: Any | None,
         do_rescale: bool | None,
         rescale_factor: float | None,
         do_normalize: bool | None,
@@ -285,6 +285,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         pixel_shuffle_scale: int | None = None,
         **kwargs,
     ) -> BatchFeature:
+        resample = kwargs.pop("interpolation", resample)
         batch_size = len(images)
         if all(len(sample_images) == 0 for sample_images in images):
             tensors = {
@@ -312,7 +313,7 @@ class IsaacImageProcessor(TorchvisionBackend):
             )
             if do_resize:
                 image_batch = self.resize(
-                    stacked_images, SizeDict(height=target_height, width=target_width), interpolation=interpolation
+                    stacked_images, SizeDict(height=target_height, width=target_width), resample=resample
                 )
             else:
                 if (original_height % patch_size) or (original_width % patch_size):
