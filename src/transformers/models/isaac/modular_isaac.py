@@ -322,6 +322,9 @@ class IsaacImageProcessor(TorchvisionBackend):
     ) -> BatchFeature:
         resample = kwargs.pop("interpolation", resample)
         batch_size = len(images)
+        # IsaacProcessor routes text-only calls here as an empty image list per sample.
+        # This returns empty vision tensors to preserve the multimodal output schema;
+        # image-token/image-count mismatches are validated earlier in processor's _preprocess call.
         if all(len(sample_images) == 0 for sample_images in images):
             tensors = {
                 "vision_patches": torch.zeros((batch_size, 0, 0, 0), dtype=torch.float32),
