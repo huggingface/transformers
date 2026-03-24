@@ -606,7 +606,6 @@ class ViTMAEPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    # Include ViTMAEDecoder so auto device_map never splits decoder Parameter leaves (hooks require module paths).
     _no_split_modules = ["ViTMAEEmbeddings", "ViTMAELayer", "ViTMAEDecoder"]
     _supports_sdpa = True
     _supports_flash_attn = True
