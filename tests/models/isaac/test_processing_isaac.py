@@ -485,6 +485,44 @@ def test_post_process_generation_extracts_boxes_and_cleans_text():
 
 
 @require_torch
+def test_post_process_generation_extracts_polygons_and_filters_by_expected_type():
+    processor = _make_post_process_processor()
+
+    generated_text = (
+        'Point <point mention="cone">(1, 2)</point> '
+        'Box <point_box mention="sign">(3, 4), (5, 6)</point_box> '
+        'Polygon <polygon mention="lane" t="0.25">(10, 20), (30, 40), (50, 60)</polygon>'
+    )
+
+    clean_text, annotations = processor.post_process_generation(generated_text, expected="polygon")
+
+    assert clean_text == "Point Box Polygon"
+    assert len(annotations) == 1
+    polygon = annotations[0]
+    assert polygon.mention == "lane"
+    assert polygon.t == pytest.approx(0.25)
+    assert len(polygon.points) == 3
+    assert polygon.points[0].x == 10
+    assert polygon.points[0].y == 20
+    assert polygon.points[1].x == 30
+    assert polygon.points[1].y == 40
+    assert polygon.points[2].x == 50
+    assert polygon.points[2].y == 60
+
+    _, boxes = processor.post_process_generation(generated_text, expected="box")
+    assert len(boxes) == 1
+    assert boxes[0].mention == "sign"
+
+
+@require_torch
+def test_post_process_generation_rejects_polygons_with_fewer_than_three_points():
+    processor = _make_post_process_processor()
+
+    with pytest.raises(ValueError, match=r"Malformed <polygon> tag"):
+        processor.post_process_generation('<polygon mention="lane">(10, 20), (30, 40)</polygon>', expected="polygon")
+
+
+@require_torch
 @require_vision
 def test_single_image_returns_offsets_and_lengths(isaac_processor):
     vision_token = isaac_processor.vision_token
