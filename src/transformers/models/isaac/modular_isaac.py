@@ -1256,7 +1256,6 @@ class IsaacModel(Qwen3PreTrainedModel):
         image_token_grids: torch.Tensor | None = None,
         image_token_offsets: torch.Tensor | None = None,
         image_token_lengths: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
         past_key_values: torch.Tensor | None = None,
     ) -> torch.Tensor:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
@@ -1272,12 +1271,6 @@ class IsaacModel(Qwen3PreTrainedModel):
             )
             self.rope_deltas = rope_deltas
             return position_ids
-
-        if position_ids is not None and past_seen_tokens == 0:
-            if position_ids.ndim == 2:
-                return position_ids.view(1, position_ids.shape[0], -1).expand(3, -1, -1)
-            if position_ids.ndim == 3 and position_ids.shape[0] in (1, 4):
-                return position_ids
 
         if self.rope_deltas is None:
             return None
@@ -1388,17 +1381,23 @@ class IsaacModel(Qwen3PreTrainedModel):
         if isinstance(attention_mask, dict):
             attention_mask = attention_mask["full_attention"]
 
-        position_ids = self.compute_3d_position_ids(
+        past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
+        computed_position_ids = self.compute_3d_position_ids(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             mm_token_type_ids=mm_token_type_ids,
             image_token_grids=vision_token_grids,
             image_token_offsets=vision_token_offsets,
             image_token_lengths=vision_token_lengths,
-            position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
         )
+        if computed_position_ids is not None:
+            position_ids = computed_position_ids
+        elif position_ids is not None and past_seen_tokens == 0:
+            position_ids = position_ids.to(device=inputs_embeds.device)
+            if position_ids.ndim == 2:
+                position_ids = position_ids.view(1, position_ids.shape[0], -1).expand(3, -1, -1)
 
         text_model_outputs = self.text_model(
             attention_mask=attention_mask,
@@ -1569,7 +1568,7 @@ class IsaacForConditionalGeneration(Qwen3ForCausalLM, GenerationMixin):
             inputs_tensor = model_kwargs["input_ids"]
 
         if (
-            model_kwargs.get("image_token_lengths") is not None
+            model_kwargs.get("vision_token_lengths") is not None
             and len(inputs_tensor.shape) == 2
             and inputs_tensor.dtype in [torch.int, torch.long]
         ):
