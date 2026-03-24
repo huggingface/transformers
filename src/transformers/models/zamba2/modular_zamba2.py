@@ -440,7 +440,7 @@ class Zamba2MambaMixer(nn.Module):
         return out
 
     # fmt: off
-    def torch_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.Tensor | None=None):
+    def torch_forward(self, input_states, cache_params: Cache | None=None, attention_mask: torch.Tensor | None = None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # Gated MLP's linear projection
@@ -455,43 +455,35 @@ class Zamba2MambaMixer(nn.Module):
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
+        hidden_states = hidden_states.transpose(1, 2)
 
-        has_previous_state = cache_params.has_previous_state(self.layer_idx)
-
-        if cache_params is not None and has_previous_state:
-            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
-        else:
-            ssm_state = torch.zeros(
-                (batch_size, self.num_heads, self.head_dim, self.ssm_state_size),
-                device=hidden_states.device, dtype=dtype
-            )
+        use_precomputed_state = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # Convolution sequence transformation
-        if cache_params is not None:
-            if has_previous_state:
-                gate = gate.unsqueeze(1)
-                conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
-                hidden_states = torch.sum(conv_state.to(projected_states.device) * self.conv1d.weight[:, 0, :], dim=-1)
-                if self.use_conv_bias:
-                    hidden_states += self.conv1d.bias
-                hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]         # [batch, 1, intermediate_size] : decoding
-            else:
-                hidden_states = hidden_states.transpose(1,2)
+        if use_precomputed_state:
+            gate = gate.unsqueeze(1)
+            conv_state = cache_params.update_conv_state(hidden_states, self.layer_idx)
+            hidden_states = torch.sum(conv_state.to(projected_states.device) * self.conv1d.weight[:, 0, :], dim=-1)
+            if self.use_conv_bias:
+                hidden_states += self.conv1d.bias
+            hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]         # [batch, 1, intermediate_size] : decoding
+        else:
+            if cache_params is not None:
                 conv_state = nn.functional.pad(
                     hidden_states,
                     (self.conv_kernel_size - hidden_states.shape[-1], 0)
                 )
                 conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
-                hidden_states = self.act(self.conv1d(hidden_states).transpose(1,2))[:, :seq_len, :]     # [batch, intermediate_size, seq_len]
-                if attention_mask is not None:
-                    dtype = hidden_states.dtype
-                    # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
-                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-        else:
-            hidden_states = self.act(self.conv1d(hidden_states.transpose(1, 2))[..., :seq_len].transpose(1, 2))
+
+            hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len].transpose(1, 2))
+            if attention_mask is not None:
+                dtype = hidden_states.dtype
+                # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
+
         hidden_states, B, C = torch.split(hidden_states, [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size], dim=-1)
         A = -torch.exp(self.A_log.float())                            # [num_heads]
-        if cache_params is not None and has_previous_state:
+        if use_precomputed_state:
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
             dt = dt[:, None, ...] if dt.ndim == 2 else dt[:, 0, :][:, None, ...]
@@ -520,6 +512,7 @@ class Zamba2MambaMixer(nn.Module):
             dBx = dB * hidden_states[..., None]
 
             # State calculation
+            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
             ssm_state = ssm_state * dA + dBx
             ssm_state = cache_params.update_ssm_state(ssm_state, self.layer_idx)
 

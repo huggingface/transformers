@@ -43,6 +43,7 @@ class BambaConfig(PreTrainedConfig):
     """
 
     model_type = "bamba"
+    attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 128000
