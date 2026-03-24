@@ -1387,6 +1387,10 @@ def gather_state_dict_for_save(
     return result
 
 
+# Cache for module to name mapping to avoid expensive named_modules() calls in hooks
+_modules2names_cache = {}
+
+
 def add_tensor_parallel_hooks_to_module(
     model,
     module,
@@ -1412,7 +1416,11 @@ def add_tensor_parallel_hooks_to_module(
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
-            modules2names = {v: k for k, v in dict(model.named_modules()).items()}
+            if model in _modules2names_cache:
+                modules2names = _modules2names_cache[model]
+            else:
+                modules2names = {v: k for k, v in model.named_modules()}
+                _modules2names_cache[model] = modules2names
             layer_name = modules2names.get(module, "unknown")
             logger.warning(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP "
