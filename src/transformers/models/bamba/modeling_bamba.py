@@ -659,7 +659,7 @@ class BambaMixer(nn.Module):
         gate, hidden_states_B_C, dt = projected_states.split(
                 [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
-        hidden_states_B_C = hidden_states_B_C.transpsose(1,2)
+        hidden_states_B_C = hidden_states_B_C.transpose(1,2)
 
         use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
 

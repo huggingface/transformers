@@ -133,7 +133,7 @@ class FalconH1Config(PreTrainedConfig):
 
     @property
     def layers_block_type(self):
-        return ["attention" for i in range(self.num_hidden_layers)]
+        return ["hybrid" for i in range(self.num_hidden_layers)]
 
 
 __all__ = ["FalconH1Config"]
