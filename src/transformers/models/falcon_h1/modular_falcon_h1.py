@@ -907,14 +907,9 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
         hidden_states = self.final_layernorm(hidden_states)
 
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
-
-        next_cache = None if not use_cache else past_key_values
-
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
         )
 
     def _update_mamba_mask(self, attention_mask, past_key_values):

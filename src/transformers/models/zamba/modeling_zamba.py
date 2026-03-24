@@ -769,9 +769,6 @@ class ZambaModel(ZambaPreTrainedModel):
 
         hidden_states = self.final_layernorm(hidden_states)
 
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
-
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,

@@ -1202,9 +1202,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             )
         hidden_states = self.norm(hidden_states)
 
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
-
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
