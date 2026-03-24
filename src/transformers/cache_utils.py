@@ -792,7 +792,7 @@ class MambaAndAttentionLayer(MambaLayer, DynamicLayer):
         # conv_kernel_size may not be correct - make sure we grab the correct one during the first call to `update_conv_state`
         if not self.has_previous_state:
             self.conv_kernel_size = conv_states.shape[-1]
-        super().update_conv_state(conv_states, **kwargs)
+        return super().update_conv_state(conv_states, **kwargs)
 
     def reset(self) -> None:
         MambaLayer.reset(self)
