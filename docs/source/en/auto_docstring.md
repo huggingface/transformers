@@ -122,15 +122,15 @@ class MyModelOutput(ImageClassifierOutput):
 </hfoption>
 <hfoption id="config classes">
 
-Place `@auto_docstring` directly above a `PreTrainedConfig` subclass, alongside `@strict(accept_kwargs=True)` from `huggingface_hub.dataclasses`. Config parameters are declared as **class-level annotations** (not as `__init__` arguments) — the `@strict` dataclass pattern used throughout Transformers. The class docstring documents model-specific parameters and optionally a usage example.
+Place `@auto_docstring` directly above a `PreTrainedConfig` subclass, alongside `@strict` from `huggingface_hub.dataclasses`. Config parameters are declared as **class-level annotations** (not as `__init__` arguments) — the `@strict` dataclass pattern used throughout Transformers. The class docstring documents model-specific parameters and optionally a usage example.
 
 ```python
 from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
+@strict
 @auto_docstring(checkpoint="org/my-model-checkpoint")
-@strict(accept_kwargs=True)
 class MyModelConfig(PreTrainedConfig):
     r"""
     custom_param (`int`, *optional*, defaults to 64):
@@ -174,10 +174,6 @@ class MyModelProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class MyModelProcessor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor=None, tokenizer=None, custom_param: int = 4, **kwargs):
         r"""
         custom_param (`int`, *optional*, defaults to 4):
@@ -413,7 +409,7 @@ The `@auto_docstring` decorator automatically generates docstrings by:
 
 Follow the best practices below to help maintain consistent and informative documentation for Transformers!
 
-* Use `@auto_docstring` for [`PreTrainedModel`] subclasses and their primary methods (`forward`, `get_text_features`, etc.), for [`PreTrainedConfig`] subclasses (alongside `@strict(accept_kwargs=True)`), and for processor classes ([`ProcessorMixin`] and [`BaseImageProcessor`] subclasses) and their primary methods (`__call__`, `preprocess`).
+* Use `@auto_docstring` for [`PreTrainedModel`] subclasses and their primary methods (`forward`, `get_text_features`, etc.), for [`PreTrainedConfig`] subclasses (alongside `@strict`), and for processor classes ([`ProcessorMixin`] and [`BaseImageProcessor`] subclasses) and their primary methods (`__call__`, `preprocess`).
 * Do not redefine standard arguments unless their behavior differs in your model.
 * For config classes, document parameters in the class body docstring (class-level annotations, not `__init__`). For image processors, document custom parameters in a `XxxImageProcessorKwargs` TypedDict rather than in `__init__`.
 * Run `check_docstrings` locally and iteratively.
