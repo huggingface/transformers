@@ -290,8 +290,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         super().__init_subclass__(*args, **kwargs)
         cls = dataclass(cls, repr=False)
 
-        # wrap all subclasses to accept arbitrary kwargs for BC
-        cls = wrap_init_to_accept_kwargs(cls)
+        if "__init__" not in cls.__dict__:
+            # Wrap all subclasses to accept arbitrary kwargs for BC
+            # only if the subclass has no custom `__init__`. Most
+            # remote code has an init defined, but some model are not
+            # See https://huggingface.co/hmellor/Ilama-3.2-1B/blob/main/configuration_ilama.py
+            cls = wrap_init_to_accept_kwargs(cls)
 
     @property
     def name_or_path(self) -> str | None:
