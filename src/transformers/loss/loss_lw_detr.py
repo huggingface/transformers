@@ -129,14 +129,15 @@ class LwDetrImageLoss(nn.Module):
         prob = source_logits.sigmoid()
         # init positive weights and negative weights
         pos_weights = torch.zeros_like(source_logits)
+        # pow promotes to float32 under float16 CUDA autocast; cast back to preserve original dtype
         neg_weights = prob.pow(gamma).to(dtype)
         pos_ind = idx + (target_classes_o,)
 
-        t = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
-        t = torch.clamp(t, 0.01).detach().to(dtype)
+        pos_quality = prob[pos_ind].pow(alpha) * pos_ious.pow(1 - alpha)
+        pos_quality = torch.clamp(pos_quality, 0.01).detach().to(dtype)
 
-        pos_weights[pos_ind] = t
-        neg_weights[pos_ind] = 1 - t
+        pos_weights[pos_ind] = pos_quality
+        neg_weights[pos_ind] = 1 - pos_quality
         loss_ce = -pos_weights * prob.log() - neg_weights * (1 - prob).log()
         loss_ce = loss_ce.sum() / num_boxes
         losses = {"loss_ce": loss_ce}
