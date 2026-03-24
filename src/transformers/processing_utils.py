@@ -1646,12 +1646,12 @@ class ProcessorMixin(PushToHubMixin):
         # might be non-padded lists and we can't cast numpy on that!
         # Then cast numpy as each input for faster indexing
         mm_token_type_ids = []
-        for input in input_ids:
-            input = np.array(input)
-            mm_token_types = np.zeros_like(input)
-            mm_token_types[np.isin(input, self.image_ids)] = 1
-            mm_token_types[np.isin(input, self.video_ids)] = 2
-            mm_token_types[np.isin(input, self.audio_ids)] = 3
+        for tokenizer_input in input_ids:
+            tokenizer_input = np.array(tokenizer_input)
+            mm_token_types = np.zeros_like(tokenizer_input)
+            mm_token_types[np.isin(tokenizer_input, self.image_ids)] = 1
+            mm_token_types[np.isin(tokenizer_input, self.video_ids)] = 2
+            mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
             mm_token_type_ids.append(mm_token_types.tolist())
         return mm_token_type_ids
 

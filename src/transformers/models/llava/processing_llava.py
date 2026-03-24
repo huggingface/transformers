@@ -15,8 +15,6 @@
 Processor class for Llava.
 """
 
-import re
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import (
@@ -116,36 +114,15 @@ class LlavaProcessor(ProcessorMixin):
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
 
-            batch_expansion_offsets = []
-
-            for i in range(len(text)):
-                last = 0
-                expansion_offsets = []
-                expanded_sample = []
-                for m in re.finditer(self.image_token, text[i]):
-                    start, end = m.span()
-                    replacement_text = self.image_token * num_image_tokens
-
-                    expansion_offsets.append(
-                        {
-                            "span": (start, end),
-                            "new_span": (start, start + len(replacement_text)),
-                            "text": m.group(0),
-                            "replacement": replacement_text,
-                        }
-                    )
-
-                    expanded_sample.append(text[i][last:start])
-                    expanded_sample.append(replacement_text)
-                    last = end
-                expanded_sample.append(text[i][last:])
-                text[i] = "".join(expanded_sample)
-                batch_expansion_offsets.append(expansion_offsets)
+            prompt_strings = []
+            for sample in text:
+                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                prompt_strings.append(sample)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
