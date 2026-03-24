@@ -21,14 +21,13 @@
 
 import copy
 import re
-from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import is_torch_available
-from .modeling_isaac import BoundingBox, SinglePoint
+from .modeling_isaac import BoundingBox, Polygon, SinglePoint
 
 
 if is_torch_available():
@@ -44,8 +43,11 @@ class IsaacProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-_POINT_OR_BOX_TAG = re.compile(
-    r"<(?P<tag>point|point_box)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
+IsaacAnnotation = SinglePoint | BoundingBox | Polygon
+
+
+_POINT_BOX_OR_POLYGON_TAG = re.compile(
+    r"<(?P<tag>point|point_box|polygon)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
 )
 _ATTR_RE = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
 _COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
@@ -87,12 +89,21 @@ def _parse_box_body(body: str, mention: str | None = None, t: str | None = None)
     return BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=_maybe_float(t))
 
 
+def _parse_polygon_body(body: str, mention: str | None = None, t: str | None = None) -> Polygon:
+    coords = list(_COORD_RE.finditer(body))
+    if len(coords) < 3:
+        raise ValueError(f"Malformed <polygon> tag: {body!r}")
+
+    points = tuple(SinglePoint(x=int(coord.group(1)), y=int(coord.group(2))) for coord in coords)
+    return Polygon(points=points, mention=mention, t=_maybe_float(t))
+
+
 def clean_text_and_extract_points(
     text: str,
     expected: str | None = None,
-) -> tuple[str, list[SinglePoint | BoundingBox]]:
-    results = []
-    for match in _POINT_OR_BOX_TAG.finditer(text or ""):
+) -> tuple[str, list[IsaacAnnotation]]:
+    results: list[IsaacAnnotation] = []
+    for match in _POINT_BOX_OR_POLYGON_TAG.finditer(text or ""):
         tag = match.group("tag").lower()
         attrs = _parse_attrs(match.group("attrs"))
         mention = attrs.get("mention")
@@ -101,12 +112,16 @@ def clean_text_and_extract_points(
             if expected not in (None, "point"):
                 continue
             results.append(_parse_point_body(match.group("body"), mention=mention, t=t))
-        else:
+        elif tag == "point_box":
             if expected not in (None, "box"):
                 continue
             results.append(_parse_box_body(match.group("body"), mention=mention, t=t))
+        else:
+            if expected not in (None, "polygon"):
+                continue
+            results.append(_parse_polygon_body(match.group("body"), mention=mention, t=t))
 
-    clean_text = re.sub(r"\s+", " ", _POINT_OR_BOX_TAG.sub("", text or "")).strip()
+    clean_text = re.sub(r"\s+", " ", _POINT_BOX_OR_POLYGON_TAG.sub("", text or "")).strip()
     return clean_text, results
 
 
@@ -145,13 +160,43 @@ class IsaacProcessor(ProcessorMixin):
         self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
 
-    def _build_batch(
+    def post_process_generation(
+        self,
+        text: str,
+        expected: str | None = None,
+        cleanup_and_extract: bool = True,
+    ) -> str | tuple[str, list[IsaacAnnotation]]:
+        if cleanup_and_extract:
+            return clean_text_and_extract_points(text, expected=expected)
+        return text
+
+    def post_process_image_text_to_text(
+        self,
+        generated_outputs,
+        skip_special_tokens: bool = True,
+        cleanup_and_extract: bool = False,
+        expected: str | None = None,
+        **kwargs,
+    ):
+        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+        return [
+            self.post_process_generation(text, expected=expected, cleanup_and_extract=cleanup_and_extract)
+            for text in generated_texts
+        ]
+
+    def __call__(
         self,
         text: str | list[str],
         images: ImageInput | None = None,
-        text_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, torch.Tensor | None]:
-        text_kwargs = copy.deepcopy(text_kwargs) if text_kwargs is not None else {}
+        return_tensors: str | TensorType | None = TensorType.PYTORCH,
+        **kwargs,
+    ) -> BatchFeature:
+        output_kwargs = self._merge_kwargs(
+            IsaacProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        text_kwargs = copy.deepcopy(output_kwargs["text_kwargs"])
         truncation = text_kwargs.pop("truncation", None)
         max_length = text_kwargs.pop("max_length", None)
         padding = text_kwargs.pop("padding", True)
@@ -210,15 +255,15 @@ class IsaacProcessor(ProcessorMixin):
                 expanded_text += (self.image_token * segment_length) + segments[image_idx + 1]
             expanded_texts.append(expanded_text)
 
-        text_inputs = self.tokenizer(expanded_texts, return_tensors=None, **text_kwargs)
-        self._check_special_mm_tokens(expanded_texts, text_inputs, modalities=["image"])
+        tokenized_text_inputs = self.tokenizer(expanded_texts, return_tensors=None, **text_kwargs)
+        self._check_special_mm_tokens(expanded_texts, tokenized_text_inputs, modalities=["image"])
 
         effective_max_length = self.max_sequence_length
         if truncation and max_length is not None:
             effective_max_length = max_length
 
         for batch_idx, (expected_image_lengths, sample_input_ids_list) in enumerate(
-            zip(expected_image_lengths_per_sample, text_inputs["input_ids"], strict=True)
+            zip(expected_image_lengths_per_sample, tokenized_text_inputs["input_ids"], strict=True)
         ):
             sample_input = torch.tensor(sample_input_ids_list, dtype=torch.long)
             image_positions = sample_input.eq(self.image_pad_token_id).nonzero(as_tuple=False).flatten()
@@ -242,7 +287,8 @@ class IsaacProcessor(ProcessorMixin):
                     vision_token_offsets[batch_idx, image_idx] = kept_start - image_start
                     vision_token_lengths[batch_idx, image_idx] = kept_end - kept_start
 
-        text_inputs = self.tokenizer.pad(
+        # Pad only after Isaac-specific truncation so image span offsets and lengths stay aligned.
+        padded_text_inputs = self.tokenizer.pad(
             {"input_ids": [sample_input.tolist() for sample_input in sample_input_ids]},
             padding=padding,
             max_length=max_length if padding == "max_length" else None,
@@ -251,8 +297,8 @@ class IsaacProcessor(ProcessorMixin):
             return_attention_mask=return_attention_mask,
             return_tensors=TensorType.PYTORCH,
         )
-        input_ids = text_inputs["input_ids"]
-        attention_mask = text_inputs.get("attention_mask")
+        input_ids = padded_text_inputs["input_ids"]
+        attention_mask = padded_text_inputs.get("attention_mask")
         if attention_mask is None:
             attention_mask = input_ids.ne(self.pad_token_id).to(dtype=torch.long)
 
@@ -262,56 +308,18 @@ class IsaacProcessor(ProcessorMixin):
         vision_patches = image_inputs["vision_patches"]
         vision_patch_attention_mask = image_inputs["vision_patch_attention_mask"]
 
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
-            "vision_patches": vision_patches,
-            "vision_patch_attention_mask": vision_patch_attention_mask,
-            "vision_token_grids": vision_token_grids,
-            "vision_token_offsets": vision_token_offsets,
-            "vision_token_lengths": vision_token_lengths,
-            "vision_image_attention_mask": vision_image_attention_mask,
-        }
-
-    def post_process_generation(
-        self,
-        text: str,
-        expected: str | None = None,
-        cleanup_and_extract: bool = True,
-    ) -> str | tuple[str, list[SinglePoint | BoundingBox]]:
-        if cleanup_and_extract:
-            return clean_text_and_extract_points(text, expected=expected)
-        return text
-
-    def post_process_image_text_to_text(
-        self,
-        generated_outputs,
-        skip_special_tokens: bool = True,
-        cleanup_and_extract: bool = False,
-        expected: str | None = None,
-        **kwargs,
-    ):
-        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
-        return [
-            self.post_process_generation(text, expected=expected, cleanup_and_extract=cleanup_and_extract)
-            for text in generated_texts
-        ]
-
-    def __call__(
-        self,
-        text: str | list[str],
-        images: ImageInput | None = None,
-        return_tensors: str | TensorType | None = TensorType.PYTORCH,
-        **kwargs,
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            IsaacProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
         return BatchFeature(
-            data=self._build_batch(text=text, images=images, text_kwargs=output_kwargs["text_kwargs"]),
+            data={
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "mm_token_type_ids": mm_token_type_ids,
+                "vision_patches": vision_patches,
+                "vision_patch_attention_mask": vision_patch_attention_mask,
+                "vision_token_grids": vision_token_grids,
+                "vision_token_offsets": vision_token_offsets,
+                "vision_token_lengths": vision_token_lengths,
+                "vision_image_attention_mask": vision_image_attention_mask,
+            },
             tensor_type=return_tensors,
         )
 

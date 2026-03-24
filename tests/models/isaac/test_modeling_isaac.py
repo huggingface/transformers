@@ -29,16 +29,16 @@ from tests.generation.test_utils import GenerationTesterMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_pipeline_mixin import PipelineTesterMixin
 from transformers import (
-    AutoTokenizer,
     IsaacConfig,
     IsaacForConditionalGeneration,
     IsaacModel,
     PythonBackend,
+    Qwen2Tokenizer,
     is_torch_available,
 )
 from transformers.image_utils import load_image
 from transformers.masking_utils import create_bidirectional_mask
-from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessorFast
+from transformers.models.isaac.image_processing_isaac_fast import IsaacImageProcessor
 from transformers.models.isaac.modeling_isaac import (
     IsaacVisionAttention,
     IsaacVisionConfig,
@@ -218,7 +218,7 @@ def create_isaac_processor(
 
     processor_image = image_processor
     if processor_image is None:
-        processor_image = IsaacImageProcessorFast(
+        processor_image = IsaacImageProcessor(
             patch_size=params["vision_patch_size"],
             max_num_patches=params["vision_max_num_patches"],
             min_num_patches=params["vision_min_num_patches"],
@@ -637,33 +637,6 @@ class IsaacPixelShufflePaddedTest(unittest.TestCase):
 
 
 @require_torch
-class IsaacPixelShufflePaddedTest(unittest.TestCase):
-    def test_pixel_shuffle_padded_matches_reference_no_attention_mask(self):
-        x = torch.arange(2 * 16 * 4, device=torch_device, dtype=torch.float32).view(2, 16, 4)
-        token_grids = torch.tensor([[4, 4], [2, 4]], device=torch_device, dtype=torch.long)
-        expected_hidden, expected_mask, expected_lengths = _pixel_shuffle_reference(x, token_grids, scale_factor=2)
-
-        hidden = pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
-
-        torch.testing.assert_close(hidden, expected_hidden)
-
-    def test_pixel_shuffle_padded_raises_on_non_divisible_grid(self):
-        x = torch.randn(1, 15, 8, device=torch_device)
-        token_grids = torch.tensor([[3, 5]], device=torch_device, dtype=torch.long)
-
-        with pytest.raises(ValueError, match="divisible"):
-            pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
-
-    def test_pixel_shuffle_padded_zero_grid(self):
-        x = torch.randn(1, 4, 8, device=torch_device)
-        token_grids = torch.tensor([[0, 0]], device=torch_device, dtype=torch.long)
-
-        hidden = pixel_shuffle_padded(x=x, token_grids=token_grids, scale_factor=2)
-
-        self.assertEqual(hidden.shape, (1, 0, 32))
-
-
-@require_torch
 @require_flash_attn
 class IsaacAttentionDtypeTest(unittest.TestCase):
     def _make_config(self):
@@ -790,8 +763,8 @@ class IsaacGenerationIntegrationTest(unittest.TestCase):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint = _base_reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=BASE_MODEL_REVISION)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.checkpoint, trust_remote_code=True, use_fast=False, revision=BASE_MODEL_REVISION
+        self.tokenizer = Qwen2Tokenizer.from_pretrained(
+            self.checkpoint, trust_remote_code=False, use_fast=False, revision=BASE_MODEL_REVISION
         )
         self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
         self.hf_config.vision_config._attn_implementation = "flash_attention_2"
@@ -1108,7 +1081,7 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint = _reference_checkpoint_or_skip()
         self.hf_config = IsaacConfig.from_pretrained(self.checkpoint, revision=MODEL_REVISION)
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = Qwen2Tokenizer.from_pretrained(
             self.checkpoint, trust_remote_code=True, use_fast=False, revision=MODEL_REVISION
         )
         self.processor = create_isaac_processor(self.tokenizer, self.hf_config)
@@ -1169,3 +1142,62 @@ class IsaacBoxPointingIntegrationTest(unittest.TestCase):
         assert first_point.top_left.y == 247
         assert first_point.bottom_right.x == 863
         assert first_point.bottom_right.y == 386
+
+    def test_hf_generate_polygon_points(self):
+        document = [
+            {
+                "type": "text",
+                "content": "<hint>POLYGON</hint>",
+                "role": "user",
+            },
+            {
+                "type": "image",
+                "content": "https://raw.githubusercontent.com/perceptron-ai-inc/perceptron/refs/heads/main/huggingface/assets/example.webp",
+                "role": "user",
+            },
+            {
+                "type": "text",
+                "content": "Determine whether it is safe to cross the street. Look for signage and moving traffic.",
+                "role": "user",
+            },
+        ]
+        messages, images = document_to_messages(document, vision_token=self.hf_config.vision_token)
+        prompt = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True).strip()
+        processor_output = self.processor(text=prompt, images=images, return_tensors="pt")
+        input_ids = processor_output["input_ids"].to(self.device)
+        prompt_len = input_ids.shape[1]
+        multimodal_inputs = to_model_multimodal_inputs(processor_output, self.device)
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                input_ids=input_ids,
+                **multimodal_inputs,
+                max_new_tokens=self.max_new_tokens,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                return_dict_in_generate=True,
+            )
+
+        generated_ids = outputs.sequences
+        hf_generated_tail = generated_ids[:, prompt_len:]
+        hf_generated_text = self.tokenizer.decode(hf_generated_tail[0], skip_special_tokens=True)
+        _, polygons = self.processor.post_process_generation(hf_generated_text, expected="polygon")
+        assert len(polygons) == 1
+        first_polygon = polygons[0]
+        xs = [point.x for point in first_polygon.points]
+        ys = [point.y for point in first_polygon.points]
+        expected_left, expected_top, expected_right, expected_bottom = 808, 247, 863, 386
+
+        assert len(first_polygon.points) >= 3
+        assert first_polygon.mention == "traffic light"
+        assert min(xs) >= expected_left - 4
+        assert max(xs) <= expected_right + 4
+        assert min(ys) >= expected_top - 4
+        assert max(ys) <= expected_bottom + 4
+        assert max(xs) - min(xs) >= 35
+        assert max(ys) - min(ys) >= 100
+        assert any(abs(x - expected_left) <= 12 for x in xs)
+        assert any(abs(x - expected_right) <= 12 for x in xs)
+        assert any(abs(y - expected_top) <= 12 for y in ys)
+        assert any(abs(y - expected_bottom) <= 12 for y in ys)
