@@ -69,6 +69,7 @@ ALLOWED_LAYER_TYPES = (
     "sparse",
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
+    "moe",  # for nemotron_h, which uses either attention, mamba or moe
 )
 
 
