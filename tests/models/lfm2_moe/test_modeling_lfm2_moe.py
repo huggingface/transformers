@@ -32,8 +32,8 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import Lfm2MoeConfig, Lfm2MoeForCausalLM, Lfm2MoeModel
-    from transformers.models.lfm2_moe.modeling_lfm2_moe import Lfm2MoeHybridConvCache
+    from transformers import DynamicCache, Lfm2MoeConfig, Lfm2MoeForCausalLM, Lfm2MoeModel
+    from transformers.cache_utils import MambaLayer
 
 
 class Lfm2MoeModelTester(CausalLMModelTester):
@@ -71,7 +71,7 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
     _torch_compile_train_cls = Lfm2MoeForCausalLM if is_torch_available() else None
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Lfm2MoeHybridConvCache)
+        self.assertIsInstance(past_key_values, DynamicCache)
 
         # (batch, kv heads, seq_length, head_dim)
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
@@ -79,15 +79,16 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         attention_shape = (batch_size, num_heads, seq_length, head_dim)
         conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
 
-        for i in range(config.num_hidden_layers):
-            if config.layer_types[i] == "full_attention":
-                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
+        for idx in range(config.num_hidden_layers):
+            if config.layer_types[idx] == "full_attention":
+                self.assertEqual(past_key_values.layers[idx].keys.shape, attention_shape)
+                self.assertEqual(past_key_values.layers[idx].values.shape, attention_shape)
             else:
-                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
+                self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
+                self.assertEqual(past_key_values.layers[idx].ssm_states.shape, (1,))
 
-    def _check_caches_are_equal(self, cache1: Lfm2MoeHybridConvCache, cache2: Lfm2MoeHybridConvCache):
-        if not isinstance(cache1, Lfm2MoeHybridConvCache) or not isinstance(cache2, Lfm2MoeHybridConvCache):
+    def _check_caches_are_equal(self, cache1: DynamicCache, cache2: DynamicCache):
+        if not isinstance(cache1, DynamicCache) or not isinstance(cache2, DynamicCache):
             raise ValueError("The wrong cache is being used!")
 
         if not len(cache1) == len(cache2):
@@ -95,9 +96,14 @@ class Lfm2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_cache[idx], cache2.conv_cache[idx])
+            # Mamba layer
+            if type(cache1.layers[idx]) is MambaLayer:
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                torch.testing.assert_close(cache1.layers[idx].ssm_states, cache2.layers[idx].ssm_states)
+            # Attention layer
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
