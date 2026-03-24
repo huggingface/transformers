@@ -984,19 +984,16 @@ class IsaacProcessor(ProcessorMixin):
 
 
 class IsaacRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
-    def __init__(self, config: IsaacConfig | IsaacTextConfig, device=None):
-        rope_source_cfg = config.get_text_config()
-        config_for_rope = copy.copy(rope_source_cfg)
-        rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
-        config_for_rope.rope_scaling = rope_scaling
+    def __init__(self, config: IsaacTextConfig, device=None):
+        rope_parameters = config.rope_parameters
 
         super().__init__(
-            config_for_rope,
+            config,
             device=device if device is not None and getattr(device, "type", None) != "meta" else None,
         )
 
-        self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), self.inv_freq.shape[0])
-        self.hidden_size = getattr(rope_source_cfg, "hidden_size", None)
+        self.mrope_section = self._resolve_mrope_section(rope_parameters.get("mrope_section"), self.inv_freq.shape[0])
+        self.hidden_size = config.hidden_size
 
     @staticmethod
     def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
