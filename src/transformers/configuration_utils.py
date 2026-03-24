@@ -68,6 +68,7 @@ ALLOWED_LAYER_TYPES = (
     "attention",
     "sparse",
     "dense",
+    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
 )
 
 

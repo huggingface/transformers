@@ -379,7 +379,9 @@ class ZambaMambaMixer(nn.Module):
             ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
         else:
             ssm_state = torch.zeros(
-                (batch_size, self.intermediate_size, self.ssm_state_size), device=hidden_states.device, dtype=dtype
+                (batch_size, self.n_mamba_heads, self.mamba_head_dim, self.ssm_state_size),
+                device=hidden_states.device,
+                dtype=dtype,
             )
 
         # 2. Convolution sequence transformation
