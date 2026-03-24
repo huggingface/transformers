@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5TextConfig(PreTrainedConfig):
     r"""
     activation_dropout (`float`, *optional*, defaults to 0.0):
@@ -60,7 +60,7 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
     dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
@@ -105,7 +105,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/kosmos-2.5")
-@strict(accept_kwargs=True)
+@strict
 class Kosmos2_5Config(PreTrainedConfig):
     r"""
     latent_query_num (`int`, *optional*, defaults to 2048):

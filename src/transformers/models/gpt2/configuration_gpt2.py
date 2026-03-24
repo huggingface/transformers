@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="openai-community/gpt2")
-@strict(accept_kwargs=True)
+@strict
 class GPT2Config(PreTrainedConfig):
     r"""
     summary_type (`string`, *optional*, defaults to `"cls_index"`):

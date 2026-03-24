@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="huggingface/informer-tourism-monthly")
-@strict(accept_kwargs=True)
+@strict
 class InformerConfig(PreTrainedConfig):
     r"""
     prediction_length (`int`):

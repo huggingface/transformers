@@ -26,7 +26,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam-vit-huge")
-@strict(accept_kwargs=True)
+@strict
 class PPChart2TableVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -64,7 +64,7 @@ class PPChart2TableVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-Chart2Table_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPChart2TableConfig(PreTrainedConfig):
     r"""
     Example:
