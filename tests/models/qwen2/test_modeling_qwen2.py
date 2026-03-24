@@ -186,7 +186,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
                 ("cuda", 8): "My favourite condiment is 100% real, organic, vegan and gluten free. I use it in my recipes and",
-                ("rocm", (9, 4)): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making"
+                ("rocm", (9, 4)): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
                 ("xpu", 3): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
             }
         )  # fmt: skip
