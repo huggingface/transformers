@@ -187,7 +187,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
     r"""
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
-    num_decoder_layers (`int`, *optional*, defaults to 1):
+    num_decoder_layers (`int`, *optional*, defaults to 2):
         Number of LSTM layers in the prediction network.
     num_duration_bins (`int`, *optional*, defaults to 5):
         Number of duration bins for predicting token durations.
@@ -223,7 +223,7 @@ class ParakeetTDTConfig(PreTrainedConfig):
         self,
         vocab_size=8193,
         decoder_hidden_size=640,
-        num_decoder_layers=1,
+        num_decoder_layers=2,
         durations=[0, 1, 2, 3, 4],
         hidden_act="relu",
         max_symbols_per_step=10,

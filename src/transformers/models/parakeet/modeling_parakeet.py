@@ -27,12 +27,20 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...generation import CompileConfig
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -822,6 +830,69 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         return sequences
 
 
+class ParakeetTDTDecoderCache:
+    def __init__(self):
+        self.cache: torch.Tensor | None = None
+        self.hidden_state: torch.Tensor | None = None
+        self.cell_state: torch.Tensor | None = None
+        self.is_initialized: bool = False
+
+    def lazy_initialization(self, hidden_states, lstm_module):
+        self.cache = torch.zeros(
+            hidden_states.shape[0], 1, lstm_module.hidden_size, device=hidden_states.device, dtype=hidden_states.dtype
+        )
+        self.hidden_state = torch.zeros(
+            lstm_module.num_layers,
+            hidden_states.shape[0],
+            lstm_module.hidden_size,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+        self.cell_state = torch.zeros(
+            lstm_module.num_layers,
+            hidden_states.shape[0],
+            lstm_module.hidden_size,
+            device=hidden_states.device,
+            dtype=hidden_states.dtype,
+        )
+
+        if not is_torchdynamo_compiling():
+            torch._dynamo.mark_static_address(self.cache)
+            torch._dynamo.mark_static_address(self.hidden_state)
+            torch._dynamo.mark_static_address(self.cell_state)
+
+        self.is_initialized = True
+
+    def update(
+        self,
+        decoder_output,
+        hidden_state,
+        cell_state,
+        lstm_module=None,
+        mask=None,
+    ):
+        if not self.is_initialized and lstm_module is not None:
+            self.lazy_initialization(decoder_output, lstm_module)
+        elif not self.is_initialized:
+            raise ValueError(
+                "ParakeetTDTDecoderCache is not initialized. Make sure to provide lstm_module to the update method."
+            )
+
+        if mask is None:
+            self.hidden_state.copy_(hidden_state)
+            self.cell_state.copy_(cell_state)
+            self.cache.copy_(decoder_output)
+        else:
+            # Mask to update specific batch elements
+            mask = mask.to(decoder_output.device)
+            batch_size = decoder_output.shape[0]
+            mask_h = mask.view(1, batch_size, 1)
+            mask_d = mask.view(batch_size, 1, 1)
+            self.cache = torch.where(mask_d, decoder_output, self.cache)
+            self.hidden_state = torch.where(mask_h, hidden_state, self.hidden_state)
+            self.cell_state = torch.where(mask_h, cell_state, self.cell_state)
+
+
 class ParakeetTDTDecoder(nn.Module):
     """LSTM-based prediction network for TDT."""
 
@@ -840,17 +911,23 @@ class ParakeetTDTDecoder(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        hidden_state: torch.Tensor | None = None,
-        cell_state: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        decoder_cache: ParakeetTDTDecoderCache | None = None,
+        decoder_cache_update_mask: torch.BoolTensor | None = None,
+    ) -> torch.Tensor:
         input_ids = input_ids.to(self.decoder_projector.weight.device)
         hidden_cell_states = (
-            (hidden_state, cell_state) if hidden_state is not None and cell_state is not None else None
+            (decoder_cache.hidden_state, decoder_cache.cell_state)
+            if decoder_cache is not None and decoder_cache.is_initialized
+            else None
         )
         embeddings = self.embedding(input_ids)
         lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
         decoder_output = self.decoder_projector(lstm_output)
-        return decoder_output, hidden_state, cell_state
+        if decoder_cache is not None:
+            decoder_cache.update(
+                decoder_output, hidden_state, cell_state, lstm_module=self.lstm, mask=decoder_cache_update_mask
+            )
+        return decoder_output
 
 
 class ParakeetTDTJointNetwork(nn.Module):
@@ -912,20 +989,15 @@ class ParakeetTDTOutput(ModelOutput):
             or `(batch, 1, 1, vocab+durations)` for single-step inference.
         encoder_outputs (`ParakeetEncoderModelOutput`, *optional*):
             Encoder outputs with `pooler_output` containing projected hidden states.
-        decoder_output (`torch.FloatTensor`, *optional*):
-            Decoder LSTM output, reused during blank-skipping in generation.
-        decoder_hidden_state (`torch.FloatTensor`, *optional*):
-            Decoder LSTM hidden state.
-        decoder_cell_state (`torch.FloatTensor`, *optional*):
-            Decoder LSTM cell state.
+        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+            Decoder LSTM cache containing hidden state, cell state, and decoder output.
+            Updated in-place during generation.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
     encoder_outputs: "ParakeetEncoderModelOutput | None" = None
-    decoder_output: torch.FloatTensor | None = None
-    decoder_hidden_state: torch.FloatTensor | None = None
-    decoder_cell_state: torch.FloatTensor | None = None
+    decoder_cache: ParakeetTDTDecoderCache | None = None
 
 
 # TODO (ebezzam) eventually move to audio_utils or loss_utils for common usage?
@@ -1098,9 +1170,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         encoder_outputs: ParakeetEncoderModelOutput | None = None,
         encoder_frame_ids: torch.LongTensor | None = None,
-        decoder_output: torch.Tensor | None = None,
-        decoder_hidden_state: torch.Tensor | None = None,
-        decoder_cell_state: torch.Tensor | None = None,
+        decoder_cache: ParakeetTDTDecoderCache | None = None,
+        decoder_cache_update_mask: torch.BoolTensor | None = None,
+        use_decoder_cache: bool | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTOutput:
@@ -1111,12 +1183,18 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             Pre-computed encoder outputs with `pooler_output` containing projected hidden states.
         encoder_frame_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Encoder frame indices for the joint network during generation.
-        decoder_output (`torch.Tensor`, *optional*):
-            Pre-computed decoder LSTM output, reused during blank-skipping.
-        decoder_hidden_state (`torch.Tensor`, *optional*):
-            Decoder LSTM hidden state from a previous step.
-        decoder_cell_state (`torch.Tensor`, *optional*):
-            Decoder LSTM cell state from a previous step.
+        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+            Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
+            (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
+            the decoder runs and the cache is updated in-place.
+        decoder_cache_update_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Boolean mask controlling which batch elements have their decoder cache updated.
+            When provided, only elements where the mask is `True` are written to the cache;
+            other elements retain their previous cached state. Used during generation to
+            preserve cache for samples that predicted blank tokens.
+        use_decoder_cache (`bool`, *optional*):
+            Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
+            is created automatically during the forward pass.
 
         Example:
 
@@ -1154,7 +1232,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 (labels.shape[0], 1), self.config.blank_token_id, dtype=labels.dtype, device=labels.device
             )
             input_ids = torch.cat([blank_tokens, labels], dim=1)
-        elif input_ids is None and decoder_output is None:
+        elif input_ids is None and decoder_cache is None:
             # for inference: start with blank token if not provided
             input_ids = torch.full(
                 (projected_encoder_output.shape[0], 1),
@@ -1163,10 +1241,15 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 device=projected_encoder_output.device,
             )
 
-        if decoder_output is None:
-            decoder_output, decoder_hidden_state, decoder_cell_state = self.decoder(
-                input_ids, decoder_hidden_state, decoder_cell_state
-            )
+        if use_decoder_cache and decoder_cache is None:
+            decoder_cache = ParakeetTDTDecoderCache()
+
+        # Run decoder if we have input_ids (initial step or after emitting a token)
+        if input_ids is not None:
+            decoder_output = self.decoder(input_ids, decoder_cache, decoder_cache_update_mask)
+        else:
+            # Reuse cached decoder_output (blank-skipping path)
+            decoder_output = decoder_cache.cache
 
         if encoder_frame_ids is not None:
             batch_indices = torch.arange(projected_encoder_output.shape[0], device=projected_encoder_output.device)
@@ -1202,9 +1285,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             loss=loss,
             logits=logits,
             encoder_outputs=encoder_outputs,
-            decoder_output=decoder_output,
-            decoder_hidden_state=decoder_hidden_state,
-            decoder_cell_state=decoder_cell_state,
+            decoder_cache=decoder_cache,
         )
 
     @torch.no_grad()
@@ -1214,6 +1295,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         return_timestamps: bool = False,
         return_dict_in_generate: bool = False,
+        compile_config: CompileConfig | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTGenerateOutput | torch.LongTensor:
         r"""
@@ -1223,6 +1305,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             return_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether to return per-token timestamps and durations. When `True`, forces
                 `return_dict_in_generate=True` and includes `token_timestamps` and `token_durations` in the output.
+            compile_config ([`~generation.CompileConfig`], *optional*):
+                If provided, `torch.compile` will be applied to the forward calls in the decoding loop.
 
         Example:
 
@@ -1254,92 +1338,71 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         if return_timestamps:
             return_dict_in_generate = True
 
-        # Initial forward: encode + blank prediction
-        outputs: ParakeetTDTOutput = self.forward(
+        model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
+
+        # Initial forward: encode + decoder initialization
+        outputs = model_forward(
             input_features=input_features,
             attention_mask=attention_mask,
+            use_decoder_cache=True,
             return_dict=True,
             **kwargs,
         )
         encoder_outputs = outputs.encoder_outputs
+        decoder_cache = outputs.decoder_cache
         batch_size, sequence_length = encoder_outputs.pooler_output.shape[:2]
         device = encoder_outputs.pooler_output.device
 
+        # TODO use encoder attention mask like in loss computation?
         if attention_mask is not None:
             encoder_attention_mask = self._get_output_attention_mask(attention_mask, target_length=sequence_length)
             valid_lengths = encoder_attention_mask.sum(dim=1).int()
         else:
             valid_lengths = torch.full((batch_size,), sequence_length, dtype=torch.int, device=device)
-        decoder_output = outputs.decoder_output
-        decoder_hidden_state = outputs.decoder_hidden_state
-        decoder_cell_state = outputs.decoder_cell_state
 
-        vocab_size = self.config.vocab_size
         time_indices = torch.zeros(batch_size, dtype=torch.long, device=device)
         time_indices_current_labels = torch.zeros(batch_size, dtype=torch.long, device=device)
         active_mask = time_indices < valid_lengths
-        active_mask_prev = torch.zeros_like(active_mask)
-
         symbols_per_step = torch.zeros(batch_size, dtype=torch.long, device=device)
         last_label_time = torch.full((batch_size,), -1, dtype=torch.long, device=device)
         max_output_len = sequence_length * self.config.max_symbols_per_step
         all_tokens_tensor = torch.full(
             (batch_size, max_output_len), self.config.pad_token_id, dtype=torch.long, device=device
         )
+        tokens = torch.zeros(batch_size, dtype=torch.long, device=device)
+        durations = torch.zeros(batch_size, dtype=torch.long, device=device)
         token_counts = torch.zeros(batch_size, dtype=torch.long, device=device)
         if return_timestamps:
             all_frame_indices = torch.zeros((batch_size, max_output_len), dtype=torch.long, device=device)
             all_durations_tensor = torch.zeros((batch_size, max_output_len), dtype=torch.long, device=device)
 
         while active_mask.any():
-            active_mask_prev.copy_(active_mask)
+            active_at_start = active_mask.clone()
 
-            outputs = self.forward(
+            time_indices_current_labels = torch.where(active_at_start, time_indices, time_indices_current_labels)
+            outputs = model_forward(
                 encoder_outputs=encoder_outputs,
                 encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
-                decoder_output=decoder_output,
-                decoder_hidden_state=decoder_hidden_state,
-                decoder_cell_state=decoder_cell_state,
+                decoder_cache=decoder_cache,
                 return_dict=True,
             )
             logits = outputs.logits.squeeze(1)
-            tokens = logits[..., :vocab_size].argmax(dim=-1)
-            durations = logits[..., vocab_size:].argmax(dim=-1)
+            tokens = torch.where(active_at_start, logits[..., : self.config.vocab_size].argmax(dim=-1), tokens)
+            durations = torch.where(active_at_start, logits[..., self.config.vocab_size :].argmax(dim=-1), durations)
 
-            blank_mask = active_mask_prev & (tokens == self.config.blank_token_id)
+            blank_mask = active_at_start & (tokens == self.config.blank_token_id)
             durations = durations.masked_fill(blank_mask & (durations == 0), 1)  # ensure forward progress
 
-            time_indices_current_labels.copy_(time_indices)
-            time_indices = time_indices + durations.masked_fill(~active_mask, 0)
+            # Advance time for all active samples
+            time_indices = time_indices + durations.masked_fill(~active_at_start, 0)
             active_mask = time_indices < valid_lengths
-            advance_mask = active_mask & blank_mask
 
-            # Skip consecutive blanks
-            while advance_mask.any():
-                time_indices_current_labels = torch.where(advance_mask, time_indices, time_indices_current_labels)
+            # If all remaining active samples predicted blank, skip emit + decoder update
+            emit_mask = active_at_start & ~blank_mask
+            if not emit_mask.any():
+                continue
 
-                outputs = self.forward(
-                    encoder_outputs=encoder_outputs,
-                    encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
-                    decoder_output=decoder_output,
-                    decoder_hidden_state=decoder_hidden_state,
-                    decoder_cell_state=decoder_cell_state,
-                    return_dict=True,
-                )
-                logits = outputs.logits.squeeze(1)
-                more_tokens = logits[..., :vocab_size].argmax(dim=-1)
-                more_durations = logits[..., vocab_size:].argmax(dim=-1)
-                tokens = torch.where(advance_mask, more_tokens, tokens)
-                durations = torch.where(advance_mask, more_durations, durations)
-
-                blank_mask = tokens == self.config.blank_token_id
-                durations = durations.masked_fill(blank_mask & (durations == 0), 1)
-
-                time_indices = torch.where(advance_mask, time_indices + durations, time_indices)
-                active_mask = time_indices < valid_lengths
-                advance_mask = active_mask & blank_mask
-
-            emit_mask = active_mask_prev & (tokens != self.config.blank_token_id)
+            # Emit non-blank tokens
             emit_indices = token_counts[emit_mask]
             all_tokens_tensor[emit_mask, emit_indices] = tokens[emit_mask]
             if return_timestamps:
@@ -1347,21 +1410,15 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 all_durations_tensor[emit_mask, emit_indices] = durations[emit_mask]
             token_counts += emit_mask.long()
 
-            # Update decoder state for emitted tokens
-            outputs = self.forward(
+            # Run decoder for emitted tokens — only update cache for samples that emitted
+            model_forward(
                 input_ids=tokens.unsqueeze(1),
                 encoder_outputs=encoder_outputs,
                 encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
-                decoder_hidden_state=decoder_hidden_state,
-                decoder_cell_state=decoder_cell_state,
+                decoder_cache=decoder_cache,
+                decoder_cache_update_mask=emit_mask,
                 return_dict=True,
             )
-
-            emit_mask_state = emit_mask.view(1, batch_size, 1)
-            decoder_hidden_state = torch.where(emit_mask_state, outputs.decoder_hidden_state, decoder_hidden_state)
-            decoder_cell_state = torch.where(emit_mask_state, outputs.decoder_cell_state, decoder_cell_state)
-            emit_mask_expanded = emit_mask.view(batch_size, 1, 1)
-            decoder_output = torch.where(emit_mask_expanded, outputs.decoder_output, decoder_output)
 
             time_changed = time_indices_current_labels != last_label_time
             symbols_per_step = torch.where(time_changed, 0, symbols_per_step)
