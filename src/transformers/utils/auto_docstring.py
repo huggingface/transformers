@@ -16,6 +16,7 @@ from __future__ import annotations
 import inspect
 import os
 from collections.abc import Mapping
+from dataclasses import fields
 from functools import lru_cache
 from pathlib import Path
 from types import UnionType
@@ -3245,7 +3246,15 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
 
 
 def _process_regular_parameters(
-    sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+    sig,
+    func,
+    class_name,
+    documented_params,
+    indent_level,
+    undocumented_parameters,
+    source_args_dict,
+    parent_class,
+    allowed_params=None,
 ):
     """
     Process all regular parameters (not kwargs parameters) from the function signature.
@@ -3278,6 +3287,10 @@ def _process_regular_parameters(
             or param.kind == inspect.Parameter.VAR_POSITIONAL
             or param.kind == inspect.Parameter.VAR_KEYWORD
         ):
+            continue
+
+        # When a filter is active (e.g. config classes: only own annotations), skip inherited params
+        if allowed_params is not None and param_name not in allowed_params:
             continue
 
         param_name = ARGS_TO_RENAME.get(param_name, param_name)
@@ -3757,7 +3770,15 @@ def _add_return_tensors_to_docstring(func, parent_class, docstring, indent_level
 
 
 def _process_parameters_section(
-    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
+    func_documentation,
+    sig,
+    func,
+    class_name,
+    model_name_lowercase,
+    parent_class,
+    indent_level,
+    source_args_dict,
+    allowed_params,
 ):
     """
     Process the parameters section of the docstring.
@@ -3783,7 +3804,15 @@ def _process_parameters_section(
 
     # Process regular parameters
     param_docstring, missing_args = _process_regular_parameters(
-        sig, func, class_name, documented_params, indent_level, undocumented_parameters, source_args_dict, parent_class
+        sig,
+        func,
+        class_name,
+        documented_params,
+        indent_level,
+        undocumented_parameters,
+        source_args_dict,
+        parent_class,
+        allowed_params,
     )
     docstring += param_docstring
 
@@ -4048,7 +4077,13 @@ def _process_example_section(
 
 
 def auto_method_docstring(
-    func, parent_class=None, custom_intro=None, custom_args=None, checkpoint=None, source_args_dict=None
+    func,
+    parent_class=None,
+    custom_intro=None,
+    custom_args=None,
+    checkpoint=None,
+    source_args_dict=None,
+    allowed_params=None,
 ):
     """
     Wrapper that automatically generates docstring.
@@ -4077,7 +4112,15 @@ def auto_method_docstring(
 
     # Process Parameters section
     docstring += _process_parameters_section(
-        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level, source_args_dict
+        func_documentation,
+        sig,
+        func,
+        class_name,
+        model_name_lowercase,
+        parent_class,
+        indent_level,
+        source_args_dict,
+        allowed_params,
     )
 
     # Process Returns section
@@ -4160,12 +4203,22 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         doc_class = cls.__doc__
         if custom_args is None and doc_class:
             custom_args = doc_class
+
+        # `fields(cls)` returns only the annotations defined on cls exclduing `ClassVar`
+        # (e.g. model_type). Also exclude two quasi-ClassVar fields which can `setattr` and
+        # saved in config. These do not act as class attributes and thus cannot be `ClassVar`
+        # in its general sense.
+        own_config_params = {
+            field.name for field in fields(cls) if field.name not in ["transformers_version", "architectures"]
+        }
+        allowed_params = own_config_params if own_config_params else None
         docstring_init = auto_method_docstring(
             cls.__init__,
             parent_class=cls,
             custom_args=custom_args,
             checkpoint=checkpoint,
             source_args_dict=get_args_doc_from_source([ConfigArgs]),
+            allowed_params=allowed_params,
         ).__doc__
 
     indent_level = get_indent_level(cls)
