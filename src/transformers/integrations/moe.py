@@ -262,12 +262,16 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         `bool`: True if grouped_mm can be used, False otherwise.
     """
     if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
-        weight.device.type == "cpu" and is_torch_less_or_equal("2.10") and (weight.data_ptr() % 16 != 0)
+        weight.device.type == "cpu"
+        and is_torch_less_or_equal("2.10.0")
+        and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
     ):
-        # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
-        # before PyTorch 2.11, torch.grouped_mm on CPU required 16 bytes alignment which is not
-        # guaranteed for tensors loaded using memmap (e.g. using safetensors lazy tensor loading)
-        # issue: https://github.com/pytorch/pytorch/issues/172440
+        # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
+        # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
+        # 2. Before PyTorch 2.11, torch.grouped_mm on CPU required 16 bytes alignment which is not
+        #    guaranteed for tensors loaded using memmap (e.g. using safetensors lazy tensor loading)
+        #    and not really necessary because the cpu path uses a fallback for-loop implementation.
+        #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
     return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
