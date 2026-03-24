@@ -109,7 +109,7 @@ from pathlib import Path
 import faiss
 import numpy as np
 import torch
-from datasets import Dataset, load_from_disk
+from datasets import Dataset, load_dataset, load_from_disk
 from huggingface_hub import logging as huggingface_hub_logging
 from huggingface_hub import snapshot_download
 from tqdm import tqdm
@@ -136,7 +136,7 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 MODELS_ROOT = Path("src/transformers/models")
 DATASET_DIR = "code_index_dataset"
-HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
+HUB_DATASET_DEFAULT = "itazap/transformers_code_embeddings_v3"
 
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
 BATCH_SIZE = 16
@@ -339,12 +339,7 @@ class CodeSimilarityAnalyzer:
             self.dataset = load_from_disk(str(local_path))
         else:
             logging.info(f"downloading index from hub: {self.hub_dataset}")
-            snapshot_path = snapshot_download(repo_id=self.hub_dataset, repo_type="dataset")
-            dataset_path = Path(snapshot_path) / DATASET_DIR
-            if not dataset_path.exists():
-                # Fallback: snapshot root contains the dataset files directly
-                dataset_path = Path(snapshot_path)
-            self.dataset = load_from_disk(str(dataset_path))
+            self.dataset = load_dataset(self.hub_dataset, split="train")
 
         self._attach_faiss_index()
 
