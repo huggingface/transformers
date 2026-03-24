@@ -28,7 +28,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
-@strict(accept_kwargs=True)
+@strict
 class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -105,7 +105,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
-@strict(accept_kwargs=True)
+@strict
 class LwDetrConfig(PreTrainedConfig):
     r"""
     projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):
@@ -134,8 +134,6 @@ class LwDetrConfig(PreTrainedConfig):
         [`LwDetrModel`] can detect in a single image.
     group_detr (`int`, *optional*, defaults to 13):
         Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
-    init_std (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
         kernels are not supported by PyTorch ONNX export.

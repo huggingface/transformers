@@ -61,13 +61,8 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageVQVAEConfig(PreTrainedConfig):
-    r"""
-    num_embeddings (`int`, *optional*, defaults to 16384):
-        Number of codebook embeddings.
-    """
-
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
@@ -79,8 +74,24 @@ class GlmImageVQVAEConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageVisionConfig(Glm4vVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
+
+    >>> # Initializing a GlmImageVisionConfig GLM-Image style configuration
+    >>> configuration = GlmImageVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the GLM-Image configuration
+    >>> model = GlmImageVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
 
@@ -100,7 +111,7 @@ class GlmImageVisionConfig(Glm4vVisionConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -131,7 +142,7 @@ class GlmImageTextConfig(Glm4vTextConfig):
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
-@strict(accept_kwargs=True)
+@strict
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):
@@ -297,8 +308,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-            The cosine and sine position embeddings for vision attention.
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         """
@@ -786,8 +795,11 @@ class GlmImageModel(Glm4vModel):
                 images_per_sample=images_per_sample,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
                 step = past_key_values_length - self._prefill_len

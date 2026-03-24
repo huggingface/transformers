@@ -39,7 +39,7 @@ from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
-@strict(accept_kwargs=True)
+@strict
 class Aimv2VisionConfig(SiglipVisionConfig):
     r"""
     use_head (`str`, *optional*, defaults to `True`):
@@ -80,7 +80,7 @@ class Aimv2VisionConfig(SiglipVisionConfig):
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
-@strict(accept_kwargs=True)
+@strict
 class Aimv2TextConfig(SiglipTextConfig):
     vocab_size: int = 49408
     hidden_size: int = 768
@@ -103,7 +103,7 @@ class Aimv2TextConfig(SiglipTextConfig):
 
 
 @auto_docstring(checkpoint="apple/aimv2-large-patch14-224-lit")
-@strict(accept_kwargs=True)
+@strict
 class Aimv2Config(SiglipConfig):
     r"""
     max_logit_scale (`float`, *optional*, defaults to `100.0`):

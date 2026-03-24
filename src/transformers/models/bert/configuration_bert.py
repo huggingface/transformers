@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google-bert/bert-base-uncased")
-@strict(accept_kwargs=True)
+@strict
 class BertConfig(PreTrainedConfig):
     r"""
     Examples:
