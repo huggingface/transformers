@@ -44,7 +44,6 @@ if is_torch_available():
     import torch
 
     from transformers import Lfm2VlConfig, Lfm2VlForConditionalGeneration, Lfm2VlModel
-    from transformers.models.lfm2.modeling_lfm2 import Lfm2HybridConvCache
 
 
 class Lfm2VlModelTester(CausalLMModelTester):
@@ -172,21 +171,10 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             self, config_class=Lfm2VlConfig, has_text_modality=False, common_properties=common_properties
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Lfm2HybridConvCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+    def _get_mamba_cache_shapes(batch_size: int, config):
         conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
-
-        for i in range(config.num_hidden_layers):
-            if config.layer_types[i] == "full_attention":
-                self.assertEqual(past_key_values.key_cache[i].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[i].shape, attention_shape)
-            else:
-                self.assertEqual(past_key_values.conv_cache[i].shape, conv_shape)
+        ssm_shape = (1,)
+        return conv_shape, ssm_shape
 
     def test_config(self):
         self.config_tester.run_common_tests()

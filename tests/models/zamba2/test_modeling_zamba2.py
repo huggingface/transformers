@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, Zamba2ForCausalLM, Zamba2ForSequenceClassification, Zamba2Model
+    from transformers import Zamba2ForCausalLM, Zamba2ForSequenceClassification, Zamba2Model
 
 
 class Zamba2ModelTester:
@@ -298,14 +298,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else {}
     )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, DynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-
+    def _get_mamba_cache_shapes(batch_size: int, config):
         intermediate_size = config.mamba_expand * config.hidden_size
         conv_shape = (
             batch_size,
@@ -313,18 +306,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config.mamba_d_conv,
         )
         ssm_shape = (batch_size, config.n_mamba_heads, config.mamba_headdim, config.mamba_d_state)
-
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
-                self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
-            else:
-                self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
-                self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
-                self.assertEqual(past_key_values.layers[idx].keys.shape, attention_shape)
-                self.assertEqual(past_key_values.layers[idx].values.shape, attention_shape)
+        return conv_shape, ssm_shape
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)

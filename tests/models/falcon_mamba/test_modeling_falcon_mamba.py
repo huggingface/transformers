@@ -274,18 +274,6 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             self, config_class=FalconMambaConfig, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, DynamicCache)
-
-        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
-        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
-
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
-            self.assertEqual(past_key_values.layers[idx].ssm_states.shape, ssm_shape)
-
     def assertInterval(self, member, container, msg=None):
         r"""
         Simple utility function to check if a member is inside an interval.

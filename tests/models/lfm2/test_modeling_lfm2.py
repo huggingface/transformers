@@ -29,7 +29,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, Lfm2ForCausalLM, Lfm2Model
+    from transformers import Lfm2ForCausalLM, Lfm2Model
 
 
 class Lfm2ModelTester(CausalLMModelTester):
@@ -51,22 +51,10 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, DynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
+    def _get_mamba_cache_shapes(batch_size: int, config):
         conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
-
-        for idx in range(config.num_hidden_layers):
-            if config.layer_types[idx] == "full_attention":
-                self.assertEqual(past_key_values.layers[idx].keys.shape, attention_shape)
-                self.assertEqual(past_key_values.layers[idx].values.shape, attention_shape)
-            else:
-                self.assertEqual(past_key_values.layers[idx].conv_states.shape, conv_shape)
-                self.assertEqual(past_key_values.layers[idx].ssm_states.shape, (1,))
+        ssm_shape = (1,)
+        return conv_shape, ssm_shape
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""

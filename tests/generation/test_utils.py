@@ -2537,6 +2537,12 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
+    def _get_mamba_cache_shapes(batch_size: int, config):
+        # Default mamba cache shape - can vary based on models so this function is convenient to easily check caches
+        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
+        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
+        return conv_shape, ssm_shape
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
         if not isinstance(past_key_values, Cache):
@@ -2560,11 +2566,14 @@ class GenerationTesterMixin:
         head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        expected_shape = (
+        attention_shape = (
             (batch_size, num_heads, seq_length, head_dim)
             if seq_length is not None
             else (batch_size, num_heads, head_dim)
         )
+
+        # For mamba layers
+        conv_shape, ssm_shape = self._get_mamba_cache_shapes(batch_size, config)
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
@@ -2574,11 +2583,23 @@ class GenerationTesterMixin:
 
         # Check each layer has the correct shape
         for layer in past_key_values.layers:
-            # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-            keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-            values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-            self.assertEqual(keys.shape, expected_shape)
-            self.assertEqual(values.shape, expected_shape)
+            if isinstance(layer, MambaLayer):
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.ssm_states.shape, ssm_shape)
+            elif isinstance(layer, MambaAndAttentionLayer):
+                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                self.assertEqual(layer.ssm_states.shape, ssm_shape)
+            else:
+                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
