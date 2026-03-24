@@ -843,7 +843,7 @@ class FalconH1Mixer(nn.Module):
 
             # Init cache
             if ssm_state is not None and cache_params is not None:
-                ssm_state = cache_params.update_ssm_states(ssm_state, self.layer_idx)
+                ssm_state = cache_params.update_ssm_state(ssm_state, self.layer_idx)
 
         if self.mamba_rms_norm:
             scan_output = self.norm(y, gate)
