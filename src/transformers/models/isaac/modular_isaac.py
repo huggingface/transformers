@@ -741,6 +741,9 @@ class IsaacConfig(PretrainedConfig):
         vision_token: str = "<image>",
         **kwargs,
     ):
+        for key in ("use_cache", "rope_theta", "max_position_embeddings"):
+            kwargs.pop(key, None)
+
         if isinstance(text_config, dict):
             self.text_config = self.sub_configs["text_config"](**text_config)
         elif isinstance(text_config, IsaacTextConfig):
