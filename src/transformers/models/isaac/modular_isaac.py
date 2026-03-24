@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import TorchvisionBackend
 from ... import initialization as init
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import (
@@ -199,7 +199,7 @@ class IsaacTextConfig(Qwen3Config):
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
+        self.validate_layer_type()
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
