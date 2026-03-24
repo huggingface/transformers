@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
-
 import asyncio
 import base64
 import copy
@@ -30,7 +28,7 @@ from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from threading import Thread
-from typing import TYPE_CHECKING, Annotated, TypedDict
+from typing import TYPE_CHECKING, Annotated, Optional, TypedDict, Union
 
 import typer
 from huggingface_hub import scan_cache_dir
@@ -512,9 +510,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: ProcessorMixin | PreTrainedTokenizerFast | None = None,
+        processor: Union["ProcessorMixin", "PreTrainedTokenizerFast"] | None = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -1263,7 +1261,7 @@ class Serve:
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
-    def get_model_modality(model: PreTrainedModel, processor=None) -> Modality:
+    def get_model_modality(model: "PreTrainedModel", processor=None) -> Modality:
         if processor is not None:
             if isinstance(processor, PreTrainedTokenizerBase):
                 return Modality.LLM
@@ -2241,7 +2239,7 @@ class Serve:
 
             return model, processor
 
-    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple[PreTrainedModel, ProcessorMixin]:
+    def load_audio_model_and_processor(self, model_id_and_revision: str) -> tuple["PreTrainedModel", "ProcessorMixin"]:
         """
         Loads the audio model and processor from the given model ID and revision into the ServeCommand instance.
 
