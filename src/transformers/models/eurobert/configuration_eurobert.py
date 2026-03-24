@@ -27,7 +27,7 @@ from ..llama import LlamaConfig
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
-@strict(accept_kwargs=True)
+@strict
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):

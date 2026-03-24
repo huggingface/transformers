@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
-@strict(accept_kwargs=True)
+@strict
 class AudioFlamingo3EncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -69,7 +69,7 @@ class AudioFlamingo3EncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-3-hf")
-@strict(accept_kwargs=True)
+@strict
 class AudioFlamingo3Config(PreTrainedConfig):
     r"""
     Example:
