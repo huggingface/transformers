@@ -1594,6 +1594,35 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
+    def test_load_best_model_with_save_best(self):
+        # Regression test: when save_strategy="best", the best model checkpoint should
+        # be loaded at the end of training, not the last one.
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(
+            output_dir=tmp_dir,
+            save_strategy="best",
+            eval_strategy="steps",
+            eval_steps=5,
+            load_best_model_at_end=True,
+            save_total_limit=2,
+            max_steps=11,
+        )
+        trainer.train()
+
+        # Check that best_model_checkpoint was set
+        assert trainer.state.best_model_checkpoint is not None, (
+            "trainer.state.best_model_checkpoint is None. Cannot load the best model checkpoint."
+        )
+
+        # Check that the right model was loaded in at the end of training —
+        # trainer.model weights should match the best checkpoint, not the last one saved
+        model_state = trainer.model.state_dict()
+        final_model_weights = safetensors.torch.load_file(
+            os.path.join(trainer.state.best_model_checkpoint, "model.safetensors")
+        )
+        for k, v in model_state.items():
+            assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
+
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
