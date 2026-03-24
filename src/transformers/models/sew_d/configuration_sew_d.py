@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="BAAI/seggpt-vit-large")
-@strict(accept_kwargs=True)
+@strict
 class SEWDConfig(PreTrainedConfig):
     r"""
     squeeze_factor (`int`, *optional*, defaults to 2):

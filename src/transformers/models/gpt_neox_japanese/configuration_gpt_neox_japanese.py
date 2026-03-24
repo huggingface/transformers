@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="abeja/gpt-neox-japanese-2.7b")
-@strict(accept_kwargs=True)
+@strict
 class GPTNeoXJapaneseConfig(PreTrainedConfig):
     r"""
     intermediate_multiple_size (`int`, *optional*, defaults to 4):

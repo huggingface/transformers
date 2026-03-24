@@ -29,7 +29,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
-@strict(accept_kwargs=True)
+@strict
 class CHMv2Config(PreTrainedConfig):
     r"""
     backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
