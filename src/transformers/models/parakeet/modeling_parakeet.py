@@ -67,6 +67,15 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
     def __init__(self, config: ParakeetEncoderConfig, device=None):
         super().__init__()
         self.max_position_embeddings = config.max_position_embeddings
+        self.config = config
+        inv_freq = self.compute_default_relative_positional_parameters(config, device=device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    @staticmethod
+    def compute_default_relative_positional_parameters(
+        config: ParakeetEncoderConfig | None = None,
+        device=None,
+    ) -> torch.Tensor:
         base = 10000.0
         inv_freq = 1.0 / (
             base
@@ -75,18 +84,11 @@ class ParakeetEncoderRelPositionalEncoding(nn.Module):
                 / config.hidden_size
             )
         )
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        return inv_freq
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[1]
-        if seq_length > self.max_position_embeddings:
-            raise ValueError(
-                f"Sequence Length: {seq_length} has to be less or equal than "
-                f"config.max_position_embeddings {self.max_position_embeddings}."
-            )
-
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
         inv_freq_expanded = (
             self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
@@ -512,12 +514,8 @@ class ParakeetPreTrainedModel(PreTrainedModel):
             init.normal_(module.bias_u, mean=0.0, std=std)
             init.normal_(module.bias_v, mean=0.0, std=std)
         elif isinstance(module, ParakeetEncoderRelPositionalEncoding):
-            encoder_config = getattr(self.config, "encoder_config", self.config)
-            inv_freq = 1.0 / (
-                10000.0
-                ** (torch.arange(0, encoder_config.hidden_size, 2, dtype=torch.int64) / encoder_config.hidden_size)
-            )
-            init.copy_(module.inv_freq, inv_freq)
+            buffer_value = module.compute_default_relative_positional_parameters(module.config)
+            init.copy_(module.inv_freq, buffer_value)
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)

@@ -21,7 +21,6 @@ from tokenizers.models import Unigram
 from torch import nn
 
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -33,6 +32,7 @@ from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoder
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoderBlock,
     ParakeetEncoderConvolutionModule,
+    ParakeetEncoderModelOutput,
     ParakeetForCTC,
     ParakeetPreTrainedModel,
 )
@@ -168,7 +168,7 @@ class LasrProcessor(ParakeetProcessor):
         raise NotImplementedError("Not needed")
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -269,7 +269,7 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         del self.scale_input
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="google/medasr")
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
         ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
@@ -465,6 +465,10 @@ class LasrPreTrainedModel(ParakeetPreTrainedModel):
         return input_lengths
 
 
+class LasrEncoderModelOutput(ParakeetEncoderModelOutput):
+    pass
+
+
 @auto_docstring(
     custom_intro="""
     The LasrEncoder model, based on the Conformer architecture](https://arxiv.org/abs/2005.08100).
@@ -499,8 +503,9 @@ class LasrEncoder(LasrPreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        output_attention_mask: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> LasrEncoderModelOutput:
         r"""
         Example:
 
@@ -531,8 +536,10 @@ class LasrEncoder(LasrPreTrainedModel):
         cos = nn.functional.dropout(cos, p=self.dropout_positions, training=self.training)
         sin = nn.functional.dropout(sin, p=self.dropout_positions, training=self.training)
 
+        output_mask = None
         if attention_mask is not None:
-            attention_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            output_mask = self._get_output_attention_mask(attention_mask, target_length=hidden_states.shape[1])
+            attention_mask = output_mask
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -558,7 +565,10 @@ class LasrEncoder(LasrPreTrainedModel):
 
         hidden_states = self.out_norm(hidden_states)
 
-        return BaseModelOutput(last_hidden_state=hidden_states)
+        return LasrEncoderModelOutput(
+            last_hidden_state=hidden_states,
+            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
+        )
 
 
 class LasrForCTC(ParakeetForCTC):
