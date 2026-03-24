@@ -411,12 +411,13 @@ class Mamba2Mixer(nn.Module):
         _, _, gate, hidden_states_B_C, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
         )
+        hidden_states_B_C = hidden_states_B_C.transpose(1,2)
 
         is_decoding = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # 2. Convolution sequence transformation
         if is_decoding:
-            conv_states = cache_params.update_conv_state(hidden_states_B_C[:, 0:1, :], layer_idx=self.layer_idx)
+            conv_states = cache_params.update_conv_state(hidden_states_B_C, layer_idx=self.layer_idx)
 
             hidden_states_B_C = torch.sum(
                 conv_states * self.conv1d.weight.squeeze(1), dim=-1
@@ -427,13 +428,12 @@ class Mamba2Mixer(nn.Module):
         else:
             # Init cache
             if cache_params is not None:
-                hidden_states_B_C_transposed = hidden_states_B_C.transpose(1, 2)
                 conv_states = nn.functional.pad(
-                    hidden_states_B_C_transposed, (self.conv_kernel_size - hidden_states_B_C_transposed.shape[-1], 0)
+                    hidden_states_B_C, (self.conv_kernel_size - hidden_states_B_C.shape[-1], 0)
                 )
                 cache_params.update_conv_state(conv_states, layer_idx=self.layer_idx)
 
-            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2))
+            hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :seq_len].transpose(1, 2))
 
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
         hidden_states, B, C = torch.split(
