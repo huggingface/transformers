@@ -1393,7 +1393,7 @@ class AutoConfig:
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PreTrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
-                    - A path or url to a saved configuration JSON *file*, e.g.,
+                    - a path to a saved configuration JSON *file*, e.g.,
                       `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the

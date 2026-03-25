@@ -124,6 +124,8 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
+    - local: chat_response_parsing
+      title: Response parsing
     title: Chat with models
   - isExpanded: false
     sections:
@@ -163,6 +165,8 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Customization
+  - local: peft
+    title: Parameter-efficient fine-tuning
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -195,8 +199,6 @@
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
-  - local: peft
-    title: PEFT
   title: Training
 - isExpanded: false
   sections:

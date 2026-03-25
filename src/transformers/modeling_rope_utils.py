@@ -703,8 +703,10 @@ class RotaryEmbeddingConfigMixin:
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
+        # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
+        # Note that validation runs every time a new config is created, even if config is non-RoPE
         rope_parameters_dict = getattr(self, "rope_parameters", None)
-        if rope_parameters_dict is None:
+        if not rope_parameters_dict:
             return
 
         if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
