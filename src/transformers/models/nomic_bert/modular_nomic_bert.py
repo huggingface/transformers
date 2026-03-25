@@ -71,7 +71,7 @@ class NomicBertConfig(BertConfig):
     model_type = "nomic_bert"
     default_theta = 1000.0
 
-    vocab_size: int = 30522
+    vocab_size: int = 30528
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12

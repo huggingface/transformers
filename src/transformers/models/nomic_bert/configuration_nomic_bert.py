@@ -47,7 +47,7 @@ class NomicBertConfig(PreTrainedConfig):
 
     model_type = "nomic_bert"
 
-    vocab_size: int = 30522
+    vocab_size: int = 30528
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
