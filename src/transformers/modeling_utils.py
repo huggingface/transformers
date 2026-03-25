@@ -3972,8 +3972,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 )
             if quantization_config is not None:
                 raise ValueError(
-                    "`distributed_config` and `quantization_config` are not yet compatible. "
-                    "Use one or the other."
+                    "`distributed_config` and `quantization_config` are not yet compatible. Use one or the other."
                 )
 
         # Not used anymore -- remove them from the kwargs

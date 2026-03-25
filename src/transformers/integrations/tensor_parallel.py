@@ -91,9 +91,7 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
             f"does not match world_size ({world_size})."
         )
 
-    return torch.distributed.init_device_mesh(
-        device_type, (fsdp_size, tp_size), mesh_dim_names=("fsdp", "tp")
-    )
+    return torch.distributed.init_device_mesh(device_type, (fsdp_size, tp_size), mesh_dim_names=("fsdp", "tp"))
 
 
 def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weight=True) -> str | None:
