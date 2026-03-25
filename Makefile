@@ -57,6 +57,7 @@ check-repo:
 		modeling_structure,\
 		init_isort,\
 		auto_mappings,\
+		sort_auto_mappings,\
 		imports,\
 		copies,\
 		modular_conversion,\
@@ -81,6 +82,7 @@ fix-repo:
 		ruff_format,\
 		init_isort,\
 		auto_mappings,\
+		sort_auto_mappings,\
 		doc_toc,\
 		copies,\
 		modular_conversion,\

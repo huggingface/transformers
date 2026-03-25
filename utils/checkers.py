@@ -53,7 +53,8 @@ CHECKERS = {
     "config_docstrings": ("Config docstrings", "check_config_docstrings.py", [], None),
     "config_attributes": ("Config attributes", "check_config_attributes.py", [], None),
     "init_isort": ("Import ordering", "custom_init_isort.py", ["--check_only"], []),
-    "auto_mappings": ("Auto mappings", "sort_auto_mappings.py", ["--check_only"], []),
+    "sort_auto_mappings": ("Auto mappings", "sort_auto_mappings.py", ["--check_only"], []),
+    "auto_mappings": ("Auto mappings", "check_auto.py", ["--fix_and_overwrite"], []),
     "update_metadata": ("Model metadata", "update_metadata.py", ["--check-only"], []),
     "add_dates": ("Model dates", "add_dates.py", ["--check-only"], []),
     "types": (
