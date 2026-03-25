@@ -127,7 +127,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             videos_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
         text, text_replacement_offsets = self.get_text_replacement(
-            text, image_inputs=image_inputs, video_inputs=videos_inputs
+            text, processed_mm_data={**image_inputs, **videos_inputs}
         )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
@@ -136,9 +136,9 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
-    def replace_image_token(self, text: str, image_inputs: dict, batch_idx: int, image_index: int) -> str:
-        image_size = image_inputs["image_sizes"][batch_idx][image_index]
-        height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][batch_idx][0]))
+    def replace_image_token(self, text: str, processed_mm_data: dict, batch_idx: int, image_index: int) -> str:
+        image_size = processed_mm_data["image_sizes"][batch_idx][image_index]
+        height, width = get_image_size(to_numpy_array(processed_mm_data["pixel_values"][batch_idx][0]))
         if not isinstance(image_size, (list, tuple)):
             # cast to list to avoid numerical precision errors when calculating unpadding
             image_size = image_size.tolist()
@@ -148,8 +148,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             num_image_tokens -= 1
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, text: str, video_inputs: dict, batch_idx: int, video_index: int) -> str:
-        one_video = video_inputs.get("pixel_values_videos")[batch_idx]
+    def replace_video_token(self, text: str, processed_mm_data: dict, batch_idx: int, video_index: int) -> str:
+        one_video = processed_mm_data.get("pixel_values_videos")[batch_idx]
         if isinstance(one_video, (list, tuple)):
             one_video = np.array(one_video)
         else:

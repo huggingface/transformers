@@ -1682,11 +1682,7 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
+        if "video_processor" in self.processor_class.get_attributes():
             self.skipTest("Processor doesn't accept videos at input")
 
         messages = [

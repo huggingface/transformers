@@ -36,7 +36,7 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import AudioInput, load_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, ImageInput, is_vision_available
+from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -71,7 +71,7 @@ from .utils.type_validators import (
     truncation_validator,
     video_metadata_validator,
 )
-from .video_utils import VideoInput, VideoMetadataType
+from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
 
 
 if is_torch_available():
@@ -657,21 +657,66 @@ class ProcessorMixin(PushToHubMixin):
             **kwargs,
         )
 
-        attribute_to_kwargs = {
-            "tokenizer": (text, "text_kwargs"),
-            "image_processor": (images, "images_kwargs"),
-            "video_processor": (videos, "videos_kwargs"),
-            "feature_extractor": (audio, "audio_kwargs"),
-        }
-        outputs = {}
-        for attribute_name in self.get_attributes():
-            attribute = getattr(self, attribute_name, None)
-            input_data, input_kwargs = attribute_to_kwargs[attribute_name]
-            if input_data is not None and attribute is not None:
-                attribute_output = attribute(input_data, **kwargs[input_kwargs])
-                outputs.update(attribute_output)
+        # is_text_batched = True
+        if isinstance(text, str):
+            text = [text]
+            # is_text_batched = False
 
-        return BatchFeature(outputs)
+        text = text.copy()
+
+        processed_images, images_replacements = self._process_modality(images, "images", **kwargs)
+        processed_videos, videos_replacements = self._process_modality(videos, "videos", **kwargs)
+        processed_audio, audio_replacements = self._process_modality(audio, "audio", **kwargs)
+
+        text_inputs = {}
+        if getattr(self, "tokenizer", None) is not None and text is not None:
+            return_tensors = kwargs["text_kwargs"].pop("return_tensors", None)
+            return_mm_token_type_ids = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_text_replacement_offsets = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+
+            new_text, text_replacement_offsets = self.get_text_replacement(
+                text,
+                images_replacements,
+                videos_replacements,
+                audio_replacements,
+            )
+            # new_text = new_text if is_text_batched else new_text[0]
+            tokenizer = getattr(self, "tokenizer")
+            text_inputs = tokenizer(new_text, **kwargs["text_kwargs"])
+            self._check_special_mm_tokens(new_text, text_inputs, modalities=["image", "video", "audio"])
+
+            if return_text_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = text_replacement_offsets
+
+            if return_mm_token_type_ids:
+                text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
+        return BatchFeature(data, tensor_type=return_tensors)
+
+    def _process_modality(
+        self,
+        mm_data: ImageInput | VideoInput | AudioInput,
+        modality: str,
+        **kwargs,
+    ):
+        if mm_data is None:
+            return {}, []
+
+        attribute_to_kwargs = {
+            "images": "image_processor",
+            "videos": "video_processor",
+            "audio": "feature_extractor",
+        }
+
+        subprocessor = getattr(self, attribute_to_kwargs[modality])
+        mm_data = subprocessor.fetch_data(mm_data)
+        processed_data = subprocessor(mm_data, **kwargs[f"{modality}_kwargs"])
+        replacement_fn: callable = getattr(self, f"get_{modality}_replacement", None)
+        image_replacements = []
+        if replacement_fn:
+            image_replacements = replacement_fn(mm_data, processed_data)
+        return processed_data, image_replacements
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
@@ -1623,33 +1668,75 @@ class ProcessorMixin(PushToHubMixin):
     ) -> str:
         raise NotImplementedError
 
+    def get_images_replacement(
+        self,
+        images: ImageInput,
+        processed_images: dict,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        # Early exit if no special tokens found, nothing to replace
+        if getattr(self, "image_token", None) is None:
+            return []
+
+        images = make_flat_list_of_images(images)
+        replacement_texts = []
+        for idx in range(len(images)):
+            replacement_text = self.replace_image_token(processed_images, image_idx=idx)
+            replacement_texts.append(replacement_text)
+        return replacement_texts
+
+    def get_videos_replacement(
+        self,
+        videos: VideoInput,
+        processed_videos: dict,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        # Early exit if no special tokens found, nothing to replace
+        if getattr(self, "video_token", None) is None:
+            return []
+
+        videos = make_batched_videos(videos)
+        replacement_texts = []
+        for idx in range(len(videos)):
+            replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+            replacement_texts.append(replacement_text)
+        return replacement_texts
+
     def get_text_replacement(
         self,
         text: list[str],
-        image_inputs: dict | None = None,
-        video_inputs: dict | None = None,
-    ) -> tuple[str, list[dict[str, Any]]]:
+        images_replacements: list[str] | None = [],
+        videos_replacements: list[str] | None = [],
+        audio_replacements: list[str] | None = [],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        special_mm_tokens = [
+            getattr(self, f"{modality}_token")
+            for modality in ["image", "video", "audio"]
+            if getattr(self, f"{modality}_token", None) is not None
+        ]
+        # Early exit if no special tokens found, nothing to replace
+        if not special_mm_tokens:
+            return text, None
+
+        special_mm_tokens = "|".join(special_mm_tokens)
         batch_replacement_offsets = []
+        images_replacements = iter(images_replacements)
+        videos_replacements = iter(videos_replacements)
         for batch_idx in range(len(text)):
             last = 0
-            image_index = video_index = 0
             replacement_offsets = []
             expanded_sample = []
-            for m in re.finditer(f"({self.image_token}) | ({self.video_token})", text[batch_idx]):
+            for m in re.finditer(f"({special_mm_tokens})", text[batch_idx]):
                 start, end = m.span()
                 expanded_sample.append(text[batch_idx][last:start])
 
                 # Case 1: if the image token has match in the text
                 if m.group(0) is not None:
-                    replacement_text = self.replace_image_token(text[batch_idx], image_inputs, batch_idx, image_index)
+                    replacement_text = next(images_replacements)
                     replacement_offsets.append({"type": "image"})
-                    image_index += 1
 
                 # Case 2: if the video token has match in the text
                 elif m.group(1) is not None:
-                    replacement_text = self.replace_video_token(text[batch_idx], video_inputs, batch_idx, video_index)
+                    replacement_text = next(videos_replacements)
                     replacement_offsets.append({"type": "video"})
-                    video_index += 1
 
                 # update common values such as start-end spans and replacement text
                 replacement_offsets[-1].update(
@@ -1667,6 +1754,20 @@ class ProcessorMixin(PushToHubMixin):
             text[batch_idx] = "".join(expanded_sample)
             batch_replacement_offsets.append(replacement_offsets)
         return text, batch_replacement_offsets
+
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for tokenizer_input in input_ids:
+            tokenizer_input = np.array(tokenizer_input)
+            mm_token_types = np.zeros_like(tokenizer_input)
+            mm_token_types[np.isin(tokenizer_input, self.image_ids)] = 1
+            mm_token_types[np.isin(tokenizer_input, self.video_ids)] = 2
+            mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
 
     @property
     def model_input_names(self):
@@ -1992,16 +2093,17 @@ class ProcessorMixin(PushToHubMixin):
         if tokenized text was truncated, leading to issues in model code.
         """
         for modality in modalities:
-            token_str = getattr(self, f"{modality}_token")
-            token_id = getattr(self, f"{modality}_token_id")
-            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
-            text_count = [sample.count(token_str) for sample in text]
+            token_str = getattr(self, f"{modality}_token", None)
+            token_id = getattr(self, f"{modality}_token_id", None)
+            if token_str is not None and token_id is not None:
+                ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+                text_count = [sample.count(token_str) for sample in text]
 
-            if ids_count != text_count:
-                raise ValueError(
-                    f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
-                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
-                )
+                if ids_count != text_count:
+                    raise ValueError(
+                        f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                        "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                    )
 
 
 ProcessorMixin.push_to_hub = copy_func(ProcessorMixin.push_to_hub)

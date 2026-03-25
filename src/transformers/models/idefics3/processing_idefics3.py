@@ -163,7 +163,7 @@ class Idefics3Processor(ProcessorMixin):
             images = self.image_processor.fetch_images(images)
 
             output_kwargs["images_kwargs"]["return_row_col_info"] = True
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
             inputs.update(image_inputs)
 
             if text is not None:
@@ -172,7 +172,9 @@ class Idefics3Processor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-                text, text_replacement_offsets = self.get_text_replacement(text, image_inputs=image_inputs)
+                text, text_replacement_offsets = self.get_text_replacement(
+                    text, images_replacements=images_replacements
+                )
                 text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
                 self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
                 inputs.update(text_inputs)
@@ -205,32 +207,35 @@ class Idefics3Processor(ProcessorMixin):
 
         return BatchFeature(data=inputs, tensor_type=return_tensors)
 
-    def replace_image_token(self, text: str, image_inputs: dict, batch_idx: int, image_index: int) -> str:
-        image_rows = image_inputs["rows"][batch_idx][image_index]
-        image_cols = image_inputs["cols"][batch_idx][image_index]
+    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
+        num_images_per_sample = len(processed_images["rows"][0])
+        batch_idx = image_idx // num_images_per_sample
+        image_idx = image_idx % num_images_per_sample
+        image_rows = processed_images["rows"][batch_idx][image_idx]
+        image_cols = processed_images["cols"][batch_idx][image_idx]
         if image_rows == 0 and image_cols == 0:
             return (
-                f"{self.fake_token_around_image}"
-                + f"{self.global_img_token}"
+                f"{self.fake_image_token}"
+                + f"{self.global_image_tag}"
                 + f"{self.image_token}" * self.image_seq_len
-                + f"{self.fake_token_around_image}"
+                + f"{self.fake_image_token}"
             )
         else:
             text_split_images = ""
             for n_h in range(image_rows):
                 for n_w in range(image_cols):
                     text_split_images += (
-                        f"{self.fake_token_around_image}"
+                        f"{self.fake_image_token}"
                         + f"<row_{n_h + 1}_col_{n_w + 1}>"
                         + f"{self.image_token}" * self.image_seq_len
                     )
                 text_split_images += "\n"
 
             text_split_images += (
-                f"\n{self.fake_token_around_image}"
-                + f"{self.global_img_token}"
+                f"\n{self.fake_image_token}"
+                + f"{self.global_image_tag}"
                 + f"{self.image_token}" * self.image_seq_len
-                + f"{self.fake_token_around_image}"
+                + f"{self.fake_image_token}"
             )
             return text_split_images
 

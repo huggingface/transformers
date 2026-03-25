@@ -15,17 +15,12 @@
 Processor class for Llava.
 """
 
-import numpy as np
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...image_utils import get_image_size, to_numpy_array
 from ...processing_utils import (
     MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
-    Unpack,
 )
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 
 
@@ -70,62 +65,8 @@ class LlavaProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[LlavaProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        if images is None and text is None:
-            raise ValueError("You have to specify at least one of `images` or `text`.")
-
-        output_kwargs = self._merge_kwargs(
-            LlavaProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            text, text_replacement_offsets = self.get_text_replacement(text, image_inputs=image_inputs)
-        else:
-            image_inputs = {}
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_text_replacement_offsets:
-            text_inputs["text_replacement_offsets"] = text_replacement_offsets
-
-        if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
-
-    def replace_image_token(self, text: str, image_inputs: dict, batch_idx: int, image_index: int) -> str:
-        pixel_values = image_inputs["pixel_values"][batch_idx]
+    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
+        pixel_values = processed_images["pixel_values"][image_idx]
         height, width = get_image_size(to_numpy_array(pixel_values))
         num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + self.num_additional_image_tokens
         if self.vision_feature_select_strategy == "default":
