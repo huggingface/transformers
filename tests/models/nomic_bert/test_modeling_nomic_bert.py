@@ -16,6 +16,7 @@ import unittest
 from transformers import AutoModel, AutoTokenizer, NomicBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     slow,
     torch_device,
@@ -355,12 +356,13 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/56")
+        # TODO: remove revision
+        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/56").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/56")
 
         sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
 
-        inputs = tokenizer(sentences, return_tensors="pt", padding=True, truncation=True)
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
 
         with torch.no_grad():
             output = model(**inputs)[0]
@@ -368,15 +370,23 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((2, 13, 768))
         self.assertEqual(output.shape, expected_shape)
 
-        # Local 4060 numbers
-        expected_slice = torch.tensor(
-            [
-                [[1.7039, -4.5610, 1.5236], [1.8685, -3.6936, 1.6641], [5.3303e-01, -4.2081, 2.3375]],
-                [
-                    [2.6875e-03, -3.7496, 9.0820e-01],
-                    [1.8299e-02, -3.3884, 3.5300e-01],
-                    [-1.4282e-01, -3.6776, -3.5079e-01],
-                ],
-            ]
-        )
-        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-3, atol=1e-3)
+        expected_slice = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [
+                        [
+                            [1.7039e00, -4.5610e00, 1.5236e00],
+                            [1.8685e00, -3.6936e00, 1.6641e00],
+                            [5.3303e-01, -4.2081e00, 2.3375e00],
+                        ],
+                        [
+                            [2.6867e-03, -3.7496e00, 9.0820e-01],
+                            [1.8297e-02, -3.3884e00, 3.5300e-01],
+                            [-1.4282e-01, -3.6776e00, -3.5079e-01],
+                        ],
+                    ]
+                ),
+            }
+        ).get_expectation()
+
+        torch.testing.assert_close(output[:, 1:4, 1:4].cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)

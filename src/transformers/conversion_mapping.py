@@ -515,7 +515,9 @@ def get_checkpoint_conversion_mapping(model_type):
 
 
 def register_checkpoint_conversion_mapping(
-    model_type: str, mapping: list[WeightConverter | WeightRenaming], overwrite: bool = False,
+    model_type: str,
+    mapping: list[WeightConverter | WeightRenaming],
+    overwrite: bool = False,
 ) -> None:
     global _checkpoint_conversion_mapping_cache
     if _checkpoint_conversion_mapping_cache is None:
