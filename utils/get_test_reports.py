@@ -251,7 +251,7 @@ if __name__ == "__main__":
         machine_type = args.machine_type
 
     # Reduce the scope for models if necessary
-    only_in = args.only_in if args.only_in else None
+    only_in = args.only_in or None
     if only_in == ["IMPORTANT_MODELS"]:
         only_in = IMPORTANT_MODELS
 

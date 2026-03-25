@@ -151,7 +151,7 @@ class DPTConfig(PreTrainedConfig):
 
         self.backbone_featmap_shape = self.backbone_featmap_shape if self.is_hybrid else None
         self.neck_ignore_stages = self.neck_ignore_stages if self.is_hybrid else []
-        self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
+        self.pooler_output_size = self.pooler_output_size or self.hidden_size
         super().__post_init__(**kwargs)
 
 
