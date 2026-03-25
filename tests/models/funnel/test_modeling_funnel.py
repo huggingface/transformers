@@ -367,7 +367,6 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": (FunnelBaseModel, FunnelModel),
             "fill-mask": FunnelForMaskedLM,
-            "question-answering": FunnelForQuestionAnswering,
             "text-classification": FunnelForSequenceClassification,
             "token-classification": FunnelForTokenClassification,
             "zero-shot": FunnelForSequenceClassification,

@@ -231,7 +231,8 @@ git bisect run python3 target_script.py
     if "error: bisect run failed" in bash_result.stderr:
         error_msg = f"Error when running git bisect:\nbash error: {bash_result.stderr}\nbash output:\n{bash_result.stdout}\nset `bad_commit` to `None`."
         print(error_msg)
-        return None, "git bisect failed"
+        result["status"] = "git bisect failed"
+        return result
 
     pattern = r"(.+) is the first bad commit"
     commits = re.findall(pattern, bash_result.stdout)

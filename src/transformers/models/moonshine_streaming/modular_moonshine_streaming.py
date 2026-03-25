@@ -359,7 +359,6 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -377,7 +376,7 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
         position_embeddings = self.pos_emb(
             torch.arange(encoder_hidden_states.shape[1], device=encoder_hidden_states.device)
         )
-        encoder_hidden_states += position_embeddings
+        encoder_hidden_states += position_embeddings.to(encoder_hidden_states.device)
         encoder_hidden_states = self.proj(encoder_hidden_states)
 
         return super().forward(
@@ -387,7 +386,6 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             **kwargs,

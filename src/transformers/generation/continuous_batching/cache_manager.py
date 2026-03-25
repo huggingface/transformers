@@ -17,6 +17,8 @@ from collections.abc import Iterator
 from math import ceil
 from typing import TypeVar
 
+import torch
+
 from .requests import logger
 
 
@@ -308,6 +310,12 @@ class CacheAllocator(ABC):
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor."""
 
+    @abstractmethod
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        """Fills the block table for a given request_id, past_length and query_length."""
+
     def fork_blocks(
         self, parent_request_id: str, children_request_ids: list[str], block_manager: BlockManager
     ) -> tuple[list[int], list[int]]:
@@ -378,13 +386,18 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variable so we can perform only two loops
+        total_length = past_length + query_length
+        num_full_blocks = total_length // self.block_size
+        remainder = total_length % self.block_size
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(num_full_blocks):
+            start = block_table[b] * self.block_size
+            physical_indices.extend(range(start, start + self.block_size))
+        if remainder:
+            start = block_table[num_full_blocks] * self.block_size
+            physical_indices.extend(range(start, start + remainder))
         return physical_indices
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -393,14 +406,36 @@ class FullAttentionCacheAllocator(CacheAllocator):
         block_table = self.block_table.get(request_id)
         if block_table is None:
             raise ValueError(f"No block table found for request {request_id}")
+        # Compute auxiliary variables so we can perform only one loop
+        start_block = past_length // self.block_size
+        start_offset = past_length % self.block_size
+        end_pos = past_length + query_length
+        end_block = (end_pos - 1) // self.block_size  # -1 because if end_pos == block_size, we still end on block 0
         # Compute the physical indices
         physical_indices = []
-        for i in range(past_length, past_length + query_length):
-            block_idx = i // self.block_size
-            block_offset = i % self.block_size
-            physical_index = block_table[block_idx] * self.block_size + block_offset
-            physical_indices.append(physical_index)
+        for b in range(start_block, end_block + 1):
+            block_start = block_table[b] * self.block_size
+            # First block may start mid-block, last block may end mid-block
+            local_start = start_offset if b == start_block else 0
+            local_end = (end_pos - 1) % self.block_size + 1 if b == end_block else self.block_size
+            physical_indices.extend(range(block_start + local_start, block_start + local_end))
         return physical_indices
+
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        """Fills the block table for a given request_id, past_length and query_length."""
+        request_blocks = self.block_table.get(request_id)
+        if request_blocks is None:
+            raise ValueError(f"No block table found for request {request_id}")
+        total_length = past_length + query_length
+        # Use ceiling division to include the partial block at the end
+        num_blocks_needed = (total_length + self.block_size - 1) // self.block_size
+        block_table[:num_blocks_needed] = torch.tensor(
+            request_blocks[:num_blocks_needed], device=block_table.device, dtype=block_table.dtype
+        )
+        # TODO: this creates a lot of H2D transfers when not using async batching, but we will update to always using
+        # an IO pair in the future or a CPU-side block table. This also entails a small memory allocation.
 
 
 class SlidingAttentionCacheAllocator(CacheAllocator):
@@ -488,3 +523,9 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         if padding_length > 0:
             physical_indices = [-1] * padding_length + physical_indices
         return physical_indices
+
+    # TODO: implement this
+    def fill_block_table(
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+    ) -> None:
+        raise NotImplementedError("Sliding window attention layers do not support block table")

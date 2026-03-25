@@ -92,7 +92,7 @@ class TrainerState:
             Relevant callbacks should implement a `state` and `from_state` function.
     """
 
-    epoch: float | None = None
+    epoch: float = 0
     global_step: int = 0
     max_steps: int = 0
     logging_steps: int = 500

@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
-    run_test_using_subprocess,
     slow,
     torch_device,
 )
@@ -187,40 +186,6 @@ class LlamaIntegrationTest(unittest.TestCase):
                 rtol=1e-2,
             )
         )
-
-    # TODO joao, manuel: remove this in v4.62.0
-    # TODO: check why we have the following strange situation.
-    # without running in subprocess, this test causes subsequent tests failing with `RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cpu and cuda:0!`
-    @run_test_using_subprocess
-    @slow
-    def test_model_7b_dola_generation(self):
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        EXPECTED_TEXT_COMPLETION = (
-            "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
-            "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
-            "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
-            "understanding of space and time."
-        )
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-chat-hf", device_map="sequential", dtype=torch.float16
-        )
-        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(
-            **model_inputs,
-            max_new_tokens=64,
-            top_p=None,
-            temperature=1,
-            do_sample=False,
-            dola_layers="low",
-            trust_remote_code=True,
-            custom_generate="transformers-community/dola",
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     @require_torch_accelerator
@@ -480,7 +445,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
             past_key_values=past_key_values,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
@@ -528,7 +492,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
             past_key_values=past_key_values,
         )
 
@@ -545,11 +508,6 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
             past_key_values=past_key_values,
         )
         decoded_1b = [

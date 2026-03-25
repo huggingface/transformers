@@ -155,6 +155,15 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         video_processor = self.fast_video_processing_class.from_dict(
             self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
         )
+        # min_pixels and max_pixels take precedence over size, like in the image processor.
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 10000})
+
+        processor_dict = self.video_processor_dict.copy()
+        processor_dict.pop("min_pixels")
+        processor_dict.pop("max_pixels")
+        video_processor = self.fast_video_processing_class.from_dict(
+            processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+        )
         self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
 
     def test_video_processor_to_json_string(self):

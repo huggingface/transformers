@@ -107,8 +107,10 @@ class Lfm2HybridConvCache:
         self.max_batch_size = max_batch_size
         self.layer_types = config.layer_types
         self.first_attention_layer = self.layer_types.index("full_attention")
+        self.last_conv_layer = len(self.layer_types) - self.layer_types[::-1].index("conv") - 1
         self.conv_L_cache = config.conv_L_cache
         self._dtype = dtype
+        self.has_previous_state = False
 
         self.conv_cache: list[torch.Tensor] = []
         device = torch.device(device) if device is not None else None
@@ -158,6 +160,24 @@ class Lfm2HybridConvCache:
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
+    def update_conv_state(
+        self, layer_idx: int, new_conv_state: torch.Tensor, cache_init: bool = False
+    ) -> torch.Tensor:
+        # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
+        # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
+        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
+        if cache_init:
+            self.conv_cache[layer_idx] = new_conv_state.to(self.conv_cache[layer_idx].device)
+        else:
+            self.conv_cache[layer_idx] = self.conv_cache[layer_idx].roll(shifts=-1, dims=-1)
+            self.conv_cache[layer_idx][:, :, -1] = new_conv_state[:, :, -1].to(self.conv_cache[layer_idx].device)
+
+        # If last layer is updated, set the flag
+        if layer_idx == self.last_conv_layer:
+            self.has_previous_state = True
+
+        return self.conv_cache[layer_idx]
+
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
@@ -179,7 +199,7 @@ class Lfm2HybridConvCache:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
-    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
         """
         Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
         the given layer at `layer_idx`.
@@ -187,7 +207,6 @@ class Lfm2HybridConvCache:
         for each layer.
         """
         full_mask_kv_offset = 0
-        query_length = cache_position.shape[0]
         past_seen_tokens = self.get_seq_length()
         kv_length = query_length + past_seen_tokens
         return kv_length, full_mask_kv_offset
@@ -209,6 +228,7 @@ class Lfm2HybridConvCache:
         return len(self.key_cache)
 
     def reset(self):
+        self.has_previous_state = False
         for layer_idx in range(len(self.conv_cache)):
             # In-place ops prevent breaking the static address
             self.conv_cache[layer_idx].zero_()
@@ -232,7 +252,6 @@ class Lfm2Attention(LlamaAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Lfm2HybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -246,8 +265,7 @@ class Lfm2Attention(LlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -295,7 +313,6 @@ class Lfm2ShortConv(nn.Module):
         self,
         x: torch.Tensor,
         past_key_values: Lfm2HybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         x = apply_mask_to_padding_states(x, attention_mask)
@@ -305,7 +322,7 @@ class Lfm2ShortConv(nn.Module):
         Bx = B * x
 
         conv_weights = self.conv.weight.view(self.conv.weight.size(0), self.conv.weight.size(2))
-        if past_key_values is not None and cache_position[0] > 0:
+        if past_key_values is not None and past_key_values.has_previous_state:
             conv_out = causal_conv1d_update(
                 Bx.squeeze(-1),
                 past_key_values.conv_cache[self.layer_idx],
@@ -317,7 +334,7 @@ class Lfm2ShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
+                past_key_values.update_conv_state(self.layer_idx, conv_state, cache_init=True)
 
             conv_out = causal_conv1d_fn(Bx, conv_weights, self.conv.bias, activation=None)
 
@@ -329,7 +346,6 @@ class Lfm2ShortConv(nn.Module):
         self,
         x: torch.Tensor,
         past_key_values: Lfm2HybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         seqlen = x.shape[1]
@@ -340,12 +356,8 @@ class Lfm2ShortConv(nn.Module):
 
         Bx = B * x
 
-        if past_key_values is not None and cache_position[0] > 0:
-            conv_state = past_key_values.conv_cache[self.layer_idx]
-            cache_position = cache_position.clamp(0, self.L_cache - 1)
-            conv_state = conv_state.roll(shifts=-1, dims=-1)
-            conv_state[:, :, cache_position] = Bx.to(device=conv_state.device, dtype=conv_state.dtype)
-            past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
+        if past_key_values is not None and past_key_values.has_previous_state:
+            conv_state = past_key_values.update_conv_state(self.layer_idx, Bx, cache_init=False)
             conv_out = torch.sum(conv_state.to(Bx.device) * self.conv.weight[:, 0, :], dim=-1)
             if self.bias:
                 conv_out += self.conv.bias
@@ -354,7 +366,7 @@ class Lfm2ShortConv(nn.Module):
         else:
             if past_key_values is not None:
                 conv_state = nn.functional.pad(Bx, (self.L_cache - Bx.shape[-1], 0))
-                past_key_values.conv_cache[self.layer_idx].copy_(conv_state)
+                conv_state = past_key_values.update_conv_state(self.layer_idx, conv_state, cache_init=True)
 
             conv_out = self.conv(Bx)[..., :seqlen]
 
@@ -367,12 +379,11 @@ class Lfm2ShortConv(nn.Module):
         self,
         hidden_states: torch.Tensor,
         past_key_values: Lfm2HybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
-            return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
-        return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
+            return self.cuda_kernels_forward(hidden_states, past_key_values, attention_mask)
+        return self.slow_forward(hidden_states, past_key_values, attention_mask)
 
 
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
@@ -395,7 +406,6 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Lfm2HybridConvCache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -406,14 +416,12 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
         else:
             hidden_states = self.conv(
                 hidden_states=self.operator_norm(hidden_states),
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 attention_mask=attention_mask,
             )
         hidden_states = hidden_states + residual
@@ -440,7 +448,6 @@ class Lfm2Model(LlamaModel):
         past_key_values: Lfm2HybridConvCache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -455,20 +462,15 @@ class Lfm2Model(LlamaModel):
                 config=self.config, max_batch_size=batch_size, dtype=self.dtype, device=self.device
             )
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -479,15 +481,14 @@ class Lfm2Model(LlamaModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = causal_mask if self.config.layer_types[i] == "full_attention" else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=layer_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                cache_position=cache_position,
                 **kwargs,
             )
 

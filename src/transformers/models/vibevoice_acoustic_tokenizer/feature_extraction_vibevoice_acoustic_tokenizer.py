@@ -70,7 +70,9 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int | None = None,
         padding: bool | str | PaddingStrategy | None = True,
         pad_to_multiple_of: int | None = None,
+        max_length: int | None = None,
         return_attention_mask: bool | None = True,
+        return_tensors: str | None = "pt",
     ) -> BatchFeature:
         """
         Args:
@@ -107,6 +109,9 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        if return_tensors != "pt":
+            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
+
         # Ensure batch of mono tensors
         audio = make_list_of_audio(audio)
         for idx, example in enumerate(audio):
@@ -131,6 +136,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 padding=padding,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
+                max_length=max_length,
             )
             if return_attention_mask:
                 output_values["padding_mask"] = output_values.pop("attention_mask")

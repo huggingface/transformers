@@ -301,7 +301,6 @@ class CsmAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -315,9 +314,7 @@ class CsmAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -357,7 +354,6 @@ class CsmDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -370,7 +366,6 @@ class CsmDecoderLayer(GradientCheckpointingLayer):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -452,7 +447,6 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -463,7 +457,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         if position_ids is not None and not is_torchdynamo_compiling():
             logger.warning_once(
                 "Custom `position_ids` were provided but will be ignored. CSM depth decoder automatically determines position_ids "
-                "from `cache_position` and as it requires them to be identical across the batch, the provided position_ids will be ignored."
+                "and as it requires them to be identical across the batch, the provided position_ids will be ignored."
             )
             position_ids = None
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -472,18 +466,17 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            inputs_seq_length = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
-            device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + inputs_seq_length, device=device)
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        inputs_seq_length = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
+        device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
+        position_ids = torch.arange(past_seen_tokens, past_seen_tokens + inputs_seq_length, device=device)
 
         if inputs_embeds is None:
-            codebook_idxs = torch.clamp(cache_position - 1, min=0)
+            codebook_idxs = torch.clamp(position_ids - 1, min=0)
             offset = codebook_idxs * self.vocab_size
             inputs_embeds = self.embed_tokens(input_ids + offset)
 
-            input_ids_are_first_codebook = cache_position[0] == 0
+            input_ids_are_first_codebook = position_ids[0] == 0
             if backbone_last_hidden_state is not None:
                 inputs_embeds[:, 0] = backbone_last_hidden_state
             else:
@@ -498,7 +491,6 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -506,7 +498,7 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_ids = cache_position.unsqueeze(0)
+        position_ids = position_ids.unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
@@ -516,7 +508,6 @@ class CsmDepthDecoderModel(CsmPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -534,13 +525,10 @@ class CsmCodebooksHead(nn.Module):
         self.num_codebooks = num_codebooks
         self.weight = nn.Parameter(torch.empty(self.num_codebooks - 1, hidden_size, vocab_size))
 
-    def forward(self, hidden_states, cache_position=None):
-        if cache_position is None:
-            seq_length = hidden_states.shape[1]
-            codebook_weight = self.weight[torch.arange(seq_length)]
-        else:
-            codebook_idxs = cache_position - 1
-            codebook_weight = self.weight[codebook_idxs]
+    def forward(self, hidden_states, codebook_indices=None):
+        # -1 because of the concatenated backbone last hidden state
+        codebook_indices = codebook_indices - 1
+        codebook_weight = self.weight[codebook_indices]
 
         hidden_states = [
             nn.functional.linear(hidden_states[:, codebook_idx, :], codebook_weight[codebook_idx].T)
@@ -584,7 +572,6 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -597,6 +584,11 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        seq_len = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
+        device = inputs_embeds.device if inputs_embeds is not None else input_ids.device
+        codebook_indices = torch.arange(seq_len, device=device) + past_seen_tokens
+
         outputs = self.model(
             input_ids=input_ids,
             backbone_last_hidden_state=backbone_last_hidden_state,
@@ -605,7 +597,6 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -620,9 +611,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         else:
             slice_indices = logits_to_keep
 
-        logits = self.codebooks_head(
-            hidden_states[:, slice_indices, :], cache_position[slice_indices] if cache_position is not None else None
-        )
+        logits = self.codebooks_head(hidden_states[:, slice_indices, :], codebook_indices[slice_indices])
         logits = logits.contiguous()
 
         loss = None
@@ -643,18 +632,18 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **kwargs
+            input_ids, next_sequence_length, past_key_values, attention_mask, inputs_embeds, **kwargs
         )
 
-        is_first_generation_step = model_inputs["cache_position"][0] == 0
-        if not is_first_generation_step:
+        if not is_first_iteration:
             model_inputs.pop("backbone_last_hidden_state")
 
         # csm depth decoder does not use position_ids
@@ -704,7 +693,6 @@ class CsmBackboneModel(CsmPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -729,20 +717,15 @@ class CsmBackboneModel(CsmPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -758,7 +741,6 @@ class CsmBackboneModel(CsmPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -917,18 +899,18 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
+        next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,
+            next_sequence_length=next_sequence_length,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -958,7 +940,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CsmOutputWithPast:
@@ -1043,7 +1024,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 

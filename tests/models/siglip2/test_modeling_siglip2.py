@@ -280,7 +280,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Siglip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -422,7 +422,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Siglip2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -653,6 +653,13 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
 
     def setUp(self):
         self.model_tester = Siglip2ForImageClassificationModelTester(self)
+
+    def _set_subconfig_attributes(self, config, attribute_name, value):
+        """Overwritten to skip timm workaround skip on `output_attentions`"""
+        for k in config.sub_configs:
+            if getattr(config, k) is not None:
+                setattr(getattr(config, k), attribute_name, value)
+                self._set_subconfig_attributes(getattr(config, k), attribute_name, value)
 
     @unittest.skip(reason="Siglip2ForImageClassification does not support inputs_embeds")
     def test_inputs_embeds(self):
