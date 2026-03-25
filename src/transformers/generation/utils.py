@@ -1842,7 +1842,9 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = "dynamic_full"
 
         dynamic_cache_kwargs = {}
-        if generation_config.cache_implementation != "dynamic_full":
+        # mamba models always need to pass the config, otherwise it will use an Attention cache
+        is_mamba = any(x in ("mamba", "conv", "linear_attention") for x in getattr(self.config, "layer_types", []))
+        if generation_config.cache_implementation != "dynamic_full" or is_mamba:
             dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
 
         if generation_config.cache_implementation == "offloaded":
@@ -1989,7 +1991,9 @@ class GenerationMixin(ContinuousMixin):
         valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
-        using_compilable_cache = cache is not None and cache.is_compileable
+        # Note: for full mamba models, even a DynamicCache is compileable since all layers are mamba, but we don't want
+        # to ALWAYS compile when calling `generate`, so we check the type
+        using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
@@ -3460,10 +3464,9 @@ class GenerationMixin(ContinuousMixin):
         # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
         if not model_kwargs["use_cache"]:
             raise ValueError("assisted generate requires `use_cache=True`")
-        if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"] or (
-            "past_key_values" in model_kwargs
-            and hasattr(model_kwargs["past_key_values"], "layers")
-            and any(getattr(l, "is_compileable", False) for l in model_kwargs["past_key_values"].layers)
+        if (
+            generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]
+            or type(model_kwargs.get("past_key_values")) is StaticCache
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
         # Get the candidate generator, given the parameterization
