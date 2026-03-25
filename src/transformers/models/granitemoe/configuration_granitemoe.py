@@ -26,14 +26,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.2-8b")
-@strict(accept_kwargs=True)
+@strict
 class GraniteMoeConfig(PreTrainedConfig):
     r"""
-        embedding_multiplier (`float`, *optional*, defaults to 1.0): embedding multiplier
-        logits_scaling (`float`, *optional*, defaults to 1.0): divisor for output logits
-        residual_multiplier (`float`, *optional*, defaults to 1.0): residual multiplier
-        attention_multiplier (`float`, *optional*, defaults to 1.0): attention multiplier
-
     ```python
     >>> from transformers import GraniteMoeModel, GraniteMoeConfig
 
@@ -45,7 +40,8 @@ class GraniteMoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "granitemoe"
     keys_to_ignore_at_inference = ["past_key_values"]
