@@ -94,6 +94,12 @@ CHECKER_FILE_GLOBS = {
     "auto_mappings": [
         "src/transformers/models/auto/*.py",
     ],
+    "repo": [
+        "src/transformers/models/**/*.py",
+        "src/transformers/models/auto/*.py",
+        "tests/models/**/test_modeling_*.py",
+        "docs/**/*.md",
+    ],
 }
 
 
