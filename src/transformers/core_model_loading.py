@@ -187,7 +187,7 @@ class MergeModulelist(ConversionOps):
         merged: dict[str, torch.Tensor] = {}
         for source_pattern, tensors in input_dict.items():
             target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
-            merged[target_pattern] = torch.stack([k for k in tensors if k != []], dim=self.dim)
+            merged[target_pattern] = torch.stack(tensors, dim=self.dim)
         return merged
 
     def get_target_pattern(self, input_dict: dict, source_pattern: str, target_patterns: list[str]) -> str:

@@ -1211,6 +1211,25 @@ class MoeIdentityExpertParallel(TensorParallelLayer):
     def prepare_module_tp(self, module, device_mesh, **kwargs):
         distribute_module(module, device_mesh, input_fn=self._prepare_input_fn)
 
+class GatherParallel(TensorParallelLayer):
+    """
+    A general parallel style that gathers the full tensor in the forward pass and splits it in the backward pass.
+
+    This can be used for layers that require the full tensor for the forward pass (e.g. RMSNorm) but want to shard gradients in the backward pass.
+    """
+
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        input_tensor = inputs[0] if inputs else inputs
+        return gather_full_tensor(input_tensor, shard_dim=-1, device_mesh=device_mesh)
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        return outputs
+
+    def shard_tensor(
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        return param[...].to(device=device, dtype=dtype)
+
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -1232,6 +1251,7 @@ class ParallelInterface(GeneralInterface):
             "moe_identity_expert": MoeIdentityExpertParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
+            "gather": GatherParallel()
         }
         if is_torch_available() and _torch_distributed_available
         else {}
