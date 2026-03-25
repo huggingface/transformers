@@ -20,13 +20,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/ijepa_vith14_1k")
-@strict(accept_kwargs=True)
+@strict
 class IJepaConfig(PreTrainedConfig):
     r"""
     pooler_output_size (`int`, *optional*):
-       Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
     pooler_act (`str`, *optional*, defaults to `"tanh"`):
-       The activation function to be used by the pooler.
+        The activation function to be used by the pooler.
 
     Example:
 

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/mms-tts-eng")
-@strict(accept_kwargs=True)
+@strict
 class VitsConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 4):

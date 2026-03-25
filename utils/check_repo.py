@@ -1191,6 +1191,9 @@ def ignore_undocumented(name: str) -> bool:
     # BLT models are internal building blocks, tested implicitly through BltForCausalLM
     if name.startswith("Blt"):
         return True
+    # image_processing_*_fast are backward-compat module aliases, not public objects.
+    if name.startswith("image_processing_") and name.endswith("_fast"):
+        return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True
     return False

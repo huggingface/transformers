@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/layoutlm-base-uncased")
-@strict(accept_kwargs=True)
+@strict
 class LayoutLMConfig(PreTrainedConfig):
     r"""
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
