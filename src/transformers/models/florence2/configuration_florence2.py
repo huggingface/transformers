@@ -73,7 +73,7 @@ class Florence2VisionConfig(PreTrainedConfig):
     num_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     num_groups: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     window_size: int = 12
-    drop_path_rate: float = 0.1
+    drop_path_rate: float | int = 0.1
     mlp_ratio: float = 4.0
     qkv_bias: bool = True
     activation_function: str = "gelu"
