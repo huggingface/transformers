@@ -20,15 +20,15 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/deit-base-distilled-patch16-224")
-@strict(accept_kwargs=True)
+@strict
 class DeiTConfig(PreTrainedConfig):
     r"""
     encoder_stride (`int`, *optional*, defaults to 16):
         Factor to increase the spatial resolution by in the decoder head for masked image modeling.
     pooler_output_size (`int`, *optional*):
-       Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
+        Dimensionality of the pooler layer. If None, defaults to `hidden_size`.
     pooler_act (`str`, *optional*, defaults to `"tanh"`):
-       The activation function to be used by the pooler.
+        The activation function to be used by the pooler.
 
     Example:
 

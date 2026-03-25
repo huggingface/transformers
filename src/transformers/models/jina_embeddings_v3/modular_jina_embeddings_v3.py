@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="jinaai/jina-embeddings-v3-hf")
-@strict(accept_kwargs=True)
+@strict
 class JinaEmbeddingsV3Config(XLMRobertaConfig):
     r"""
     Examples:

@@ -58,19 +58,19 @@ from ..sam2_video.modeling_sam2_video import (
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):
