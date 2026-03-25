@@ -297,6 +297,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def _get_mamba_cache_shapes(self, batch_size: int, config):
         intermediate_size = config.mamba_expand * config.hidden_size
