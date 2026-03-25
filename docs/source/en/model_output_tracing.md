@@ -5,6 +5,7 @@ Every model's `forward()` method used to manually resolve `None` flags like `out
 - `@capture_outputs` resolves output flags, collects intermediate values, and handles `return_dict` conversion.
 - `@merge_with_config_defaults` resolves `use_cache` from config. Omit it for models that don't cache, like [`CLIPModel`].
 
+These decorators are mainly involved when integrating new models. For a step-by-step guide, see [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/modular_transformers).
 
 ## Declare which submodules to capture
 
@@ -24,6 +25,7 @@ Apply `@capture_outputs` to the base model's `forward()` method. It attaches for
 
 `OutputRecorder` accepts a `module_class` (an `nn.Module` subclass whose outputs to collect) and an optional `index` to select which element of the module's output tuple to get. Pass `layer_name` to attach hooks only to modules with a specific attribute name. Use `layer_name` when two layers share the same class, for example self-attention vs. cross-attention.
 
+The exampple below shows how these decoratos are used in practice, including different levels output control. See [LlamaModel](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py) for real world usage in codebase.
 
 ```python
 from ...processing_utils import Unpack
@@ -72,4 +74,38 @@ class MyModel(MyPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values
         )
+```
+
+## Advanced usage: swapping intermediate capturing layers at load time
+
+The output-tracing system described above depends on `_can_record_outputs` pointing at the *exact* classes that a model's layers instantiate. When you swap out a layer implementation — for example, to use a custom attention kernel, a quantised expert layer, or an architecture variant — those pointers need to stay in sync. The patching API provides a clean, global registry for this, and automatically keeps `_can_record_outputs` consistent.
+
+First let's see how you can swap layers and use custom layers with `register_patch_mapping`. Keys to `register_patch_mapping` can be exact class names or regex patterns — exact matches take priority, then patterns are tested with `re.search()`. Trying to register the same key twice raises `ValueError` unless you pass `overwrite=True`. The replacement must be a subclass of `nn.Module`; anything else raises an error.
+
+
+```python
+from transformers.monkey_patching import register_patch_mapping, unregister_patch_mapping
+
+# Exact name – replaces only Qwen2MoeExperts
+register_patch_mapping({"Qwen2MoeExperts": SequentialExperts})
+
+# Regex – replaces every class whose name ends in "Attention"
+register_patch_mapping({".*Attention$": FusedAttention})
+
+# Anchored version – only matches Llama2Attention, Llama3Attention, …
+register_patch_mapping({"^Llama\\d+Attention$": CustomLlamaAttention})
+
+# Same way, custom keys can be removed from the registry by passing the name that was registered
+unregister_patch_mapping(["Qwen2MoeExperts", ".*Attention$"])
+```
+
+Now that the layers have been swapped, we need to update the `OutputRecorder` to point at the new target class. `patch_output_recorders` fixes this by walking every submodule of an already-instantiated model and updating each `OutputRecorder.target_class` to the registered replacement:
+
+```python
+# Built manually, outside from_pretrained
+model = Qwen2MoeModel(config)
+
+# Without this, _can_record_outputs still points at the original Qwen2MoeExperts class
+# and hooks will never fire on CustomExperts instances.
+patch_output_recorders(model)
 ```
