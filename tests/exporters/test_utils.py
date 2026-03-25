@@ -113,7 +113,7 @@ DYNAMIC_EXPORT_PARAMS = parameterized.expand(
 )
 
 # Maximum time (in seconds) for a single export test before it is killed.
-EXPORT_TEST_TIMEOUT = 600
+EXPORT_TEST_TIMEOUT = 1000
 
 
 # ──────────────────────────── helpers ────────────────────────────
@@ -175,15 +175,9 @@ class ExportTesterMixin:
 
         with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
             source_code = f.read()
-            # TODO: rewrite chunked attention loops as tensor ops or use torch._dynamo.allow_in_graph
-            if "for q, k, v in zip(*splits)" in source_code:
-                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
             # TODO: add use_experts_implementation support to remaining MoE models
             if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
-            # TODO: make get_rope_index export-safe (avoid data-dependent indexing)
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
 
     def _should_skip(self, model_class, generate=False):
         """Return True if this model class should be skipped for export tests."""

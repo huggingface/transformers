@@ -87,6 +87,7 @@ class ExecutorchExporter(DynamoExporter):
 def prepare_for_xnnpack(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
 
+    model.requires_grad_(False)
     device = getattr(model, "device", None) or next(model.parameters()).device
     if device.type != "cpu":
         model = model.to(device="cpu")
@@ -99,11 +100,11 @@ def prepare_for_cuda(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
     """
-
+    model.requires_grad_(False)
+    dtype = next(model.parameters()).dtype
     device = getattr(model, "device", None) or next(model.parameters()).device
     if device.type != "cuda":
         model = model.to(device="cuda")
-    dtype = next(model.parameters()).dtype
     if dtype != torch.bfloat16:
         model = model.to(dtype=torch.bfloat16)
     partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
@@ -204,11 +205,26 @@ def _patch_avg_pool2d(original):
 
 
 def _patch_scaled_dot_product_attention(original):
-    """Manual matmul+softmax fallback for asymmetric head dims (D_q != D_v)."""
+    """Manual matmul+softmax fallback for cases unsupported by the ExecuTorch CUDA backend.
+
+    Falls back to eager attention when:
+    - enable_gqa=True
+    - D_q != D_v (asymmetric head dims, e.g. MLA attention)
+    - attn_mask is float (ExecuTorch CUDA SDPA only accepts bool masks)
+    """
 
     def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
-        if query.shape[-1] != value.shape[-1]:
+        needs_eager_attention = query.device.type == "cuda" and (
+            kwargs.get("enable_gqa", False)
+            or query.shape[-1] != value.shape[-1]
+            or (attn_mask is not None and attn_mask.is_floating_point())
+        )
+        if needs_eager_attention:
             scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
+            if key.shape[1] != query.shape[1]:
+                n_rep = query.shape[1] // key.shape[1]
+                key = key.repeat_interleave(n_rep, dim=1)
+                value = value.repeat_interleave(n_rep, dim=1)
             attn_weight = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
             if is_causal:
                 L, S = query.shape[-2], key.shape[-2]
