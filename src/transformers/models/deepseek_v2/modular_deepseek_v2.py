@@ -106,7 +106,7 @@ class DeepseekV2Config(LlamaConfig):
     attention_dropout: float | None = 0.0
     mlp_bias: bool = False
     first_k_dense_replace: int = 0
-    kv_lora_rank: int = 512
+    kv_lora_rank: int | None = 512
     q_lora_rank: int | None = 1536
     n_group: int | None = None
     n_routed_experts: int = 64
