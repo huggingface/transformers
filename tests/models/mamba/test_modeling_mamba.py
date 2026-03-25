@@ -31,7 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, MambaForCausalLM, MambaModel
+    from transformers import CompileConfig, DynamicCache, MambaForCausalLM, MambaModel
 
 
 class MambaModelTester:
@@ -452,8 +452,10 @@ class MambaIntegrationTests(unittest.TestCase):
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
-        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20)
+        compile_config = CompileConfig(fullgraph=True, mode="reduce-overhead")
+        output = model.generate(
+            input_ids, max_new_tokens=20, cache_implementation="static", compile_config=compile_config
+        )
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 

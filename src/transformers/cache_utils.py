@@ -672,19 +672,23 @@ class HQQQuantizedLayer(QuantizedLayer):
 class MambaCacheLayerMixin(ABC):
     """Base, abstract class for a mamba single layer's cache."""
 
-    is_compileable = False
+    # All shapes are static by essence in a Mamba layer, so it is compileable
+    is_compileable = True
 
     def __init__(self):
         self.conv_states: torch.Tensor | None = None
         self.ssm_states: torch.Tensor | None = None
-        self.is_initialized = False
+        self.is_conv_states_initialized = False
+        self.is_ssm_states_initialized = False
         self.has_previous_state = False
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
 
     @abstractmethod
-    def lazy_initialization(self, conv_states: torch.Tensor) -> None: ...
+    def lazy_initialization(
+        self, conv_states: torch.Tensor | None = None, ssm_states: torch.Tensor | None = None
+    ) -> None: ...
 
     @abstractmethod
     def update_conv_state(self, conv_states: torch.Tensor) -> torch.Tensor: ...
@@ -694,44 +698,55 @@ class MambaCacheLayerMixin(ABC):
 
     def offload(self):
         """Offload this layer's data to CPU device."""
-        if self.is_initialized:
+        if self.is_conv_states_initialized:
             self.conv_states = self.conv_states.to("cpu", non_blocking=True)
+        if self.is_ssm_states_initialized:
             self.ssm_states = self.ssm_states.to("cpu", non_blocking=True)
 
     def prefetch(self):
         """In case of layer offloading, this allows to move the data back to the layer's device ahead of time."""
-        if self.is_initialized and self.conv_states.device != self.device:
+        if self.is_conv_states_initialized and self.conv_states.device != self.device:
             self.conv_states = self.conv_states.to(self.device, non_blocking=True)
+        if self.is_ssm_states_initialized and self.ssm_states.device != self.device:
             self.ssm_states = self.ssm_states.to(self.device, non_blocking=True)
 
     def reset(self) -> None:
         """Resets the cache values while preserving the objects"""
-        if self.is_initialized:
+        if self.is_conv_states_initialized:
             self.conv_states.zero_()
+        if self.is_ssm_states_initialized:
             self.ssm_states.zero_()
         self.has_previous_state = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        if self.has_previous_state:
+        if self.is_conv_states_initialized:
             self.conv_states = self.conv_states.index_select(0, beam_idx.to(self.device))
-            # ssm_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
-            if self.ssm_states.numel() > 0:
-                self.ssm_states = self.ssm_states.index_select(0, beam_idx.to(self.device))
+        # ssm_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
+        if self.is_ssm_states_initialized:
+            self.ssm_states = self.ssm_states.index_select(0, beam_idx.to(self.device))
 
     def crop(self, max_length: int):
-        # We don't crop the mamba cache, so simply do nothing
+        # We don't crop the mamba cache, so simply do nothing here
         pass
 
 
 class MambaLayer(MambaCacheLayerMixin):
-    def lazy_initialization(self, conv_states: torch.Tensor) -> None:
-        self.dtype, self.device = conv_states.dtype, conv_states.device
-        # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
-        self.conv_kernel_size = conv_states.shape[-1]
-        self.conv_states = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.ssm_states = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.is_initialized = True
+    def lazy_initialization(
+        self, conv_states: torch.Tensor | None = None, ssm_states: torch.Tensor | None = None
+    ) -> None:
+        # Here, we will lazy init both states separately, each in their own update function
+        if conv_states is not None:
+            self.dtype, self.device = conv_states.dtype, conv_states.device
+            # Even if prefill is larfer/shorter than the conv_size, the tensor is always either padded or truncated
+            self.max_batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
+            # The shape is always static, so we init as such
+            self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
+            self.is_conv_states_initialized = True
+        if ssm_states is not None:
+            # The shape is always static, so we init as such
+            self.ssm_states = torch.zeros_like(ssm_states, dtype=self.dtype, device=self.device)
+            self.is_ssm_states_initialized = True
 
     def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -744,8 +759,8 @@ class MambaLayer(MambaCacheLayerMixin):
             `torch.Tensor`: The updated conv states.
         """
         # Lazy initialization
-        if not self.is_initialized:
-            self.lazy_initialization(conv_states)
+        if not self.is_conv_states_initialized:
+            self.lazy_initialization(conv_states=conv_states)
 
         # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
         # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
@@ -774,25 +789,28 @@ class MambaLayer(MambaCacheLayerMixin):
         Returns:
             `torch.Tensor`: The updated ssm states.
         """
+        if not self.is_ssm_states_initialized:
+            self.lazy_initialization(ssm_states=ssm_states)
         self.ssm_states = ssm_states
         return self.ssm_states
 
 
 class MambaAndAttentionLayer(MambaLayer, DynamicLayer):
+    # The dynamic Attention part makes it non-compileable
+    is_compileable = False
+
     def __init__(self):
         DynamicLayer.__init__(self)
         MambaLayer.__init__(self)
 
-    def lazy_initialization(self, states1: torch.Tensor, states2: torch.Tensor | None = None) -> None:
-        MambaLayer.lazy_initialization(self, states1)
-        DynamicLayer.lazy_initialization(self, states1, states2)
-
-    def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
-        # We need this as lazy initialization may be called first from `update` from the attention part, so the inferred
-        # conv_kernel_size may not be correct - make sure we grab the correct one during the first call to `update_conv_state`
-        if not self.has_previous_state:
-            self.conv_kernel_size = conv_states.shape[-1]
-        return super().update_conv_state(conv_states, **kwargs)
+    def lazy_initialization(self, *args, **kwargs) -> None:
+        # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
+        if len(args) == 2 and len(kwargs) == 0:
+            DynamicLayer.lazy_initialization(self, *args)
+        # Otherwise, for the Mamba cache, when it's called in `update_conv_state` or `update_ssm_state`, it's
+        # always called with 1 single kwarg (cause it needs to know if it's for the conv or ssm states)
+        if len(args) == 0 and len(kwargs) == 1:
+            MambaLayer.lazy_initialization(self, **kwargs)
 
     def reset(self) -> None:
         MambaLayer.reset(self)
@@ -1312,6 +1330,9 @@ class StaticCache(Cache):
                 layer = StaticSlidingWindowLayer(
                     max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
                 )
+            # Mamba layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
+            elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
+                layers.append(MambaLayer())
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)

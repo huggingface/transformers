@@ -1768,19 +1768,19 @@ class GenerationMixin(ContinuousMixin):
     def _supports_default_dynamic_cache(cls: type["GenerativePreTrainedModel"]) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This adds exception for some models like `Mamba` models which use their own caches.
         """
         # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
-        return not cls._is_stateful and all(
-            special_model_name not in cls.__name__.lower()
-            or "minimaxm2" in cls.__name__.lower()  # name clash between minimax and minimax m2
-            for special_model_name in [
-                "reformer",
-                "minimax",
-                "xlnet",
-                "lfm2",
-                "lfm2_vl",
-            ]
+        unsupported_model_names = (
+            "reformer",
+            "minimax",
+            "xlnet",
+            "olmo_hybrid",
+            "rwkv",
+            "xlstm",
+        )
+        # name clash between minimax and minimax m2, so we add this "or"
+        return "minimaxm2" in cls.__name__.lower() or all(
+            unsupported_name not in cls.__name__.lower() for unsupported_name in unsupported_model_names
         )
 
     def _prepare_cache_for_generation(
@@ -1855,7 +1855,7 @@ class GenerationMixin(ContinuousMixin):
                     f"and will be removed in v5.13. Please only use one of {STATIC_CACHE_IMPLEMENTATIONS}, "
                     "and the layer structure will be inferred automatically."
                 )
-            model_kwargs["past_key_values"] = self._prepare_static_cache(
+            model_kwargs[cache_name] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation,
                 batch_size=max(generation_config.num_beams, generation_config.num_return_sequences) * batch_size,
                 max_cache_len=max_cache_length,
@@ -1871,19 +1871,19 @@ class GenerationMixin(ContinuousMixin):
             cache_config = generation_config.cache_config if generation_config.cache_config is not None else {}
             cache_config.setdefault("config", self.config.get_text_config(decoder=True))
             backend = cache_config.pop("backend", "quanto")
-            model_kwargs["past_key_values"] = QuantizedCache(backend=backend, **cache_config)
+            model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
         # i.e. `cache_implementation` in [None, "dynamic", "offloaded", "dynamic_full"]
         # TODO: prepare linear cache from a single API, instead of creating in modeling code
         else:
-            model_kwargs["past_key_values"] = DynamicCache(**dynamic_cache_kwargs)
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
 
         if (
             self.config.is_encoder_decoder
-            and "past_key_values" in model_kwargs
-            and not isinstance(model_kwargs["past_key_values"], EncoderDecoderCache)
+            and cache_name in model_kwargs
+            and not isinstance(model_kwargs[cache_name], EncoderDecoderCache)
         ):
-            model_kwargs["past_key_values"] = EncoderDecoderCache(
-                model_kwargs["past_key_values"],  # self-attention cache
+            model_kwargs[cache_name] = EncoderDecoderCache(
+                model_kwargs[cache_name],  # self-attention cache
                 DynamicCache(**dynamic_cache_kwargs),  # cross-attention cache
             )
 
@@ -1983,13 +1983,13 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.disable_compile:
             return False
 
+        cache = model_kwargs.get("past_key_values", model_kwargs.get("cache_params"))
+
         # Base logic
         valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
-        using_compilable_cache = (
-            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
-        )
+        using_compilable_cache = cache is not None and cache.is_compileable
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation

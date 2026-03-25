@@ -487,6 +487,7 @@ class Mamba2Mixer(nn.Module):
             # [bsz, num_heads, head_dim]
 
             # Reshape ssm_states to merge the first two dimensions
+            ssm_states = ssm_states.to(device=C.device, dtype=C.dtype)
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
             y = torch.bmm(ssm_states_reshaped, C_reshaped)
