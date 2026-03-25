@@ -218,7 +218,6 @@ class EsmConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.is_folding_model:
-            self.model_type = "esmfold"
             if self.esmfold_config is None:
                 logger.info("No esmfold_config supplied for folding model, using default values.")
                 self.esmfold_config = EsmFoldConfig()
