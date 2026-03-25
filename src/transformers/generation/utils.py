@@ -1842,8 +1842,11 @@ class GenerationMixin(ContinuousMixin):
             generation_config.cache_implementation = "dynamic_full"
 
         dynamic_cache_kwargs = {}
-        # mamba models always need to pass the config, otherwise it will use an Attention cache
-        is_mamba = any(x in ("mamba", "conv", "linear_attention") for x in getattr(self.config, "layer_types", []))
+        # mamba models always need to pass the config, otherwise it will use an Attention cache for the Mamba layers
+        is_mamba = any(
+            x in ("mamba", "conv", "linear_attention")
+            for x in getattr(self.config.get_text_config(decoder=True), "layer_types", [])
+        )
         if generation_config.cache_implementation != "dynamic_full" or is_mamba:
             dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
 
