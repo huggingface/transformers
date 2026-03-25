@@ -171,7 +171,7 @@ def _fsdp_global_wrapper(rank, test_name, func, func_args, func_kwargs, world_si
         output_stream = sys.stderr if any_failed else sys.stdout
         print(f"[FSDP] {status} test: {test_name} ({elapsed:.1f}s)", file=output_stream, flush=True)
         with open(results_file, "w") as f:
-            json.dump({"error": error if error else "Failed on another rank" if any_failed else None}, f)
+            json.dump({"error": error or ("Failed on another rank" if any_failed else None)}, f)
 
     backend_empty_cache(_get_distributed_device_type())
     dist.barrier()

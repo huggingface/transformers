@@ -333,7 +333,7 @@ def parse_args():
         data_files["train"] = args.train_dir
     if args.validation_dir is not None:
         data_files["val"] = args.validation_dir
-    args.data_files = data_files if data_files else None
+    args.data_files = data_files or None
 
     if args.push_to_hub:
         assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."

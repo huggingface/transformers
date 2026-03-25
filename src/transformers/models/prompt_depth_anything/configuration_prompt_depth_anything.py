@@ -91,7 +91,7 @@ class PromptDepthAnythingConfig(PreTrainedConfig):
             **kwargs,
         )
 
-        self.max_depth = self.max_depth if self.max_depth else 1
+        self.max_depth = self.max_depth or 1
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
