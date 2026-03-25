@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/timesformer-base-finetuned-k600")
-@strict(accept_kwargs=True)
+@strict
 class TimesformerConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 8):

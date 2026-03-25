@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="SmallDoge/Doge-320M")
-@strict(accept_kwargs=True)
+@strict
 class DogeConfig(PreTrainedConfig):
     r"""
     keep_window_size (`int`, *optional*, defaults to 2048):

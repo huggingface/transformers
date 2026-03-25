@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM2-8B-A1B")
-@strict(accept_kwargs=True)
+@strict
 class Lfm2MoeConfig(PreTrainedConfig):
     r"""
     conv_bias (`bool`, *optional*, defaults to `False`):
@@ -43,7 +43,8 @@ class Lfm2MoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "lfm2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]

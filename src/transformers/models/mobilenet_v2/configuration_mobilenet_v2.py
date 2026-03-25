@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/mobilenet_v2_1.0_224")
-@strict(accept_kwargs=True)
+@strict
 class MobileNetV2Config(PreTrainedConfig):
     r"""
     depth_divisible_by (`int`, *optional*, defaults to 8):

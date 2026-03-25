@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ByteDance-Seed/Seed-OSS-36B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class SeedOssConfig(PreTrainedConfig):
     r"""
     attention_out_bias (`bool`, *optional*, defaults to `False`):
@@ -38,7 +38,8 @@ class SeedOssConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "seed_oss"
     keys_to_ignore_at_inference = ["past_key_values"]

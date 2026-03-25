@@ -149,7 +149,7 @@ class LasrProcessor(ParakeetProcessor):
 
 
 @auto_docstring(checkpoint="google/medasr")
-@strict(accept_kwargs=True)
+@strict
 class LasrEncoderConfig(ParakeetEncoderConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -209,16 +209,16 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
 
 
 @auto_docstring(checkpoint="google/medasr")
-@strict(accept_kwargs=True)
+@strict
 class LasrCTCConfig(ParakeetCTCConfig):
     r"""
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`LasrForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`LasrForCTC`].
+    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+        instance of [`LasrForCTC`].
+    ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`LasrForCTC`].
 
     Example:
         ```python

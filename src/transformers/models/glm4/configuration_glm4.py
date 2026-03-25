@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
-@strict(accept_kwargs=True)
+@strict
 class Glm4Config(PreTrainedConfig):
     r"""
     Example:
