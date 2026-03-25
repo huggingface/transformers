@@ -2346,23 +2346,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             return
         try:
             # This check is for remote code that does NOT use either `torch.init` or `transformers.initialization` in `_init_weights`
-        # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
-        # otherwise
-        if (
-            is_remote_code
-            and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
-            and all(
-                getattr(buffer, "_is_hf_initialized", False)
-                for buffer in module.buffers(recurse=False)
-                if buffer is not None
-            )
-        ):
-            module._is_hf_initialized = True
-            return
-
-        self._init_weights(module)
+            # which allow to check the flag directly on param. As they don't and write the params in-place, params would be reinitialized
+            # otherwise
+            if (
+                is_remote_code
+                and all(getattr(param, "_is_hf_initialized", False) for param in module.parameters(recurse=False))
+                and all(
+                    getattr(buffer, "_is_hf_initialized", False)
+                    for buffer in module.buffers(recurse=False)
+                    if buffer is not None
+                )
+            ):
+                module._is_hf_initialized = True
+                return
         except Exception as e:
-            pass
+            logger.warning(f"Error occurred while initializing weights for module {module.__class__.__name__}: {e}")
+
         module._is_hf_initialized = True
 
     @torch.no_grad()
