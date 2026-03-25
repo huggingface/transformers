@@ -700,12 +700,12 @@ class ProcessorMixin(PushToHubMixin):
         }
 
         subprocessor = getattr(self, attribute_to_kwargs[modality])
-        mm_data = subprocessor.fetch_data(mm_data)
-        processed_data = subprocessor(mm_data, **kwargs[f"{modality}_kwargs"])
+        decoded_mm_data = subprocessor.fetch_data(mm_data)
+        processed_data = subprocessor(decoded_mm_data, **kwargs[f"{modality}_kwargs"])
         replacement_fn: callable = getattr(self, f"get_{modality}_replacement", None)
         image_replacements = []
         if replacement_fn:
-            image_replacements = replacement_fn(mm_data, processed_data)
+            image_replacements = replacement_fn(decoded_mm_data, processed_data)
         return processed_data, image_replacements
 
     def prepare_inputs_layout(
@@ -794,7 +794,7 @@ class ProcessorMixin(PushToHubMixin):
         if not special_mm_tokens:
             return text, None
 
-        special_mm_tokens = "|".join(special_mm_tokens)
+        regex_special_mm_tokens = "|".join(f"({re.escape(v)})" for v in special_mm_tokens)
         batch_replacement_offsets = []
         images_replacements = iter(images_replacements)
         videos_replacements = iter(videos_replacements)
@@ -802,17 +802,17 @@ class ProcessorMixin(PushToHubMixin):
             last = 0
             replacement_offsets = []
             expanded_sample = []
-            for m in re.finditer(f"({special_mm_tokens})", text[batch_idx]):
+            for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
                 expanded_sample.append(text[batch_idx][last:start])
 
                 # Case 1: if the image token has match in the text
-                if m.group(0) is not None:
+                if m.groups()[0] is not None:
                     replacement_text = next(images_replacements)
                     replacement_offsets.append({"type": "image"})
 
                 # Case 2: if the video token has match in the text
-                elif m.group(1) is not None:
+                elif m.groups()[1] is not None:
                     replacement_text = next(videos_replacements)
                     replacement_offsets.append({"type": "video"})
 
@@ -821,7 +821,7 @@ class ProcessorMixin(PushToHubMixin):
                     {
                         "span": (start, end),
                         "new_span": (start, start + len(replacement_text)),
-                        "text": m.group(0),
+                        "text": m.group(),
                         "replacement": replacement_text,
                     }
                 )

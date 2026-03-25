@@ -20,8 +20,6 @@
 Processor class for Qwen2-VL.
 """
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
@@ -80,45 +78,21 @@ class Qwen2VLProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
+
+        self.validate_inputs(images=images, text=text, **kwargs)
+        images, text, *_ = self.prepare_inputs_layout(images=images, text=text)
+
         output_kwargs = self._merge_kwargs(
             Qwen2VLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        image_inputs = videos_inputs = {}
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
-
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_grid_thw = videos_inputs["video_grid_thw"]
-
-        if not isinstance(text, list):
-            text = [text]
-
-        text = text.copy()  # below lines change text in-place
-
-        if images is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        if videos is not None:
-            merge_length = self.video_processor.merge_size**2
-            index = 0
-            for i in range(len(text)):
-                while self.video_token in text[i]:
-                    num_video_tokens = video_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+        image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
+        videos_inputs, videos_replacements = self._process_modality(videos, "videos", **output_kwargs)
+        text, text_replacement_offsets = self.get_text_replacement(
+            text, images_replacements=images_replacements, videos_replacements=videos_replacements
+        )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
@@ -126,13 +100,19 @@ class Qwen2VLProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.video_token_id] = 2
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
+        merge_length = self.image_processor.merge_size**2
+        num_image_tokens = processed_images["image_grid_thw"][image_idx].prod() // merge_length
+        return self.image_token * num_image_tokens
+
+    def replace_video_token(self, processed_videos: dict, video_idx: int) -> str:
+        merge_length = self.video_processor.merge_size**2
+        num_video_tokens = processed_videos["video_grid_thw"][video_idx].prod() // merge_length
+        return self.video_token * num_video_tokens
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """

@@ -77,23 +77,16 @@ class Gemma3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        image_inputs = {}
-        if images is not None:
-            image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
-            image_inputs.pop("num_crops", None)  # unused by model
+        image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
+        image_inputs.pop("num_crops", None)  # unused by model
 
-            # Create empty text to be replaced with placeholders
-            if not text:
-                text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
-
-            # Replace image tokens by the full expanded sequence
-            image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
-            text, text_replacement_offsets = self.get_text_replacement(text, images_replacements=images_replacements)
+        # Replace image tokens by the full expanded sequence
+        text, text_replacement_offsets = self.get_text_replacement(text, images_replacements=images_replacements)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-        # self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        # self._check_special_mm_tokens(text, text_inputs, modalities=["image"]) # BOI token in gemma, FIXME
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
         if return_mm_token_type_ids:
@@ -111,6 +104,10 @@ class Gemma3Processor(ProcessorMixin):
 
         if images is not None:
             images = make_nested_list_of_images(images)
+
+        # Create empty text to be replaced with placeholders
+        if images and not text:
+            text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
 
         return images, text
 
