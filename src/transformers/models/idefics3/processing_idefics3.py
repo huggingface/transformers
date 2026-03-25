@@ -148,9 +148,9 @@ class Idefics3Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
     ):
-        if text is not None and isinstance(text, str):
-            text = [text]
-        else:
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
             text = text.copy()
 
         if images is not None:

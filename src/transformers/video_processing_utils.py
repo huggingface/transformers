@@ -878,7 +878,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             )
             backend = "torchvision"
 
-        if isinstance(video_url_or_urls, list):
+        if isinstance(video_url_or_urls, list) and len(video_url_or_urls) > 0:
             return list(zip(*[self.fetch_videos(x, sample_indices_fn=sample_indices_fn) for x in video_url_or_urls]))
         else:
             return load_video(video_url_or_urls, backend=backend, sample_indices_fn=sample_indices_fn)

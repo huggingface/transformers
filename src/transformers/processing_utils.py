@@ -736,15 +736,11 @@ class ProcessorMixin(PushToHubMixin):
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
-    def replace_image_token(
-        self, text: str, image_inputs: dict | None = None, batch_idx: int = 0, image_index: int = 0
-    ) -> str:
-        raise NotImplementedError
+    def replace_image_token(self, text: str, image_inputs: dict | None = None, image_idx: int = 0) -> str:
+        return None
 
-    def replace_video_token(
-        self, text: str, video_inputs: dict | None = None, batch_idx: int = 0, video_index: int = 0
-    ) -> str:
-        raise NotImplementedError
+    def replace_video_token(self, text: str, video_inputs: dict | None = None, video_idx: int = 0) -> str:
+        return None
 
     def get_images_replacement(
         self,
