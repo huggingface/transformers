@@ -275,6 +275,13 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
+    if weight.device.type == "cuda":
+        if hasattr(torch.nn.functional, "grouped_mm"):
+            return torch.cuda.get_device_capability(weight.device) >= (8, 0)
+        if hasattr(torch, "_grouped_mm"):
+            return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+        return False
+
     return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
 
 
