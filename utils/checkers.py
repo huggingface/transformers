@@ -100,6 +100,12 @@ CHECKER_FILE_GLOBS = {
         "tests/models/**/test_modeling_*.py",
         "docs/**/*.md",
     ],
+    "imports": ["src/transformers/**/__init__.py", "src/transformers/**/*.py"],
+    "pipeline_typing": ["src/transformers/pipelines/__init__.py"],
+    "doctest_list": ["src/transformers/**/*.py", "docs/**/*.md"],
+    "update_metadata": ["src/transformers/models/**/*.py", "docs/**/*.md"],
+    "add_dates": ["src/transformers/models/**/__init__.py"],
+    "deps_table": ["setup.py", "pyproject.toml"],
 }
 
 
