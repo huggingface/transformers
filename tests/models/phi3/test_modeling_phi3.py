@@ -139,7 +139,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=32)
+        outputs = model.generate(**inputs, max_new_tokens=32)
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
@@ -161,7 +161,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs["input_ids"], 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
@@ -207,7 +207,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=32)
+        outputs = model.generate(**inputs, max_new_tokens=32)
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
@@ -229,7 +229,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs["input_ids"], 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
