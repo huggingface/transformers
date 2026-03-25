@@ -205,7 +205,7 @@ class TextToAudioPipeline(Pipeline):
             # ensure dict output to facilitate postprocessing
             forward_params.update({"return_dict_in_generate": True})
 
-            if self.model.config.model_type in ["csm"]:
+            if self.model.config.model_type == "csm":
                 # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
                 # needed for decoding to audio
                 if "output_audio" not in forward_params:
