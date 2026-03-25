@@ -1,29 +1,28 @@
-# Tracing Model Intermediate Outputs with Decorators
+# Tracing model intermediate outputs
 
-Every Transformers model's `forward()` method has historically needed to handle three chores that is same across all model classes and acrhitectures:
+Every model's `forward()` method used to manually resolve `None` flags like `output_attentions` from config defaults, accumulate per-layer attention weights and hidden states into tuples, and convert [`ModelOutput`] dataclasses to plain tuples when `return_dict=False`. Two decorators replace all of that boilerplate.
 
-1. **Resolve `None` flags from config defaults** — If the caller passes `output_attentions=None`, fall back to `self.config.output_attentions`. Same for `output_hidden_states`, `use_cache`, and `return_dict`.
-2. **Manually collect intermediate outputs** — Loop over layers, appending each layer's attention weights to an accumulator tuple when `output_attentions=True`; doing the same for hidden states.
-3. **Convert `ModelOutput` → tuple on the way out** — When `return_dict=False`, unpack the dataclass into a flat tuple.
-
-This boilerplate was copy-pasted across every one of the 240+ models in the library. Two new decorators, `@capture_outputs` and `@merge_with_config_defaults` can replace all of it.
+- `@capture_outputs` resolves output flags, collects intermediate values, and handles `return_dict` conversion.
+- `@merge_with_config_defaults` resolves `use_cache` from config. Omit it for models that don't cache, like [`CLIPModel`].
 
 
-## Collect intermediate outputs with `@capture_outputs` and `@merge_with_config_defaults`
+## Declare which submodules to capture
 
-`@capture_outputs` is applied to the base model's `forward()` method and attached forward hooks to:
+Apply `@capture_outputs` to the base model's `forward()` method. It attaches forward hooks that:
 
-- Automatically intercept outputs from specified submodule classes during the forward pass, without those submodules needing to know they're being observed.
+- Intercept outputs from specified submodule classes during the forward pass, without those submodules needing to know they're being observed.
 - Collect per-layer attention weights and hidden states into tuples.
-- Inject the collected values into the `ModelOutput` dataclass that the method returns.
-- Handle the `return_dict=False` conversion (producing a plain tuple instead of a dataclass).
-- Resolve `output_attentions` and `output_hidden_states` from kwargs or from `self.config` when `None`.
+- Inject collected values into the returned [`ModelOutput`] dataclass.
+- Convert the dataclass to a plain tuple when `return_dict=False`.
+- Resolve `output_attentions` and `output_hidden_states` from kwargs or `self.config` when `None`.
 
-For `@capture_outputs` to know *which* submodule produces *which* output, the `ModelPreTrainedModel` class must declare a `_can_record_outputs` class-level dictionary. Each key is an output field name (`"hidden_states"`, `"attentions"`, `"cross_attentions"`), and each value is either a module class or an `OutputRecorder` instance.
+## Map output fields to submodules
 
-The `OutputRecorder` expects a `module_class` which is an `nn.Module` instance whose outputs we want to collect and optionally an `index` to indicate which element of the module's output tuple to grab. If `layer_name` is also provided, hooks will be attached only modules with the given layer name. This is useful when two layers share the same class as in self-attention vs. cross-attention layers.
+`@capture_outputs` needs to know which submodule produces which output. Declare a `_can_record_outputs` class-level dictionary on your `PreTrainedModel` subclass. Each key is an output field name (`"hidden_states"`, `"attentions"`, `"cross_attentions"`), and each value is a module class or an `OutputRecorder` instance.
 
-Another required decorator, `@merge_with_config_defaults`, resolves the `use_cache` argument to config's default value. It can be ommited in models that do not require caching such as `CLIPModel`
+## Fine-grained control with OutputRecorder
+
+`OutputRecorder` accepts a `module_class` (an `nn.Module` subclass whose outputs to collect) and an optional `index` to select which element of the module's output tuple to get. Pass `layer_name` to attach hooks only to modules with a specific attribute name. Use `layer_name` when two layers share the same class, for example self-attention vs. cross-attention.
 
 
 ```python
@@ -54,7 +53,7 @@ class MyPreTrainedModel(PreTrainedModel):
 class MyModel(MyPreTrainedModel):
 
     @merge_with_config_defaults # ← resolves use_cache
-    @capture_outputs          # ← handles output collection + return_dict
+    @capture_outputs            # ← handles output collection + return_dict
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
