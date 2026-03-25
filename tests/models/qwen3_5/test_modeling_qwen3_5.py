@@ -19,9 +19,9 @@ import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
+from transformers.utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from transformers.testing_utils import (
     cleanup,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -197,10 +197,12 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
                 cu_seq_lens_k=cu_seq_lens,
             )
 
-    @require_flash_attn
     @require_torch_accelerator
     @slow
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids_seq_idx_and_fa_kwargs(self):
+        if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
+            self.skipTest("Qwen3.5 padding-free fast path requires `flash-linear-attention` and `causal-conv1d`.")
+
         max_new_tokens = 30
 
         for model_class in self.all_generative_model_classes:
