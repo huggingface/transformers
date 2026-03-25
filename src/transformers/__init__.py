@@ -540,6 +540,9 @@ if TYPE_CHECKING:
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+
+    # Distributed config
+    from .distributed.configuration_utils import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -761,9 +764,6 @@ if TYPE_CHECKING:
     from .utils import is_torch_xpu_available as is_torch_xpu_available
     from .utils.import_utils import requires_backends
     from .utils.kernel_config import KernelConfig as KernelConfig
-
-    # Distributed config
-    from .distributed.configuration_utils import DistributedConfig as DistributedConfig
 
     # Quantization config
     from .utils.quantization_config import AqlmConfig as AqlmConfig

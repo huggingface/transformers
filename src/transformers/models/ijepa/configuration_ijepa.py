@@ -62,7 +62,7 @@ class IJepaConfig(PreTrainedConfig):
     pooler_act: str = "tanh"
 
     def __post_init__(self, **kwargs):
-        self.pooler_output_size = self.pooler_output_size if self.pooler_output_size else self.hidden_size
+        self.pooler_output_size = self.pooler_output_size or self.hidden_size
         super().__post_init__(**kwargs)
 
 
