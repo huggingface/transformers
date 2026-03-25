@@ -333,8 +333,8 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            # Attentions are captured per transformer layer (one per SwinLayer block), not per stage.
-            expected_num_attentions = sum(self.model_tester.depths)
+            # Attentions are captured per stage (one per SwinStage), not per transformer block.
+            expected_num_attentions = len(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config

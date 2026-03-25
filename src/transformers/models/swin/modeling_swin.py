@@ -618,7 +618,7 @@ class SwinLayer(nn.Module):
             height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
         )
 
-        attention_output, _ = self.attention(hidden_states_windows, attn_mask, **kwargs)
+        attention_output, attn_weights = self.attention(hidden_states_windows, attn_mask, **kwargs)
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
         shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
@@ -642,7 +642,7 @@ class SwinLayer(nn.Module):
         hidden_states = self.mlp(hidden_states)
         hidden_states = hidden_states + residual
 
-        return hidden_states
+        return hidden_states, attn_weights
 
 
 class SwinStage(GradientCheckpointingLayer):
@@ -686,10 +686,13 @@ class SwinStage(GradientCheckpointingLayer):
         always_partition: bool = False,
         output_hidden_states_before_downsampling: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         height, width = input_dimensions
+        last_attn_weights = None
         for layer_module in self.blocks:
-            hidden_states = layer_module(hidden_states, input_dimensions, always_partition=always_partition, **kwargs)
+            hidden_states, last_attn_weights = layer_module(
+                hidden_states, input_dimensions, always_partition=always_partition, **kwargs
+            )
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
@@ -699,6 +702,7 @@ class SwinStage(GradientCheckpointingLayer):
         # Index 1: spatial (B, C, H, W) view whose resolution depends on the flag:
         #   output_hidden_states_before_downsampling=True  → pre-downsampling (used by backbone)
         #   output_hidden_states_before_downsampling=False → post-downsampling (default)
+        # Index 2: attention weights from the last block in this stage (None if output_attentions=False).
         if output_hidden_states_before_downsampling:
             spatial_state, h, w = hidden_states_before_downsampling, height, width
         elif self.downsample is not None:
@@ -709,7 +713,7 @@ class SwinStage(GradientCheckpointingLayer):
         batch_size, _, hidden_size = spatial_state.shape
         reshaped_hidden_states = spatial_state.view(batch_size, h, w, hidden_size).permute(0, 3, 1, 2).contiguous()
 
-        return hidden_states, reshaped_hidden_states
+        return hidden_states, reshaped_hidden_states, last_attn_weights
 
 
 @auto_docstring
@@ -731,8 +735,9 @@ class SwinPreTrainedModel(PreTrainedModel):
         "hidden_states": OutputRecorder(SwinStage, index=0, capture_initial_hidden_state=True),
         # reshaped_hidden_states are collected explicitly by SwinEncoder (per stage) and the stem
         # is prepended in SwinModel.forward, so they are NOT captured via hooks here.
-        # index=1: SwinAttention returns (attn_output, attn_weights); capture weights at index 1.
-        "attentions": OutputRecorder(SwinAttention, index=1, capture_initial_hidden_state=False),
+        # index=2: SwinStage returns (hidden_states, reshaped_hidden_states, last_attn_weights);
+        # capture the last block's attention weights at index 2, giving one entry per stage.
+        "attentions": OutputRecorder(SwinStage, index=2, capture_initial_hidden_state=False),
     }
 
     @torch.no_grad()
@@ -793,7 +798,7 @@ class SwinEncoder(SwinPreTrainedModel):
             all_reshaped_hidden_states = (stem_spatial,)
 
         for layer_module in self.layers:
-            hidden_states, reshaped_hidden_state = layer_module(
+            hidden_states, reshaped_hidden_state, _ = layer_module(
                 hidden_states,
                 input_dimensions,
                 always_partition=always_partition,
