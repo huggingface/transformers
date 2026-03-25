@@ -106,6 +106,34 @@ CHECKER_FILE_GLOBS = {
     "update_metadata": ["src/transformers/models/**/*.py", "docs/**/*.md"],
     "add_dates": ["src/transformers/models/**/__init__.py"],
     "deps_table": ["setup.py", "pyproject.toml"],
+    "ruff_check": [
+        "examples/**/*.py",
+        "tests/**/*.py",
+        "src/**/*.py",
+        "utils/**/*.py",
+        "scripts/**/*.py",
+        "benchmark/**/*.py",
+        "benchmark_v2/**/*.py",
+        "setup.py",
+        "conftest.py",
+    ],
+    "ruff_format": [
+        "examples/**/*.py",
+        "tests/**/*.py",
+        "src/**/*.py",
+        "utils/**/*.py",
+        "scripts/**/*.py",
+        "benchmark/**/*.py",
+        "benchmark_v2/**/*.py",
+        "setup.py",
+        "conftest.py",
+    ],
+    "types": [
+        "src/transformers/_typing.py",
+        "src/transformers/utils/**/*.py",
+        "src/transformers/generation/**/*.py",
+        "src/transformers/quantizers/**/*.py",
+    ],
 }
 
 
