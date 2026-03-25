@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uw-madison/nystromformer-512")
-@strict(accept_kwargs=True)
+@strict
 class NystromformerConfig(PreTrainedConfig):
     r"""
     segment_means_seq_len (`int`, *optional*, defaults to 64):
@@ -69,7 +69,7 @@ class NystromformerConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_cross_attention: bool = False
     tie_word_embeddings: bool = True
 

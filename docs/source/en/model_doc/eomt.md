@@ -192,9 +192,9 @@ plt.show()
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## EomtImageProcessorFast
+## EomtImageProcessorPil
 
-[[autodoc]] EomtImageProcessorFast
+[[autodoc]] EomtImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

@@ -27,7 +27,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
-@strict(accept_kwargs=True)
+@strict
 class OlmoHybridConfig(PreTrainedConfig):
     r"""
     linear_num_key_heads (`int`, *optional*):
@@ -100,7 +100,7 @@ class OlmoHybridConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 100277
     bos_token_id: int | None = None
-    eos_token_id: int | None = 100257
+    eos_token_id: int | list[int] | None = 100257
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False

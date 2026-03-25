@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -75,7 +75,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
     decoder_start_token_id: int = 0
     use_cache: bool = False
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     bos_token_id: int | None = None
     tie_word_embeddings: bool = False
     is_decoder: bool = True
@@ -83,11 +83,9 @@ class Pix2StructTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
-    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
-        The non-linear activation function (function or string).
     patch_embed_hidden_size (`int`, *optional*, defaults to 768):
         Dimensionality of the input patch_embedding layer in the Transformer encoder.
     d_ff (`int`, *optional*, defaults to 2048):
@@ -96,6 +94,8 @@ class Pix2StructVisionConfig(PreTrainedConfig):
         Dimensionality of the key, query, value projections per attention head.
     The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
         `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
+    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string).
     seq_len (`int`, *optional*, defaults to 4096):
         Maximum sequence length (here number of patches) supported by the model.
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -138,7 +138,7 @@ class Pix2StructVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructConfig(PreTrainedConfig):
     r"""
     is_vqa (`bool`, *optional*, defaults to `False`):

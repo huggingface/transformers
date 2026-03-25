@@ -20,15 +20,15 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="EleutherAI/gpt-neo-1.3B")
-@strict(accept_kwargs=True)
+@strict
 class GPTNeoConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 256):
-        The size of the sliding window for local attention.
     attention_types (`list`, *optional*, defaults to `[[['global', 'local'], 12]]`):
         The type of attention for each layer in a `List` of the following format `[[["attention_type"],
         num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
         value of `attention_type` from `["global", "local"]
+    window_size (`int`, *optional*, defaults to 256):
+        The size of the sliding window for local attention.
 
     Example:
 
@@ -66,7 +66,7 @@ class GPTNeoConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     use_cache: bool = True
     bos_token_id: int | None = 50256
-    eos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
     pad_token_id: int | None = None
     tie_word_embeddings: bool = True
 

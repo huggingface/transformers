@@ -269,7 +269,7 @@ pipeline(
 
 Transformers 不止是一个使用预训练模型的工具包，它还是围绕 Hugging Face Hub 构建的项目社区。我们希望 Transformers 能助力开发者、研究人员、学生、老师、工程师与任何人构建理想项目。
 
-为庆祝 Transformers 获得 100,000 颗星，我们制作了 [awesome-transformers](./awesome-transformers.md) 页面，展示了 100 个由社区构建的优秀项目。
+为庆祝 Transformers 获得 100,000 颗星，我们制作了 [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) 页面，展示了 100 个由社区构建的优秀项目。
 
 如果你拥有或使用某个项目，认为它应该在列表中出现，欢迎提交 PR 添加它！
 

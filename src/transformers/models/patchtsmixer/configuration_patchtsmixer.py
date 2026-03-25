@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ibm/patchtsmixer-etth1-pretrain")
-@strict(accept_kwargs=True)
+@strict
 class PatchTSMixerConfig(PreTrainedConfig):
     r"""
     context_length (`int`, *optional*, defaults to 32):

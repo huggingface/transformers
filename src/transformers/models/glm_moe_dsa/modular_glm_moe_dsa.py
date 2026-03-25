@@ -75,7 +75,7 @@ def apply_rotary_pos_emb(
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
-@strict(accept_kwargs=True)
+@strict
 class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -88,9 +88,6 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
-    indexer_rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether the indexer uses interleaved rotary position embeddings.
-
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -266,7 +263,7 @@ class GlmMoeDsaIndexer(nn.Module):
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-
+        scores = F.relu(scores)
         # Weight per head and sum across heads → [B, S, T]
         index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
 

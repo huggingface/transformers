@@ -25,7 +25,7 @@ from parameterized import parameterized
 
 from transformers import (
     RTDetrConfig,
-    RTDetrImageProcessor,
+    RTDetrImageProcessorPil,
     RTDetrResNetConfig,
     is_torch_available,
     is_vision_available,
@@ -651,7 +651,7 @@ def prepare_img():
 class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

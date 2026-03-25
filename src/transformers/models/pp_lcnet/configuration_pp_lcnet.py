@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     scale (`float`, *optional*, defaults to 1.0):
