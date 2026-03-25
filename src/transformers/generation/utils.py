@@ -33,6 +33,7 @@ from ..cache_utils import (
     QuantizedCache,
     StaticCache,
 )
+from ..distributed.utils import is_fsdp_managed_module
 from ..dynamic_module_utils import (
     check_python_requirements,
     get_cached_module_file,
@@ -40,7 +41,6 @@ from ..dynamic_module_utils import (
     resolve_trust_remote_code,
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
-from ..integrations.fsdp import is_fsdp_managed_module
 from ..masking_utils import create_masks_for_generate
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (

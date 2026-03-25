@@ -18,6 +18,7 @@ from typing import Any, Optional
 import torch
 import torch.distributed as dist
 
+from ...distributed.utils import is_fsdp_managed_module
 from ...generation.logits_process import (
     DiaClassifierFreeGuidanceLogitsProcessor,
     DiaEOSChannelFilterLogitsProcessor,
@@ -29,7 +30,6 @@ from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin, GenerationMode
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 

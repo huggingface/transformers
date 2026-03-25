@@ -312,9 +312,11 @@ def check_config_attributes():
             cls
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
-                lambda x: inspect.isclass(x)
-                and issubclass(x, PreTrainedConfig)
-                and inspect.getmodule(x) == inspect.getmodule(_config_class),
+                lambda x: (
+                    inspect.isclass(x)
+                    and issubclass(x, PreTrainedConfig)
+                    and inspect.getmodule(x) == inspect.getmodule(_config_class)
+                ),
             )
         ]
         for config_class in config_classes_in_module:

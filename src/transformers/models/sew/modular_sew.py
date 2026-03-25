@@ -20,8 +20,8 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...distributed.utils import is_fsdp_managed_module
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring

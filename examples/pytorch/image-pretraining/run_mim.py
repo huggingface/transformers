@@ -115,7 +115,7 @@ class DataTrainingArguments:
             data_files["train"] = self.train_dir
         if self.validation_dir is not None:
             data_files["val"] = self.validation_dir
-        self.data_files = data_files if data_files else None
+        self.data_files = data_files or None
 
 
 @dataclass

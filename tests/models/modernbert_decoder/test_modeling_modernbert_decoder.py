@@ -41,6 +41,7 @@ class ModernBertDecoderModelTester(CausalLMModelTester):
 @require_torch
 class ModernBertDecoderModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ModernBertDecoderModelTester
+    skip_fsdp_tests = True
 
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""

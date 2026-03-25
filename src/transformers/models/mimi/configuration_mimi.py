@@ -123,7 +123,7 @@ class MimiConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
+        self.upsampling_ratios = self.upsampling_ratios or [8, 6, 5, 4]
         self.codebook_dim = self.codebook_dim if self.codebook_dim is not None else self.hidden_size
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
         # Handle backward compatibility for frame_rate:
