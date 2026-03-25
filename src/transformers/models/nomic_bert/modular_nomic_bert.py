@@ -15,11 +15,9 @@
 
 import torch
 import torch.nn as nn
-from huggingface_hub.dataclasses import strict
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
@@ -50,14 +48,10 @@ from ..jina_embeddings_v3.modeling_jina_embeddings_v3 import (
     JinaEmbeddingsV3Layer,
     JinaEmbeddingsV3Model,
 )
-from ..llama.modeling_llama import (
-    LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-)
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 @auto_docstring(checkpoint="nomic-ai/nomic-embed-text-v1.5")
-@strict(accept_kwargs=True)
 class NomicBertConfig(BertConfig):
     r"""
     Examples:
@@ -114,7 +108,6 @@ class NomicBertRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class NomicBertAttention(JinaEmbeddingsV3Attention):
     def __init__(self, config):
         super().__init__(config)
