@@ -29,7 +29,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
-@strict(accept_kwargs=True)
+@strict
 class MaskFormerDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 100):
@@ -119,19 +119,19 @@ class MaskFormerDetrConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
-@strict(accept_kwargs=True)
+@strict
 class MaskFormerConfig(PreTrainedConfig):
     r"""
-    cross_entropy_weight (`float`, *optional*, defaults to 1.0):
-        The weight for the cross entropy loss.
+    fpn_feature_size (`int`, *optional*, defaults to 256):
+        The Feature Pyramid Network's features size.
     mask_feature_size (`int`, *optional*, defaults to 256):
         The masks' features size, this value will also be used to specify the Feature Pyramid Network features'
         size.
-    fpn_feature_size (`int`, *optional*, defaults to 256):
-        The Feature Pyramid Network's features size.
     decoder_config (`Dict`, *optional*):
         The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
         will be used.
+    cross_entropy_weight (`float`, *optional*, defaults to 1.0):
+        The weight for the cross entropy loss.
     output_auxiliary_logits (`bool`, *optional*):
         Should the model output its `auxiliary_logits` or not.
 

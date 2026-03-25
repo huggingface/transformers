@@ -464,16 +464,12 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
     Example:
@@ -505,13 +501,13 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
     Example:

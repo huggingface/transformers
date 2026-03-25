@@ -91,7 +91,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
-@strict(accept_kwargs=True)
+@strict
 class VideoLlama3VisionConfig(SiglipVisionConfig):
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
@@ -100,7 +100,7 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
-@strict(accept_kwargs=True)
+@strict
 class VideoLlama3Config(PreTrainedConfig):
     model_type = "video_llama_3"
     sub_configs = {"vision_config": VideoLlama3VisionConfig, "text_config": AutoConfig}
@@ -1105,12 +1105,7 @@ class VideoLlama3Processor(Qwen2VLProcessor):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.video_token_id] = 2
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def model_input_names(self):

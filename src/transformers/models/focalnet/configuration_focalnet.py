@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/focalnet-tiny")
-@strict(accept_kwargs=True)
+@strict
 class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     use_conv_embed (`bool`, *optional*, defaults to `False`):
