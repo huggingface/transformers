@@ -1774,7 +1774,7 @@ class GenerationMixin(ContinuousMixin):
             "reformer",
             "minimax",
             "xlnet",
-            "olmo_hybrid",
+            "olmohybrid",
             "rwkv",
             "xlstm",
         )
