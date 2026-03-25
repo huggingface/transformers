@@ -200,16 +200,13 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @require_torch_accelerator
     @slow
-    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_seq_idx_and_fa_kwargs(self):
+    def test_padding_free_matches_padded_with_position_ids_seq_idx_and_fa_kwargs(self):
         if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
             self.skipTest("Qwen3.5 padding-free fast path requires `flash-linear-attention` and `causal-conv1d`.")
 
         max_new_tokens = 30
 
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
                 self.skipTest("Model dummy inputs should contain padding in their attention mask")
@@ -242,7 +239,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
                     model_class.from_pretrained(
                         tmpdirname,
                         dtype=torch.float16,
-                        attn_implementation="flash_attention_2",
                     )
                     .to(torch_device)
                     .eval()
