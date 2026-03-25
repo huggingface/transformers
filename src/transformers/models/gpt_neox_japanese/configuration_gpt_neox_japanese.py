@@ -72,7 +72,11 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         # Model uses non-standard naming for rope params, overwrite!
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 1.0)
+        rotary_pct = kwargs.pop("rotary_pct", None)
+        if rotary_pct is not None:
+            self.rope_parameters["partial_rotary_factor"] = rotary_pct
+        else:
+            self.rope_parameters.setdefault("partial_rotary_factor", 1.0)
         self.standardize_rope_params()
         return kwargs
 
