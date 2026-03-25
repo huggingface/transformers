@@ -1986,10 +1986,6 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
     # 2. Find files that contain the @auto_docstring decorator
     auto_docstrings_files = find_files_with_auto_docstring(matching_files)
 
-    # Load disk cache for skipping unchanged files
-    disk_cache = _load_disk_cache() if use_cache else {}
-    new_disk_cache: dict[str, str] = {}
-
     # Collect all errors before raising
     has_errors = False
 
@@ -1997,14 +1993,6 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
     for candidate_file in auto_docstrings_files:
         with open(candidate_file, "r", encoding="utf-8") as f:
             content = f.read()
-
-        # Skip unchanged files that passed on the previous run
-        file_key = str(Path(candidate_file).relative_to(PATH_TO_REPO))
-        digest = _content_hash(content)
-        if use_cache and disk_cache.get(file_key) == digest:
-            new_disk_cache[file_key] = digest
-            continue
-
         lines = content.split("\n")
 
         # Parse file once and share the AST tree across all analysis passes
@@ -2042,12 +2030,9 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             _process_typed_dict_docstrings(candidate_file, overwrite=overwrite, tree=tree)
         )
 
-        # Track whether this file had any errors
-        file_has_errors = False
-
         # Report TypedDict errors
         if typed_dict_missing_warnings:
-            file_has_errors = True
+            has_errors = True
             if not overwrite:
                 print(
                     "Some TypedDict fields are undocumented. Run `make fix-copies` or "
@@ -2057,7 +2042,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             for warning in typed_dict_missing_warnings:
                 print(warning)
         if typed_dict_redundant_warnings:
-            file_has_errors = True
+            has_errors = True
             if not overwrite:
                 print(
                     "Some TypedDict fields are redundant (same as source or have placeholders). "
@@ -2067,12 +2052,12 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             for warning in typed_dict_redundant_warnings:
                 print(warning)
         if typed_dict_fill_warnings:
-            file_has_errors = True
+            has_errors = True
             print(f"[ERROR] TypedDict docstrings need to be filled in {candidate_file}:")
             for warning in typed_dict_fill_warnings:
                 print(warning)
         if missing_docstring_args_warnings:
-            file_has_errors = True
+            has_errors = True
             if not overwrite:
                 print(
                     "Some docstrings are missing. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
@@ -2081,7 +2066,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             for warning in missing_docstring_args_warnings:
                 print(warning)
         if docstring_args_ro_remove_warnings:
-            file_has_errors = True
+            has_errors = True
             if not overwrite:
                 print(
                     "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
@@ -2090,19 +2075,10 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cach
             for warning in docstring_args_ro_remove_warnings:
                 print(warning)
         if fill_docstring_args_warnings:
-            file_has_errors = True
+            has_errors = True
             print(f"[ERROR] Docstring needs to be filled for the following arguments in {candidate_file}:")
             for warning in fill_docstring_args_warnings:
                 print(warning)
-
-        if file_has_errors:
-            has_errors = True
-        else:
-            # Only cache files that passed cleanly
-            new_disk_cache[file_key] = digest
-
-    if use_cache:
-        _save_disk_cache(new_disk_cache)
 
     # Raise error after processing all files
     if has_errors:

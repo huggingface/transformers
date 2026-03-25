@@ -25,6 +25,7 @@ Usage:
 import argparse
 import hashlib
 import itertools
+import json
 import os
 import shutil
 import subprocess
@@ -36,6 +37,7 @@ from pathlib import Path
 
 UTILS_DIR = Path(__file__).parent
 REPO_ROOT = UTILS_DIR.parent
+CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
 
 # Each checker maps to (label, script_path, extra_check_args, extra_fix_args).
 # When fix_args is None, the checker has no fix mode.
@@ -74,6 +76,81 @@ CHECKERS = {
     "ruff_check": ("Ruff linting", None, None, None),
     "ruff_format": ("Ruff formatting", None, None, None),
 }
+
+# File glob patterns that each checker depends on.
+# If all matched files are unchanged since the last clean run, the checker is skipped.
+# Checkers not listed here are always run.
+CHECKER_FILE_GLOBS = {
+    "copies": ["src/transformers/models/**/*.py"],
+    "modular_conversion": ["src/transformers/models/**/modular_*.py"],
+    "docstrings": ["src/transformers/models/**/modeling_*.py", "src/transformers/models/**/modular_*.py"],
+    "doc_toc": ["docs/**/*.md"],
+    "dummies": ["src/transformers/**/*.py"],
+    "inits": ["src/transformers/**/__init__.py"],
+    "init_isort": ["src/transformers/**/__init__.py"],
+    "config_docstrings": ["src/transformers/models/**/configuration_*.py"],
+    "config_attributes": ["src/transformers/models/**/configuration_*.py"],
+    "modeling_structure": ["src/transformers/models/**/modeling_*.py"],
+    "auto_mappings": [
+        "src/transformers/models/auto/*.py",
+    ],
+}
+
+
+class CheckerCache:
+    """Disk-backed cache that tracks file content hashes per checker.
+
+    For each checker that declares file globs in CHECKER_FILE_GLOBS, we compute
+    a single digest over all matching files.  If the digest matches the stored
+    value from the last clean (rc == 0) run, the checker can be skipped.
+    """
+
+    def __init__(self, path: Path = CACHE_PATH):
+        self._path = path
+        self._data = self._load()
+
+    def _load(self) -> dict:
+        try:
+            return json.loads(self._path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {}
+
+    def save(self) -> None:
+        try:
+            self._path.write_text(json.dumps(self._data, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def _digest_files(globs: list[str]) -> str:
+        """Compute a single SHA-256 over sorted file paths + contents."""
+        h = hashlib.sha256()
+        paths = set()
+        for pattern in globs:
+            paths.update(REPO_ROOT.glob(pattern))
+        for p in sorted(paths):
+            if p.is_file():
+                h.update(str(p.relative_to(REPO_ROOT)).encode())
+                h.update(p.read_bytes())
+        return h.hexdigest()
+
+    def is_current(self, checker_name: str) -> bool:
+        """Return True if the checker's files haven't changed since last clean run."""
+        globs = CHECKER_FILE_GLOBS.get(checker_name)
+        if globs is None:
+            return False
+        return self._data.get(checker_name) == self._digest_files(globs)
+
+    def update(self, checker_name: str) -> None:
+        """Record current digest for a checker (call after a clean run)."""
+        globs = CHECKER_FILE_GLOBS.get(checker_name)
+        if globs is None:
+            return
+        self._data[checker_name] = self._digest_files(globs)
+
+    def invalidate(self, checker_name: str) -> None:
+        """Remove a checker from the cache (call after a failed run)."""
+        self._data.pop(checker_name, None)
 
 
 def _file_md5(path):
@@ -287,6 +364,7 @@ def main():
         "--keep-going", action="store_true", help="Run all checkers even if some fail (report failures at the end)."
     )
     parser.add_argument("--list", action="store_true", help="List available checkers and exit.")
+    parser.add_argument("--no-cache", action="store_true", help="Ignore the disk cache and re-run every checker.")
 
     args = parser.parse_args()
 
@@ -314,9 +392,23 @@ def main():
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
 
+    use_cache = not args.no_cache and not args.fix
+    cache = CheckerCache() if use_cache else None
+
     failures = []
+    skipped = 0
     for name in names:
         label = CHECKERS[name][0]
+
+        # Skip if all relevant files are unchanged since last clean run
+        if cache is not None and cache.is_current(name):
+            skipped += 1
+            if is_tty:
+                print(f"{GREEN}✓ {label} (cached){RESET}\n")
+            else:
+                print(f"{label} (cached)\n")
+            continue
+
         cmd_str = get_checker_command(name, fix=args.fix)
 
         if is_tty:
@@ -326,9 +418,15 @@ def main():
             rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
             window.finish(success=(rc == 0))
             print()
-            if rc != 0:
+            if rc == 0 and cache is not None:
+                cache.update(name)
+            elif rc != 0:
+                if cache is not None:
+                    cache.invalidate(name)
                 failures.append(name)
                 if not args.keep_going:
+                    if cache is not None:
+                        cache.save()
                     sys.exit(1)
         else:
             print(f"{label}")
@@ -341,16 +439,29 @@ def main():
             status = "OK" if rc == 0 else "FAILED"
             print(status)
             print()
-            if rc != 0:
+            if rc == 0 and cache is not None:
+                cache.update(name)
+            elif rc != 0:
+                if cache is not None:
+                    cache.invalidate(name)
                 failures.append(name)
                 if not args.keep_going:
+                    if cache is not None:
+                        cache.save()
                     sys.exit(1)
+
+    if cache is not None:
+        cache.save()
 
     if failures:
         print(f"\n{len(failures)} failed: {', '.join(failures)}")
         sys.exit(1)
 
-    print(f"\nAll {len(names)} checks passed.")
+    passed = len(names) - skipped
+    if skipped:
+        print(f"\nAll {len(names)} checks passed ({passed} ran, {skipped} cached).")
+    else:
+        print(f"\nAll {len(names)} checks passed.")
 
 
 if __name__ == "__main__":
