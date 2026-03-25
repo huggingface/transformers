@@ -762,6 +762,9 @@ if TYPE_CHECKING:
     from .utils.import_utils import requires_backends
     from .utils.kernel_config import KernelConfig as KernelConfig
 
+    # Distributed config
+    from .distributed.configuration_utils import DistributedConfig as DistributedConfig
+
     # Quantization config
     from .utils.quantization_config import AqlmConfig as AqlmConfig
     from .utils.quantization_config import AutoRoundConfig as AutoRoundConfig
