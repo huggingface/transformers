@@ -405,7 +405,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "nomic_bert": [
-            WeightRenaming(r"encoder.", r"nomic_bert."),
+            WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
             WeightRenaming(r"attn.out_proj", r"self_attn.o_proj"),
             WeightRenaming(r"fc11", r"up_proj"),

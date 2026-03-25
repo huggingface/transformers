@@ -184,14 +184,6 @@ print(embeddings)
 
 [[autodoc]] NomicBertForMaskedLM
 
-## NomicBertForNextSentencePrediction
-
-[[autodoc]] NomicBertForNextSentencePrediction
-
-## NomicBertForPreTraining
-
-[[autodoc]] NomicBertForPreTraining
-
 ## NomicBertForSequenceClassification
 
 [[autodoc]] NomicBertForSequenceClassification

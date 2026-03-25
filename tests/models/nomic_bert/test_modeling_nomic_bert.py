@@ -14,7 +14,6 @@
 import unittest
 
 from transformers import AutoModel, AutoTokenizer, NomicBertConfig, is_torch_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -31,10 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_PRETRAINING_MAPPING,
         NomicBertForMaskedLM,
-        NomicBertForNextSentencePrediction,
-        NomicBertForPreTraining,
         NomicBertForSequenceClassification,
         NomicBertForTokenClassification,
         NomicBertModel,
@@ -163,7 +159,7 @@ class NomicBertModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output, None)
 
     def create_and_check_for_masked_lm(
         self,
@@ -181,52 +177,6 @@ class NomicBertModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_next_sequence_prediction(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        next_sentence_label,
-    ):
-        model = NomicBertForNextSentencePrediction(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            labels=sequence_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
-
-    def create_and_check_for_pretraining(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        next_sentence_label,
-    ):
-        model = NomicBertForPreTraining(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            labels=token_labels,
-            next_sentence_label=sequence_labels,
-        )
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_sequence_classification(
         self,
@@ -286,8 +236,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         (
             NomicBertModel,
             NomicBertForMaskedLM,
-            NomicBertForNextSentencePrediction,
-            NomicBertForPreTraining,
             NomicBertForSequenceClassification,
             NomicBertForTokenClassification,
         )
@@ -305,20 +253,7 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-
-    # special case for ForPreTraining model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-                inputs_dict["next_sentence_label"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-        return inputs_dict
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = NomicBertModelTester(self)
@@ -334,14 +269,6 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_next_sequence_prediction(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_next_sequence_prediction(*config_and_inputs)
-
-    def test_for_pretraining(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

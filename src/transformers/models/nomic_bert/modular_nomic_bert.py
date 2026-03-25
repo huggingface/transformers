@@ -25,6 +25,7 @@ from ...modeling_outputs import (
     MaskedLMOutput,
 )
 from ...modeling_rope_utils import RopeParameters
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -32,13 +33,9 @@ from ...utils.output_capturing import capture_outputs
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertForMaskedLM,
-    BertForNextSentencePrediction,
-    BertForPreTraining,
-    BertForPreTrainingOutput,
     BertForSequenceClassification,
     BertForTokenClassification,
     BertOnlyMLMHead,
-    BertPooler,
     BertPredictionHeadTransform,
     BertPreTrainedModel,
 )
@@ -128,10 +125,6 @@ class NomicBertLayer(JinaEmbeddingsV3Layer):
     pass
 
 
-class NomicBertPooler(BertPooler):
-    pass
-
-
 class NomicBertPreTrainedModel(BertPreTrainedModel):
     config_class = NomicBertConfig
     base_model_prefix = "nomic_bert"
@@ -143,24 +136,6 @@ class NomicBertPreTrainedModel(BertPreTrainedModel):
         "hidden_states": NomicBertLayer,
         "attentions": NomicBertAttention,
     }
-
-
-class NomicBertForPreTrainingOutput(BertForPreTrainingOutput):
-    pass
-
-
-class NomicBertPredictionHeadTransform(BertPredictionHeadTransform):
-    def __init__(self, config):
-        super().__init__(config)
-        # Use layer_norm rather than LayerNorm to avoid bert legacy mappings weights and bias to gamma and beta
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        del self.LayerNorm
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.layernorm(hidden_states)
-        return hidden_states
 
 
 @auto_docstring
@@ -231,27 +206,30 @@ class NomicBertModel(JinaEmbeddingsV3Model):
         )
 
 
-class NomicBertForPreTraining(BertForPreTraining):
-    pass
+class NomicBertPredictionHeadTransform(BertPredictionHeadTransform):
+    def __init__(self, config):
+        super().__init__(config)
+        # Use layer_norm rather than LayerNorm to avoid bert legacy mappings weights and bias to gamma and beta
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        del self.LayerNorm
 
-
-class NomicBertForNextSentencePrediction(BertForNextSentencePrediction):
-    pass
-
-
-class NomicBertForSequenceClassification(BertForSequenceClassification):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        return hidden_states
 
 
 class NomicBertOnlyMLMHead(BertOnlyMLMHead):
     pass
 
 
+@auto_docstring
 class NomicBertForMaskedLM(BertForMaskedLM):
     def __init__(self, config):
-        NomicBertPreTrainedModel.__init__(self, config=config)
+        PreTrainedModel.__init__(self, config)
 
-        self.nomic_bert = NomicBertModel(config, add_pooling_layer=False)
+        self.nomic_bert = NomicBertModel(config)
         self.cls = NomicBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
@@ -301,18 +279,21 @@ class NomicBertForMaskedLM(BertForMaskedLM):
         )
 
 
+class NomicBertForSequenceClassification(BertForSequenceClassification):
+    def __init__(self, config):
+        super().__init__(config)
+        self.nomic_bert = NomicBertModel(config, add_pooling_layer=True)
+
+
 class NomicBertForTokenClassification(BertForTokenClassification):
     pass
 
 
 __all__ = [
     "NomicBertConfig",
+    "NomicBertPreTrainedModel",
+    "NomicBertModel",
     "NomicBertForMaskedLM",
-    "NomicBertForNextSentencePrediction",
-    "NomicBertForPreTraining",
     "NomicBertForSequenceClassification",
     "NomicBertForTokenClassification",
-    "NomicBertLayer",
-    "NomicBertModel",
-    "NomicBertPreTrainedModel",
 ]

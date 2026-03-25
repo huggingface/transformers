@@ -20,7 +20,6 @@
 
 
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -35,14 +34,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedLMOutput,
-    NextSentencePredictorOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_nomic_bert import NomicBertConfig
@@ -327,21 +325,6 @@ class NomicBertLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class NomicBertPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
 class NomicBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -387,47 +370,19 @@ class NomicBertPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Output type of [`NomicBertForPreTraining`].
-    """
-)
-class NomicBertForPreTrainingOutput(ModelOutput):
-    r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-        Total loss as the sum of the masked language modeling loss and the next sequence prediction
-        (classification) loss.
-    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-        Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-        before SoftMax).
-    """
-
-    loss: torch.FloatTensor | None = None
-    prediction_logits: torch.FloatTensor | None = None
-    seq_relationship_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-
-
-class NomicBertPredictionHeadTransform(nn.Module):
+class NomicBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        # Use layer_norm rather than LayerNorm to avoid bert legacy mappings weights and bias to gamma and beta
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.activation = nn.Tanh()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.layernorm(hidden_states)
-        return hidden_states
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
 
 
 @auto_docstring
@@ -517,25 +472,36 @@ class NomicBertModel(NomicBertPreTrainedModel):
         )
 
 
-class NomicBertPreTrainingHeads(nn.Module):
+class NomicBertPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        # Use layer_norm rather than LayerNorm to avoid bert legacy mappings weights and bias to gamma and beta
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        return hidden_states
+
+
+class NomicBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.predictions = NomicBertLMPredictionHead(config)
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, sequence_output, pooled_output):
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
+        return prediction_scores
 
 
-@auto_docstring(
-    custom_intro="""
-    NomicBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
-    sentence prediction (classification)` head.
-    """
-)
-class NomicBertForPreTraining(NomicBertPreTrainedModel):
+@auto_docstring
+class NomicBertForMaskedLM(NomicBertPreTrainedModel):
     _tied_weights_keys = {
         "cls.predictions.decoder.weight": "nomic_bert.embeddings.word_embeddings.weight",
         "cls.predictions.decoder.bias": "cls.predictions.bias",
@@ -545,7 +511,7 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         super().__init__(config)
 
         self.nomic_bert = NomicBertModel(config)
-        self.cls = NomicBertPreTrainingHeads(config)
+        self.cls = NomicBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -567,36 +533,13 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        next_sentence_label: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | NomicBertForPreTrainingOutput:
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
-            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence
-            pair (see `input_ids` docstring) Indices should be in `[0, 1]`:
-
-            - 0 indicates sequence B is a continuation of sequence A,
-            - 1 indicates sequence B is a random sequence.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, NomicBertForPreTraining
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-nomic_bert/nomic_bert-base-uncased")
-        >>> model = NomicBertForPreTraining.from_pretrained("google-nomic_bert/nomic_bert-base-uncased")
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
-        ```
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         outputs = self.nomic_bert(
             input_ids,
@@ -608,111 +551,17 @@ class NomicBertForPreTraining(NomicBertPreTrainedModel):
             **kwargs,
         )
 
-        sequence_output, pooled_output = outputs[:2]
-        prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
+        sequence_output = outputs[0]
+        prediction_scores = self.cls(sequence_output)
 
-        total_loss = None
-        if labels is not None and next_sentence_label is not None:
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
-            total_loss = masked_lm_loss + next_sentence_loss
-
-        return NomicBertForPreTrainingOutput(
-            loss=total_loss,
-            prediction_logits=prediction_scores,
-            seq_relationship_logits=seq_relationship_score,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-class NomicBertOnlyNSPHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.seq_relationship = nn.Linear(config.hidden_size, 2)
-
-    def forward(self, pooled_output):
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return seq_relationship_score
-
-
-@auto_docstring(
-    custom_intro="""
-    NomicBert Model with a `next sentence prediction (classification)` head on top.
-    """
-)
-class NomicBertForNextSentencePrediction(NomicBertPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.nomic_bert = NomicBertModel(config)
-        self.cls = NomicBertOnlyNSPHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | NextSentencePredictorOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
-            (see `input_ids` docstring). Indices should be in `[0, 1]`:
-
-            - 0 indicates sequence B is a continuation of sequence A,
-            - 1 indicates sequence B is a random sequence.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, NomicBertForNextSentencePrediction
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("google-nomic_bert/nomic_bert-base-uncased")
-        >>> model = NomicBertForNextSentencePrediction.from_pretrained("google-nomic_bert/nomic_bert-base-uncased")
-
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
-
-        >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
-        >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
-        ```
-        """
-
-        outputs = self.nomic_bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        pooled_output = outputs[1]
-
-        seq_relationship_scores = self.cls(pooled_output)
-
-        next_sentence_loss = None
+        masked_lm_loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), labels.view(-1))
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        return NextSentencePredictorOutput(
-            loss=next_sentence_loss,
-            logits=seq_relationship_scores,
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -729,8 +578,7 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
-
-        self.nomic_bert = NomicBertModel(config)
+        self.nomic_bert = NomicBertModel(config, add_pooling_layer=True)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -804,83 +652,6 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
         )
 
 
-class NomicBertOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = NomicBertLMPredictionHead(config)
-
-    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
-
-
-@auto_docstring
-class NomicBertForMaskedLM(NomicBertPreTrainedModel):
-    _tied_weights_keys = {
-        "cls.predictions.decoder.weight": "nomic_bert.embeddings.word_embeddings.weight",
-        "cls.predictions.decoder.bias": "cls.predictions.bias",
-    }
-
-    def __init__(self, config):
-        super().__init__(config=config)
-
-        self.nomic_bert = NomicBertModel(config, add_pooling_layer=False)
-        self.cls = NomicBertOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-        self.cls.predictions.bias = new_embeddings.bias
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
-        outputs = self.nomic_bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            return_dict=True,
-            **kwargs,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
 @auto_docstring
 class NomicBertForTokenClassification(NomicBertPreTrainedModel):
     def __init__(self, config):
@@ -942,12 +713,9 @@ class NomicBertForTokenClassification(NomicBertPreTrainedModel):
 
 
 __all__ = [
+    "NomicBertPreTrainedModel",
+    "NomicBertModel",
     "NomicBertForMaskedLM",
-    "NomicBertForNextSentencePrediction",
-    "NomicBertForPreTraining",
     "NomicBertForSequenceClassification",
     "NomicBertForTokenClassification",
-    "NomicBertLayer",
-    "NomicBertModel",
-    "NomicBertPreTrainedModel",
 ]
