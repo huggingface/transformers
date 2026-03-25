@@ -165,7 +165,7 @@ class Llama4TextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
-    attention_chunk_size: int = 8192
+    attention_chunk_size: int | None = 8192
     layer_types: list[str] | None = None
     attn_temperature_tuning: bool = True
     floor_scale: int = 8192
