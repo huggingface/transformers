@@ -81,12 +81,22 @@ class TestModuleFusion(unittest.TestCase):
         """RegistryCollector stores args in registry and returns input unchanged."""
         registry = {}
         spec = ModuleSpec(inputs=["x"], outputs=["x"])
-        collector = RegistryCollector(spec, index=2, registry=registry)
+        linear = LinearWithScale()
+        collector = RegistryCollector(spec, index=2, registry=registry, orig_module=linear)
         x = torch.randn(2, 8)
         out = collector(x)
         self.assertIn("in_2_x", registry)
         self.assertIs(registry["in_2_x"], x)
         self.assertTrue(torch.equal(out, x))
+
+    def test_collector_delegates_attribute_access_to_orig_module(self):
+        """Attribute access on RegistryCollector is transparently forwarded to orig_module."""
+        linear = LinearWithScale()
+        collector = RegistryCollector(
+            ModuleSpec(inputs=["x", "scale"], outputs=["x"]), index=0, registry={}, orig_module=linear
+        )
+        self.assertIs(collector.linear, linear.linear)
+        self.assertIs(collector.linear.weight, linear.linear.weight)
 
     # --- FusedModule validation ---
 
@@ -107,6 +117,18 @@ class TestModuleFusion(unittest.TestCase):
                 [ModuleSpec(inputs=["x", "scale", "extra"], outputs=["x"])],  # 3 > 2 params
                 {},
             )
+
+    def test_fused_module_delegates_attribute_access_to_last_module(self):
+        """Attribute access on FusedModule is transparently forwarded to the last module in the chain."""
+        linear = LinearWithScale()
+        norm = LayerNorm()
+        specs = [
+            ModuleSpec(inputs=["x", "scale"], outputs=["x"]),
+            ModuleSpec(inputs=["x"], outputs=["x"]),
+        ]
+        fused = FusedModule([linear, norm], specs, {})
+        self.assertIs(fused.norm, norm.norm)
+        self.assertIs(fused.norm.weight, norm.norm.weight)
 
     # --- FusedModule forward ---
 

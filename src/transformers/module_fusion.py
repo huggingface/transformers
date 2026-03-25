@@ -49,11 +49,20 @@ class RegistryCollector(nn.Module):
     The registry is later consumed by `FusedModule`.
     """
 
-    def __init__(self, spec: ModuleSpec, index: int, registry: dict[str, Any]):
+    def __init__(self, spec: ModuleSpec, index: int, registry: dict[str, Any], orig_module: nn.Module):
         super().__init__()
         self.spec = spec
         self.index = index
+        self.orig_module = orig_module
         self._registry = registry
+
+    def __getattr__(self, name: str) -> Any:
+        # This module is a transparent pass-through, so we delegate all attribute access to the original module.
+        # In particular, it allows to access the original parameters and buffers as if the collector was not there.
+        try:
+            return super().__getattr__(name)  # handles _modules, _parameters, _buffers
+        except AttributeError:
+            return getattr(self._modules["orig_module"], name)
 
     def _input_key(self, name: str) -> str:
         return f"in_{self.index}_{name}"
@@ -85,6 +94,12 @@ class FusedModule(nn.Module):
         self._registry = registry
         self._signatures = [inspect.signature(mod.forward) for mod in modules]
         self._validate_specs()
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)  # handles _modules, _parameters, _buffers
+        except AttributeError:
+            return getattr(self._modules["modules_to_fuse"][-1], name)
 
     def _input_key(self, module_index: int, name: str) -> str:
         return f"in_{module_index}_{name}"
@@ -204,7 +219,7 @@ def fuse_modules(
         registry = {}
         modules_to_fuse = [generic_children[p][1] for p in module_names_to_fuse]
         for index, (p, spec) in enumerate(zip(module_names_to_fuse[:-1], module_specs[:-1])):
-            module.add_module(generic_children[p][0], RegistryCollector(spec, index, registry))
+            module.add_module(generic_children[p][0], RegistryCollector(spec, index, registry, modules_to_fuse[index]))
         last_p = module_names_to_fuse[-1]
         module.add_module(generic_children[last_p][0], FusedModule(modules_to_fuse, module_specs, registry))
 
