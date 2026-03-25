@@ -575,9 +575,9 @@ class ProcessorMixin(PushToHubMixin):
 
         # Special ids used per each modality in multimodal models. Models need to
         # override if they use special BOI/EOI/row/col/etc tokens that have to be marked
-        self.image_ids = [getattr(self, "image_token_ids", None)]
-        self.video_ids = [getattr(self, "video_token_ids", None)]
-        self.audio_ids = [getattr(self, "audio_token_ids", None)]
+        self.image_ids = [getattr(self, "image_token_id", None)]
+        self.video_ids = [getattr(self, "video_token_id", None)]
+        self.audio_ids = [getattr(self, "audio_token_id", None)]
 
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
@@ -700,11 +700,11 @@ class ProcessorMixin(PushToHubMixin):
         }
 
         subprocessor = getattr(self, attribute_to_kwargs[modality])
-        decoded_mm_data = subprocessor.fetch_data(mm_data)
-        processed_data = subprocessor(decoded_mm_data, **kwargs[f"{modality}_kwargs"])
+        processed_data = subprocessor(mm_data, **kwargs[f"{modality}_kwargs"])
         replacement_fn: callable = getattr(self, f"get_{modality}_replacement", None)
         image_replacements = []
         if replacement_fn:
+            decoded_mm_data = subprocessor.fetch_data(mm_data)  # not good, esp for videos
             image_replacements = replacement_fn(decoded_mm_data, processed_data)
         return processed_data, image_replacements
 
