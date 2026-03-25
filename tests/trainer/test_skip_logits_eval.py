@@ -24,31 +24,33 @@ class ModelWithSkipLogits(nn.Module):
         self.called_with_skip_logits = False
 
     def forward(self, input_ids=None, labels=None, skip_logits=None, **kwargs):
-        # This is what we are testing.
         assert skip_logits is True
         self.called_with_skip_logits = True
         return {"loss": torch.tensor(0.0)}
 
 
 def test_trainer_sets_skip_logits_for_loss_only_eval_when_liger_enabled():
-    model = ModelWithSkipLogits()
-    ds = TinyDataset()
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(0)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        args = TrainingArguments(
-            output_dir=tmp,
-            per_device_eval_batch_size=2,
-            do_train=False,
-            do_eval=True,
-            prediction_loss_only=True,
-            use_liger_kernel=True,
-            report_to=[],
-            disable_tqdm=True,
-        )
-        trainer = Trainer(model=model, args=args, eval_dataset=ds)
-        trainer.evaluate()
+        model = ModelWithSkipLogits()
+        ds = TinyDataset()
 
-    assert model.called_with_skip_logits is True
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                per_device_eval_batch_size=2,
+                do_train=False,
+                do_eval=True,
+                prediction_loss_only=True,
+                use_liger_kernel=True,
+                report_to=[],
+                disable_tqdm=True,
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=ds)
+            trainer.evaluate()
+
+        assert model.called_with_skip_logits is True
 
 
 class ReturnLossNoLabelsModel(nn.Module):
@@ -58,34 +60,35 @@ class ReturnLossNoLabelsModel(nn.Module):
 
     def forward(self, input_ids=None, return_loss=None, skip_logits=None, **kwargs):
         self.seen_skip_logits.append(skip_logits)
-        # mimic CLIP-like behavior: can return loss without labels
         if return_loss:
             return {"loss": torch.tensor(0.0)}
         return {"logits": torch.zeros((input_ids.shape[0], 2))}
 
 
 def test_trainer_does_not_set_skip_logits_when_no_labels_but_return_loss_true():
-    model = ReturnLossNoLabelsModel()
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(0)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        args = TrainingArguments(
-            output_dir=tmp,
-            per_device_eval_batch_size=2,
-            do_train=False,
-            do_eval=True,
-            prediction_loss_only=True,
-            use_liger_kernel=True,
-            report_to=[],
-            disable_tqdm=True,
-        )
-        trainer = Trainer(model=model, args=args)
+        model = ReturnLossNoLabelsModel()
 
-        # Simulate CLIP-like case: no label names, but return_loss is supported.
-        trainer.label_names = []
-        trainer.prediction_step(
-            trainer.model,
-            {"input_ids": torch.tensor([[1, 2, 3]], dtype=torch.long), "return_loss": True},
-            prediction_loss_only=True,
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            args = TrainingArguments(
+                output_dir=tmp,
+                per_device_eval_batch_size=2,
+                do_train=False,
+                do_eval=True,
+                prediction_loss_only=True,
+                use_liger_kernel=True,
+                report_to=[],
+                disable_tqdm=True,
+            )
+            trainer = Trainer(model=model, args=args)
 
-    assert model.seen_skip_logits[-1] is None
+            trainer.label_names = []
+            trainer.prediction_step(
+                trainer.model,
+                {"input_ids": torch.tensor([[1, 2, 3]], dtype=torch.long), "return_loss": True},
+                prediction_loss_only=True,
+            )
+
+        assert model.seen_skip_logits[-1] is None
