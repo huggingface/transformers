@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -20,21 +20,20 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
 from ..moonshine_streaming.modeling_moonshine_streaming import (
-    eager_attention_forward,
     MoonshineStreamingDecoder,
     MoonshineStreamingDecoderMLP,
     MoonshineStreamingForConditionalGeneration,
     MoonshineStreamingModel,
+    eager_attention_forward,
 )
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils.output_capturing import OutputRecorder
 from .configuration_cohere_asr import CohereAsrConfig
 
 
@@ -158,16 +157,25 @@ class CohereAsrCrossAttention(nn.Module):
         kv_hidden_shape = (*kv_input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
         if past_key_values is not None:
-            past_key_values = past_key_values.cross_attention_cache
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
+            past_key_values.is_updated[self.layer_idx] = True
+            cross_cache = past_key_values.cross_attention_cache
+            if is_updated:
+                key_states = cross_cache.layers[self.layer_idx].keys
+                value_states = cross_cache.layers[self.layer_idx].values
+            else:
+                key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
+                value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
+                key_states, value_states = cross_cache.update(key_states, value_states, self.layer_idx)
+        else:
+            key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
+            value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
 
         attn_output, attn_weights = attention_interface(
             self,

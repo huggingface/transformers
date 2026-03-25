@@ -25,6 +25,8 @@ from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 @strict(accept_kwargs=True)
 class CohereAsrConfig(PreTrainedConfig):
     r"""
+    pad_head_dim_to_multiple_of (<fill_type>):
+        <fill_docstring>
     Example:
 
     ```python
