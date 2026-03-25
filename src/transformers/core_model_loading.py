@@ -971,7 +971,7 @@ def get_parallel_materialization_context(
             if getattr(mapping, "distributed_operation", None) is None:
                 parallel_layer = ALL_PARALLEL_STYLES[parallel_plan[matched_parallel_pattern]].__class__
                 mapping.distributed_operation = parallel_layer(
-                    device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                    device_mesh=device_mesh["tp"], rank=device_mesh["tp"].get_local_rank(), empty_param=empty_param.clone()
                 )
             return ParallelMaterializationContext(mapping.distributed_operation, tensor_idx, device_map[""])
 

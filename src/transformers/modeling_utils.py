@@ -3956,9 +3956,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tp_plan = kwargs.pop("tp_plan", None)
-        tp_size = kwargs.pop("tp_size", None)
-        fsdp_plan = kwargs.pop("fsdp_plan", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -4019,22 +4016,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     ": PartialState().process_index} where PartialState comes from accelerate library"
                 )
 
-            if fsdp_plan is not None and (tp_plan is not None or tp_size is not None):
-                raise ValueError("Combining `fsdp_plan` with tensor parallel loading is not supported yet.")
-
-            if tp_plan is not None or tp_size is not None:  # TP-only setup (accelerate-managed)
-                device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                    tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
-                )
-
             device_map = check_and_set_device_map(device_map)  # validate & normalize (requires accelerate)
-
-        if fsdp_plan is not None:
-            device_map, device_mesh, _ = initialize_fsdp(
-                fsdp_plan=fsdp_plan,
-                device_mesh=device_mesh,
-                device_map=device_map,
-            )
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4159,25 +4141,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        # =================================================================
-        # Post-instantiation: distribute model and resolve device mapping
-        # =================================================================
         if distributed_config is not None:
-            # Distributed path: TP hooks only (FSDP2 applied after weight loading)
             if torch.distributed.is_initialized() and device_mesh is not None:
                 model = distribute_model(model, distributed_config, device_mesh)
         else:
             # Accelerate path: optional TP hooks, then accelerate auto device mapping
-            if _torch_distributed_available and device_mesh is not None and tp_plan is not None:
-                _dc = DistributedConfig(tp_size=tp_size, tp_plan=tp_plan)
-                model = distribute_model(model, _dc, device_mesh)
             if isinstance(device_map, dict):
                 device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
             elif device_map is not None:
                 device_map = {"": device_map}
 
         # Finalize model weight initialization
-        active_tp_plan = getattr(model, "_tp_plan", None) if tp_size is not None else None
+        active_tp_plan = getattr(model, "_tp_plan", None) if distributed_config.tp_plan is not None else None
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4200,11 +4175,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
-        # Apply FSDP2 after weight loading (fully_shard needs real parameters, not meta)
+        # TODO(3outeille): will be apply during meta. Will be fixed later. For now, we just apply FSDP2 after weight loading
         if distributed_config is not None and distributed_config.fsdp_plan is not None:
             model = apply_fsdp2(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
-        elif fsdp_plan is not None:
-            model = apply_fsdp2(model, device_mesh, fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
