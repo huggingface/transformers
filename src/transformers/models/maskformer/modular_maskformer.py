@@ -53,13 +53,13 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
-@strict(accept_kwargs=True)
+@strict
 class MaskFormerDetrConfig(DetrConfig):
     model_type = "detr"
 
 
 @auto_docstring(checkpoint="facebook/maskformer-swin-base-ade")
-@strict(accept_kwargs=True)
+@strict
 class MaskFormerConfig(PreTrainedConfig):
     r"""
     fpn_feature_size (`int`, *optional*, defaults to 256):
