@@ -435,10 +435,9 @@ class NomicBertModel(NomicBertPreTrainedModel):
     _no_split_modules = ["NomicBertEmbeddings", "NomicBertLayer"]
 
     def __init__(self, config, add_pooling_layer=False):
-        """
-        Args:
-            add_pooling_layer (`bool`, *optional*, defaults to `False`):
-                Whether to add a pooling layer.
+        r"""
+        add_pooling_layer (`bool`, *optional*, defaults to `False`):
+            Whether to add a pooling layer.
         """
         super().__init__(config)
         self.config = config

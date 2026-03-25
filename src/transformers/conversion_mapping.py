@@ -405,14 +405,16 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "nomic_bert": [
-            WeightRenaming("encoder.", "nomic_bert."),
+            WeightRenaming(r"encoder.", r"nomic_bert."),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
             WeightRenaming(r"attn.out_proj", r"self_attn.o_proj"),
             WeightRenaming(r"fc11", r"up_proj"),
             WeightRenaming(r"fc12", r"gate_proj"),
             WeightRenaming(r"fc2", r"down_proj"),
             WeightRenaming(r"norm1", r"post_attention_layernorm"),
-            WeightRenaming(r"norm2", r"post_mlp_layernorm",
+            WeightRenaming(
+                r"norm2",
+                r"post_mlp_layernorm",
             ),
             WeightConverter(
                 source_patterns=["attn.Wqkv"],

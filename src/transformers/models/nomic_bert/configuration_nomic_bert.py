@@ -43,7 +43,6 @@ class NomicBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "nomic_bert"
-    default_theta = 1000.0
 
     vocab_size: int = 30522
     hidden_size: int = 768
@@ -62,6 +61,7 @@ class NomicBertConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | None = None
     tie_word_embeddings = True
+    default_theta = 1000.0
     rope_parameters: RopeParameters | dict | None = None
     head_dim: int | None = None
 

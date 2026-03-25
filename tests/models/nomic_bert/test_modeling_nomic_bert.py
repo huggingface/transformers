@@ -369,16 +369,14 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         # Local 4060 numbers
-        expected_slice = torch.tensor([
+        expected_slice = torch.tensor(
             [
-                [ 1.7039, -4.5610, 1.5236],
-                [ 1.8685, -3.6936, 1.6641],
-                [ 5.3303e-01, -4.2081, 2.3375]
-            ],
-            [
-                [ 2.6875e-03, -3.7496, 9.0820e-01],
-                [ 1.8299e-02, -3.3884, 3.5300e-01],
-                [-1.4282e-01, -3.6776, -3.5079e-01]
+                [[1.7039, -4.5610, 1.5236], [1.8685, -3.6936, 1.6641], [5.3303e-01, -4.2081, 2.3375]],
+                [
+                    [2.6875e-03, -3.7496, 9.0820e-01],
+                    [1.8299e-02, -3.3884, 3.5300e-01],
+                    [-1.4282e-01, -3.6776, -3.5079e-01],
+                ],
             ]
-        ])
+        )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-3, atol=1e-3)

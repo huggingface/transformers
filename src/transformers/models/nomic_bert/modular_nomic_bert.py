@@ -164,10 +164,9 @@ class NomicBertPredictionHeadTransform(BertPredictionHeadTransform):
 @auto_docstring
 class NomicBertModel(JinaEmbeddingsV3Model):
     def __init__(self, config, add_pooling_layer=False):
-        """
-        Args:
-            add_pooling_layer (`bool`, *optional*, defaults to `False`):
-                Whether to add a pooling layer.
+        r"""
+        add_pooling_layer (`bool`, *optional*, defaults to `False`):
+            Whether to add a pooling layer.
         """
         super().__init__(config, add_pooling_layer=add_pooling_layer)
 
