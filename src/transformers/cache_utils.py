@@ -742,10 +742,16 @@ class MambaLayer(MambaCacheLayerMixin):
             self.max_batch_size, self.conv_kernel_size = conv_states.shape[0], conv_states.shape[-1]
             # The shape is always static, so we init as such
             self.conv_states = torch.zeros_like(conv_states, dtype=self.dtype, device=self.device)
+            # Mark as static address to be able to use cudagraphs
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.conv_states)
             self.is_conv_states_initialized = True
         if ssm_states is not None:
             # The shape is always static, so we init as such
             self.ssm_states = torch.zeros_like(ssm_states, dtype=self.dtype, device=self.device)
+            # Mark as static address to be able to use cudagraphs
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.ssm_states)
             self.is_ssm_states_initialized = True
 
     def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -762,20 +768,22 @@ class MambaLayer(MambaCacheLayerMixin):
         if not self.is_conv_states_initialized:
             self.lazy_initialization(conv_states=conv_states)
 
-        # Technically, those update are not logically correct if the prefill is smaller than `conv_kernel_size`,
-        # as it will `roll` anyway in the first decoding step even though it should `roll` ONLY if the cache is already full.
-        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
         if not self.has_previous_state:
-            self.conv_states = conv_states
+            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+            self.conv_states.copy_(conv_states)
             self.has_previous_state = True
+        # Technically, this update is not logically correct if the prefill is smaller than `conv_kernel_size`,
+        # as it will `roll` anyway in the first decoding step, even though it should `roll` ONLY if the cache is already full.
+        # But since `conv_kernel_size=4` in practice, it's almost impossible to have a smaller prefill so it's mostly fine for now
         else:
+            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
             num_new_tokens = conv_states.shape[-1]
             if num_new_tokens >= self.conv_kernel_size:
-                self.conv_states = conv_states[..., -self.conv_kernel_size :]
+                self.conv_states.copy_(conv_states[..., -self.conv_kernel_size :])
             else:
                 new_conv_states = self.conv_states.roll(shifts=-num_new_tokens, dims=-1)
                 new_conv_states[:, :, -num_new_tokens:] = conv_states
-                self.conv_states = new_conv_states
+                self.conv_states.copy_(new_conv_states)
 
         return self.conv_states
 
@@ -791,7 +799,8 @@ class MambaLayer(MambaCacheLayerMixin):
         """
         if not self.is_ssm_states_initialized:
             self.lazy_initialization(ssm_states=ssm_states)
-        self.ssm_states = ssm_states
+        # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+        self.ssm_states.copy_(ssm_states)
         return self.ssm_states
 
 
@@ -1332,7 +1341,7 @@ class StaticCache(Cache):
                 )
             # Mamba layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
-                layers.append(MambaLayer())
+                layer = MambaLayer()
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)
