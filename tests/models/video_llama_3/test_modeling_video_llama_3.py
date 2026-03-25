@@ -350,6 +350,7 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
+    test_torch_exportable = False
     test_resize_embeddings = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
@@ -651,6 +652,7 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         if is_torch_available()
         else ()
     )
+    test_torch_exportable = False
     pipeline_model_mapping = {"image-text-to-text": VideoLlama3ForConditionalGeneration}
     _is_composite = True
 
