@@ -13,9 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3.5 model."""
 
-import inspect
 import copy
-import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
@@ -200,72 +198,62 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
 
     @require_torch_accelerator
     @slow
-    def test_padding_free_matches_padded_with_position_ids_seq_idx_and_fa_kwargs(self):
+    def test_padding_free_matches_padded_fast_path_regression(self):
         if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
             self.skipTest("Qwen3.5 padding-free fast path requires `flash-linear-attention` and `causal-conv1d`.")
+        torch.manual_seed(0)
 
-        max_new_tokens = 30
+        config = Qwen3_5TextConfig(
+            vocab_size=100,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+            max_position_embeddings=64,
+            hidden_act="silu",
+            layer_types=["full_attention", "linear_attention"],
+            linear_conv_kernel_dim=2,
+            linear_key_head_dim=16,
+            linear_value_head_dim=16,
+            linear_num_key_heads=2,
+            linear_num_value_heads=4,
+            pad_token_id=0,
+        )
+        model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
+        linear_attn = model.model.layers[1].linear_attn
+        self.assertIsNotNone(linear_attn.causal_conv1d_fn)
+        self.assertTrue(linear_attn.chunk_gated_delta_rule.__module__.startswith("fla."))
+        self.assertTrue(linear_attn.recurrent_gated_delta_rule.__module__.startswith("fla."))
 
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
-                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+        padded_input_ids = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]], device=torch_device)
+        attention_mask = torch.tensor([[0, 1, 1, 1], [1, 1, 1, 1]], dtype=torch.long, device=torch_device)
+        position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
 
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
+        features = [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5, 6, 7]}]
+        data_collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+        )
+        padding_free_batch = data_collator(features)
+        padding_free_batch = {
+            key: value.to(torch_device) if torch.is_tensor(value) else value
+            for key, value in padding_free_batch.items()
+        }
 
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+        with torch.no_grad():
+            res_padded = model(
+                input_ids=padded_input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                use_cache=False,
+            )
+            res_padfree = model(**padding_free_batch, use_cache=False)
 
-            model = model_class(config)
-            if "position_ids" not in inspect.signature(model.forward).parameters:
-                self.skipTest("Model does not support position_ids")
+        logits_padded = res_padded.logits[attention_mask.bool()]
+        logits_padfree = res_padfree.logits[0]
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                if 0 in inputs_dict["attention_mask"][:, -1]:
-                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
-                dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
-                inputs_dict["position_ids"] = (
-                    (dummy_attention_mask == 1).long().cumsum(dim=1) - 1
-                ) * (dummy_attention_mask == 1).long()
-                labels = inputs_dict["input_ids"].clone()
-                labels[~dummy_attention_mask.bool()] = -100
-                first_nonneg_idx = (labels >= 0).int().argmax(dim=1)
-                labels[torch.arange(labels.size(0), device=labels.device), first_nonneg_idx] = -100
-                inputs_dict["labels"] = labels
-
-                model = (
-                    model_class.from_pretrained(
-                        tmpdirname,
-                        dtype=torch.float16,
-                    )
-                    .to(torch_device)
-                    .eval()
-                )
-
-                features = [
-                    {"input_ids": i[a.bool()].tolist()}
-                    for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
-                ]
-
-                data_collator = DataCollatorWithFlattening(
-                    return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
-                )
-                batch = data_collator(features)
-                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
-
-                with torch.no_grad():
-                    res_padded = model(**inputs_dict)
-                    res_padfree = model(**batch_accelerator)
-
-                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
-                logits_padfree = res_padfree.logits[0]
-
-                torch.testing.assert_close(logits_padded, logits_padfree, atol=5e-3, rtol=5e-3)
+        torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
 
 class Qwen3_5VisionText2TextModelTester:
