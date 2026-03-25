@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="CohereForAI/c4ai-command-r-v01")
-@strict(accept_kwargs=True)
+@strict
 class CohereConfig(PreTrainedConfig):
     r"""
     logit_scale (`float`, *optional*, defaults to 0.0625):
@@ -43,7 +43,8 @@ class CohereConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config # doctest: +SKIP
-    ```"""
+    ```
+    """
 
     model_type = "cohere"
     keys_to_ignore_at_inference = ["past_key_values"]

@@ -124,11 +124,8 @@ class EuroBertModelTester:
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
         )
@@ -225,7 +222,7 @@ class EuroBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = EuroBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EuroBertConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=EuroBertConfig, hidden_size=32, num_attention_heads=2)
 
     def test_config(self):
         self.config_tester.run_common_tests()

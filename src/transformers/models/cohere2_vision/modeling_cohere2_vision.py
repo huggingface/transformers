@@ -28,7 +28,12 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ..auto import AutoModel
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
@@ -144,8 +149,6 @@ class Cohere2VisionPreTrainedModel(PreTrainedModel):
     """
 )
 class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Cohere2VisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -248,7 +251,6 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel):
     """
 )
 class Cohere2VisionForConditionalGeneration(Cohere2VisionPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: Cohere2VisionConfig):

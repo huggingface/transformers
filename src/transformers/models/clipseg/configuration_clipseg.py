@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="CIDAS/clipseg-rd64")
-@strict(accept_kwargs=True)
+@strict
 class CLIPSegTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -61,7 +61,7 @@ class CLIPSegTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="CIDAS/clipseg-rd64")
-@strict(accept_kwargs=True)
+@strict
 class CLIPSegVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -97,7 +97,7 @@ class CLIPSegVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="CIDAS/clipseg-rd64")
-@strict(accept_kwargs=True)
+@strict
 class CLIPSegConfig(PreTrainedConfig):
     r"""
     extract_layers (`list[int]`, *optional*, defaults to `[3, 6, 9]`):

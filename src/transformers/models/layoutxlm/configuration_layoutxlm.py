@@ -31,7 +31,7 @@ if is_detectron2_available():
 
 
 @auto_docstring(checkpoint="microsoft/layoutxlm-base")
-@strict(accept_kwargs=True)
+@strict
 class LayoutXLMConfig(PreTrainedConfig):
     r"""
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):

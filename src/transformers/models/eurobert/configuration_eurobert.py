@@ -19,12 +19,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+from ...configuration_utils import strict
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..llama import LlamaConfig
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
+@strict
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
@@ -58,7 +61,7 @@ class EuroBertConfig(LlamaConfig):
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-05
     bos_token_id: int | None = 128000
-    eos_token_id: int | None = 128001
+    eos_token_id: int | list[int] | None = 128001
     pad_token_id: int | None = 128001
     mask_token_id: int = 128002
     pretraining_tp: int = 1
@@ -69,7 +72,6 @@ class EuroBertConfig(LlamaConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     classifier_pooling: str = "late"
-    is_causal: bool = False
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

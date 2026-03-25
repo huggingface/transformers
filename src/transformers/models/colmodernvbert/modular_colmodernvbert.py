@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
-@strict(accept_kwargs=True)
+@strict
 class ColModernVBertConfig(ColQwen2Config):
     r"""
     Example:
@@ -374,8 +374,6 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColPaliForRetrieval):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.vlm = AutoModel.from_config(config.vlm_config)

@@ -91,7 +91,7 @@ _deps = [
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
     "kenlm",
-    "kernels>=0.10.2,<0.11",
+    "kernels>=0.12.0,<0.13",
     "librosa",
     "mistral-common[image]>=1.10.0",
     "nltk<=3.8.1",
@@ -141,6 +141,7 @@ _deps = [
     "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
+    "tomli",
     "tiktoken",
     "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
@@ -181,7 +182,7 @@ if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
-extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty")
+extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli")
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")

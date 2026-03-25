@@ -193,7 +193,6 @@ class FalconMambaModelTester:
         outputs = model(
             input_ids[:, :-1],
             use_cache=True,
-            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
         )
         output_one = outputs.last_hidden_state
 
@@ -202,7 +201,6 @@ class FalconMambaModelTester:
             input_ids[:, -1:],
             use_cache=True,
             cache_params=outputs.cache_params,
-            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
         )
         output_two = outputs.last_hidden_state
 
@@ -223,9 +221,7 @@ class FalconMambaModelTester:
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(
-            token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
-        )
+        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
 
         loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
