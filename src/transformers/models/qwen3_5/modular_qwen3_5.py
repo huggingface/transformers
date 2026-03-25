@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...masking_utils import create_causal_mask, find_packed_sequence_indices
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -184,24 +184,6 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         )
         return inv_freq, attention_factor
 
-
-def _prepare_linear_attention_packed_kwargs(
-    position_ids: torch.LongTensor | None,
-    past_key_values: Cache | None,
-) -> dict[str, torch.Tensor]:
-    if position_ids is None or past_key_values is not None or position_ids.shape[0] != 1:
-        return {}
-
-    seq_idx = find_packed_sequence_indices(position_ids)
-    if seq_idx is None:
-        return {}
-
-    seq_idx = seq_idx.to(device=position_ids.device, dtype=torch.int32)
-    lengths = torch.bincount(seq_idx[0].to(torch.int64))
-    cu_seqlens = torch.cat([lengths.new_zeros(1), lengths.cumsum(0)]).to(device=position_ids.device, dtype=torch.int32)
-    return {"seq_idx": seq_idx, "cu_seqlens": cu_seqlens}
-
-
 class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -225,7 +207,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         cache_params: Qwen3_5DynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
         seq_idx: torch.IntTensor | None = None,
-        cu_seqlens: torch.IntTensor | None = None,
+        cu_seq_lens_q: torch.LongTensor | None = None,
+        cu_seq_lens_k: torch.LongTensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -262,6 +245,14 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             if cache_params is not None:
                 conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx] = conv_state
+            has_fast_path = self.causal_conv1d_fn is not None and self.chunk_gated_delta_rule.__module__.startswith(
+                "fla."
+            )
+            if not has_fast_path and any(x is not None for x in (seq_idx, cu_seq_lens_q, cu_seq_lens_k)):
+                raise NotImplementedError(
+                    "Padding-free training kwargs require fast path support. Please install `flash-linear-attention` "
+                    "and `causal-conv1d`."
+                )
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -298,7 +289,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         if not use_precomputed_states:
             chunk_kwargs = {}
             if getattr(self.chunk_gated_delta_rule, "__module__", "").startswith("fla."):
-                chunk_kwargs["cu_seqlens"] = cu_seqlens
+                chunk_kwargs["cu_seqlens"] = cu_seq_lens_q
 
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
@@ -384,8 +375,9 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
-                seq_idx=kwargs.pop("seq_idx", None),
-                cu_seqlens=kwargs.pop("cu_seqlens", None),
+                seq_idx=kwargs.get("seq_idx"),
+                cu_seq_lens_q=kwargs.get("cu_seq_lens_q"),
+                cu_seq_lens_k=kwargs.get("cu_seq_lens_k"),
             )
         elif self.layer_type == "full_attention":
             # Self Attention
@@ -544,7 +536,6 @@ class Qwen3_5TextModel(Qwen3NextModel):
             position_ids=text_position_ids,
         )
         linear_attn_mask = self._update_linear_attn_mask(attention_mask, past_key_values)
-        linear_attn_kwargs = _prepare_linear_attention_packed_kwargs(text_position_ids, past_key_values)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -559,7 +550,6 @@ class Qwen3_5TextModel(Qwen3NextModel):
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                **linear_attn_kwargs,
                 **kwargs,
             )
 

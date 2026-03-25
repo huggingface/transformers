@@ -13,13 +13,17 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3.5 model."""
 
+import inspect
 import copy
+import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, is_torch_available
+from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -46,10 +50,7 @@ if is_torch_available():
         Qwen3_5TextConfig,
         Qwen3_5TextModel,
     )
-    from transformers.models.qwen3_5.modeling_qwen3_5 import (
-        Qwen3_5DynamicCache,
-        _prepare_linear_attention_packed_kwargs,
-    )
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5DynamicCache
 
 
 class Qwen3_5TextModelTester(CausalLMModelTester):
@@ -160,39 +161,109 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    def test_prepare_linear_attention_packed_kwargs(self):
-        position_ids = torch.tensor([[0, 1, 2, 0, 1, 2, 3]])
-
-        packed_kwargs = _prepare_linear_attention_packed_kwargs(position_ids, past_key_values=None)
-
-        self.assertEqual(packed_kwargs["seq_idx"].tolist(), [[0, 0, 0, 1, 1, 1, 1]])
-        self.assertEqual(packed_kwargs["seq_idx"].dtype, torch.int32)
-        self.assertEqual(packed_kwargs["cu_seqlens"].tolist(), [0, 3, 7])
-        self.assertEqual(packed_kwargs["cu_seqlens"].dtype, torch.int32)
-
-        self.assertDictEqual(
-            _prepare_linear_attention_packed_kwargs(torch.arange(4).unsqueeze(0), past_key_values=None), {}
+    def test_padding_free_kwargs_require_fast_path(self):
+        config = Qwen3_5TextConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+            max_position_embeddings=64,
+            layer_types=["full_attention", "linear_attention"],
+            linear_conv_kernel_dim=2,
+            linear_key_head_dim=16,
+            linear_value_head_dim=16,
+            linear_num_key_heads=4,
+            linear_num_value_heads=8,
+            pad_token_id=0,
         )
+        model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
+        if model.model.layers[1].linear_attn.causal_conv1d_fn is not None:
+            self.skipTest("Fast path is available in this environment")
 
-    def test_prepare_linear_attention_packed_kwargs_multi_segment(self):
-        position_ids = torch.tensor([[0, 1, 0, 1, 2, 0]])
+        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        position_ids = torch.tensor([[0, 1, 0, 1]], device=torch_device)
+        seq_idx = torch.tensor([[0, 0, 1, 1]], dtype=torch.int32, device=torch_device)
+        cu_seq_lens = torch.tensor([0, 2, 4], dtype=torch.int32, device=torch_device)
 
-        packed_kwargs = _prepare_linear_attention_packed_kwargs(position_ids, past_key_values=None)
+        with self.assertRaisesRegex(NotImplementedError, "Padding-free training kwargs require fast path support"):
+            model(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                seq_idx=seq_idx,
+                cu_seq_lens_q=cu_seq_lens,
+                cu_seq_lens_k=cu_seq_lens,
+            )
 
-        self.assertEqual(packed_kwargs["seq_idx"].tolist(), [[0, 0, 1, 1, 1, 2]])
-        self.assertEqual(packed_kwargs["cu_seqlens"].tolist(), [0, 2, 5, 6])
+    @require_flash_attn
+    @require_torch_accelerator
+    @slow
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_seq_idx_and_fa_kwargs(self):
+        max_new_tokens = 30
 
-    def test_prepare_linear_attention_packed_kwargs_ignored_with_cache_or_batch(self):
-        position_ids = torch.tensor([[0, 1, 2, 0, 1, 2, 3]])
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
-        self.assertDictEqual(
-            _prepare_linear_attention_packed_kwargs(position_ids, past_key_values=object()),
-            {},
-        )
-        self.assertDictEqual(
-            _prepare_linear_attention_packed_kwargs(position_ids.expand(2, -1), past_key_values=None),
-            {},
-        )
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if 0 not in inputs_dict.get("attention_mask", []) or "attention_mask" not in inputs_dict:
+                self.skipTest("Model dummy inputs should contain padding in their attention mask")
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                if 0 in inputs_dict["attention_mask"][:, -1]:
+                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                dummy_attention_mask = inputs_dict["attention_mask"]
+                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                labels = inputs_dict["input_ids"].clone()
+                labels[~dummy_attention_mask.bool()] = -100
+                first_nonneg_idx = (labels >= 0).int().argmax(dim=1)
+                labels[torch.arange(labels.size(0), device=labels.device), first_nonneg_idx] = -100
+                inputs_dict["labels"] = labels
+
+                model = (
+                    model_class.from_pretrained(
+                        tmpdirname,
+                        dtype=torch.float16,
+                        attn_implementation="flash_attention_2",
+                    )
+                    .to(torch_device)
+                    .eval()
+                )
+
+                features = [
+                    {"input_ids": i[a.bool()].tolist()}
+                    for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+                ]
+
+                data_collator = DataCollatorWithFlattening(
+                    return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+                )
+                batch = data_collator(features)
+                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
+
+                with torch.no_grad():
+                    res_padded = model(**inputs_dict)
+                    res_padfree = model(**batch_accelerator)
+
+                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
+                logits_padfree = res_padfree.logits[0]
+
+                torch.testing.assert_close(logits_padded, logits_padfree, atol=5e-3, rtol=5e-3)
 
 
 class Qwen3_5VisionText2TextModelTester:
