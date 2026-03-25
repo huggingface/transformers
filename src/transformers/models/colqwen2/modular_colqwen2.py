@@ -303,7 +303,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.model.visual(
+                image_embeds = self.vlm.visual(
                     pixel_values, grid_thw=image_grid_thw, return_dict=True
                 ).pooler_output
                 image_mask = (
@@ -312,7 +312,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        vlm_output = self.vlm.model(
+        vlm_output = self.vlm(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
