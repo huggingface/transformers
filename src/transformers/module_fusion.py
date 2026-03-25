@@ -104,10 +104,11 @@ class FusedModule(nn.Module):
                     output_producers[self._output_key(i, name)] = i
 
         for i, (mod, spec, sig) in enumerate(zip(self.modules_to_fuse, self.specs, self._signatures)):
-            if len(spec.inputs) != len(sig.parameters):
+            n_required = sum(1 for p in sig.parameters.values() if p.default is inspect.Parameter.empty)
+            if len(spec.inputs) < n_required or len(spec.inputs) > len(sig.parameters):
                 raise ValueError(
                     f"Module of type {type(mod)} expects {len(sig.parameters)} inputs "
-                    f"but spec defines {len(spec.inputs)}."
+                    f"({n_required} required) but spec defines {len(spec.inputs)}."
                 )
             if i == 0:
                 continue  # module 0 inputs come from collectors, always externally provided
@@ -193,26 +194,52 @@ def fuse_modules(
         )
     """
     pattern = re.compile(r"\d+")
-    to_visit = [(model, "")]
+    for module_name, module in model.named_modules():
+        generic_children = {
+            re.sub(pattern, "*", f"{module_name}.{n}" if module_name else n): (n, child)
+            for n, child in module.named_children()
+        }
+        if not all(p in generic_children for p in module_names_to_fuse):
+            continue
+        registry = {}
+        modules_to_fuse = [generic_children[p][1] for p in module_names_to_fuse]
+        for index, (p, spec) in enumerate(zip(module_names_to_fuse[:-1], module_specs[:-1])):
+            module.add_module(generic_children[p][0], RegistryCollector(spec, index, registry))
+        last_p = module_names_to_fuse[-1]
+        module.add_module(generic_children[last_p][0], FusedModule(modules_to_fuse, module_specs, registry))
 
-    while to_visit:
-        parent, parent_name = to_visit.pop()
-        named_children = {}
-        for name, child in parent.named_children():
-            full_name = f"{parent_name}.{name}" if parent_name else name
-            generic_name = re.sub(pattern, "*", full_name)
-            named_children[generic_name] = {"module": child, "name": name}
 
-        if all(name in named_children for name in module_names_to_fuse):
-            registry = {}
-            modules_to_fuse = [named_children[name]["module"] for name in module_names_to_fuse]
+def unfuse_modules(model: nn.Module) -> None:
+    """
+    Revert a previous `fuse_modules` call in-place, restoring the original modules.
 
-            for index, (name, spec) in enumerate(zip(module_names_to_fuse[:-1], module_specs[:-1])):
-                attr_name = named_children[name]["name"]
-                parent.add_module(attr_name, RegistryCollector(spec, index, registry))
+    For each `FusedModule` found in the model tree, the function:
 
-            last_name = module_names_to_fuse[-1]
-            parent.add_module(named_children[last_name]["name"], FusedModule(modules_to_fuse, module_specs, registry))
+    - replaces each sibling `RegistryCollector` with the corresponding original module
+      (recovered from `FusedModule.modules_to_fuse`),
+    - replaces the `FusedModule` itself with the last original module.
 
-        for entry in named_children.values():
-            to_visit.append((entry["module"], re.sub(pattern, "*", f"{parent_name}.{entry['name']}" if parent_name else entry["name"])))
+    Collectors belonging to a given `FusedModule` are identified by sharing the same
+    ``_registry`` object.
+
+    Args:
+        model (`nn.Module`): The model to restore in-place.
+
+    Example::
+
+        fuse_modules(model, ["model.layers.*.norm", "model.layers.*.mlp"], specs)
+        # ... optimized forward pass ...
+        unfuse_modules(model)  # back to original
+    """
+    for parent in model.modules():
+        fused_children = {name: child for name, child in parent.named_children() if isinstance(child, FusedModule)}
+        for fused_name, fused in fused_children.items():
+            # Collectors belonging to this FusedModule share the same registry object.
+            collectors = {
+                name: child
+                for name, child in parent.named_children()
+                if isinstance(child, RegistryCollector) and child._registry is fused._registry
+            }
+            for col_name, collector in collectors.items():
+                parent.add_module(col_name, fused.modules_to_fuse[collector.index])
+            parent.add_module(fused_name, fused.modules_to_fuse[-1])
