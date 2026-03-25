@@ -1682,7 +1682,7 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if "video_processor" in self.processor_class.get_attributes():
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest("Processor doesn't accept videos at input")
 
         messages = [

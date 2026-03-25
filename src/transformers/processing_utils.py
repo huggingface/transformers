@@ -645,24 +645,15 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
         """
-        if "audios" in kwargs and audio is None:
-            raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
 
-        if images is None and text is None and videos is None and audio is None:
-            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio)
 
         kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
-
-        # is_text_batched = True
-        if isinstance(text, str):
-            text = [text]
-            # is_text_batched = False
-
-        text = text.copy()
 
         processed_images, images_replacements = self._process_modality(images, "images", **kwargs)
         processed_videos, videos_replacements = self._process_modality(videos, "videos", **kwargs)
@@ -680,7 +671,6 @@ class ProcessorMixin(PushToHubMixin):
                 videos_replacements,
                 audio_replacements,
             )
-            # new_text = new_text if is_text_batched else new_text[0]
             tokenizer = getattr(self, "tokenizer")
             text_inputs = tokenizer(new_text, **kwargs["text_kwargs"])
             self._check_special_mm_tokens(new_text, text_inputs, modalities=["image", "video", "audio"])
@@ -717,6 +707,145 @@ class ProcessorMixin(PushToHubMixin):
         if replacement_fn:
             image_replacements = replacement_fn(mm_data, processed_data)
         return processed_data, image_replacements
+
+    def prepare_inputs_layout(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
+    ):
+        if isinstance(text, str):
+            text = [text]
+        else:
+            # avoid in-palce updates on text
+            text = text.copy()
+        return images, text, videos, audio
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        if "audios" in kwargs and audio is None:
+            raise ValueError("You passed keyword argument `audios` which is deprecated. Please use `audio` instead.")
+
+        if images is None and text is None and videos is None and audio is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+    def replace_image_token(
+        self, text: str, image_inputs: dict | None = None, batch_idx: int = 0, image_index: int = 0
+    ) -> str:
+        raise NotImplementedError
+
+    def replace_video_token(
+        self, text: str, video_inputs: dict | None = None, batch_idx: int = 0, video_index: int = 0
+    ) -> str:
+        raise NotImplementedError
+
+    def get_images_replacement(
+        self,
+        images: ImageInput,
+        processed_images: dict,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        # Early exit if no special tokens found, nothing to replace
+        if getattr(self, "image_token", None) is None:
+            return []
+
+        images = make_flat_list_of_images(images)
+        replacement_texts = []
+        for idx in range(len(images)):
+            replacement_text = self.replace_image_token(processed_images, image_idx=idx)
+            replacement_texts.append(replacement_text)
+        return replacement_texts
+
+    def get_videos_replacement(
+        self,
+        videos: VideoInput,
+        processed_videos: dict,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        # Early exit if no special tokens found, nothing to replace
+        if getattr(self, "video_token", None) is None:
+            return []
+
+        videos = make_batched_videos(videos)
+        replacement_texts = []
+        for idx in range(len(videos)):
+            replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+            replacement_texts.append(replacement_text)
+        return replacement_texts
+
+    def get_text_replacement(
+        self,
+        text: list[str],
+        images_replacements: list[str] | None = [],
+        videos_replacements: list[str] | None = [],
+        audio_replacements: list[str] | None = [],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        special_mm_tokens = [
+            getattr(self, f"{modality}_token")
+            for modality in ["image", "video", "audio"]
+            if getattr(self, f"{modality}_token", None) is not None
+        ]
+        # Early exit if no special tokens found, nothing to replace
+        if not special_mm_tokens:
+            return text, None
+
+        special_mm_tokens = "|".join(special_mm_tokens)
+        batch_replacement_offsets = []
+        images_replacements = iter(images_replacements)
+        videos_replacements = iter(videos_replacements)
+        for batch_idx in range(len(text)):
+            last = 0
+            replacement_offsets = []
+            expanded_sample = []
+            for m in re.finditer(f"({special_mm_tokens})", text[batch_idx]):
+                start, end = m.span()
+                expanded_sample.append(text[batch_idx][last:start])
+
+                # Case 1: if the image token has match in the text
+                if m.group(0) is not None:
+                    replacement_text = next(images_replacements)
+                    replacement_offsets.append({"type": "image"})
+
+                # Case 2: if the video token has match in the text
+                elif m.group(1) is not None:
+                    replacement_text = next(videos_replacements)
+                    replacement_offsets.append({"type": "video"})
+
+                # update common values such as start-end spans and replacement text
+                replacement_offsets[-1].update(
+                    {
+                        "span": (start, end),
+                        "new_span": (start, start + len(replacement_text)),
+                        "text": m.group(0),
+                        "replacement": replacement_text,
+                    }
+                )
+                expanded_sample.append(replacement_text)
+                last = end
+
+            expanded_sample.append(text[batch_idx][last:])
+            text[batch_idx] = "".join(expanded_sample)
+            batch_replacement_offsets.append(replacement_offsets)
+        return text, batch_replacement_offsets
+
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for tokenizer_input in input_ids:
+            tokenizer_input = np.array(tokenizer_input)
+            mm_token_types = np.zeros_like(tokenizer_input)
+            mm_token_types[np.isin(tokenizer_input, self.image_ids)] = 1
+            mm_token_types[np.isin(tokenizer_input, self.video_ids)] = 2
+            mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
@@ -1657,117 +1786,6 @@ class ProcessorMixin(PushToHubMixin):
         if not hasattr(self, "tokenizer"):
             raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
         return self.tokenizer.decode(*args, **kwargs)
-
-    def replace_image_token(
-        self, text: str, image_inputs: dict | None = None, batch_idx: int = 0, image_index: int = 0
-    ) -> str:
-        raise NotImplementedError
-
-    def replace_video_token(
-        self, text: str, video_inputs: dict | None = None, batch_idx: int = 0, video_index: int = 0
-    ) -> str:
-        raise NotImplementedError
-
-    def get_images_replacement(
-        self,
-        images: ImageInput,
-        processed_images: dict,
-    ) -> tuple[str, list[dict[str, Any]]]:
-        # Early exit if no special tokens found, nothing to replace
-        if getattr(self, "image_token", None) is None:
-            return []
-
-        images = make_flat_list_of_images(images)
-        replacement_texts = []
-        for idx in range(len(images)):
-            replacement_text = self.replace_image_token(processed_images, image_idx=idx)
-            replacement_texts.append(replacement_text)
-        return replacement_texts
-
-    def get_videos_replacement(
-        self,
-        videos: VideoInput,
-        processed_videos: dict,
-    ) -> tuple[str, list[dict[str, Any]]]:
-        # Early exit if no special tokens found, nothing to replace
-        if getattr(self, "video_token", None) is None:
-            return []
-
-        videos = make_batched_videos(videos)
-        replacement_texts = []
-        for idx in range(len(videos)):
-            replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
-            replacement_texts.append(replacement_text)
-        return replacement_texts
-
-    def get_text_replacement(
-        self,
-        text: list[str],
-        images_replacements: list[str] | None = [],
-        videos_replacements: list[str] | None = [],
-        audio_replacements: list[str] | None = [],
-    ) -> tuple[list[str], list[dict[str, Any]]]:
-        special_mm_tokens = [
-            getattr(self, f"{modality}_token")
-            for modality in ["image", "video", "audio"]
-            if getattr(self, f"{modality}_token", None) is not None
-        ]
-        # Early exit if no special tokens found, nothing to replace
-        if not special_mm_tokens:
-            return text, None
-
-        special_mm_tokens = "|".join(special_mm_tokens)
-        batch_replacement_offsets = []
-        images_replacements = iter(images_replacements)
-        videos_replacements = iter(videos_replacements)
-        for batch_idx in range(len(text)):
-            last = 0
-            replacement_offsets = []
-            expanded_sample = []
-            for m in re.finditer(f"({special_mm_tokens})", text[batch_idx]):
-                start, end = m.span()
-                expanded_sample.append(text[batch_idx][last:start])
-
-                # Case 1: if the image token has match in the text
-                if m.group(0) is not None:
-                    replacement_text = next(images_replacements)
-                    replacement_offsets.append({"type": "image"})
-
-                # Case 2: if the video token has match in the text
-                elif m.group(1) is not None:
-                    replacement_text = next(videos_replacements)
-                    replacement_offsets.append({"type": "video"})
-
-                # update common values such as start-end spans and replacement text
-                replacement_offsets[-1].update(
-                    {
-                        "span": (start, end),
-                        "new_span": (start, start + len(replacement_text)),
-                        "text": m.group(0),
-                        "replacement": replacement_text,
-                    }
-                )
-                expanded_sample.append(replacement_text)
-                last = end
-
-            expanded_sample.append(text[batch_idx][last:])
-            text[batch_idx] = "".join(expanded_sample)
-            batch_replacement_offsets.append(replacement_offsets)
-        return text, batch_replacement_offsets
-
-    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
-        # We have to iterate for each list separately because inputs
-        # might be non-padded lists and we can't cast numpy on that!
-        # Then cast numpy as each input for faster indexing
-        mm_token_type_ids = []
-        for tokenizer_input in input_ids:
-            tokenizer_input = np.array(tokenizer_input)
-            mm_token_types = np.zeros_like(tokenizer_input)
-            mm_token_types[np.isin(tokenizer_input, self.image_ids)] = 1
-            mm_token_types[np.isin(tokenizer_input, self.video_ids)] = 2
-            mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
-            mm_token_type_ids.append(mm_token_types.tolist())
-        return mm_token_type_ids
 
     @property
     def model_input_names(self):

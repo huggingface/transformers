@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
+from ...image_utils import ImageInput, is_valid_image, valid_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring, logging
@@ -32,14 +32,6 @@ if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
 logger = logging.get_logger(__name__)
-
-
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -58,6 +50,8 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Idefics3Processor(ProcessorMixin):
+    valid_processor_kwargs = Idefics3ProcessorKwargs
+
     def __init__(
         self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str | None = None, **kwargs
     ):
@@ -108,8 +102,11 @@ class Idefics3Processor(ProcessorMixin):
             The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
             image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
         """
-        if text is None and images is None:
-            raise ValueError("You must provide either `text` or `images`.")
+        if text is not None and isinstance(text, str):
+            text = [text]
+
+        self.validate_inputs(images=images, text=text, **kwargs)
+        images, text = self.prepare_inputs_layout(images=images, text=text)
 
         output_kwargs = self._merge_kwargs(
             Idefics3ProcessorKwargs,
@@ -117,31 +114,52 @@ class Idefics3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        # return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
-        n_images_in_text = []
-        n_images_in_images = []
-        inputs = {}
+        image_inputs = text_inputs = {}
+        if images is not None:
+            image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
 
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            # Pop inputs unused by the model
+            image_inputs.pop("rows", None)
+            image_inputs.pop("cols", None)
+
+            if text is not None:
+                text, text_replacement_offsets = self.get_text_replacement(
+                    text, images_replacements=images_replacements
+                )
+                text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+                if return_text_replacement_offsets:
+                    text_inputs["text_replacement_offsets"] = text_replacement_offsets
+                # if return_mm_token_type_ids:
+                #     text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"], batch_image_seq_lengths)
+                self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        elif text is not None:
+            text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def prepare_inputs_layout(
+        self,
+        images: ImageInput | None = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+    ):
+        if text is not None and isinstance(text, str):
+            text = [text]
+        else:
+            text = text.copy()
 
         if images is not None:
-            if is_image_or_image_url(images):
+            if is_valid_image(images):
                 images = [[images]]
-            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
+            elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
                 if text is not None:
-                    if sum(n_images_in_text) != len(images):
-                        raise ValueError(
-                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                            f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
-                        )
                     # Reorganize the images to match the prompts
+                    n_images_in_text = [sample.count(self.image_token) for sample in text]
                     cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
                     images = [
                         images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
@@ -149,70 +167,42 @@ class Idefics3Processor(ProcessorMixin):
                     ]
                 else:
                     images = [images]
-            elif (
-                not isinstance(images, (list, tuple))
-                and not isinstance(images[0], (list, tuple))
-                and not is_image_or_image_url(images[0][0])
-            ):
-                raise ValueError(
-                    "Invalid input images. Please provide a single image or a list of images or a list of list of images."
-                )
-            n_images_in_images = [len(sample) for sample in images]
 
-            # Load images if they are URLs
-            images = self.image_processor.fetch_images(images)
+        return images, text
 
-            output_kwargs["images_kwargs"]["return_row_col_info"] = True
-            image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
-            inputs.update(image_inputs)
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(images, text, **kwargs)
 
-            if text is not None:
-                if n_images_in_images != n_images_in_text:
+        if text is None and images is None:
+            raise ValueError("You must provide either `text` or `images`.")
+
+        if text is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            if images is not None and isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+                n_images_in_text = [sample.count(self.image_token) for sample in text]
+                if sum(n_images_in_text) != len(images):
                     raise ValueError(
-                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                        f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
                     )
-
-                text, text_replacement_offsets = self.get_text_replacement(
-                    text, images_replacements=images_replacements
-                )
-                text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-                self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-                inputs.update(text_inputs)
-
-        elif text is not None:
-            if any(n_images_in_text):
+            elif images is None and any(n_images_in_text):
                 raise ValueError(
                     f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
-            text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-            inputs.update(text_inputs)
 
-        # FIXME: `batch_image_seq_lengths` is lost
-        batch_image_seq_lengths = []
-        if return_mm_token_type_ids:
-            array_ids = np.array(inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(array_ids)
-            for i, seq_lengths in enumerate(batch_image_seq_lengths):
-                image_start_positions = np.where(array_ids[i] == self.fake_image_token_id)[0]
-                j = 0
-                for seq_len in seq_lengths:
-                    if j >= len(image_start_positions):
-                        break
-                    start = image_start_positions[j]
-                    end = start + seq_len
-                    mm_token_type_ids[i, start:end] = 1
-                    j = np.searchsorted(image_start_positions, end)
-
-            inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
-        return BatchFeature(data=inputs, tensor_type=return_tensors)
+        if images is not None and not valid_images(images):
+            raise ValueError(
+                "Invalid input images. Please provide a single image or a list of images or a list of list of images."
+            )
 
     def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
-        num_images_per_sample = len(processed_images["rows"][0])
-        batch_idx = image_idx // num_images_per_sample
-        image_idx = image_idx % num_images_per_sample
-        image_rows = processed_images["rows"][batch_idx][image_idx]
-        image_cols = processed_images["cols"][batch_idx][image_idx]
+        image_rows = [row for row_list in processed_images["rows"] for row in row_list][image_idx]
+        image_cols = [col for col_list in processed_images["cols"] for col in col_list][image_idx]
         if image_rows == 0 and image_cols == 0:
             return (
                 f"{self.fake_image_token}"
@@ -238,6 +228,27 @@ class Idefics3Processor(ProcessorMixin):
                 + f"{self.fake_image_token}"
             )
             return text_split_images
+
+    def create_mm_token_type_ids(self, input_ids: list, batch_image_seq_lengths: list[int]) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for i, seq_lengths in enumerate(batch_image_seq_lengths):
+            array_ids = np.array(input_ids[i])
+            mm_token_types = np.zeros_like(array_ids)
+            image_start_positions = np.where(array_ids == self.fake_image_token_id)[0]
+            j = 0
+            for seq_len in seq_lengths:
+                if j >= len(image_start_positions):
+                    break
+                start = image_start_positions[j]
+                end = start + seq_len
+                mm_token_types[start:end] = 1
+                j = np.searchsorted(image_start_positions, end)
+            mm_token_type_ids.append(mm_token_types.tolist())
+
+        return mm_token_type_ids
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """

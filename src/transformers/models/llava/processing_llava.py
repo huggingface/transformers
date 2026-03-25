@@ -35,6 +35,8 @@ class LlavaProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class LlavaProcessor(ProcessorMixin):
+    valid_processor_kwargs = LlavaProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,
