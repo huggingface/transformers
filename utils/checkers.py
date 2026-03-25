@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
 from pathlib import Path
 
@@ -205,6 +206,14 @@ RESET = "\033[0m"
 SPINNER_CHARS = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
+def format_elapsed(seconds: float) -> str:
+    """Format a duration for status output."""
+    if seconds >= 60:
+        minutes, seconds = divmod(seconds, 60)
+        return f"{int(minutes)}m{seconds:05.2f}s"
+    return f"{seconds:.2f}s"
+
+
 class SlidingWindow:
     """Displays a spinning title + sliding window of the last N output lines in a TTY."""
 
@@ -251,7 +260,7 @@ class SlidingWindow:
             self.lines.append(line.rstrip()[: self.term_width])
             self._redraw()
 
-    def finish(self, success):
+    def finish(self, success, elapsed=None):
         """Stop spinner and print final status title."""
         self._stop.set()
         self._thread.join()
@@ -262,10 +271,11 @@ class SlidingWindow:
             self._title_on_screen = False
             self.displayed = 0
             # Print final title with status
+            suffix = f" ({format_elapsed(elapsed)})" if elapsed is not None else ""
             if success:
-                print(f"{GREEN}✓ {self.label}{RESET}")
+                print(f"{GREEN}✓ {self.label}{suffix}{RESET}")
             else:
-                print(f"{RED}✗ {self.label}{RESET}")
+                print(f"{RED}✗ {self.label}{suffix}{RESET}")
             # Reprint output lines
             for line in self.lines:
                 print(line)
@@ -432,11 +442,15 @@ def main():
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
 
+    if not is_tty and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+
     use_cache = not args.no_cache and not args.fix
     cache = CheckerCache() if use_cache else None
 
     failures = []
     skipped = 0
+    total_start = time.perf_counter()
     for name in names:
         label = CHECKERS[name][0]
 
@@ -446,17 +460,19 @@ def main():
             if is_tty:
                 print(f"{GREEN}✓ {label} (cached){RESET}\n")
             else:
-                print(f"{label} (cached)\n")
+                print(f"{label} (cached)\n", flush=True)
             continue
 
         cmd_str = get_checker_command(name, fix=args.fix)
+        checker_start = time.perf_counter()
 
         if is_tty:
             window = SlidingWindow(label, max_lines=10)
             if cmd_str:
                 window.add_line(f"$ {cmd_str}")
             rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
-            window.finish(success=(rc == 0))
+            elapsed = time.perf_counter() - checker_start
+            window.finish(success=(rc == 0), elapsed=elapsed)
             print()
             if rc == 0 and cache is not None:
                 cache.update(name)
@@ -469,16 +485,22 @@ def main():
                         cache.save()
                     sys.exit(1)
         else:
-            print(f"{label}")
+            print(f"{label}", flush=True)
             if cmd_str:
-                print(f"$ {cmd_str}")
-            rc, output = run_checker(name, fix=args.fix)
-            tail = output.splitlines()[-10:]
-            if tail:
-                print("\n".join(tail))
+                print(f"$ {cmd_str}", flush=True)
+            if is_ci:
+                rc, output = run_checker(
+                    name, fix=args.fix, line_callback=lambda line: print(line, end="", flush=True)
+                )
+            else:
+                rc, output = run_checker(name, fix=args.fix)
+                tail = output.splitlines()[-10:]
+                if tail:
+                    print("\n".join(tail), flush=True)
+            elapsed = time.perf_counter() - checker_start
             status = "OK" if rc == 0 else "FAILED"
-            print(status)
-            print()
+            print(f"{status} ({format_elapsed(elapsed)})", flush=True)
+            print(flush=True)
             if rc == 0 and cache is not None:
                 cache.update(name)
             elif rc != 0:
@@ -494,14 +516,15 @@ def main():
         cache.save()
 
     if failures:
-        print(f"\n{len(failures)} failed: {', '.join(failures)}")
+        print(f"\n{len(failures)} failed: {', '.join(failures)}", flush=True)
         sys.exit(1)
 
+    total_elapsed = format_elapsed(time.perf_counter() - total_start)
     passed = len(names) - skipped
     if skipped:
-        print(f"\nAll {len(names)} checks passed ({passed} ran, {skipped} cached).")
+        print(f"\nAll {len(names)} checks passed in {total_elapsed} ({passed} ran, {skipped} cached).", flush=True)
     else:
-        print(f"\nAll {len(names)} checks passed.")
+        print(f"\nAll {len(names)} checks passed in {total_elapsed}.", flush=True)
 
 
 if __name__ == "__main__":
