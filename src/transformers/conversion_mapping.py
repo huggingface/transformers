@@ -90,7 +90,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
         "colpali": [
-            WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "emu3": [
@@ -110,9 +109,10 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "colqwen2": [
+            WeightRenaming(source_patterns=r"vlm.model", target_patterns="vlm"),
             WeightRenaming(
-                source_patterns=r"vlm.model(?!\.(language_model|visual))",
-                target_patterns="vlm.model.language_model",
+                source_patterns=r"vlm(?!\.(language_model|visual))",
+                target_patterns="vlm.language_model",
             ),
         ],
         "gemma3n_text": [
