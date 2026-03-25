@@ -32,6 +32,8 @@ The export pipeline has four stages, each with its own set of patches/fixes:
    for ORT compatibility.
 """
 
+from __future__ import annotations
+
 import copy
 import functools
 import operator
@@ -53,7 +55,7 @@ if is_torch_available():
 
 if is_onnxscript_available():
     import onnx_ir
-    from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal, aten_index_put
+    from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
 if TYPE_CHECKING:
@@ -62,6 +64,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         from torch.export import ExportedProgram
         from torch.onnx import ONNXProgram
+
+    if is_onnxscript_available():
+        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
 
 
 logger = logging.get_logger(__file__)
@@ -86,7 +91,7 @@ class OnnxExporter(DynamoExporter):
 
     required_packages = ["torch", "onnx", "onnxscript"]
 
-    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ONNXProgram":
+    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ONNXProgram:
         with patch_model_outputs(model), patch_torch_ops(), patch_onnx_decomposition():
             exported_program: ExportedProgram = super().export(model, sample_inputs)
             with torch.no_grad():
@@ -399,7 +404,7 @@ def patch_torch_ops():
 _COMPARISON_OPS = frozenset({operator.le, operator.lt, operator.ge, operator.gt, operator.eq, operator.ne})
 
 
-def _fix_dead_comparison(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Erase or constant-fold comparison nodes involving symbolic infinities.
 
     torch.export emits guards like ``%le_3 = operator.le(sym_size, int_oo)`` where
@@ -427,7 +432,7 @@ def _fix_dead_comparison(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> b
     return False
 
 
-def _fix_alias(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
     if node.target is not torch.ops.aten.alias.default:
         return False
@@ -436,7 +441,7 @@ def _fix_alias(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     return True
 
 
-def _fix_detach_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_detach_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place detach_ with out-of-place detach."""
     if node.target is not torch.ops.aten.detach_.default:
         return False
@@ -447,7 +452,7 @@ def _fix_detach_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bo
     return True
 
 
-def _fix_index_put_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place index_put_ with out-of-place index_put."""
     if node.target is not torch.ops.aten.index_put_.default:
         return False
@@ -469,7 +474,7 @@ _ASSERTION_OPS = frozenset(
 )
 
 
-def _fix_assertion(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Erase assertion / shape-constraint nodes that have no ONNX equivalent."""
     if node.target not in _ASSERTION_OPS:
         return False
@@ -477,7 +482,7 @@ def _fix_assertion(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     return True
 
 
-def _fix_fill_diagonal_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_fill_diagonal_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place fill_diagonal_ with out-of-place equivalent."""
     if node.target is not torch.ops.aten.fill_diagonal_.default:
         return False
@@ -496,7 +501,7 @@ def _fix_fill_diagonal_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node"
     return True
 
 
-def _fix_triu_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_triu_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace in-place triu_ with out-of-place triu."""
     if node.target is not torch.ops.aten.triu_.default:
         return False
@@ -507,7 +512,7 @@ def _fix_triu_inplace(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool
     return True
 
 
-def _fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_sort_stable(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace aten.sort.stable with aten.sort.default (which has ONNX translation)."""
     if node.target is not torch.ops.aten.sort.stable:
         return False
@@ -521,7 +526,7 @@ def _fix_sort_stable(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
     return True
 
 
-def _fix_remainder_scalar(gm: "torch.fx.GraphModule", node: "torch.fx.Node") -> bool:
+def _fix_remainder_scalar(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Rewrite remainder.Scalar to remainder.Tensor when the 'scalar' arg is actually a tensor.
 
     After decomposition the second operand of ``aten.remainder.Scalar`` can be a graph
@@ -553,7 +558,7 @@ _FX_NODE_FIXES = [
 ]
 
 
-def patch_fx_graph(graph_module: "torch.fx.GraphModule") -> None:
+def patch_fx_graph(graph_module: torch.fx.GraphModule) -> None:
     """Apply FX node fixes to all sub-GraphModules, then eliminate dead code."""
     for gm in graph_module.modules():
         if not isinstance(gm, torch.fx.GraphModule):
@@ -647,7 +652,7 @@ _ONNX_TRANSLATION_TABLE = {
 # To add a new fix: implement _fix_ir_* and append to _IR_FIXES.
 
 
-def _fix_ir_topk_sorted(graph_like: "onnx_ir.Graph") -> None:
+def _fix_ir_topk_sorted(graph_like: onnx_ir.Graph) -> None:
     """Set sorted=1 on TopK nodes (ORT CUDA EP rejects TopK without it)."""
     for ir_node in list(graph_like.all_nodes()):
         if ir_node.op_type == "TopK":
@@ -659,7 +664,7 @@ _IR_FIXES = [
 ]
 
 
-def patch_onnx_ir(onnx_program: "ONNXProgram") -> None:
+def patch_onnx_ir(onnx_program: ONNXProgram) -> None:
     """Apply ONNX IR fixes to the exported program for ORT compatibility."""
     for fix in _IR_FIXES:
         fix(onnx_program.model.graph)
