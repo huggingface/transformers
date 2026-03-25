@@ -113,8 +113,7 @@ class GlmMoeDsaIndexer(nn.Module):
     Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
-    which uses interleaved RoPE.
+    main MLA attention.
 
     **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
     from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
@@ -421,12 +420,11 @@ class GlmMoeDsaAttention(nn.Module):
         if attention_mask is not None and attention_mask.dim() == 4:
             causal_mask = attention_mask[..., :total_len]
             combined_mask = index_mask + causal_mask
+        elif attention_mask is not None:
+            # 2D mask case: add both masks (both are additive: -inf or 0)
+            combined_mask = index_mask + attention_mask.unsqueeze(1)
         else:
-            combined_mask = (
-                attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
-                if attention_mask is not None
-                else index_mask
-            )
+            combined_mask = index_mask
 
         # Flash attention head_dim padding (qk_head_dim != v_head_dim)
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
