@@ -1,0 +1,250 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch CohereAsr model."""
+
+import copy
+import math
+import unittest
+
+from transformers import CohereAsrConfig, is_torch_available
+from transformers.testing_utils import require_torch, torch_device
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    floats_tensor,
+    random_attention_mask,
+)
+from ...test_pipeline_mixin import PipelineTesterMixin
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import CohereAsrForConditionalGeneration
+    from transformers.models.cohere_asr.modeling_cohere_asr import CohereAsrModel
+
+
+class CohereAsrModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        seq_length=200,
+        is_training=False,
+        encoder_config={
+            "model_type": "parakeet_encoder",
+            "hidden_size": 16,
+            "intermediate_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "hidden_act": "silu",
+            "attention_bias": True,
+            "convolution_bias": True,
+            "conv_kernel_size": 9,
+            "subsampling_factor": 4,
+            "subsampling_conv_channels": 8,
+            "num_mel_bins": 8,
+            "subsampling_conv_kernel_size": 3,
+            "subsampling_conv_stride": 2,
+            "dropout": 0.0,
+            "dropout_positions": 0.0,
+            "layerdrop": 0.0,
+            "activation_dropout": 0.0,
+            "attention_dropout": 0.0,
+            "max_position_embeddings": 5000,
+            "scale_input": False,
+        },
+        decoder_start_token_id=85,
+        bos_token_id=98,
+        eos_token_id=98,
+        pad_token_id=0,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.encoder_config = encoder_config
+        self.decoder_start_token_id = decoder_start_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+
+        # Decoder defaults
+        self.vocab_size = 147
+        self.hidden_size = 16
+        self.intermediate_size = 32
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 2
+        self.num_key_value_heads = 2
+        self.head_dim = 8
+
+        # Derived from encoder_config for test assertions
+        self.num_mel_bins = encoder_config["num_mel_bins"]
+        self.encoder_hidden_size = encoder_config["hidden_size"]
+        self.encoder_num_hidden_layers = encoder_config["num_hidden_layers"]
+        self.encoder_num_attention_heads = encoder_config["num_attention_heads"]
+        self.encoder_seq_length = self.get_encoder_output_length(seq_length)
+        self.decoder_seq_length = 1
+        self.decoder_key_length = 1
+        self.key_length = self.encoder_seq_length
+
+    def get_encoder_output_length(self, input_length):
+        """Compute the encoder output length after subsampling convolutions."""
+        num_layers = int(math.log2(self.encoder_config["subsampling_factor"]))
+        kernel_size = self.encoder_config["subsampling_conv_kernel_size"]
+        stride = self.encoder_config["subsampling_conv_stride"]
+        add_pad = (kernel_size - 1) // 2 * 2 - kernel_size
+        length = input_length
+        for _ in range(num_layers):
+            length = int((length + add_pad) / stride) + 1
+        return length
+
+    def get_config(self):
+        return CohereAsrConfig(
+            encoder_config=self.encoder_config,
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
+            hidden_act="relu",
+            attention_bias=True,
+            attention_dropout=0.0,
+            decoder_start_token_id=self.decoder_start_token_id,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+        )
+
+    def prepare_config_and_inputs(self):
+        input_values = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins], scale=1.0)
+        attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id]], device=torch_device)
+        decoder_attention_mask = decoder_input_ids.ne(self.pad_token_id)
+        config = self.get_config()
+        return config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask = (
+            self.prepare_config_and_inputs()
+        )
+        inputs_dict = {
+            "input_values": input_values,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (CohereAsrModel, CohereAsrForConditionalGeneration) if is_torch_available() else ()
+    # TODO: enable generation tests
+    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "automatic-speech-recognition": CohereAsrForConditionalGeneration,
+            "feature-extraction": CohereAsrModel,
+        }
+        if is_torch_available()
+        else {}
+    )
+    is_encoder_decoder = True
+
+    # CohereAsr's pos_emb layer is large relative to total model size
+    model_split_percents = [0.5, 0.9, 0.95]
+
+    def setUp(self):
+        self.model_tester = CohereAsrModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CohereAsrConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    # Copied from tests.models.moonshine_streaming.test_modeling_moonshine_streaming.MoonshineStreamingModelTest.test_resize_tokens_embeddings
+    def test_resize_tokens_embeddings(self):
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is False")
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.vocab_size
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)
+
+    # Copied from tests.models.moonshine_streaming.test_modeling_moonshine_streaming.MoonshineStreamingModelTest.test_resize_embeddings_untied
+    def test_resize_embeddings_untied(self):
+        (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is False")
+
+        original_config.tie_word_embeddings = False
+        if original_config.tie_word_embeddings:
+            self.skipTest(reason="Model cannot untie embeddings")
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            if model.get_output_embeddings() is None:
+                continue
+
+            model_vocab_size = config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
