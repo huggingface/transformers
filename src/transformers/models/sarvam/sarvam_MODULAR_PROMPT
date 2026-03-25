@@ -1,0 +1,22 @@
+Create `/fsx/ita_zaporozhets/transformers/src/transformers/models/sarvam/modular_sarvam.py` for the `sarvam` model.
+
+Top matched model for class inheritance:
+- `deepseek_v3`: 6 matched classes (54.5%), matched classes [MoEGate, SarvamMLAAttention, SarvamMLADecoderLayer, SarvamMLAMLP, SarvamMLAMoE, SarvamMLARMSNorm]
+
+For the matched classes listed above, inherit from `deepseek_v3` and only override what differs. See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+
+For classes marked "copy as-is", reproduce them exactly from `modeling_sarvam.py` without inheriting from `deepseek_v3`. Also copy any module-level helper functions they depend on.
+The copied and inherited classes must remain mutually compatible: method signatures, parameter names, and return types must match what each side expects when they call into one another.
+
+Matched classes:
+- `SarvamMLARMSNorm` → inherit from `deepseek_v3`
+- `SarvamMLARotaryEmbedding` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAYarnRotaryEmbedding` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAMLP` → inherit from `deepseek_v3`
+- `MoEGate` → inherit from `deepseek_v3`
+- `SarvamMLAMoE` → inherit from `deepseek_v3`
+- `SarvamMLAAttention` → inherit from `deepseek_v3`
+- `SarvamMLADecoderLayer` → inherit from `deepseek_v3`
+- `SarvamMLAPreTrainedModel` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAModel` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAForCausalLM` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
