@@ -434,10 +434,10 @@ class NomicBertPredictionHeadTransform(nn.Module):
 class NomicBertModel(NomicBertPreTrainedModel):
     _no_split_modules = ["NomicBertEmbeddings", "NomicBertLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=False):
         """
         Args:
-            add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            add_pooling_layer (`bool`, *optional*, defaults to `False`):
                 Whether to add a pooling layer.
         """
         super().__init__(config)
@@ -449,8 +449,6 @@ class NomicBertModel(NomicBertPreTrainedModel):
         self.pooler = NomicBertPooler(config) if add_pooling_layer else None
         self.rotary_emb = NomicBertRotaryEmbedding(config)
         self.layers = nn.ModuleList([NomicBertLayer(config) for _ in range(config.num_hidden_layers)])
-        self.embeddings_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.embeddings_dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -492,9 +490,6 @@ class NomicBertModel(NomicBertPreTrainedModel):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-
-        embedding_output = self.embeddings_layernorm(embedding_output)
-        embedding_output = self.embeddings_dropout(embedding_output)
 
         attention_mask = create_bidirectional_mask(
             config=self.config,

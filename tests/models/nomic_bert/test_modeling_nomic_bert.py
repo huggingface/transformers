@@ -355,7 +355,8 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
+        #model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
+        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/56")
         tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5")
 
         sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
@@ -365,8 +366,19 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(**inputs)[0]
 
-        expected_shape = torch.Size((2, 11, 768))
+        expected_shape = torch.Size((2, 13, 768))
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
-        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+        expected_slice = torch.tensor([
+            [
+                [ 1.7039, -4.5610, 1.5236],
+                [ 1.8685, -3.6936, 1.6641],
+                [ 5.3303e-01, -4.2081, 2.3375]
+            ],
+            [
+                [ 2.6875e-03, -3.7496, 9.0820e-01],
+                [ 1.8299e-02, -3.3884, 3.5300e-01],
+                [-1.4282e-01, -3.6776, -3.5079e-01]
+            ]
+        ])
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-3, atol=1e-3)

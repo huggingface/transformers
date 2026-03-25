@@ -421,37 +421,21 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "nomic_bert": [
-            # Embeddings & Pooler
-            WeightRenaming("emb_ln", "embeddings.LayerNorm"),
-            # Encoder Layers Renaming
-            WeightRenaming(
-                r"encoder.layers.(\d+).attn.out_proj.weight",
-                r"layers.\1.self_attn.o_proj.weight",
+            WeightRenaming("encoder.", "nomic_bert."),
+            WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
+            WeightRenaming(r"attn.out_proj", r"self_attn.o_proj"),
+            WeightRenaming(r"fc11", r"gate_proj"),
+            WeightRenaming(r"fc12", r"up_proj"),
+            WeightRenaming(r"fc2", r"down_proj"),
+            WeightRenaming(r"norm1", r"post_attention_layernorm"),
+            WeightRenaming(r"norm2", r"post_mlp_layernorm",
             ),
-            WeightRenaming(
-                r"encoder.layers.(\d+).mlp.fc11.weight",
-                r"layers.\1.mlp.gate_proj.weight",
-            ),
-            WeightRenaming(
-                r"encoder.layers.(\d+).mlp.fc12.weight",
-                r"layers.\1.mlp.up_proj.weight",
-            ),
-            WeightRenaming(r"encoder.layers.(\d+).mlp.fc2.weight", r"layers.\1.mlp.down_proj.weight"),
-            WeightRenaming(
-                r"encoder.layers.(\d+).norm1",
-                r"layers.\1.post_attention_layernorm",
-            ),
-            WeightRenaming(
-                r"encoder.layers.(\d+).norm2",
-                r"layers.\1.post_mlp_layernorm",
-            ),
-            WeightRenaming("encoder.layers.", "nomic_bert.layers."),
             WeightConverter(
-                source_patterns=["attn.Wqkv.weight"],
+                source_patterns=["attn.Wqkv"],
                 target_patterns=[
-                    "self_attn.q_proj.weight",
-                    "self_attn.k_proj.weight",
-                    "self_attn.v_proj.weight",
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
                 ],
                 operations=[Chunk(dim=0)],
             ),

@@ -169,15 +169,13 @@ class NomicBertPredictionHeadTransform(BertPredictionHeadTransform):
 
 @auto_docstring
 class NomicBertModel(JinaEmbeddingsV3Model):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=False):
         """
         Args:
-            add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            add_pooling_layer (`bool`, *optional*, defaults to `False`):
                 Whether to add a pooling layer.
         """
         super().__init__(config, add_pooling_layer=add_pooling_layer)
-        self.embeddings_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.embeddings_dropout = nn.Dropout(config.hidden_dropout_prob)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -210,9 +208,6 @@ class NomicBertModel(JinaEmbeddingsV3Model):
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
-
-        embedding_output = self.embeddings_layernorm(embedding_output)
-        embedding_output = self.embeddings_dropout(embedding_output)
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
