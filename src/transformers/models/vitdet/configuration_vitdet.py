@@ -34,6 +34,7 @@ class VitDetConfig(BackboneConfigMixin, PreTrainedConfig):
         Whether to add relative position embeddings to the attention maps.
     window_size (`int`, *optional*, defaults to 0):
         The size of the attention window.
+
     Example:
 
     ```python

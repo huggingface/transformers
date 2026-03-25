@@ -87,17 +87,15 @@ class AlignVisionConfig(PreTrainedConfig):
         List of scaling coefficient of each block.
     squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
         Squeeze expansion ratio.
+    hidden_dim (`int`, *optional*, defaults to 1280):
+        The hidden dimension of the layer before the classification head.
     pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
         Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
         `"max"`]
-    batch_norm_eps (`float`, *optional*, defaults to 1e-3):
-        The epsilon used by the batch normalization layers.
     batch_norm_momentum (`float`, *optional*, defaults to 0.99):
         The momentum used by the batch normalization layers.
     drop_connect_rate (`float`, *optional*, defaults to 0.2):
         The drop rate for skip connections.
-    hidden_dim (`int`, *optional*, defaults to 1280):
-        The hidden dimension of the layer before the classification head.
 
     Example:
 

@@ -27,8 +27,10 @@ class PhimoeConfig(PreTrainedConfig):
     r"""
     num_local_experts (`int`, *optional*, defaults to 16):
         Number of experts per Sparse MLP layer.
-    input_jitter_noise (`float`, *optional*, defaults to 0.0): Input jitter noise
-    lm_head_bias (`bool`, *optional*, defaults to `False`): LM head bias
+    input_jitter_noise (`float`, *optional*, defaults to 0.0):
+        Input jitter noise
+    lm_head_bias (`bool`, *optional*, defaults to `False`):
+        LM head bias
 
     Example:
 

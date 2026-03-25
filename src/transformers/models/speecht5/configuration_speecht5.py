@@ -242,8 +242,6 @@ class SpeechT5HifiGanConfig(PreTrainedConfig):
     resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
         A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
         multi-receptive field fusion (MRF) module.
-    initializer_range (`float`, *optional*, defaults to 0.01):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     leaky_relu_slope (`float`, *optional*, defaults to 0.1):
         The angle of the negative slope used by the leaky ReLU activation.
     normalize_before (`bool`, *optional*, defaults to `True`):

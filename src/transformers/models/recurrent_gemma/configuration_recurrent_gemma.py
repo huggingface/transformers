@@ -50,7 +50,8 @@ class RecurrentGemmaConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "recurrent_gemma"
     attribute_map = {"sliding_window": "attention_window_size"}

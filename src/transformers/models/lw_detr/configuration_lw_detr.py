@@ -131,8 +131,6 @@ class LwDetrConfig(PreTrainedConfig):
         [`LwDetrModel`] can detect in a single image.
     group_detr (`int`, *optional*, defaults to 13):
         Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
-    init_std (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
         kernels are not supported by PyTorch ONNX export.

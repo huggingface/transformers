@@ -45,10 +45,14 @@ logger = logging.get_logger(__name__)
 @strict
 class ModernVBertConfig(PreTrainedConfig):
     r"""
-    pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
-    initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-    classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks.
-    classifier_bias (`bool | None`, *optional*, defaults to `False`): Whether to add a bias term to the classification head
+    pixel_shuffle_factor (`int | None`, *optional*, defaults to 4):
+        Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+    initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0):
+        The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+    classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`):
+        The pooling strategy to use for classification tasks.
+    classifier_bias (`bool | None`, *optional*, defaults to `False`):
+        Whether to add a bias term to the classification head
 
     Example:
     ```python
@@ -331,7 +335,7 @@ class ModernVBertPredictionHead(ModernBertPredictionHead):
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embeddings.tok_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
 
         self.vocab_size = config.text_config.vocab_size

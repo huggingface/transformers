@@ -140,13 +140,13 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         Multi level features dimension for decoder
     decoder_ffn_dim (`int`, *optional*, defaults to 1024):
         Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-        `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_feature_levels (`int`, *optional*, defaults to 3):
         The number of input feature levels.
     decoder_n_points (`int`, *optional*, defaults to 4):
         The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
     label_noise_ratio (`float`, *optional*, defaults to 0.5):

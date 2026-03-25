@@ -45,10 +45,6 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
 @strict
 class Qwen2VLTextConfig(PreTrainedConfig):
     r"""
-    max_window_layers (`int`, *optional*, defaults to 80):
-        The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
-        additional layer afterwards will use SWA (Sliding Window Attention).
-
     ```python
     >>> from transformers import Qwen2VLTextModel, Qwen2VLConfig
 
@@ -60,7 +56,8 @@ class Qwen2VLTextConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "qwen2_vl_text"
     base_config_key = "text_config"
@@ -103,7 +100,6 @@ class Qwen2VLTextConfig(PreTrainedConfig):
     bos_token_id: int | None = 151643
     eos_token_id: int | list[int] | None = 151645
     pad_token_id: int | None = None
-    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         self.sliding_window = self.sliding_window if self.use_sliding_window else None

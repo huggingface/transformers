@@ -69,8 +69,6 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
     r"""
     num_blocks (`int`, *optional*, defaults to 24):
         Number of hidden layers in the Transformer encoder.
-    downsample_rate (`int`, *optional*, defaults to 1):
-        Downsample rate for the audio feature extractor.
     activation (`str`, *optional*, defaults to `"swish"`):
         The non-linear activation function in the MLPs.
     chunk_size (`int`, *optional*, defaults to -1):
@@ -103,6 +101,8 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
         The non-linear activation function in the nemo conv modules.
     nemo_conv_channels (`int`, *optional*, defaults to 1024):
         Number of channels in the nemo conv modules.
+    downsample_rate (`int`, *optional*, defaults to 1):
+        Downsample rate for the audio feature extractor.
     feature_layer (`int`, *optional*, defaults to -2):
         The index of the layer of the encoder from which to extract audio features.
 
