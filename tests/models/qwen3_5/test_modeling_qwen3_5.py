@@ -229,6 +229,9 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
+                inputs_dict["position_ids"] = (
+                    (dummy_attention_mask == 1).long().cumsum(dim=1) - 1
+                ) * (dummy_attention_mask == 1).long()
                 labels = inputs_dict["input_ids"].clone()
                 labels[~dummy_attention_mask.bool()] = -100
                 first_nonneg_idx = (labels >= 0).int().argmax(dim=1)
