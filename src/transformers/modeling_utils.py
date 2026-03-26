@@ -4151,7 +4151,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 device_map = {"": device_map}
 
         # Finalize model weight initialization
-        active_tp_plan = getattr(model, "_tp_plan", None) if distributed_config.tp_plan is not None else None
+        active_tp_plan = getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_plan", None) else None
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
