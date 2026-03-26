@@ -101,7 +101,10 @@ register_patch_mapping({"^Llama\\d+Attention$": CustomLlamaAttention})
 unregister_patch_mapping(["Qwen2MoeExperts", ".*Attention$"])
 ```
 
-Now that the layers have been swapped, we need to update the `OutputRecorder` to point at the new target class. `patch_output_recorders` fixes this by walking every submodule of an already-instantiated model and updating each `OutputRecorder.target_class` to the registered replacement:
+Once mappings are registered, `patch_output_recorders` walks every submodule and updates each `OutputRecorder.target_class` to the registered replacement.
+
+> [!TIP]
+> The [`~PreTrainedModel.from_pretrained`] method calls `patch_output_recorders` automatically. You only need to call it yourself when constructing a model directly.
 
 ```python
 from transformers.monkey_patching import patch_output_recorders
