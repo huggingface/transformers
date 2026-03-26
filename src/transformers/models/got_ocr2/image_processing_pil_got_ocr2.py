@@ -29,10 +29,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
+from ...utils.import_utils import requires
 from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
 
 

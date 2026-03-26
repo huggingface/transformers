@@ -31,11 +31,10 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
-
+from ...utils.import_utils import requires
 from .image_processing_vilt import ViltImageProcessorKwargs
 
 

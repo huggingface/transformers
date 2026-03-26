@@ -20,10 +20,10 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
+from ...utils.import_utils import requires
 from .image_processing_siglip2 import (
     Siglip2ImageProcessorKwargs,
     get_image_size_for_max_num_patches,

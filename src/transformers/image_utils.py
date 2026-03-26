@@ -16,7 +16,6 @@ import base64
 import os
 from collections.abc import Iterable
 from dataclasses import dataclass, fields
-from enum import IntEnum
 from io import BytesIO
 from typing import Any, Union
 
@@ -49,15 +48,6 @@ if is_vision_available():
     import PIL.ImageOps
 
     PILImageResampling = PIL.Image.Resampling
-else:
-
-    class PILImageResampling(IntEnum):  # type: ignore[no-redef]
-        NEAREST = 0
-        LANCZOS = 1
-        BILINEAR = 2
-        BICUBIC = 3
-        BOX = 4
-        HAMMING = 5
 
     if is_torchvision_available():
         from torchvision.transforms import InterpolationMode

@@ -23,11 +23,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
     is_torch_available,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():

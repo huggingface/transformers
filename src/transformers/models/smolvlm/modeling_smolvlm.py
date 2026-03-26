@@ -23,6 +23,9 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import torch
+from torch import nn
+
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
@@ -36,7 +39,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_available,
     logging,
     torch_compilable_check,
 )
@@ -44,11 +46,6 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_smolvlm import SmolVLMConfig, SmolVLMVisionConfig
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
 
 
 logger = logging.get_logger(__name__)

@@ -34,11 +34,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
-
+from ...utils.import_utils import requires
 from .image_processing_nougat import NougatImageProcessorKwargs
 
 

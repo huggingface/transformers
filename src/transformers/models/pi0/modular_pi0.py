@@ -34,10 +34,11 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
 from ..siglip.image_processing_siglip import SiglipImageProcessor
-from ...utils.import_utils import requires
+
 
 logger = logging.get_logger(__name__)
 

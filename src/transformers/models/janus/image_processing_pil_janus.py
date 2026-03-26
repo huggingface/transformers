@@ -16,6 +16,7 @@
 from collections.abc import Iterable
 
 import numpy as np
+import PIL
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -34,15 +35,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
-    is_vision_available,
 )
+from ...utils.import_utils import requires
 from .image_processing_janus import JanusImageProcessorKwargs
-
-
-import PIL
 
 
 @requires(backends=("vision", "torch", "torchvision"))
