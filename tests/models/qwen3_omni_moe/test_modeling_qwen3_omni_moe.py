@@ -675,6 +675,29 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
             _ = config.use_sliding_window
 
 
+import threading
+import psutil
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+def log_memory_usage(stop_event, interval=1):
+    process = psutil.Process(os.getpid())
+    while not stop_event.is_set():
+        vm = psutil.virtual_memory()
+        process_mem = process.memory_info().rss / 1024**3
+        logger.warning(
+            f"[Memory] "
+            f"total={vm.total / 1024**3:.2f}GB, "
+            f"used={vm.used / 1024**3:.2f}GB, "
+            f"free={vm.free / 1024**3:.2f}GB, "
+            f"available={vm.available / 1024**3:.2f}GB, "
+            f"process_rss={process_mem:.2f}GB",
+        )
+        stop_event.wait(interval)
+
+
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -685,6 +708,15 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        stop_event = threading.Event()
+        monitor_thread = threading.Thread(target=log_memory_usage, args=(stop_event,), daemon=True)
+        monitor_thread.start()
+
+        try:
+            model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            )
+            # ... rest of test
+        finally:
+            stop_event.set()
+            monitor_thread.join()
