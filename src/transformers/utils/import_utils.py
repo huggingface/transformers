@@ -1168,7 +1168,7 @@ def is_soundfile_available() -> bool:
 
 @lru_cache
 def is_timm_available() -> bool:
-    return is_torch_available() and _is_package_available("timm")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
 
 
 @lru_cache
