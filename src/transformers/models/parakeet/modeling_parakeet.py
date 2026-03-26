@@ -637,7 +637,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         return ParakeetEncoderModelOutput(
             last_hidden_state=hidden_states,
-            attention_mask=output_mask if attention_mask is not None and output_attention_mask else None,
+            attention_mask=output_mask.int() if attention_mask is not None and output_attention_mask else None,
         )
 
 
