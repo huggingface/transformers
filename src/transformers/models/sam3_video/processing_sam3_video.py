@@ -29,7 +29,7 @@ from ...video_utils import VideoInput
 from .modeling_sam3_video import Sam3VideoInferenceSession
 
 
-@requires(backends=("torch",))
+@requires(backends=("torch", "torchvision"))
 @auto_docstring
 class Sam3VideoProcessor(ProcessorMixin):
     def __init__(
