@@ -311,9 +311,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             language="en",
         )
-        model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device
-        )
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -338,9 +336,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False
         )
 
-        model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device
-        )
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
         inputs_pnc.to(model.device, dtype=model.dtype)
         inputs_nopnc.to(model.device, dtype=model.dtype)
 
@@ -370,9 +366,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(audio=audio, return_tensors="pt", language="en", sampling_rate=16000)
         audio_chunk_index = inputs.get("audio_chunk_index")
-        model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device
-        )
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -402,9 +396,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
         audio_chunk_index = inputs.get("audio_chunk_index")
-        model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device
-        )
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -430,9 +422,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             sampling_rate=16000,
         )
         inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
-        model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, device_map=torch_device
-        )
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)

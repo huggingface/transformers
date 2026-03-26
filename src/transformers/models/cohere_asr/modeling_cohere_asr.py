@@ -309,7 +309,6 @@ class CohereAsrPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
-    # TODO arthur, how do we separate when it cross / self coming from different layer?
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
