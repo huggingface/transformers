@@ -13,7 +13,7 @@ jobs:
   anti-slop:
     runs-on: ubuntu-latest
     steps:
-      - uses: peakoss/anti-slop@v0
+      - uses: peakoss/anti-slop@v0.2.1
         with:
           # -- Failure threshold --
           # Require at least 2 failed checks before labeling to reduce false positives
