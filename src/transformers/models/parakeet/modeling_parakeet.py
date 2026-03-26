@@ -975,7 +975,7 @@ class ParakeetTDTGenerateOutput(ModelOutput):
 
 
 @dataclass
-class ParakeetTDTOutput(ModelOutput):
+class ParakeetTDTOutput(BaseModelOutputWithPooling):
     """
     Output of the Parakeet TDT forward pass.
 
@@ -985,8 +985,8 @@ class ParakeetTDTOutput(ModelOutput):
         logits (`torch.FloatTensor`):
             Joint token and duration logits. Shape is `(batch, T, U+1, vocab+durations)` for training
             or `(batch, 1, 1, vocab+durations)` for single-step inference.
-        encoder_outputs (`ParakeetEncoderModelOutput`, *optional*):
-            Encoder outputs with `pooler_output` containing projected hidden states.
+        attention_mask (`torch.Tensor`, *optional*):
+            Encoder output attention mask after subsampling.
         decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
             Decoder LSTM cache containing hidden state, cell state, and decoder output.
             Updated in-place during generation.
@@ -994,7 +994,7 @@ class ParakeetTDTOutput(ModelOutput):
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    encoder_outputs: "ParakeetEncoderModelOutput | None" = None
+    attention_mask: torch.Tensor | None = None
     decoder_cache: ParakeetTDTDecoderCache | None = None
 
 
@@ -1145,6 +1145,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     def get_audio_features(
         self,
         input_features: torch.Tensor,
@@ -1166,7 +1167,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
-        encoder_outputs: ParakeetEncoderModelOutput | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
         encoder_frame_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetTDTDecoderCache | None = None,
         decoder_cache_update_mask: torch.BoolTensor | None = None,
@@ -1177,8 +1178,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        encoder_outputs (`ParakeetEncoderModelOutput`, *optional*):
-            Pre-computed encoder outputs with `pooler_output` containing projected hidden states.
+        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+            Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
+            Can be a tuple or `ParakeetEncoderModelOutput`.
         encoder_frame_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Encoder frame indices for the joint network during generation.
         decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
@@ -1221,6 +1223,14 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 input_features=input_features,
                 attention_mask=attention_mask,
                 **kwargs,
+            )
+        elif not isinstance(encoder_outputs, ParakeetEncoderModelOutput):
+            encoder_outputs = ParakeetEncoderModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                pooler_output=encoder_outputs[1],
+                hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
+                attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
             )
         projected_encoder_output = encoder_outputs.pooler_output
 
@@ -1282,7 +1292,11 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         return ParakeetTDTOutput(
             loss=loss,
             logits=logits,
-            encoder_outputs=encoder_outputs,
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+            pooler_output=encoder_outputs.pooler_output,
+            attention_mask=encoder_outputs.attention_mask,
             decoder_cache=decoder_cache,
         )
 
@@ -1339,6 +1353,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
 
         # Initial forward: encode + decoder initialization
+        kwargs.setdefault("output_attention_mask", True)
         outputs = model_forward(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -1346,15 +1361,22 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        encoder_outputs = outputs.encoder_outputs
-        decoder_cache = outputs.decoder_cache
-        batch_size, sequence_length = encoder_outputs.pooler_output.shape[:2]
-        device = encoder_outputs.pooler_output.device
 
-        # TODO use encoder attention mask like in loss computation?
-        if attention_mask is not None:
-            encoder_attention_mask = self._get_output_attention_mask(attention_mask, target_length=sequence_length)
-            valid_lengths = encoder_attention_mask.sum(dim=1).int()
+        # Reconstruct encoder_outputs for subsequent forward calls
+        encoder_outputs = ParakeetEncoderModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            pooler_output=outputs.pooler_output,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            attention_mask=outputs.attention_mask,
+        )
+        decoder_cache = outputs.decoder_cache
+        batch_size, sequence_length = outputs.pooler_output.shape[:2]
+        device = outputs.pooler_output.device
+
+        # Use encoder attention mask for valid lengths
+        if outputs.attention_mask is not None:
+            valid_lengths = outputs.attention_mask.sum(dim=1).int()
         else:
             valid_lengths = torch.full((batch_size,), sequence_length, dtype=torch.int, device=device)
 
@@ -1439,8 +1461,8 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
                 sequences=sequences,
                 token_timestamps=token_timestamps,
                 token_durations=token_durations,
-                attentions=encoder_outputs.attentions,
-                hidden_states=encoder_outputs.hidden_states,
+                attentions=outputs.attentions,
+                hidden_states=outputs.hidden_states,
             )
         return sequences
 
