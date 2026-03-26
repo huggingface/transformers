@@ -59,6 +59,11 @@ To train a new IDEFICS model from scratch use the m4 codebase (a link will be pr
 [[autodoc]] IdeficsImageProcessor
     - preprocess
 
+## IdeficsImageProcessorPil
+
+[[autodoc]] IdeficsImageProcessorPil
+    - preprocess
+
 ## IdeficsProcessor
 
 [[autodoc]] IdeficsProcessor

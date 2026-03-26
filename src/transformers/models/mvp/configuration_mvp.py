@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="RUCAIBox/mvp")
-@strict(accept_kwargs=True)
+@strict
 class MvpConfig(PreTrainedConfig):
     r"""
     use_prompt (`bool`, *optional*, defaults to `False`):
@@ -74,7 +74,7 @@ class MvpConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     is_encoder_decoder: int = True
     decoder_start_token_id: int | None = 2
     use_prompt: bool = False

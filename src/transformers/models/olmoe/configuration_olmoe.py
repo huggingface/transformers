@@ -19,7 +19,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/OLMoE-1B-7B-0924")
-@strict(accept_kwargs=True)
+@strict
 class OlmoeConfig(PreTrainedConfig):
     r"""
     clip_qkv (`float`, *optional*):
@@ -37,7 +37,8 @@ class OlmoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "olmoe"
     keys_to_ignore_at_inference = ["past_key_values"]

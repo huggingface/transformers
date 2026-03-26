@@ -189,9 +189,9 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 [[autodoc]] ChameleonImageProcessor
     - preprocess
 
-## ChameleonImageProcessorFast
+## ChameleonImageProcessorPil
 
-[[autodoc]] ChameleonImageProcessorFast
+[[autodoc]] ChameleonImageProcessorPil
     - preprocess
 
 ## ChameleonVQVAE

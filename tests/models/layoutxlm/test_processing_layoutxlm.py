@@ -30,10 +30,10 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
-    from transformers import LayoutLMv2ImageProcessor
+    from transformers import LayoutLMv2ImageProcessorPil
 
-if is_torchvision_available():
-    from transformers import LayoutLMv2ImageProcessorFast
+    if is_torchvision_available():
+        from transformers import LayoutLMv2ImageProcessor, LayoutLMv2ImageProcessorPil
 
 
 @require_pytesseract
@@ -86,7 +86,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorPil)
 
         # fast tokenizer and image processor
         tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
@@ -100,7 +100,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorFast)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     @slow
     def test_overflowing_tokens(self):

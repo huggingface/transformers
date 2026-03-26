@@ -193,7 +193,6 @@ class Mamba2ModelTester:
             input_ids[:, :-1],
             attention_mask=attention_mask[:, :-1],
             use_cache=True,
-            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
         )
         output_one = outputs.last_hidden_state
 
@@ -203,7 +202,6 @@ class Mamba2ModelTester:
             attention_mask=attention_mask[:, -1:],
             use_cache=True,
             cache_params=outputs.cache_params,
-            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
         )
         output_two = outputs.last_hidden_state
 

@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/vitdet-base-patch16-224")
-@strict(accept_kwargs=True)
+@strict
 class VitDetConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -34,6 +34,7 @@ class VitDetConfig(BackboneConfigMixin, PreTrainedConfig):
         Whether to add relative position embeddings to the attention maps.
     window_size (`int`, *optional*, defaults to 0):
         The size of the attention window.
+
     Example:
 
     ```python

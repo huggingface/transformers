@@ -72,7 +72,7 @@ class Sam2VideoMaskDecoderConfig(Sam2MaskDecoderConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
-@strict(accept_kwargs=True)
+@strict
 class Sam2VideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
@@ -122,7 +122,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the Rope positional encoding.
+        The dropout rate for the Rope positional encoding.
     memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
         Dimensionality of the memory encoder hidden states.
     memory_encoder_output_channels (`int`, *optional*, defaults to 64):

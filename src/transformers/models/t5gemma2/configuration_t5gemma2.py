@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2TextConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -137,7 +137,7 @@ class T5Gemma2TextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2EncoderConfig(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
@@ -206,7 +206,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2DecoderConfig(PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -312,7 +312,7 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2Config(PreTrainedConfig):
     r"""
     encoder (`Union[T5Gemma2EncoderConfig, dict]`, optional, *optional*):

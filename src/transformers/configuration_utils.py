@@ -19,7 +19,8 @@ import json
 import math
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass, fields
+from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 
 from huggingface_hub import create_repo
@@ -68,6 +69,46 @@ ALLOWED_LAYER_TYPES = (
     "sparse",
     "dense",
 )
+
+
+# copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
+def wrap_init_to_accept_kwargs(cls: dataclass):
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def __init__(self, *args, **kwargs: Any) -> None:
+        # Extract only the fields that are part of the dataclass
+        dataclass_fields = {f.name for f in fields(cls)}
+        standard_kwargs = {k: v for k, v in kwargs.items() if k in dataclass_fields}
+
+        # We need to call bare `__init__` without `__post_init__` but the `original_init` of
+        # any dataclas contains a call to post-init at the end (without kwargs)
+        if len(args) > 0:
+            raise ValueError(
+                f"{cls.__name__} accepts only keyword arguments, but found `{len(args)}` positional args."
+            )
+
+        for f in fields(cls):  # type: ignore
+            if f.name in standard_kwargs:
+                setattr(self, f.name, standard_kwargs[f.name])
+            elif f.default is not MISSING:
+                setattr(self, f.name, f.default)
+            elif f.default_factory is not MISSING:
+                setattr(self, f.name, f.default_factory())
+            else:
+                raise TypeError(f"Missing required field - '{f.name}'")
+
+        # Pass any additional kwargs to `__post_init__` and let the object
+        # decide whether to set the attr or use for different purposes (e.g. BC checks)
+        additional_kwargs = {}
+        for name, value in kwargs.items():
+            if name not in dataclass_fields:
+                additional_kwargs[name] = value
+
+        self.__post_init__(**additional_kwargs)
+
+    cls.__init__ = __init__
+    return cls
 
 
 @strict(accept_kwargs=True)
@@ -161,6 +202,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             `float16` weights.
     """
 
+    # Class attributes that we don't want to save or have in `self.__dict__`
+    # They are not supposed to be set/changed by users. Each field is set when
+    # creating a model class
     base_config_key: ClassVar[str] = ""
     sub_configs: ClassVar[dict[str, type["PreTrainedConfig"]]] = {}
     has_no_defaults_at_init: ClassVar[bool] = False
@@ -171,10 +215,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     base_model_ep_plan: ClassVar[dict[str, Sequence[list[str]]] | None] = None
     _auto_class: ClassVar[str | None] = None
 
-    # Attributes set for all models internally when saving
+    # Attributes set internally when saving and used to infer model
+    # class for `Auto` mapping
     model_type: ClassVar[str] = ""
-    transformers_version: ClassVar[str | None] = None
-    architectures: ClassVar[list[str] | None] = None
+    transformers_version: str | None = None
+    architectures: list[str] | None = None
 
     # Common attributes for all models
     output_hidden_states: bool | None = False
@@ -187,9 +232,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     id2label: dict[int, str] | dict[str, str] | None = None
     label2id: dict[str, int] | dict[str, str] | None = None
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
-
-    # Tokenizer kwargs
-    tokenizer_class: str | None = None
 
     def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
@@ -247,7 +289,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
+        cls_has_custom_init = "__init__" in cls.__dict__
         cls = dataclass(cls, repr=False)
+
+        if not cls_has_custom_init:
+            # Wrap all subclasses to accept arbitrary kwargs for BC
+            # only if the subclass has no custom `__init__`. Most
+            # remote code has an init defined, but some model are not
+            # See https://huggingface.co/hmellor/Ilama-3.2-1B/blob/main/configuration_ilama.py
+            cls = wrap_init_to_accept_kwargs(cls)
 
     @property
     def name_or_path(self) -> str | None:
@@ -499,7 +549,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                   huggingface.co.
                 - a path to a *directory* containing a configuration file saved using the
                   [`~PreTrainedConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
-                - a path or url to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
+                - a path to a saved configuration JSON *file*, e.g., `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -1265,3 +1315,18 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 
 # The alias is only here for BC - we did not have the correct CamelCasing before
 PretrainedConfig = PreTrainedConfig
+
+
+def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
+    logger.warning(
+        "`layer_type_validation` is deprecated and will be removed in v5.20. "
+        "Use `PreTrainedConfig.validate_layer_type` instead"
+    )
+
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        raise ValueError(
+            f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
+            f"({len(layer_types)})"
+        )

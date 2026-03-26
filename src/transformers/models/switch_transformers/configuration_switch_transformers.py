@@ -22,15 +22,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/switch-base-8")
-@strict(accept_kwargs=True)
+@strict
 class SwitchTransformersConfig(PreTrainedConfig):
     r"""
     num_sparse_encoder_layers (`int`, *optional*, defaults to 3):
         Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
         Note: When set to 0 with `num_layers=1`, the current implementation may still create a sparse layer
         due to the sparse step calculation. This edge case is not encountered in existing checkpoints.
-    num_decoder_layers (`int`, *optional*, defaults to 12):
-        Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
     num_sparse_decoder_layers (`int`, *optional*, defaults to 3):
         Number of sparse (MoE) dense hidden layers in the Transformer decoder layer.
         Note: When set to 0 with `num_decoder_layers=1`, the current implementation may still create a sparse
@@ -84,7 +82,7 @@ class SwitchTransformersConfig(PreTrainedConfig):
     add_router_probs: bool = False
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     bos_token_id: int | None = None
     tie_word_embeddings: bool = True
     is_decoder: bool = False

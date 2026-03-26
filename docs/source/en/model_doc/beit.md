@@ -142,9 +142,9 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
-## BeitImageProcessorFast
+## BeitImageProcessorPil
 
-[[autodoc]] BeitImageProcessorFast
+[[autodoc]] BeitImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
 
