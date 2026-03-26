@@ -3970,9 +3970,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "`distributed_config` and `device_map` are mutually exclusive. "
                     "`distributed_config` handles device placement natively via torch.distributed."
                 )
+            # NOTE(3outeille): support quantization (fp4/fp8) with distributed training later
             if quantization_config is not None:
                 raise ValueError(
-                    "`distributed_config` and `quantization_config` are not yet compatible. Use one or the other."
+                    "Quantization is not currently supported with distributed training. Please disable quantization or distributed_config."
                 )
 
         # Not used anymore -- remove them from the kwargs
@@ -4144,11 +4145,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if torch.distributed.is_initialized() and device_mesh is not None:
                 model = distribute_model(model, distributed_config, device_mesh)
         else:
-            # Accelerate path: optional TP hooks, then accelerate auto device mapping
-            if isinstance(device_map, dict):
+            # Accelerate path: auto device mapping
+            if device_map is not None:
                 device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-            elif device_map is not None:
-                device_map = {"": device_map}
 
         # Finalize model weight initialization
         active_tp_plan = getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_plan", None) else None
@@ -4174,8 +4173,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
-        # TODO(3outeille): will be apply during meta. Will be fixed later. For now, we just apply FSDP2 after weight loading
-        if distributed_config is not None and distributed_config.fsdp_plan is not None:
+        # TODO(3outeille): will be applied during meta once weight loader supports FSDP-managed params.
+        # For now, apply FSDP2 after weight loading. Only on the native distributed path (never accelerate).
+        if (
+            distributed_config is not None
+            and distributed_config.fsdp_plan is not None
+            and not getattr(model, "_is_fsdp_managed_module", False)
+        ):
             model = apply_fsdp2(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,

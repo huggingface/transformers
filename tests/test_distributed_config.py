@@ -1,7 +1,7 @@
 import json
 import tempfile
 
-from transformers import DistributedConfig
+from transformers.distributed import DistributedConfig
 
 
 class TestDistributedConfig:

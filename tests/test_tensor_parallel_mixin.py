@@ -16,6 +16,7 @@ import tempfile
 from abc import ABC, abstractmethod
 
 from transformers import TorchAoConfig, set_seed
+from transformers.distributed import DistributedConfig
 from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
 from transformers.testing_utils import (
     is_tensor_parallel_test,
@@ -117,7 +118,7 @@ def _load_tp_and_reference_models(model_path, model_class):
     Returns:
         tuple: (model_tp, model_ref, device)
     """
-    model_tp = model_class.from_pretrained(model_path, tp_plan="auto")
+    model_tp = model_class.from_pretrained(model_path, distributed_config=DistributedConfig(tp_plan="auto"))
     dist.barrier()
 
     device = model_tp.device
@@ -296,7 +297,9 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
 
     quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
 
-    model_tp = model_class.from_pretrained(model_path, tp_plan="auto", quantization_config=quantization_config)
+    model_tp = model_class.from_pretrained(
+        model_path, distributed_config=DistributedConfig(tp_plan="auto"), quantization_config=quantization_config
+    )
     dist.barrier()
 
     device = model_tp.device
