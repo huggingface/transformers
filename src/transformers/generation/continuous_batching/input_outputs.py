@@ -281,6 +281,14 @@ class ContinuousBatchingIOs:
             self.write_index_storage[:, :q_len].fill_(-2)  # -1 is used to let the cache where new states go
             self.read_index_storage[:, : q_len + kv_len].fill_(-2)  # same
 
+    def reset(self) -> None:
+        """Reset all relevant states for a new generation loop."""
+        self._reset_static_tensors(full_reset=True)
+        self.requests_in_batch = []
+        self.req_id_to_new_token_position = {}
+        if self.compute_stream is not None:
+            self.compute_stream.synchronize()
+
     # These getter function help create a common interface for the sync and async IOs
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Get the cumulative sequence lengths for the current batch."""
@@ -530,6 +538,13 @@ class HostDeviceIOPair:
         self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
         self.d2h_over = torch.cuda.Event() if torch.cuda.is_available() else None
 
+    def reset(self) -> None:
+        self.host_io.reset()
+        self.device_io.reset()
+        self.h2d_over.synchronize()
+        self.compute_over.synchronize()
+        self.d2h_over.synchronize()
+
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
 
@@ -721,3 +736,12 @@ class ContinuousBatchingAsyncIOs:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
+
+    def reset(self) -> None:
+        """Reset all state for a new generation session. Used in persistent mode between sessions."""
+        self.current_pair = 0
+        for io_pair in self.io_pairs:
+            io_pair.reset()
+        self.h2d_stream.synchronize()
+        self.d2h_stream.synchronize()
+        self.compute_stream.synchronize()

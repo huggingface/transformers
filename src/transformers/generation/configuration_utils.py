@@ -1642,6 +1642,9 @@ class ContinuousBatchingConfig:
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
 
+    # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
+    scheduler_type: str = "fifo"
+
     def account_for_cb_deprecated_arguments(
         self,
         max_queue_size: int = 0,
