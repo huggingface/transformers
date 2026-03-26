@@ -92,6 +92,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cohere", "CohereModel"),
         ("cohere2", "Cohere2Model"),
         ("cohere2_vision", "Cohere2VisionModel"),
+        ("cohere_asr", "CohereAsrModel"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),

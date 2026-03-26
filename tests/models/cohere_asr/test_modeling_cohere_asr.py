@@ -279,7 +279,7 @@ class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
 @require_torch
 class CohereAsrIntegrationTest(unittest.TestCase):
-    checkpoint_name = "converted-cohere-asr"
+    checkpoint_name = "/home/eustache_lebihan/cohere-asr/converted-cohere-asr"
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
@@ -293,7 +293,10 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
         """
-        audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3", sampling_rate=16000)
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+            sampling_rate=16000,
+        )
         inputs = self.processor(
             audio,
             sampling_rate=16000,
@@ -306,7 +309,9 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         outputs = self.model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [" Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."]
+        EXPECTED_OUTPUT = [
+            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
+        ]
         self.assertEqual(text, EXPECTED_OUTPUT)
 
     @slow
@@ -314,7 +319,10 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
         """
-        audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3", sampling_rate=16000)
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+            sampling_rate=16000,
+        )
         inputs_pnc = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=True)
         inputs_nopnc = self.processor(
             audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False
@@ -331,8 +339,12 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         text_pnc = self.processor.decode(outputs_pnc, skip_special_tokens=True)
         text_nopnc = self.processor.decode(outputs_nopnc, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_PNC = [" Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."]
-        EXPECTED_OUTPUT_NOPNC = [" yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"]
+        EXPECTED_OUTPUT_PNC = [
+            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
+        ]
+        EXPECTED_OUTPUT_NOPNC = [
+            " yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"
+        ]
         self.assertEqual(text_pnc, EXPECTED_OUTPUT_PNC)
         self.assertEqual(text_nopnc, EXPECTED_OUTPUT_NOPNC)
 
@@ -341,7 +353,10 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
         """
-        audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3", sampling_rate=16000)
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
+            sampling_rate=16000,
+        )
         inputs = self.processor(audio=audio, return_tensors="pt", language="en", sampling_rate=16000)
         audio_chunk_index = inputs.pop("audio_chunk_index")
         inputs.to(self.model.device)
@@ -363,14 +378,22 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
         """
-        audio_short = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3", sampling_rate=16000)
-        audio_long = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3", sampling_rate=16000)
+        audio_short = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+            sampling_rate=16000,
+        )
+        audio_long = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3",
+            sampling_rate=16000,
+        )
         inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
         audio_chunk_index = inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)
 
         outputs = self.model.generate(**inputs, max_new_tokens=256)
-        text = self.processor.decode(outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en")
+        text = self.processor.decode(
+            outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en"
+        )
 
         # fmt: off
         EXPECTED_OUTPUT = [
@@ -388,7 +411,10 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         due to compute diffs:
         expected output: Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?
         """
-        audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/fleur_es_sample.wav", sampling_rate=16000)
+        audio = load_audio(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/fleur_es_sample.wav",
+            sampling_rate=16000,
+        )
         inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
         inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)

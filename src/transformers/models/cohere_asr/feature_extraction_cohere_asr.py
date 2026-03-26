@@ -58,7 +58,7 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
             A preemphasis filter coefficient. 0.0 means no preemphasis filter.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
-        dither (`float`, *optional*, defaults to 1e-5):
+        dither (`float`, *optional*, defaults to 1e-05):
             Amount of deterministic dither noise to add before feature extraction. Each sample is seeded by its
             valid waveform length so that dither is batch-composition invariant. Set to 0.0 to disable.
         max_audio_clip_s (`float`, *optional*, defaults to 35.0):

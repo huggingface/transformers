@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-import torch
-
 from ...utils import auto_docstring, logging
 
 
@@ -83,13 +83,13 @@ class CohereAsrProcessor(ProcessorMixin):
         language (`str`):
             Language code (e.g. `"en"`, `"es"`, `"fr"`) used to build the decoder prompt. The processor
             constructs the full decoder prompt and returns `decoder_input_ids` alongside the audio features.
+        punctuation (`bool`, defaults to `True`):
+            Whether to enable punctuation in the decoder prompt.
         sampling_rate (`int`, *optional*):
             The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
             extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
-        punctuation (`bool`, defaults to `True`):
-            Whether to enable punctuation in the decoder prompt.
         """
         audio = make_list_of_audio(audio)
 

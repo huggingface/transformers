@@ -21,12 +21,10 @@ from ..auto import CONFIG_MAPPING
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 
 
-@auto_docstring
+@auto_docstring(checkpoint="TODO")
 @strict(accept_kwargs=True)
 class CohereAsrConfig(PreTrainedConfig):
     r"""
-    pad_head_dim_to_multiple_of (<fill_type>):
-        <fill_docstring>
     Example:
 
     ```python
@@ -80,7 +78,6 @@ class CohereAsrConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
     decoder_start_token_id: int | None = None
-    pad_head_dim_to_multiple_of: int | None = None
     tie_word_embeddings: bool = False
     head_dim: int | None = None
 
