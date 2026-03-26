@@ -183,6 +183,8 @@ if PYTHON_MINOR_VERSION < 13:
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli")
+extras["docs"] = deps_list("hf-doc-builder")
+extras["doc"] = extras["docs"]
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
@@ -230,10 +232,10 @@ extras["testing"] = (
         "rjieba",
         "beautifulsoup4",
         "tensorboard",
-        "hf-doc-builder",
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
+    + extras["docs"]
     + extras["quality"]
     + extras["retrieval"]
     + extras["sentencepiece"]

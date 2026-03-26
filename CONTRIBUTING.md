@@ -394,7 +394,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    make sure you install the [documentation builder](https://github.com/huggingface/doc-builder).
 
    ```bash
-   pip install hf-doc-builder
+   pip install ".[docs]"
    ```
 
    Run the following command from the root of the repository:
