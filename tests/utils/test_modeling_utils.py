@@ -2949,6 +2949,53 @@ class TestAttentionImplementation(unittest.TestCase):
 
 
 @require_torch
+class TestCanSetImplementationWithMissingSysModule(unittest.TestCase):
+    """Regression test for https://github.com/huggingface/transformers/issues/45003.
+
+    When a module is absent from sys.modules (e.g. lazy loaders, frozen importers),
+    _can_set_attn_implementation and _can_set_experts_implementation should return
+    False instead of raising a KeyError.
+    """
+
+    def test_can_set_attn_implementation_missing_sys_module(self):
+        from transformers.models.clip.modeling_clip import CLIPTextModel
+
+        module_key = CLIPTextModel.__module__
+        original = sys.modules.pop(module_key, None)
+        try:
+            result = CLIPTextModel._can_set_attn_implementation()
+            self.assertFalse(result)
+        finally:
+            if original is not None:
+                sys.modules[module_key] = original
+
+    def test_can_set_experts_implementation_missing_sys_module(self):
+        from transformers.models.clip.modeling_clip import CLIPTextModel
+
+        module_key = CLIPTextModel.__module__
+        original = sys.modules.pop(module_key, None)
+        try:
+            result = CLIPTextModel._can_set_experts_implementation()
+            self.assertFalse(result)
+        finally:
+            if original is not None:
+                sys.modules[module_key] = original
+
+    def test_model_init_with_missing_sys_module(self):
+        from transformers.models.clip.modeling_clip import CLIPTextConfig, CLIPTextModel
+
+        module_key = CLIPTextModel.__module__
+        original = sys.modules.pop(module_key, None)
+        try:
+            config = CLIPTextConfig()
+            model = CLIPTextModel(config)
+            self.assertIsNotNone(model)
+        finally:
+            if original is not None:
+                sys.modules[module_key] = original
+
+
+@require_torch
 class TestTensorSharing(TestCasePlus):
     def test_disjoint(self):
         main = torch.zeros(10)
