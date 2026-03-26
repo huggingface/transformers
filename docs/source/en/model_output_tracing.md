@@ -5,7 +5,7 @@ Every model's `forward()` method used to manually resolve `None` flags like `out
 - `@capture_outputs` resolves output flags, collects intermediate values, and handles `return_dict` conversion.
 - `@merge_with_config_defaults` resolves `use_cache` from config. Omit it for models that don't cache, like [`CLIPModel`].
 
-These decorators are mainly involved when integrating new models. For a step-by-step guide, see [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/modular_transformers).
+You'll mostly encounter these decorators when integrating a new model. See [adding a model to 🤗 Transformers]./modular_transformers) for a step-by-step guide.
 
 ## Declare which submodules to capture
 
@@ -23,7 +23,7 @@ Apply `@capture_outputs` to the base model's `forward()` method. It attaches for
 
 ## Fine-grained control with OutputRecorder
 
-`OutputRecorder` accepts a `module_class` (an `nn.Module` subclass whose outputs to collect) and an optional `index` to select which element of the module's output tuple to get. Pass `layer_name` to attach hooks only to modules with a specific attribute name. Use `layer_name` when two layers share the same class, for example self-attention vs. cross-attention.
+`OutputRecorder` accepts a `target_class` (an `nn.Module` subclass whose outputs to collect) and an optional `index` to select which element of the module's output tuple to get. Pass `layer_name` to attach hooks only to modules with a specific attribute name. Use `layer_name` when two layers share the same class, for example self-attention vs. cross-attention.
 
 The exampple below shows how these decoratos are used in practice, including different levels output control. See [LlamaModel](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py) for real world usage in codebase.
 
