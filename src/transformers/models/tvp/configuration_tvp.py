@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="Intel/tvp-base")
-@strict(accept_kwargs=True)
+@strict
 class TvpConfig(PreTrainedConfig):
     r"""
     distance_loss_weight (`float`, *optional*, defaults to 1.0):

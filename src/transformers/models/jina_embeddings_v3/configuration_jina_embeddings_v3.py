@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="jinaai/jina-embeddings-v3-hf")
-@strict(accept_kwargs=True)
+@strict
 class JinaEmbeddingsV3Config(PreTrainedConfig):
     r"""
     Examples:
