@@ -111,8 +111,6 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv pip install ."]
-        # The prebuilt CircleCI images can lag behind changes in doc-builder, so install it explicitly.
-        self.install_steps.append("uv pip install git+https://github.com/huggingface/doc-builder.git@main")
         # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded`
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         # Install pytest-random-order plugin for test randomization
