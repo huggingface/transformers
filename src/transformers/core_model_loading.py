@@ -876,27 +876,25 @@ class FSDPShardOperation:
     rank: int
     empty_param: Any
     placements: tuple[Any, ...]
+    shard_placements_with_dim_idx: list = field(init=False, default_factory=list)
     shard_placement: Any | None = field(init=False, default=None)
     local_shape: tuple[int, ...] = field(init=False)
 
     def __post_init__(self):
-        shard_placements = [placement for placement in self.placements if placement.is_shard()]
-        if len(shard_placements) > 1:
-            raise NotImplementedError(
-                f"FSDP shard-on-read does not support multiple shard placements yet: {self.placements}"
-            )
-        self.shard_placement = shard_placements[0] if shard_placements else None
-        if self.shard_placement is not None and len(self.placements) != 1:
-            raise NotImplementedError(
-                f"FSDP shard-on-read only supports a single placement today. Got placements={self.placements}."
-            )
+        self.shard_placements_with_dim_idx = [
+            (i, placement) for i, placement in enumerate(self.placements) if placement.is_shard()
+        ]
+        # Keep single shard_placement for backward compat with 1D case
+        self.shard_placement = self.shard_placements_with_dim_idx[0][1] if self.shard_placements_with_dim_idx else None
         self.local_shape = self.get_expected_sharded_shape(self.empty_param.shape)
 
     @classmethod
     def from_param(cls, param: Any) -> FSDPShardOperation:
+        mesh = param.device_mesh
+        rank = mesh.get_local_rank() if mesh.ndim == 1 else 0  # rank per-dim handled in shard_tensor
         return cls(
-            device_mesh=param.device_mesh,
-            rank=param.device_mesh.get_local_rank(),
+            device_mesh=mesh,
+            rank=rank,
             empty_param=param,
             placements=tuple(param.placements),
         )
@@ -904,16 +902,17 @@ class FSDPShardOperation:
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
-        if self.shard_placement is None:
+        if not self.shard_placements_with_dim_idx:
             local_tensor = param[...]
-        else:
+        elif len(self.shard_placements_with_dim_idx) == 1:
+            # Single shard placement (1D: TP-only or FSDP-only)
             param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
-            # Mixtral-style converted expert weights first stack individual expert tensors along dim 0 before
-            # concatenating. Only materialize the experts owned by this rank.
+            shard_placement = self.shard_placements_with_dim_idx[0][1]
+            # Mixtral-style converted expert weights
             if (
                 tensor_idx is not None
                 and len(self.empty_param.shape) == len(param_shape) + 1
-                and self.shard_placement.dim == 0
+                and shard_placement.dim == 0
             ):
                 local_expert_count = self.local_shape[0]
                 expert_offset = compute_local_shape_and_global_offset(
@@ -928,9 +927,20 @@ class FSDPShardOperation:
                     self.empty_param,
                     self.device_mesh,
                     self.rank,
-                    self.shard_placement.dim,
+                    shard_placement.dim,
                     tensor_idx=tensor_idx,
                 )
+        else:
+            # Multiple shard placements (2D: TP+FSDP) — shard each dim sequentially
+            local_tensor = param[...] if not isinstance(param, torch.Tensor) else param
+            for mesh_dim_idx, placement in self.shard_placements_with_dim_idx:
+                sub_mesh = self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim_idx]]
+                rank = sub_mesh.get_local_rank()
+                size = sub_mesh.size()
+                shard_dim = placement.dim
+                chunk_size = local_tensor.shape[shard_dim] // size
+                local_tensor = local_tensor.narrow(shard_dim, rank * chunk_size, chunk_size).contiguous()
+
         if local_tensor is None:
             return None
         return local_tensor.to(device=device, dtype=dtype)
@@ -960,6 +970,8 @@ def get_parallel_materialization_context(
         else None
     )
 
+    tp_op = None
+    # Check if TP shard-on-read applies to this param
     if (
         device_mesh
         and parallel_plan
@@ -968,16 +980,28 @@ def get_parallel_materialization_context(
     ):
         if matched_parallel_pattern := parallel_pattern_matcher.search(renamed_key):
             matched_parallel_pattern = parallel_pattern_by_group_name[matched_parallel_pattern.lastgroup]
-            if getattr(mapping, "distributed_operation", None) is None:
-                parallel_layer = ALL_PARALLEL_STYLES[parallel_plan[matched_parallel_pattern]].__class__
-                mapping.distributed_operation = parallel_layer(
-                    device_mesh=device_mesh["tp"],
-                    rank=device_mesh["tp"].get_local_rank(),
-                    empty_param=empty_param.clone(),
-                )
-            return ParallelMaterializationContext(mapping.distributed_operation, tensor_idx, device_map[""])
+            tp_mesh = (
+                device_mesh["tp"]
+                if device_mesh.ndim > 1 and "tp" in (device_mesh.mesh_dim_names or ())
+                else device_mesh
+            )
+            parallel_layer = ALL_PARALLEL_STYLES[parallel_plan[matched_parallel_pattern]].__class__
+            tp_op = parallel_layer(
+                device_mesh=tp_mesh,
+                rank=tp_mesh.get_local_rank(),
+                empty_param=empty_param.clone()
+                if not is_dtensor_like(empty_param)
+                else empty_param.to_local().clone(),
+            )
 
-    if is_dtensor_like(empty_param):
+    # Compose or use individually
+    if tp_op is not None and not is_dtensor_like(empty_param):
+        # TP-only
+        if getattr(mapping, "distributed_operation", None) is None:
+            mapping.distributed_operation = tp_op
+        return ParallelMaterializationContext(mapping.distributed_operation, tensor_idx, device_map.get("", "cpu"))
+    elif is_dtensor_like(empty_param):
+        # FSDP-only (no TP match, but param is DTensor from fully_shard)
         if getattr(mapping, "distributed_operation", None) is None:
             mapping.distributed_operation = FSDPShardOperation.from_param(empty_param)
         return ParallelMaterializationContext(
@@ -1079,12 +1103,13 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP/FSDP shard-on-read, use the local shard shape; otherwise, use full shape
-        if is_dtensor_like(ref):
+        # Determine expected shape: use the distributed operation (which accounts for TP+FSDP composition),
+        # or fall back to DTensor local shape for FSDP-only, or full shape for plain loading.
+        if distributed_operation is not None:
+            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
+        elif is_dtensor_like(ref):
             local_shape, _ = compute_local_shape_and_global_offset(ref.shape, ref.device_mesh, ref.placements)
             expected_shape = torch.Size(local_shape)
-        elif distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
         else:
             expected_shape = ref.shape
 
@@ -1093,6 +1118,9 @@ def set_param_for_module(
         else:
             if is_dtensor_like(ref):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
+                # ref.shape is the DTensor global shape. For DTensor-based TP+FSDP,
+                # parallelize_module + fully_shard compose correctly, so ref.shape
+                # and ref.placements are already correct for the 2D DTensor.
                 fsdp_param = DTensor.from_local(
                     local_param.contiguous(),
                     ref.device_mesh,

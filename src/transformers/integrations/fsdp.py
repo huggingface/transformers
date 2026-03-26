@@ -359,9 +359,9 @@ def _get_manual_plan_modules(fsdp_plan: dict[str, Any]) -> dict[str, list[str]]:
     return modules
 
 
-def apply_fsdp2(
+def apply_fully_shard_data_parallel(
     model,
-    device_mesh,
+    fsdp_mesh,
     fsdp_plan: dict[str, Any] | str | None,
 ):
     """
@@ -397,10 +397,10 @@ def apply_fsdp2(
     if not is_torch_greater_or_equal("2.5"):
         raise OSError("FSDP2 requires torch>=2.5")
 
-    if device_mesh is None:
-        raise ValueError("device_mesh is required for FSDP2")
+    if fsdp_plan is None:
+        return model
 
-    if isinstance(fsdp_plan, str):
+    if fsdp_plan == "auto":
         fsdp_plan = {"mode": fsdp_plan}
 
     input_embed = getattr(model, "get_input_embeddings", lambda: None)()
@@ -427,17 +427,17 @@ def apply_fsdp2(
                 "Could not auto-detect transformer block classes for FSDP. Applying FSDP only to root module."
             )
         else:
-            _auto_shard_input_embedding(input_embed, is_weights_tied, device_mesh, auto_policy_kwargs)
+            _auto_shard_input_embedding(input_embed, is_weights_tied, fsdp_mesh, auto_policy_kwargs)
 
-            _auto_shard_transformer_blocks(model, block_classes, device_mesh, auto_policy_kwargs)
+            _auto_shard_transformer_blocks(model, block_classes, fsdp_mesh, auto_policy_kwargs)
 
             tail_modules = _auto_get_tail_modules(
                 model, decoder_layer_names, input_embed, output_embed, is_weights_tied
             )
-            _auto_shard_tail_modules(tail_modules, device_mesh, auto_policy_kwargs)
+            _auto_shard_tail_modules(tail_modules, fsdp_mesh, auto_policy_kwargs)
 
         # Shard root model
-        fully_shard(model, mesh=device_mesh, **auto_policy_kwargs)
+        fully_shard(model, mesh=fsdp_mesh, **auto_policy_kwargs)
 
         logger.info(
             f"FSDP2 applied to model: {len(block_classes)} block type(s), {len(decoder_layer_names)} decoder layers"
@@ -468,7 +468,7 @@ def apply_fsdp2(
             for name, module in _iter_manual_plan_targets(model, pattern, name_to_module, already_sharded_names):
                 if name in already_sharded_names:
                     continue
-                shard_kwargs = {"mesh": device_mesh, "reshard_after_forward": reshard}
+                shard_kwargs = {"mesh": fsdp_mesh, "reshard_after_forward": reshard}
                 if mp_policy is not None:
                     shard_kwargs["mp_policy"] = mp_policy
                 if offload_policy is not None:
@@ -480,7 +480,7 @@ def apply_fsdp2(
         # Shard root model with the same policies as sub-modules.
         # MixedPrecisionPolicy.output_dtype casting happens in post_forward
         # for every fully_shard-wrapped module, even with no direct parameters.
-        fully_shard(model, mesh=device_mesh, mp_policy=root_mp_policy, offload_policy=root_offload_policy)
+        fully_shard(model, mesh=fsdp_mesh, mp_policy=root_mp_policy, offload_policy=root_offload_policy)
 
     # Used by generation code to detect FSDP and enable synced_gpus.
     model._is_fsdp_managed_module = True

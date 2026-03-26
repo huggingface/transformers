@@ -52,7 +52,7 @@ if is_torch_available():
     from transformers.distributed import DistributedConfig
     from transformers.integrations.fsdp import (
         _find_final_norm,
-        apply_fsdp2,
+        apply_fully_shard_data_parallel,
         get_transformer_block_classes,
         initialize_fsdp,
     )
@@ -518,7 +518,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
 def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_word_embeddings):
     """
-    Verify that apply_fsdp2(fsdp_plan={"mode": "auto"}) wraps exactly the right modules.
+    Verify that apply_fully_shard_data_parallel(fsdp_plan={"mode": "auto"}) wraps exactly the right modules.
 
     Expected FSDP targets:
     UNTIED                              TIED
@@ -566,7 +566,7 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
     if not weights_tied:
         expected_targets |= {output_name}
 
-    model = apply_fsdp2(model, device_mesh, fsdp_plan=auto_plan)
+    model = apply_fully_shard_data_parallel(model, device_mesh, fsdp_plan=auto_plan)
 
     actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
