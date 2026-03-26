@@ -180,6 +180,7 @@ def streaming_response(
 
     t_start = time.perf_counter()
     t_first_token = None
+    completion_tokens = None
     text_chunks = []
 
     resp = requests.post(f"{base_url}/v1/responses", json=payload, stream=True, timeout=300)
@@ -201,6 +202,8 @@ def streaming_response(
                 if t_first_token is None:
                     t_first_token = time.perf_counter()
         elif etype == "response.completed":
+            usage = chunk.get("response", {}).get("usage", {})
+            completion_tokens = usage.get("output_tokens")
             break
 
     t_end = time.perf_counter()
@@ -209,7 +212,7 @@ def streaming_response(
     return {
         "total": t_end - t_start,
         "ttft": (t_first_token - t_start) if t_first_token else None,
-        "completion_tokens": len(text_chunks),  # approximate — one chunk per streamer push
+        "completion_tokens": completion_tokens,
         "text": text,
     }
 
@@ -400,7 +403,7 @@ def print_table(rows: list[dict], title: str = "", reference_texts: dict | None 
 
 def start_server(
     model: str, port: int, processor: str | None = None, attn_implementation: str | None = None,
-    compile: bool = False,
+    compile: bool = False, continuous_batching: bool = False,
 ):
     """Start a transformers serve instance. Returns the Serve object."""
     from transformers.cli.serve_refactored import Serve
@@ -412,6 +415,8 @@ def start_server(
         kwargs["attn_implementation"] = attn_implementation
     if compile:
         kwargs["compile"] = True
+    if continuous_batching:
+        kwargs["continuous_batching"] = True
     return Serve(**kwargs)
 
 
@@ -462,6 +467,8 @@ def main():
                         help="Attention implementations to benchmark (default: sdpa eager flash_attention_2)")
     parser.add_argument("--compile", action="store_true",
                         help="Enable static cache + torch.compile on the server for faster decode")
+    parser.add_argument("--continuous-batching", action="store_true",
+                        help="Enable continuous batching with paged attention")
     parser.add_argument("--mode", type=str, choices=["bench", "chat"], default="bench",
                         help="bench: greedy (temp=0). chat: sampling (do_sample=True, temp=0.7)")
     parser.add_argument("--endpoint", type=str, choices=["chat", "responses"], default="responses",
@@ -506,7 +513,7 @@ def main():
                 print(f"\nStarting server for {spec['model']} (attn={attn_impl})...")
                 try:
                     server = start_server(spec["model"], args.port, spec["processor"], attn_implementation=attn_impl,
-                                          compile=args.compile)
+                                          compile=args.compile, continuous_batching=args.continuous_batching)
                 except Exception as e:
                     print(f"  ERROR: Failed to start server with attn={attn_impl}: {e}. Skipping.")
                     continue
@@ -519,8 +526,17 @@ def main():
 
                 tokenizer = AutoTokenizer.from_pretrained(spec["tokenizer"])
 
-                # Warmup (always dynamic cache — static cache compiles shapes, so a short warmup would break longer requests)
-                streaming_request(base_url, [{"role": "user", "content": "hi"}], max_tokens=5, seed=args.seed, endpoint=endpoint)
+                # Warmup — use non-streaming when compile is on (first compile call takes ~30s,
+                # streaming warmup can hang waiting for SSE chunks during compilation)
+                if args.compile:
+                    warmup_prompt = make_prompt(tokenizer, max(args.pp + [args.tg_prefill]))
+                    gen_cfg = {"max_new_tokens": max(args.tg), "do_sample": False}
+                    payload = {"messages": [{"role": "user", "content": warmup_prompt}], "stream": False,
+                               "seed": args.seed, "generation_config": json.dumps(gen_cfg)}
+                    print("  compile warmup (non-streaming, may take ~30s)...")
+                    requests.post(f"{base_url}/v1/chat/completions", json=payload, timeout=120)
+                else:
+                    streaming_request(base_url, [{"role": "user", "content": "hi"}], max_tokens=5, seed=args.seed, endpoint=endpoint)
 
                 rows = []
                 for pp in args.pp:

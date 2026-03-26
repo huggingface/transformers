@@ -6,18 +6,16 @@ Unlike benchmark_serve.py (single-user perf), this tests server capacity:
 - What's the latency distribution (p50/p90/p99) as concurrency increases?
 - Does the server stay stable under pressure?
 
-Modes:
-  --max-concurrency N   Send requests with up to N in flight at once
-  --request-rate R      Send R requests/sec (Poisson arrival), let them queue naturally
+Each --max-concurrency value sends that many requests simultaneously.
 
 Examples:
-    # Sweep concurrency levels (1, 2, 4, 8)
+    # Sweep concurrency levels
     python tests/cli/benchmark_serve_load.py --model Qwen/Qwen2.5-7B-Instruct \\
-        --max-concurrency 1 2 4 8 --num-requests 32
+        --max-concurrency 1 4 8 32 --continuous-batching
 
-    # Fixed request rate
+    # 500 concurrent non-streaming requests
     python tests/cli/benchmark_serve_load.py --model Qwen/Qwen2.5-7B-Instruct \\
-        --request-rate 5.0 --num-requests 50
+        --max-concurrency 500 --continuous-batching --no-stream
 
     # Against an existing server
     python tests/cli/benchmark_serve_load.py --url http://localhost:8000 \\
@@ -33,7 +31,7 @@ import statistics
 import time
 
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 import aiohttp
 
@@ -79,23 +77,27 @@ async def send_request(
     max_new_tokens: int,
     seed: int,
     endpoint: str = "responses",
+    model: str | None = None,
+    stream: bool = True,
 ) -> dict:
-    """Send a single streaming request and collect timing metrics."""
+    """Send a single request and collect timing metrics."""
     gen_cfg = {"max_new_tokens": max_new_tokens, "do_sample": False}
 
     if endpoint == "responses":
         url = f"{base_url}/v1/responses"
         payload = {
+            "model": model,
             "input": [{"role": "user", "content": prompt}],
-            "stream": True,
+            "stream": stream,
             "seed": seed,
             "generation_config": json.dumps(gen_cfg),
         }
     else:
         url = f"{base_url}/v1/chat/completions"
         payload = {
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
-            "stream": True,
+            "stream": stream,
             "seed": seed,
             "generation_config": json.dumps(gen_cfg),
         }
@@ -104,61 +106,85 @@ async def send_request(
     t_first_token = None
     token_times = []
     text_chunks = []
+    non_streaming_tokens = 0
     error = None
 
     try:
         async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=300)) as resp:
             if resp.status != 200:
-                error = f"HTTP {resp.status}"
+                error = f"HTTP {resp.status}: {await resp.text()}"
                 return _make_result(t_start, error=error)
 
-            async for line in resp.content:
-                line = line.decode("utf-8").strip()
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[len("data: "):]
-                if data_str.strip() == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-
-                # Extract token content based on endpoint format
-                has_content = False
+            if not stream:
+                # Non-streaming: single JSON response — get token count from usage
+                body = await resp.json()
+                t_first_token = time.perf_counter()
                 if endpoint == "responses":
-                    if chunk.get("type") == "response.output_text.delta":
-                        delta = chunk.get("delta", "")
-                        if delta:
-                            text_chunks.append(delta)
-                            has_content = True
-                    elif chunk.get("type") == "response.completed":
-                        break
+                    output_tokens = body.get("usage", {}).get("output_tokens", 0)
+                    for item in body.get("output", []):
+                        if item.get("type") == "message":
+                            for part in item.get("content", []):
+                                if part.get("type") == "output_text":
+                                    text_chunks.append(part.get("text", ""))
                 else:
-                    choices = chunk.get("choices", [])
-                    if choices:
-                        content = choices[0].get("delta", {}).get("content")
-                        if content is not None and content != "":
+                    output_tokens = body.get("usage", {}).get("completion_tokens", 0)
+                    for choice in body.get("choices", []):
+                        content = choice.get("message", {}).get("content", "")
+                        if content:
                             text_chunks.append(content)
-                            has_content = True
-                        if choices[0].get("finish_reason") is not None:
-                            break
+                # Use server-reported token count instead of len(text_chunks)
+                non_streaming_tokens = output_tokens
+                token_times.append(t_first_token)
+            else:
+                # Streaming: parse SSE events
+                async for line in resp.content:
+                    line = line.decode("utf-8").strip()
+                    if not line or not line.startswith("data: "):
+                        continue
+                    data_str = line[len("data: "):]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
 
-                if has_content:
-                    now = time.perf_counter()
-                    token_times.append(now)
-                    if t_first_token is None:
-                        t_first_token = now
+                    # Extract token content based on endpoint format
+                    has_content = False
+                    if endpoint == "responses":
+                        if chunk.get("type") == "response.output_text.delta":
+                            delta = chunk.get("delta", "")
+                            if delta:
+                                text_chunks.append(delta)
+                                has_content = True
+                        elif chunk.get("type") == "response.completed":
+                            break
+                    else:
+                        choices = chunk.get("choices", [])
+                        if choices:
+                            content = choices[0].get("delta", {}).get("content")
+                            if content is not None and content != "":
+                                text_chunks.append(content)
+                                has_content = True
+                            if choices[0].get("finish_reason") is not None:
+                                break
+
+                    if has_content:
+                        now = time.perf_counter()
+                        token_times.append(now)
+                        if t_first_token is None:
+                            t_first_token = now
 
     except asyncio.TimeoutError:
         error = "timeout"
     except Exception as e:
         error = str(e)
 
-    return _make_result(t_start, t_first_token, token_times, text_chunks, error)
+    output_token_count = non_streaming_tokens if not stream else None
+    return _make_result(t_start, t_first_token, token_times, text_chunks, error, output_token_count=output_token_count)
 
 
-def _make_result(t_start, t_first_token=None, token_times=None, text_chunks=None, error=None):
+def _make_result(t_start, t_first_token=None, token_times=None, text_chunks=None, error=None, output_token_count=None):
     t_end = time.perf_counter()
     token_times = token_times or []
     text_chunks = text_chunks or []
@@ -173,7 +199,7 @@ def _make_result(t_start, t_first_token=None, token_times=None, text_chunks=None
         "ttft": (t_first_token - t_start) if t_first_token else None,
         "tpot": statistics.mean(itl) if itl else None,  # time per output token
         "itl": itl,
-        "output_tokens": len(text_chunks),
+        "output_tokens": output_token_count if output_token_count is not None else len(text_chunks),
         "text": "".join(text_chunks),
         "error": error,
     }
@@ -188,52 +214,20 @@ async def run_concurrency_test(
     base_url: str,
     prompts: list[str],
     max_new_tokens: int,
-    max_concurrency: int,
     seed: int,
     endpoint: str,
+    model: str | None = None,
+    stream: bool = True,
 ) -> list[dict]:
-    """Send all requests with a concurrency limit via semaphore."""
-    semaphore = asyncio.Semaphore(max_concurrency)
-    results = []
-
-    async def _limited(session, prompt):
-        async with semaphore:
-            return await send_request(session, base_url, prompt, max_new_tokens, seed, endpoint)
-
-    async with aiohttp.ClientSession() as session:
-        tasks = [_limited(session, p) for p in prompts]
+    """Send all prompts concurrently and collect results."""
+    connector = aiohttp.TCPConnector(limit=0)
+    timeout = aiohttp.ClientTimeout(total=600)
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        tasks = [send_request(session, base_url, p, max_new_tokens, seed, endpoint, model=model, stream=stream) for p in prompts]
         results = await asyncio.gather(*tasks)
 
     return list(results)
 
-
-async def run_rate_test(
-    base_url: str,
-    prompts: list[str],
-    max_new_tokens: int,
-    request_rate: float,
-    seed: int,
-    endpoint: str,
-) -> list[dict]:
-    """Send requests at a target rate using Poisson inter-arrival times."""
-    results = []
-    tasks = []
-
-    async with aiohttp.ClientSession() as session:
-        for i, prompt in enumerate(prompts):
-            task = asyncio.create_task(
-                send_request(session, base_url, prompt, max_new_tokens, seed, endpoint)
-            )
-            tasks.append(task)
-
-            # Poisson inter-arrival: exponential delay
-            if i < len(prompts) - 1:
-                delay = random.expovariate(request_rate)
-                await asyncio.sleep(delay)
-
-        results = await asyncio.gather(*tasks)
-
-    return list(results)
 
 
 # ---------------------------------------------------------------------------
@@ -361,12 +355,17 @@ def wait_for_server(base_url: str, timeout: int = 120) -> bool:
     return False
 
 
-def start_server(model: str, port: int, compile: bool = False):
+def start_server(model: str, port: int, compile: bool = False, continuous_batching: bool = False,
+                  attn_implementation: str | None = None):
     from transformers.cli.serve_refactored import Serve
 
     kwargs = {"force_model": model, "port": port, "non_blocking": True, "log_level": "warning"}
     if compile:
         kwargs["compile"] = True
+    if continuous_batching:
+        kwargs["continuous_batching"] = True
+    if attn_implementation:
+        kwargs["attn_implementation"] = attn_implementation
     return Serve(**kwargs)
 
 
@@ -379,9 +378,14 @@ async def async_main(args):
     base_url = args.url if args.url else f"http://localhost:{args.port}"
     server = None
 
+    # Default to flash_attention_3 when using continuous batching
+    if args.continuous_batching and args.attn_impl is None:
+        args.attn_impl = "flash_attention_3"
+
     if not args.url:
         print(f"Starting server for {args.model}...")
-        server = start_server(args.model, args.port, compile=args.compile)
+        server = start_server(args.model, args.port, compile=args.compile, continuous_batching=args.continuous_batching,
+                              attn_implementation=args.attn_impl)
         if not wait_for_server(base_url):
             print("ERROR: Server did not start")
             if server:
@@ -392,44 +396,34 @@ async def async_main(args):
     tokenizer_id = args.processor or args.model
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
 
-    # Generate prompts
-    prompts = make_prompts(tokenizer, args.num_requests, args.prompt_tokens, variance=args.prompt_variance)
-    print(f"Generated {len(prompts)} prompts (~{args.prompt_tokens} tokens each, ±{int(args.prompt_variance*100)}%)")
+    num_requests = max(args.max_concurrency)
+    prompts = make_prompts(tokenizer, num_requests, args.prompt_tokens, variance=args.prompt_variance)
+    print(f"Generated {num_requests} prompts (~{args.prompt_tokens} tokens each, ±{int(args.prompt_variance*100)}%)")
     print(f"Max new tokens per request: {args.max_new_tokens}")
-    print(f"Endpoint: /v1/{args.endpoint}")
+    print(f"Endpoint: /v1/{args.endpoint} ({'streaming' if args.stream else 'non-streaming'})")
 
-    # Warmup — use the longest prompt so compilation covers all shorter sizes
-    warmup_prompt = max(prompts, key=len)
-    print(f"Warming up ({args.warmup} requests, longest prompt)...")
-    async with aiohttp.ClientSession() as session:
-        for i in range(args.warmup):
-            await send_request(session, base_url, warmup_prompt, args.max_new_tokens, args.seed, args.endpoint)
+    # Warmup — small batch to warm CUDA graphs and JIT kernels
+    warmup_size = min(16, num_requests)
+    warmup_prompts = prompts[:warmup_size]
+    print(f"Warming up ({args.warmup}x {warmup_size} requests)...")
+    for _ in range(args.warmup):
+        await run_concurrency_test(
+            base_url, warmup_prompts, args.max_new_tokens, args.seed, args.endpoint, model=args.model, stream=args.stream,
+        )
     print("Warmup done.")
 
-    # Run tests
-    if args.request_rate:
-        # Rate-based test
-        label = f"rate={args.request_rate} req/s, {args.num_requests} requests"
+    # Run tests — one round per concurrency level
+    for concurrency in args.max_concurrency:
+        test_prompts = prompts[:concurrency]
+        label = f"{concurrency} concurrent requests"
         print(f"\nRunning: {label}")
         t0 = time.perf_counter()
-        results = await run_rate_test(
-            base_url, prompts, args.max_new_tokens, args.request_rate, args.seed, args.endpoint,
+        results = await run_concurrency_test(
+            base_url, test_prompts, args.max_new_tokens, args.seed, args.endpoint, model=args.model, stream=args.stream,
         )
         duration = time.perf_counter() - t0
         metrics = compute_metrics(results, duration)
         print_metrics(metrics, label)
-    else:
-        # Concurrency sweep
-        for concurrency in args.max_concurrency:
-            label = f"concurrency={concurrency}, {args.num_requests} requests"
-            print(f"\nRunning: {label}")
-            t0 = time.perf_counter()
-            results = await run_concurrency_test(
-                base_url, prompts, args.max_new_tokens, concurrency, args.seed, args.endpoint,
-            )
-            duration = time.perf_counter() - t0
-            metrics = compute_metrics(results, duration)
-            print_metrics(metrics, label)
 
     if server:
         server.kill_server()
@@ -445,14 +439,14 @@ def main():
     parser.add_argument("--url", type=str, default=None, help="Existing server URL (skip start/stop)")
     parser.add_argument("--port", type=int, default=8642)
     parser.add_argument("--compile", action="store_true", help="Enable --compile on the server")
+    parser.add_argument("--continuous-batching", action="store_true", help="Enable continuous batching on the server")
+    parser.add_argument("--attn-impl", type=str, default=None, help="Attention implementation (e.g. flash_attention_3)")
     parser.add_argument("--endpoint", type=str, choices=["chat", "responses"], default="responses")
+    parser.add_argument("--no-stream", action="store_true", help="Use non-streaming requests")
 
     # Load parameters
     parser.add_argument("--max-concurrency", type=int, nargs="+", default=[1, 2, 4],
-                        help="Concurrency levels to sweep (default: 1 2 4)")
-    parser.add_argument("--request-rate", type=float, default=None,
-                        help="Target request rate (req/s). Uses Poisson arrivals. Overrides --max-concurrency.")
-    parser.add_argument("--num-requests", type=int, default=16, help="Total requests per test (default: 16)")
+                        help="Number of concurrent requests to send (default: 1 2 4)")
 
     # Prompt parameters
     parser.add_argument("--prompt-tokens", type=int, default=256, help="Target prompt length in tokens (default: 256)")
@@ -463,6 +457,7 @@ def main():
     parser.add_argument("--warmup", type=int, default=2, help="Warmup requests (default: 2)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+    args.stream = not args.no_stream
 
     asyncio.run(async_main(args))
 
