@@ -168,7 +168,6 @@ Operations are fully reversible. Saving reverses the conversions and returns the
 | [`MergeModulelist(dim)`] | [`SplitModulelist(dim)`] |
 | [`SplitModulelist(dim)`] | [`MergeModulelist(dim)`] |
 | [`Transpose(d0, d1)`] | [`Transpose(d1, d0)`] |
-| [`Force16BytesAlignment`] | [`Force16BytesAlignment`] (idempotent) |
 
 ### Chunk
 
@@ -247,10 +246,6 @@ WeightConverter(
     operations=[Transpose(dim0=0, dim1=1)],
 )
 ```
-
-### Force16BytesAlignment
-
-[`Force16BytesAlignment`] clones a tensor if it is not 16-byte aligned. This is required for `torch._grouped_mm` and TMA/SIMD operations. It is idempotent: applying it more than once has no additional effect.
 
 ## Operation chaining
 

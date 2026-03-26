@@ -27,9 +27,8 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
-    CLIPImageProcessorFast,
     ViTImageProcessor,
-    ViTImageProcessorFast,
+    ViTImageProcessorPil,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
 
@@ -47,7 +46,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     @require_torchvision
     def test_image_processor_from_model_shortcut(self):
         config = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        self.assertIsInstance(config, CLIPImageProcessorFast)
+        self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_directory_from_key(self):
@@ -61,7 +60,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_directory_from_feature_extractor_key(self):
@@ -78,7 +77,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_new_filename(self):
@@ -93,7 +92,7 @@ class AutoImageProcessorTest(unittest.TestCase):
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
             # Now loading fast image processor by default
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_directory_from_config(self):
@@ -125,7 +124,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             dict_as_saved = json.loads(config.to_json_string())
             self.assertTrue("_processor_class" not in dict_as_saved)
 
-        self.assertIsInstance(config, CLIPImageProcessorFast)
+        self.assertIsInstance(config, CLIPImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_file(self):
@@ -137,7 +136,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             )
 
             config = AutoImageProcessor.from_pretrained(processor_tmpfile)
-            self.assertIsInstance(config, CLIPImageProcessorFast)
+            self.assertIsInstance(config, CLIPImageProcessor)
 
     def test_repo_not_found(self):
         with self.assertRaisesRegex(
@@ -165,15 +164,15 @@ class AutoImageProcessorTest(unittest.TestCase):
 
         # Fast image processor is selected by default
         image_processor = AutoImageProcessor.from_pretrained(checkpoint)
-        self.assertIsInstance(image_processor, ViTImageProcessorFast)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
 
         # Fast image processor is selected when use_fast=True
         image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=True)
-        self.assertIsInstance(image_processor, ViTImageProcessorFast)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
 
         # Slow image processor is selected when use_fast=False
         image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=False)
-        self.assertIsInstance(image_processor, ViTImageProcessor)
+        self.assertIsInstance(image_processor, ViTImageProcessorPil)
 
     def test_from_pretrained_dynamic_image_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
@@ -272,5 +271,93 @@ class AutoImageProcessorTest(unittest.TestCase):
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:
                 del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
+                del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]
+
+    @require_vision
+    def test_backend_kwarg_pil(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "ViTImageProcessor"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+            self.assertIsInstance(image_processor, ViTImageProcessorPil)
+
+    @require_torchvision
+    def test_backend_kwarg_torchvision(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "ViTImageProcessor"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
+            self.assertIsInstance(image_processor, ViTImageProcessor)
+
+    @require_torchvision
+    def test_default_to_pil_backend_for_lanczos_processors(self):
+        # Even when torchvision is available, processors that rely on Lanczos interpolation
+        # (listed in DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS) must default to the PIL backend
+        # when backend='auto'.
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "FlavaImageProcessor"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertEqual(type(image_processor).__name__, "FlavaImageProcessorPil")
+
+    @require_torchvision
+    def test_explicit_backend_overrides_lanczos_default(self):
+        # An explicit backend="torchvision" must bypass the DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS
+        # override; only the auto-resolved backend is affected by the list.
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "FlavaImageProcessor"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
+            self.assertEqual(type(image_processor).__name__, "FlavaImageProcessor")
+
+    @require_torchvision
+    def test_legacy_fast_class_name_in_config(self):
+        # Checkpoints saved before the rename used names like "ViTImageProcessorFast".
+        # The *Fast suffix must be stripped and the correct backend variant returned.
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "ViTImageProcessorFast"}, open(processor_tmpfile, "w"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="torchvision")
+            self.assertIsInstance(image_processor, ViTImageProcessor)
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+            self.assertIsInstance(image_processor, ViTImageProcessorPil)
+
+    @require_vision
+    def test_register_with_image_processor_classes_dict(self):
+        # New image_processor_classes={} dict API for register().
+        try:
+            AutoImageProcessor.register(CustomConfig, image_processor_classes={"pil": CustomImageProcessor})
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                json.dump(
+                    {"image_processor_type": "CustomImageProcessor"},
+                    open(Path(tmp_dir) / "preprocessor_config.json", "w"),
+                )
+                image_processor = AutoImageProcessor.from_pretrained(tmp_dir, backend="pil")
+                self.assertIsInstance(image_processor, CustomImageProcessor)
+        finally:
+            if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
+                del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]
+
+    @require_vision
+    def test_register_legacy_slow_fast_params(self):
+        # slow_image_processor_class= and fast_image_processor_class= are deprecated but
+        # must still work; they map to "pil" and "torchvision" backends respectively.
+        try:
+            AutoImageProcessor.register(CustomConfig, slow_image_processor_class=CustomImageProcessor)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                json.dump(
+                    {"image_processor_type": "CustomImageProcessor"},
+                    open(Path(tmp_dir) / "preprocessor_config.json", "w"),
+                )
+                image_processor = AutoImageProcessor.from_pretrained(tmp_dir, backend="pil")
+                self.assertIsInstance(image_processor, CustomImageProcessor)
+        finally:
             if CustomConfig in IMAGE_PROCESSOR_MAPPING._extra_content:
                 del IMAGE_PROCESSOR_MAPPING._extra_content[CustomConfig]

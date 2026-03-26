@@ -21,7 +21,6 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
-    Force16BytesAlignment,
     MergeModulelist,
     Transpose,
     WeightConverter,
@@ -41,6 +40,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
     "qwen2_moe": "qwen2_moe",
+    "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
     "dots1": "qwen2_moe",
@@ -79,6 +79,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
+    "pp_chart2table": "got_ocr2",
 }
 
 
@@ -176,23 +177,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("^norm.", "text_model.norm."),
             WeightRenaming("^layers.", "text_model.layers."),
         ],
-        "gpt_oss": [
-            # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
-            # If you are dequantizing the model on the fly, these converters will be ignored because the tensors
-            # that match these patterns are only created after dequantization.
-            # That's not an issue for now since the dequantization converters already ensure 16 bytes alignment
-            # by enforcing contiguity.
-            WeightConverter(
-                source_patterns="mlp.experts.gate_up_proj$",
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[Force16BytesAlignment()],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.down_proj$",
-                target_patterns="mlp.experts.down_proj",
-                operations=[Force16BytesAlignment()],
-            ),
-        ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightConverter(
@@ -239,12 +223,12 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
+                operations=[Transpose(1, 2, check_dims=True)],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.down_proj",
                 target_patterns="mlp.experts.down_proj",
-                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
+                operations=[Transpose(1, 2, check_dims=True)],
             ),
         ],
         "phimoe": [
@@ -470,12 +454,12 @@ def _build_checkpoint_conversion_mapping():
                 "mlp.experts.*.up_proj.weight",
             ],
             target_patterns="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         ),
         WeightConverter(
             source_patterns="mlp.experts.*.down_proj.weight",
             target_patterns="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0)],
         ),
     ]
     mapping["minimax_m2"] = mapping["mixtral"].copy()
@@ -492,12 +476,12 @@ def _build_checkpoint_conversion_mapping():
                 "mlp.experts.*.up_proj.weight",
             ],
             target_patterns="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         ),
         WeightConverter(
             source_patterns="mlp.experts.*.down_proj.weight",
             target_patterns="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0)],
         ),
     ]
 
@@ -603,13 +587,6 @@ def get_model_conversion_mapping(
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
-        # NOTE: Since get_weight_conversions() only serve to dequantize, we would normally want to apply them first.
-        # However, for now it's not possible to cascade converters (i.e., applying model-specific conversions on top
-        # of tensors created by the dequantization conversions)
-        # This means that if a model has model-specific conversions and is being dequantized, the model-specific conversion
-        # that relies on tensors created by dequantization conversions will not be applied.
-        # GptOss example: with Mxfp4Config(dequantize=True), Force16BytesAlignment converters are ignored because the tensors
-        # "mlp.experts.gate_up_proj$" and "mlp.experts.down_proj$" are only created after dequantization conversions are applied.
         weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
     return weight_conversions

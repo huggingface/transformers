@@ -344,21 +344,34 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
     "chameleon",
-    "deepseek_vl",
-    "deepseek_vl_v2",
-    "deepseek_vl_hybrid",
+    "chatlm",
     "deepseek_v2",
     "deepseek_v3",
+    "deepseek_vl",
+    "deepseek_vl_hybrid",
+    "deepseek_vl_v2",
     "fuyu",
+    "h2ovl_chat",
     "hyperclovax",
     "internlm2",
-    "janus",
+    "internvl_chat",
     "jamba",
+    "janus",
+    "kimi_k25",
     "llava",
     "llava_next",
+    "minicpmv",
+    "minimax_m2",
     "modernbert",
+    "molmo",
+    "molmo2",
+    "nemotron",
+    "nvfp4",
     "opencua",
+    "openvla",
     "phi3",
+    "phi3_v",
+    "phimoe",
     "step3p5",
     "vipllava",
 }
@@ -574,7 +587,7 @@ class AutoTokenizer:
                     - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                       using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
-                    - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
+                    - a path to a single saved vocabulary file if and only if the tokenizer only requires a
                       single vocabulary file (like Bert or XLNet), e.g.: `./my_model_directory/vocab.txt`. (Not
                       applicable to all derived classes)
             inputs (additional positional arguments, *optional*):

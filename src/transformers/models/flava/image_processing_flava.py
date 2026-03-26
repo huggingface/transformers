@@ -1,4 +1,4 @@
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,33 +19,29 @@ from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any
 
-import numpy as np
+import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
+    SizeDict,
 )
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-from ...utils.import_utils import requires
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    is_torchvision_available,
+)
 
 
-if is_vision_available():
-    import PIL
-
-
-logger = logging.get_logger(__name__)
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 # These values are taken from CLIP
@@ -60,19 +56,19 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     return_image_mask (`bool`, *optional*, defaults to `False`):
         Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
-    input_size_patches (`int`, *optional*, defaults to 14):
+    input_size_patches (`int`, *optional*, defaults to `14`):
         Number of patches in the image in height and width direction. 14x14 = 196 total patches. Can be overridden
         by the `input_size_patches` parameter in `preprocess`.
-    total_mask_patches (`int`, *optional*, defaults to 75):
+    total_mask_patches (`int`, *optional*, defaults to `75`):
         Total number of patches that should be masked. Can be overridden by the `total_mask_patches` parameter in
         `preprocess`.
-    mask_group_min_patches (`int`, *optional*, defaults to 16):
+    mask_group_min_patches (`int`, *optional*, defaults to `16`):
         Minimum number of patches that should be masked. Can be overridden by the `mask_group_min_patches`
         parameter in `preprocess`.
     mask_group_max_patches (`int`, *optional*):
         Maximum number of patches that should be masked. Can be overridden by the `mask_group_max_patches`
         parameter in `preprocess`.
-    mask_group_min_aspect_ratio (`float`, *optional*, defaults to 0.3):
+    mask_group_min_aspect_ratio (`float`, *optional*, defaults to `0.3`):
         Minimum aspect ratio of the mask window. Can be overridden by the `mask_group_min_aspect_ratio` parameter
         in `preprocess`.
     mask_group_max_aspect_ratio (`float`, *optional*):
@@ -86,9 +82,11 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
         Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
         `preprocess`.
-    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
-        Resampling filter to use if resizing the codebook image. Can be overridden by the `codebook_resample`
-        parameter in `preprocess`.
+    codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS` for PIL backend,
+        `PILImageResampling.BICUBIC` for torchvision backend):
+        Resampling filter to use if resizing the codebook image. LANCZOS is not supported for torch Tensors;
+        BICUBIC is used as the closest alternative for the torchvision backend. Can be overridden by the
+        `codebook_resample` parameter in `preprocess`.
     codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
         Whether to crop the input for codebook at the center. If the input size is smaller than
         `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
@@ -127,10 +125,10 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     # Codebook related params
     return_codebook_pixels: bool
     codebook_do_resize: bool
-    codebook_size: bool
+    codebook_size: dict[str, int]
     codebook_resample: int
     codebook_do_center_crop: bool
-    codebook_crop_size: int
+    codebook_crop_size: dict[str, int]
     codebook_do_rescale: bool
     codebook_rescale_factor: int | float
     codebook_do_map_pixels: bool
@@ -192,18 +190,16 @@ class FlavaMaskingGenerator:
                 num_masked = mask[top : top + height, left : left + width].sum()
                 # Overlap
                 if 0 < height * width - num_masked <= max_mask_patches:
-                    for i in range(top, top + height):
-                        for j in range(left, left + width):
-                            if mask[i, j] == 0:
-                                mask[i, j] = 1
-                                delta += 1
+                    zeros_pos = mask[top : top + height, left : left + width] == 0
+                    mask[top : top + height, left : left + width][zeros_pos] = 1
+                    delta += zeros_pos.sum()
 
                 if delta > 0:
                     break
         return delta
 
     def __call__(self):
-        mask = np.zeros(shape=self.get_shape(), dtype=int)
+        mask = torch.zeros(self.get_shape(), dtype=torch.int)
         mask_count = 0
         while mask_count < self.total_mask_patches:
             max_mask_patches = self.total_mask_patches - mask_count
@@ -218,176 +214,49 @@ class FlavaMaskingGenerator:
         return mask
 
 
-@requires(backends=("vision",))
-class FlavaImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a Flava image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in `preprocess`.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the image after resizing. Can be overridden by the `size` parameter in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in
-            `preprocess`.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the images. Can be overridden by the `do_center_crop` parameter in `preprocess`.
-        crop_size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of image after the center crop `(crop_size["height"], crop_size["width"])`. Can be overridden by the
-            `crop_size` parameter in `preprocess`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in `preprocess`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in
-            `preprocess`.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in `preprocess`.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        return_image_mask (`bool`, *optional*, defaults to `False`):
-            Whether to return the image mask. Can be overridden by the `return_image_mask` parameter in `preprocess`.
-        input_size_patches (`int`, *optional*, defaults to 14):
-            Number of patches in the image in height and width direction. 14x14 = 196 total patches. Can be overridden
-            by the `input_size_patches` parameter in `preprocess`.
-        total_mask_patches (`int`, *optional*, defaults to 75):
-            Total number of patches that should be masked. Can be overridden by the `total_mask_patches` parameter in
-            `preprocess`.
-        mask_group_min_patches (`int`, *optional*, defaults to 16):
-            Minimum number of patches that should be masked. Can be overridden by the `mask_group_min_patches`
-            parameter in `preprocess`.
-        mask_group_max_patches (`int`, *optional*):
-            Maximum number of patches that should be masked. Can be overridden by the `mask_group_max_patches`
-            parameter in `preprocess`.
-        mask_group_min_aspect_ratio (`float`, *optional*, defaults to 0.3):
-            Minimum aspect ratio of the mask window. Can be overridden by the `mask_group_min_aspect_ratio` parameter
-            in `preprocess`.
-        mask_group_max_aspect_ratio (`float`, *optional*):
-            Maximum aspect ratio of the mask window. Can be overridden by the `mask_group_max_aspect_ratio` parameter
-            in `preprocess`.
-        codebook_do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
-            parameter in `preprocess`. `codebook_size`.
-        codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
-            `preprocess`.
-        codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
-            Resampling filter to use if resizing the codebook image. Can be overridden by the `codebook_resample`
-            parameter in `preprocess`.
-        codebook_do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to crop the input for codebook at the center. If the input size is smaller than
-            `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
-            overridden by the `codebook_do_center_crop` parameter in `preprocess`.
-        codebook_crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Desired output size for codebook input when applying center-cropping. Can be overridden by the
-            `codebook_crop_size` parameter in `preprocess`.
-        codebook_do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the input for codebook by the specified scale `codebook_rescale_factor`. Can be
-            overridden by the `codebook_do_rescale` parameter in `preprocess`.
-        codebook_rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Defines the scale factor to use if rescaling the codebook image. Can be overridden by the
-            `codebook_rescale_factor` parameter in `preprocess`.
-        codebook_do_map_pixels (`bool`, *optional*, defaults to `True`):
-            Whether to map the pixel values of the codebook input to (1 - 2e)x + e. Can be overridden by the
-            `codebook_do_map_pixels` parameter in `preprocess`.
-        codebook_do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to normalize the input for codebook with `codebook_image_mean` and `codebook_image_std`. Can
-            be overridden by the `codebook_do_normalize` parameter in `preprocess`.
-        codebook_image_mean (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0, 0, 0]`):
-            The sequence of means for each channel, to be used when normalizing images for codebook. Can be overridden
-            by the `codebook_image_mean` parameter in `preprocess`.
-        codebook_image_std (`Optional[Union[float, Iterable[float]]]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            The sequence of standard deviations for each channel, to be used when normalizing images for codebook. Can
-            be overridden by the `codebook_image_std` parameter in `preprocess`.
-    """
-
-    model_input_names = ["pixel_values"]
+@auto_docstring
+class FlavaImageProcessor(TorchvisionBackend):
     valid_kwargs = FlavaImageProcessorKwargs
+    resample = PILImageResampling.BICUBIC
+    image_mean = FLAVA_IMAGE_MEAN
+    image_std = FLAVA_IMAGE_STD
+    size = {"height": 224, "width": 224}
+    crop_size = {"height": 224, "width": 224}
+    do_resize = True
+    do_center_crop = True
+    do_rescale = True
+    do_normalize = True
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_center_crop: bool = True,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | Iterable[float] | None = None,
-        image_std: float | Iterable[float] | None = None,
-        # Mask related params
-        return_image_mask: bool = False,
-        input_size_patches: int = 14,
-        total_mask_patches: int = 75,
-        mask_group_min_patches: int = 16,
-        mask_group_max_patches: int | None = None,
-        mask_group_min_aspect_ratio: float = 0.3,
-        mask_group_max_aspect_ratio: float | None = None,
-        # Codebook related params
-        return_codebook_pixels: bool = False,
-        codebook_do_resize: bool = True,
-        codebook_size: bool | None = None,
-        codebook_resample: int = PILImageResampling.LANCZOS,
-        codebook_do_center_crop: bool = True,
-        codebook_crop_size: int | None = None,
-        codebook_do_rescale: bool = True,
-        codebook_rescale_factor: int | float = 1 / 255,
-        codebook_do_map_pixels: bool = True,
-        codebook_do_normalize: bool = True,
-        codebook_image_mean: float | Iterable[float] | None = None,
-        codebook_image_std: float | Iterable[float] | None = None,
-        **kwargs,
-    ) -> None:
+    # Mask related params
+    return_image_mask = False
+    input_size_patches = 14
+    total_mask_patches = 75
+    mask_group_min_patches = 16
+    mask_group_max_patches = None
+    mask_group_min_aspect_ratio = 0.3
+    mask_group_max_aspect_ratio = None
+    # Codebook related params
+    return_codebook_pixels = False
+    codebook_do_resize = True
+    codebook_size = {"height": 112, "width": 112}
+    # LANCZOS resampling is not supported for torch Tensors; BICUBIC is the closest alternative.
+    # Note: the PIL backend defaults to LANCZOS for this parameter.
+    codebook_resample = PILImageResampling.BICUBIC
+    codebook_do_center_crop = True
+    codebook_crop_size = {"height": 112, "width": 112}
+    codebook_do_rescale = True
+    codebook_rescale_factor = 1 / 255
+    codebook_do_map_pixels = True
+    codebook_do_normalize = True
+    codebook_image_mean = FLAVA_CODEBOOK_MEAN
+    codebook_image_std = FLAVA_CODEBOOK_STD
+
+    def __init__(self, **kwargs: Unpack[FlavaImageProcessorKwargs]):
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
-        size = get_size_dict(size)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        codebook_size = codebook_size if codebook_size is not None else {"height": 112, "width": 112}
-        codebook_size = get_size_dict(codebook_size, param_name="codebook_size")
-        codebook_crop_size = codebook_crop_size if codebook_crop_size is not None else {"height": 112, "width": 112}
-        codebook_crop_size = get_size_dict(codebook_crop_size, param_name="codebook_crop_size")
-
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else FLAVA_IMAGE_MEAN
-        self.image_std = image_std if image_std is not None else FLAVA_IMAGE_STD
-
-        self.return_image_mask = return_image_mask
-        self.input_size_patches = input_size_patches
-        self.total_mask_patches = total_mask_patches
-        self.mask_group_min_patches = mask_group_min_patches
-        self.mask_group_max_patches = mask_group_max_patches
-        self.mask_group_min_aspect_ratio = mask_group_min_aspect_ratio
-        self.mask_group_max_aspect_ratio = mask_group_max_aspect_ratio
-
-        self.return_codebook_pixels = return_codebook_pixels
-        self.codebook_do_resize = codebook_do_resize
-        self.codebook_size = codebook_size
-        self.codebook_resample = codebook_resample
-        self.codebook_do_center_crop = codebook_do_center_crop
-        self.codebook_crop_size = codebook_crop_size
-        self.codebook_do_rescale = codebook_do_rescale
-        self.codebook_rescale_factor = codebook_rescale_factor
-        self.codebook_do_map_pixels = codebook_do_map_pixels
-        self.codebook_do_normalize = codebook_do_normalize
-        self.codebook_image_mean = codebook_image_mean
-        self.codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else FLAVA_CODEBOOK_MEAN
-        self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[FlavaImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     @classmethod
     def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
@@ -421,351 +290,176 @@ class FlavaImageProcessor(BaseImageProcessor):
             mask_group_max_aspect_ratio=mask_group_max_aspect_ratio,
         )
 
-    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
-    def resize(
+    def map_pixels(self, image: "torch.Tensor") -> "torch.Tensor":
+        return (1 - 2 * LOGIT_LAPLACE_EPS) * image + LOGIT_LAPLACE_EPS
+
+    def _standardize_kwargs(
         self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        crop_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        codebook_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        codebook_crop_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        codebook_image_mean: float | list[float] | None = None,
+        codebook_image_std: float | list[float] | None = None,
+        codebook_resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> dict:
         """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
         """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
+        kwargs = super()._standardize_kwargs(
+            size=size,
+            crop_size=crop_size,
+            default_to_square=default_to_square,
+            image_mean=image_mean,
+            image_std=image_std,
             data_format=data_format,
-            input_data_format=input_data_format,
             **kwargs,
         )
+        if codebook_size is not None and not isinstance(codebook_size, SizeDict):
+            codebook_size = SizeDict(**get_size_dict(size=codebook_size, default_to_square=default_to_square))
+        if codebook_crop_size is not None and not isinstance(codebook_crop_size, SizeDict):
+            codebook_crop_size = SizeDict(**get_size_dict(codebook_crop_size, param_name="codebook_crop_size"))
+        if isinstance(codebook_image_mean, list):
+            codebook_image_mean = tuple(codebook_image_mean)
+        if isinstance(codebook_image_std, list):
+            codebook_image_std = tuple(codebook_image_std)
 
-    def map_pixels(self, image: np.ndarray) -> np.ndarray:
-        return (1 - 2 * LOGIT_LAPLACE_EPS) * image + LOGIT_LAPLACE_EPS
+        kwargs["codebook_size"] = codebook_size
+        kwargs["codebook_crop_size"] = codebook_crop_size
+        kwargs["codebook_image_mean"] = codebook_image_mean
+        kwargs["codebook_image_std"] = codebook_image_std
+        # Store codebook_resample as-is - resize() will handle conversion
+        kwargs["codebook_resample"] = codebook_resample
+
+        return kwargs
 
     def _preprocess_image(
         self,
-        image: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_map_pixels: bool | None = None,
-        data_format: ChannelDimension | None = ChannelDimension.FIRST,
-        input_data_format: ChannelDimension | None = None,
-    ) -> np.ndarray:
-        """Preprocesses a single image."""
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        do_map_pixels: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+    ) -> "torch.Tensor":
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            if do_map_pixels:
+                stacked_images = self.map_pixels(image=stacked_images)
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+
+        return processed_images
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        # Mask related params
+        return_image_mask: bool | None,
+        input_size_patches: int | None,
+        total_mask_patches: int | None,
+        mask_group_min_patches: int | None,
+        mask_group_max_patches: int | None,
+        mask_group_min_aspect_ratio: float | None,
+        mask_group_max_aspect_ratio: float | None,
+        # Codebook related params
+        return_codebook_pixels: bool | None,
+        codebook_do_resize: bool | None,
+        codebook_size: SizeDict | None,
+        codebook_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        codebook_do_center_crop: bool | None,
+        codebook_crop_size: SizeDict | None,
+        codebook_do_rescale: bool | None,
+        codebook_rescale_factor: float | None,
+        codebook_do_map_pixels: bool | None,
+        codebook_do_normalize: bool | None,
+        codebook_image_mean: float | list[float] | None,
+        codebook_image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        processed_images = self._preprocess_image(
+            images=images,
             do_resize=do_resize,
             size=size,
             resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            do_map_pixels=False,
+            image_mean=image_mean,
+            image_std=image_std,
+            disable_grouping=disable_grouping,
+            return_tensors=return_tensors,
         )
-
-        # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
-
-        if do_rescale and is_scaled_image(image):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(image)
-
-        if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-
-        if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
-
-        if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-        if do_map_pixels:
-            image = self.map_pixels(image)
-
-        if data_format is not None:
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-        return image
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: dict[str, int] | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        # Mask related params
-        return_image_mask: bool | None = None,
-        input_size_patches: int | None = None,
-        total_mask_patches: int | None = None,
-        mask_group_min_patches: int | None = None,
-        mask_group_max_patches: int | None = None,
-        mask_group_min_aspect_ratio: float | None = None,
-        mask_group_max_aspect_ratio: float | None = None,
-        # Codebook related params
-        return_codebook_pixels: bool | None = None,
-        codebook_do_resize: bool | None = None,
-        codebook_size: dict[str, int] | None = None,
-        codebook_resample: int | None = None,
-        codebook_do_center_crop: bool | None = None,
-        codebook_crop_size: dict[str, int] | None = None,
-        codebook_do_rescale: bool | None = None,
-        codebook_rescale_factor: float | None = None,
-        codebook_do_map_pixels: bool | None = None,
-        codebook_do_normalize: bool | None = None,
-        codebook_image_mean: Iterable[float] | None = None,
-        codebook_image_std: Iterable[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the center crop. Only has an effect if `do_center_crop` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation.
-            return_image_mask (`bool`, *optional*, defaults to `self.return_image_mask`):
-                Whether to return the image mask.
-            input_size_patches (`int`, *optional*, defaults to `self.input_size_patches`):
-                Size of the patches to extract from the image.
-            total_mask_patches (`int`, *optional*, defaults to `self.total_mask_patches`):
-                Total number of patches to extract from the image.
-            mask_group_min_patches (`int`, *optional*, defaults to `self.mask_group_min_patches`):
-                Minimum number of patches to extract from the image.
-            mask_group_max_patches (`int`, *optional*, defaults to `self.mask_group_max_patches`):
-                Maximum number of patches to extract from the image.
-            mask_group_min_aspect_ratio (`float`, *optional*, defaults to `self.mask_group_min_aspect_ratio`):
-                Minimum aspect ratio of the patches to extract from the image.
-            mask_group_max_aspect_ratio (`float`, *optional*, defaults to `self.mask_group_max_aspect_ratio`):
-                Maximum aspect ratio of the patches to extract from the image.
-            return_codebook_pixels (`bool`, *optional*, defaults to `self.return_codebook_pixels`):
-                Whether to return the codebook pixels.
-            codebook_do_resize (`bool`, *optional*, defaults to `self.codebook_do_resize`):
-                Whether to resize the codebook pixels.
-            codebook_size (`dict[str, int]`, *optional*, defaults to `self.codebook_size`):
-                Size of the codebook pixels.
-            codebook_resample (`int`, *optional*, defaults to `self.codebook_resample`):
-                Resampling filter to use if resizing the codebook pixels. This can be one of the enum
-                `PILImageResampling`, Only has an effect if `codebook_do_resize` is set to `True`.
-            codebook_do_center_crop (`bool`, *optional*, defaults to `self.codebook_do_center_crop`):
-                Whether to center crop the codebook pixels.
-            codebook_crop_size (`dict[str, int]`, *optional*, defaults to `self.codebook_crop_size`):
-                Size of the center crop of the codebook pixels. Only has an effect if `codebook_do_center_crop` is set
-                to `True`.
-            codebook_do_rescale (`bool`, *optional*, defaults to `self.codebook_do_rescale`):
-                Whether to rescale the codebook pixels values between [0 - 1].
-            codebook_rescale_factor (`float`, *optional*, defaults to `self.codebook_rescale_factor`):
-                Rescale factor to rescale the codebook pixels by if `codebook_do_rescale` is set to `True`.
-            codebook_do_map_pixels (`bool`, *optional*, defaults to `self.codebook_do_map_pixels`):
-                Whether to map the codebook pixels values.
-            codebook_do_normalize (`bool`, *optional*, defaults to `self.codebook_do_normalize`):
-                Whether to normalize the codebook pixels.
-            codebook_image_mean (`float` or `list[float]`, *optional*, defaults to `self.codebook_image_mean`):
-                Codebook pixels mean to normalize the codebook pixels by if `codebook_do_normalize` is set to `True`.
-            codebook_image_std (`float` or `list[float]`, *optional*, defaults to `self.codebook_image_std`):
-                Codebook pixels standard deviation to normalize the codebook pixels by if `codebook_do_normalize` is
-                set to `True`.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size)
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size")
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-
-        return_image_mask = return_image_mask if return_image_mask is not None else self.return_image_mask
-        input_size_patches = input_size_patches if input_size_patches is not None else self.input_size_patches
-        total_mask_patches = total_mask_patches if total_mask_patches is not None else self.total_mask_patches
-        mask_group_min_patches = (
-            mask_group_min_patches if mask_group_min_patches is not None else self.mask_group_min_patches
-        )
-        mask_group_max_patches = (
-            mask_group_max_patches if mask_group_max_patches is not None else self.mask_group_max_patches
-        )
-        mask_group_min_aspect_ratio = (
-            mask_group_min_aspect_ratio
-            if mask_group_min_aspect_ratio is not None
-            else self.mask_group_min_aspect_ratio
-        )
-        mask_group_max_aspect_ratio = (
-            mask_group_max_aspect_ratio
-            if mask_group_max_aspect_ratio is not None
-            else self.mask_group_max_aspect_ratio
-        )
-
-        return_codebook_pixels = (
-            return_codebook_pixels if return_codebook_pixels is not None else self.return_codebook_pixels
-        )
-        codebook_do_resize = codebook_do_resize if codebook_do_resize is not None else self.codebook_do_resize
-        codebook_size = codebook_size if codebook_size is not None else self.codebook_size
-        codebook_size = get_size_dict(codebook_size, param_name="codebook_size")
-        codebook_resample = codebook_resample if codebook_resample is not None else self.codebook_resample
-        codebook_do_rescale = codebook_do_rescale if codebook_do_rescale is not None else self.codebook_do_rescale
-        codebook_rescale_factor = (
-            codebook_rescale_factor if codebook_rescale_factor is not None else self.codebook_rescale_factor
-        )
-        codebook_do_center_crop = (
-            codebook_do_center_crop if codebook_do_center_crop is not None else self.codebook_do_center_crop
-        )
-        codebook_crop_size = codebook_crop_size if codebook_crop_size is not None else self.codebook_crop_size
-        codebook_crop_size = get_size_dict(codebook_crop_size, param_name="codebook_crop_size")
-        codebook_do_map_pixels = (
-            codebook_do_map_pixels if codebook_do_map_pixels is not None else self.codebook_do_map_pixels
-        )
-        codebook_do_normalize = (
-            codebook_do_normalize if codebook_do_normalize is not None else self.codebook_do_normalize
-        )
-        codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else self.codebook_image_mean
-        codebook_image_std = codebook_image_std if codebook_image_std is not None else self.codebook_image_std
-
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        processed_images = [
-            self._preprocess_image(
-                image=img,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_map_pixels=False,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            )
-            for img in images
-        ]
-        data = {"pixel_values": processed_images}
+        data = {
+            "pixel_values": processed_images,
+        }
 
         if return_codebook_pixels:
-            codebook_images = [
-                self._preprocess_image(
-                    image=img,
-                    do_resize=codebook_do_resize,
-                    size=codebook_size,
-                    resample=codebook_resample,
-                    do_center_crop=codebook_do_center_crop,
-                    crop_size=codebook_crop_size,
-                    do_rescale=codebook_do_rescale,
-                    rescale_factor=codebook_rescale_factor,
-                    do_normalize=codebook_do_normalize,
-                    image_mean=codebook_image_mean,
-                    image_std=codebook_image_std,
-                    do_map_pixels=codebook_do_map_pixels,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                for img in images
-            ]
-            data["codebook_pixel_values"] = codebook_images
+            codebook_processed_images = self._preprocess_image(
+                images=images,
+                do_resize=codebook_do_resize,
+                size=codebook_size,
+                resample=codebook_resample,  # resize() handles conversion from PILImageResampling to InterpolationMode
+                do_center_crop=codebook_do_center_crop,
+                crop_size=codebook_crop_size,
+                do_rescale=codebook_do_rescale,
+                rescale_factor=codebook_rescale_factor,
+                do_normalize=codebook_do_normalize,
+                do_map_pixels=codebook_do_map_pixels,
+                image_mean=codebook_image_mean,
+                image_std=codebook_image_std,
+                disable_grouping=disable_grouping,
+                return_tensors=return_tensors,
+            )
+            data["codebook_pixel_values"] = codebook_processed_images
 
         if return_image_mask:
             mask_generator = self.masking_generator(
@@ -776,7 +470,7 @@ class FlavaImageProcessor(BaseImageProcessor):
                 mask_group_min_aspect_ratio=mask_group_min_aspect_ratio,
                 mask_group_max_aspect_ratio=mask_group_max_aspect_ratio,
             )
-            masks = [mask_generator() for _ in images]
+            masks = [mask_generator() for _ in range(len(images))]
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
