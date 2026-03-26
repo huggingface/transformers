@@ -269,7 +269,7 @@ outputs.loss.backward()
 
 ### TDT Training
 
-The TDT loss has been implemented within Transformers to enable training. For faster training (around 10-50x depending on batch size), consider using NeMo's `TDTLossNumba`. Note that this requires installing the NeMo toolkit with `pip install nemo_toolkit[asr]`.  
+The TDT loss has been implemented within Transformers to enable training. For faster training (around 10x), consider using NeMo's `TDTLossNumba`. Note that this requires installing the NeMo toolkit with `pip install nemo_toolkit[asr]`.  
 
 <hfoptions id="usage">
 <hfoption id="Transformers-only">
@@ -319,16 +319,12 @@ model = AutoModelForTDT.from_pretrained(model_id, dtype=torch.bfloat16, device_m
 model.train()
 
 # Initialize NeMo TDT loss
-# NOTE: NeMo's TDTLossNumba doesn't seem to do normalization with target lengths as suggested by its docstring so doing manually:
-# - Docstring: https://github.com/NVIDIA-NeMo/NeMo/blob/main/nemo/collections/asr/parts/numba/rnnt_loss/rnnt_pytorch.py#L373
-# - Normalization: https://github.com/NVIDIA-NeMo/NeMo/blob/main/nemo/collections/asr/parts/numba/rnnt_loss/rnnt_pytorch.py#L247-L253
 loss_fn = TDTLossNumba(
     blank=model.config.blank_token_id,
     durations=model.config.durations,
     reduction="none",   
 )
 
-# Create wrapper to adapt NeMo loss to Transformers signature
 def nemo_loss_wrapper(token_logits, duration_logits, targets, logit_lengths, target_lengths, **kwargs):
     """Adapter function that converts Transformers loss signature to NeMo signature."""
     acts = torch.cat([token_logits, duration_logits], dim=-1)
@@ -341,6 +337,9 @@ def nemo_loss_wrapper(token_logits, duration_logits, targets, logit_lengths, tar
         act_lens=act_lens,
         label_lens=target_lengths.long(),
     )
+    # NOTE: NeMo's TDTLossNumba doesn't do normalization with target lengths as suggested by its docstring so we do manually:
+    # - Docstring: https://github.com/NVIDIA-NeMo/NeMo/blob/main/nemo/collections/asr/parts/numba/rnnt_loss/rnnt_pytorch.py#L373
+    # - Expected normalization: https://github.com/NVIDIA-NeMo/NeMo/blob/main/nemo/collections/asr/parts/numba/rnnt_loss/rnnt_pytorch.py#L247-L253
     return (per_sample_losses / target_lengths.float()).mean()
 
 # Monkey-patch the model's loss function
