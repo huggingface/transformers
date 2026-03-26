@@ -540,7 +540,6 @@ if TYPE_CHECKING:
     from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
     from .data.datasets import SquadDataset as SquadDataset
     from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
-
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
