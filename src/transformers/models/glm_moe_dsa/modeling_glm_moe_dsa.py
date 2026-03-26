@@ -69,7 +69,6 @@ def apply_rotary_pos_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
     unsqueeze_dim: int = 1,
-    is_neox_style: bool = True,
 ) -> torch.Tensor:
     """
     Applies Rotary Position Embedding to a single tensor.
@@ -83,20 +82,10 @@ def apply_rotary_pos_emb(
         sin (`torch.Tensor`): Sine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
         unsqueeze_dim (`int`): Dimension along which to unsqueeze cos/sin for broadcasting.
             Use `1` when x is `[B, H, S, D]` (BHSD) and `2` when x is `[B, S, H, D]` (BSHD).
-        is_neox_style (`bool`, *optional*, defaults to `True`):
-            Whether to use NeoX split-half style (`True`) or GPT-J/interleaved style (`False`).
 
     Returns:
         `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
     """
-    if is_neox_style:
-        cos = cos.unsqueeze(unsqueeze_dim)
-        sin = sin.unsqueeze(unsqueeze_dim)
-
-        # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
-        x1 = x[..., : x.shape[-1] // 2]
-        x2 = x[..., x.shape[-1] // 2 :]
-        return torch.cat((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1)
 
     # Interleaved (GPT-J style): (x[0], x[1]), (x[2], x[3]), ...
     # RotaryEmbedding outputs cos/sin with repeated halves for NeoX compatibility,
@@ -183,15 +172,13 @@ class GlmMoeDsaIndexer(nn.Module):
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=2, is_neox_style=False)  # [B, S, H, rope_D]
+        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=2)  # [B, S, H, rope_D]
         q = torch.cat([q_pe, q_nope], dim=-1)  # [B, S, H, D]
 
         # === Keys ===
         k = self.k_norm(self.wk(hidden_states))  # [B, S, D]
         k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2, is_neox_style=False).squeeze(
-            2
-        )  # [B, S, rope_D]
+        k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)  # [B, S, rope_D]
         k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
 
         # === Key cache (managed by the indexer, not DynamicCache) ===
@@ -362,7 +349,7 @@ class GlmMoeDsaAttention(nn.Module):
         query_states = query_states.view(batch_size, seq_length, -1, self.qk_head_dim).transpose(1, 2)
         # Split nope/rope, apply RoPE, recombine — layout: [B, H, S, D]
         q_nope, q_pe = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1, is_neox_style=False)  # BHSD format
+        q_pe = apply_rotary_pos_emb(q_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
 
         # ===== KV path =====
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)  # [B, S, kv_rank + rope_D]
@@ -378,7 +365,7 @@ class GlmMoeDsaAttention(nn.Module):
 
         # RoPE on k_pe (single-head rope stream)
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)  # [B, 1, S, rope_D]
-        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1, is_neox_style=False)  # BHSD format
+        k_pe = apply_rotary_pos_emb(k_pe, cos, sin, unsqueeze_dim=1)  # BHSD format
         k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # [B, H, S, rope_D]
 
         # Assemble full Q and K
