@@ -330,7 +330,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_backends"] = ["PilBackend", "TorchvisionBackend"]
+    _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -345,6 +345,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects

@@ -85,7 +85,7 @@ class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
-        requires_backends(self, "torchvision")
+        requires_backends(self, ["torch", "torchvision"])
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
