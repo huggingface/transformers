@@ -678,6 +678,8 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
         )
