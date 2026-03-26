@@ -155,7 +155,7 @@ class CohereAsrProcessor(ProcessorMixin):
         Returns:
             A list of reassembled transcription strings, one per original input sample.
         """
-        max_sample_idx = max(sample_idx for sample_idx, _ in chunk_map)
+        max_sample_idx = max(sample_idx for sample_idx, _ in audio_chunk_index)
         outputs = [""] * (max_sample_idx + 1)
         chunked = {}
 
