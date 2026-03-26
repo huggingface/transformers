@@ -1,0 +1,68 @@
+name: Anti-Slop
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+jobs:
+  anti-slop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: peakoss/anti-slop@v0.2.1
+        with:
+          # -- Failure threshold --
+          # Require both enabled checks to fail before labeling while we validate the signals
+          max-failures: 2
+
+          # -- Do NOT close or lock, just label --
+          close-pr: false
+          lock-pr: false
+          failure-add-pr-labels: "Code agent slop"
+          failure-pr-message: |
+            This PR was flagged by our automated quality checks. If you're a genuine
+            contributor, please reply here and a maintainer will review your PR.
+
+            Common reasons for flagging:
+            - New GitHub account
+            - Unusually high number of repository forks in a 24-hour window
+
+            We appreciate your contribution and apologize if this is a false positive!
+
+          # -- Account checks --
+          # Start with two conservative, high-signal checks and iterate from there
+          min-account-age: 30
+          max-daily-forks: 7
+
+          # -- Disabled checks (keep minimal) --
+          blocked-source-branches: ""
+          blocked-paths: ""
+          detect-spam-usernames: false
+          min-profile-completeness: 0
+          require-description: false
+          require-linked-issue: false
+          require-conventional-title: false
+          require-pr-template: false
+          strict-pr-template-sections: ""
+          optional-pr-template-sections: ""
+          max-additional-pr-template-sections: 0
+          max-description-length: 0
+          require-conventional-commits: false
+          require-commit-author-match: false
+          require-maintainer-can-modify: false
+          require-final-newline: false
+          max-added-comments: 0
+          max-emoji-count: 0
+          max-code-references: 0
+          max-commit-message-length: 0
+          min-repo-merged-prs: 0
+          min-repo-merge-ratio: 0
+          min-global-merge-ratio: 0
+
+          # -- Exemptions --
+          exempt-author-association: "OWNER,MEMBER,COLLABORATOR"
+          exempt-label: "exempt"

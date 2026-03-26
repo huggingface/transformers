@@ -25,16 +25,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="")
-@strict(accept_kwargs=True)
+@strict
 class SpeechEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    kwargs (*optional*):
-        Dictionary of keyword arguments. Notably:
-            - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-              the encoder config.
-            - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-              the decoder config.
-
     Examples:
 
     ```python

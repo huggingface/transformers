@@ -84,7 +84,7 @@ class VLMModelTester:
         kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_attention_heads", 2)
         kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("intermediate_size", 37)
+        kwargs.setdefault("intermediate_size", 32)  # Keep this divisible by 8 for fp16/bf16/fp32 16-bytes alignment
         kwargs.setdefault("hidden_act", "gelu")
         kwargs.setdefault("hidden_dropout_prob", 0.1)
         kwargs.setdefault("attention_probs_dropout_prob", 0.1)

@@ -21,7 +21,6 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
-    Force16BytesAlignment,
     MergeModulelist,
     Transpose,
     WeightConverter,
@@ -56,7 +55,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
-    "qwen3_5_moe": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
@@ -92,7 +90,6 @@ def _build_checkpoint_conversion_mapping():
         ],
         "colpali": [
             WeightRenaming(source_patterns=r"vlm(?!\.model)", target_patterns="vlm.model"),
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
         ],
         "emu3": [
             WeightRenaming(source_patterns=r"text_model.model", target_patterns="text_model"),
@@ -110,20 +107,16 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"(?<!_)model(?!\.(language_model|visual))", target_patterns="model.language_model"
             ),
         ],
-        "colqwen2": [
-            WeightRenaming(
-                source_patterns=r"vlm.model(?!\.(language_model|visual))",
-                target_patterns="vlm.model.language_model",
-            ),
-        ],
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
-            # when saving.TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            # when saving. TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
+            # Note: we don't add `timm_model` when it is part of a bigger VLM, because they already have `timm_model`
+            # saved in state dict keys. Thus the look behind check. Should be fixed by proper `add_prefix`!
             WeightRenaming(
-                source_patterns=r"(.+)",
+                source_patterns=r"^(?!(?:model\.|backbone\.|tower\.))(.+)$",
                 target_patterns=r"timm_model.\1",
             )
         ],
@@ -148,7 +141,6 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.vlm.language_model.embed_tokens",
             ),
         ],
-        "chmv2": [WeightRenaming(r"backbone.layer.", r"backbone.model.layer.")],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
@@ -162,11 +154,6 @@ def _build_checkpoint_conversion_mapping():
         "qwen3_5_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
-        "t5gemma2": [
-            WeightRenaming(r"(?<!vision_model\.)encoder.embed_tokens.", "encoder.text_model.embed_tokens."),
-            WeightRenaming(r"(?<!vision_model\.)encoder.norm.", "encoder.text_model.norm."),
-            WeightRenaming(r"(?<!vision_model\.)encoder.layers.", "encoder.text_model.layers."),
-        ],
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
@@ -174,26 +161,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"tracker_neck.", target_patterns="vision_encoder.neck."),
         ],
         "t5gemma2_encoder": [
-            WeightRenaming("^embed_tokens.", "text_model.embed_tokens."),
-            WeightRenaming("^norm.", "text_model.norm."),
-            WeightRenaming("^layers.", "text_model.layers."),
-        ],
-        "gpt_oss": [
-            # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
-            # If you are dequantizing the model on the fly, these converters will be ignored because the tensors
-            # that match these patterns are only created after dequantization.
-            # That's not an issue for now since the dequantization converters already ensure 16 bytes alignment
-            # by enforcing contiguity.
-            WeightConverter(
-                source_patterns="mlp.experts.gate_up_proj$",
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[Force16BytesAlignment()],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.down_proj$",
-                target_patterns="mlp.experts.down_proj",
-                operations=[Force16BytesAlignment()],
-            ),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens\.", "text_model.embed_tokens."),
+            WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)(?<!layer)(?<!_)norm\.", "text_model.norm."),
+            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
         ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
@@ -241,12 +211,12 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter(
                 source_patterns="mlp.experts.gate_up_proj",
                 target_patterns="mlp.experts.gate_up_proj",
-                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
+                operations=[Transpose(1, 2, check_dims=True)],
             ),
             WeightConverter(
                 source_patterns="mlp.experts.down_proj",
                 target_patterns="mlp.experts.down_proj",
-                operations=[Transpose(1, 2, check_dims=True), Force16BytesAlignment()],
+                operations=[Transpose(1, 2, check_dims=True)],
             ),
         ],
         "phimoe": [
@@ -338,6 +308,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("out_proj", "o_proj"),
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+            # `DetrForSegmentation`
+            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+            # Mask head refactor
+            WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
+            WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
+            WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
+            WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
+            WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
+            WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
+            WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
+            WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
+            WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
+            WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
+            WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
+            WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
+            WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
+            WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
         ],
         "rt_detr": [
             WeightRenaming("out_proj", "o_proj"),
@@ -366,6 +354,24 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 r"decoder.layers.(\d+).ca_qpos_sine_proj", r"decoder.layers.\1.encoder_attn.q_pos_sine_proj"
             ),
+            # The rest of patterns are used only in `ConditionalDetrForSegmentation`
+            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+            # Mask head refactor
+            WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
+            WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
+            WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
+            WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
+            WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
+            WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
+            WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
+            WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
+            WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
+            WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
+            WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
+            WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
+            WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
+            WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
         ],
         "deformable_detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
@@ -458,12 +464,12 @@ def _build_checkpoint_conversion_mapping():
                 "mlp.experts.*.up_proj.weight",
             ],
             target_patterns="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         ),
         WeightConverter(
             source_patterns="mlp.experts.*.down_proj.weight",
             target_patterns="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0)],
         ),
     ]
     mapping["minimax_m2"] = mapping["mixtral"].copy()
@@ -480,12 +486,12 @@ def _build_checkpoint_conversion_mapping():
                 "mlp.experts.*.up_proj.weight",
             ],
             target_patterns="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         ),
         WeightConverter(
             source_patterns="mlp.experts.*.down_proj.weight",
             target_patterns="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0), Force16BytesAlignment()],
+            operations=[MergeModulelist(dim=0)],
         ),
     ]
 
@@ -521,8 +527,12 @@ def register_checkpoint_conversion_mapping(
     _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
-# DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = ["detr"]
+def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightConverter | WeightRenaming] | None:
+    model_type = getattr(model.config, "model_type", None)
+    if model_type is not None:
+        model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
+        return model_specific_conversions
+    return None
 
 
 def get_model_conversion_mapping(
@@ -535,41 +545,41 @@ def get_model_conversion_mapping(
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
     """
+    # Lazy import to avoid circular import issues
+    from .modeling_utils import PreTrainedModel
+
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
 
     # Load models with explicit, user-provided key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
-    elif any(
-        allowed_name in class_name.__name__.lower()
-        for class_name in model.__class__.__mro__[:-1]
-        for allowed_name in VLMS
-    ):
-        weight_conversions = [
-            WeightRenaming(source_patterns=k, target_patterns=v)
-            for k, v in model._checkpoint_conversion_mapping.items()
-        ]
 
-    # TODO: should be checked recursively on submodels!!
-    model_type = getattr(model.config, "model_type", None)
-    if model_type is not None:
-        model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
-        if model_specific_conversions is not None:
-            weight_conversions.extend(model_specific_conversions)
+    # Model have several `PreTrainedModel` within with the same model type
+    # For ex: XForConditionalGeneration -> XModel. We don't want to apply the same
+    # conversion pattern twice because of that
+    seen_model_types = set()
+    if (conversions := extract_weight_conversions_for_model(model)) is not None:
+        weight_conversions.extend(conversions)
+        seen_model_types.add(model.config.model_type)
+
+    # Recurse over submodules and collect all conversions
+    for submodule in model.modules():
+        if (
+            submodule is not model
+            and isinstance(submodule, PreTrainedModel)
+            and submodule.config.model_type not in seen_model_types
+        ):
+            conversions = extract_weight_conversions_for_model(submodule)
+            if conversions is not None:
+                weight_conversions.extend(conversions)
+                seen_model_types.add(submodule.config.model_type)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
-        # NOTE: Since get_weight_conversions() only serve to dequantize, we would normally want to apply them first.
-        # However, for now it's not possible to cascade converters (i.e., applying model-specific conversions on top
-        # of tensors created by the dequantization conversions)
-        # This means that if a model has model-specific conversions and is being dequantized, the model-specific conversion
-        # that relies on tensors created by dequantization conversions will not be applied.
-        # GptOss example: with Mxfp4Config(dequantize=True), Force16BytesAlignment converters are ignored because the tensors
-        # "mlp.experts.gate_up_proj$" and "mlp.experts.down_proj$" are only created after dequantization conversions are applied.
         weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
     return weight_conversions

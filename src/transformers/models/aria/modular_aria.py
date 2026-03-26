@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -98,7 +97,7 @@ def sequential_experts_gemm(token_states, expert_weights, tokens_per_expert):
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
-@strict(accept_kwargs=True)
+@strict
 class AriaTextConfig(LlamaConfig):
     r"""
     moe_num_experts (`int`, *optional*, defaults to 8):
@@ -129,7 +128,7 @@ class AriaTextConfig(LlamaConfig):
 
 
 @auto_docstring(checkpoint="rhymes-ai/Aria")
-@strict(accept_kwargs=True)
+@strict
 class AriaConfig(PreTrainedConfig):
     r"""
     projector_patch_to_query_dict (`dict`, *optional*):
@@ -635,11 +634,7 @@ class AriaProcessor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
