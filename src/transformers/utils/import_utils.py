@@ -674,7 +674,7 @@ def is_pygments_available() -> bool:
 
 @lru_cache
 def is_torchvision_available() -> bool:
-    return is_torch_available() and _is_package_available("torchvision")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("torchvision")[0]
 
 
 @lru_cache
@@ -1128,7 +1128,12 @@ def is_tokenizers_available() -> bool:
 
 @lru_cache
 def is_vision_available() -> bool:
-    return _is_package_available("PIL")[0]
+    try:
+        import PIL.Image  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 @lru_cache

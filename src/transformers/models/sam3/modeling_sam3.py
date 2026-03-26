@@ -20,8 +20,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 from torch import Tensor
+
+from ...utils import is_torchvision_available
+
+if is_torchvision_available():
+    import torchvision
 
 from transformers import CLIPTextModelWithProjection
 

@@ -14,7 +14,11 @@
 from typing import Union
 
 import torch
-from torchvision.ops import masks_to_boxes
+
+from ...utils import is_torchvision_available
+
+if is_torchvision_available():
+    from torchvision.ops import masks_to_boxes
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin

@@ -174,7 +174,27 @@ jobs:
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
-            - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports. Its very important to fix them before you do anything else actually!! 🚨'; exit 1)
+            - run:
+                name: "Test import with all backends (torch + PIL + torchvision)"
+                command: python -c "from transformers import *" || (echo '🚨 import failed with all backends. Fix unprotected imports!! 🚨'; exit 1)
+            - run:
+                name: "Test import with torch only (no PIL, no torchvision)"
+                command: |
+                    uv pip uninstall Pillow torchvision -q
+                    python -c "from transformers import *" || (echo '🚨 import failed with torch only (no PIL). Fix unprotected imports!! 🚨'; exit 1)
+                    uv pip install -e ".[quality]" -q
+            - run:
+                name: "Test import with PIL only (no torch, no torchvision)"
+                command: |
+                    uv pip uninstall torch torchvision torchaudio -q
+                    python -c "from transformers import *" || (echo '🚨 import failed with PIL only (no torch). Fix unprotected imports!! 🚨'; exit 1)
+                    uv pip install -e ".[quality]" -q
+            - run:
+                name: "Test import with torch + PIL, no torchvision"
+                command: |
+                    uv pip uninstall torchvision -q
+                    python -c "from transformers import *" || (echo '🚨 import failed with torch+PIL but no torchvision. Fix unprotected imports!! 🚨'; exit 1)
+                    uv pip install -e ".[quality]" -q
             - run: make check-repository-consistency
 
 workflows:
