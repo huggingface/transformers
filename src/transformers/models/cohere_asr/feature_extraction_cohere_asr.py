@@ -58,6 +58,18 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
             A preemphasis filter coefficient. 0.0 means no preemphasis filter.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        dither (`float`, *optional*, defaults to 1e-5):
+            Amount of deterministic dither noise to add before feature extraction. Each sample is seeded by its
+            valid waveform length so that dither is batch-composition invariant. Set to 0.0 to disable.
+        max_audio_clip_s (`float`, *optional*, defaults to 35.0):
+            Maximum duration in seconds for a single audio chunk. Audio longer than
+            `max_audio_clip_s - overlap_chunk_second` is split at energy-based boundaries.
+        overlap_chunk_second (`float`, *optional*, defaults to 5.0):
+            Size in seconds of the boundary search window used when splitting long audio. This is not actual
+            overlap between chunks — it defines how far back from the chunk boundary to search for a quiet
+            split point.
+        min_energy_window_samples (`int`, *optional*, defaults to 1600):
+            Size in samples of the sliding window used to find the quietest point when splitting audio chunks.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -71,6 +83,10 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
         win_length=400,
         preemphasis=0.97,
         padding_value=0.0,
+        dither=1e-5,
+        max_audio_clip_s=35.0,
+        overlap_chunk_second=5.0,
+        min_energy_window_samples=1600,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -79,6 +95,10 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.win_length = win_length
         self.preemphasis = preemphasis
+        self.dither = dither
+        self.max_audio_clip_s = max_audio_clip_s
+        self.overlap_chunk_second = overlap_chunk_second
+        self.min_energy_window_samples = min_energy_window_samples
 
         # TODO: @eustlb, for now we use librosa to compute the mel filters
         # indeed mel_filter_bank uses np.float64 (while librosa uses np.float32), giving numerical differences
@@ -86,6 +106,63 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
             sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
         )
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
+
+    def _find_split_point_energy(self, waveform: torch.Tensor, start_idx: int, end_idx: int) -> int:
+        segment = waveform[start_idx:end_idx]
+        if segment.shape[0] <= self.min_energy_window_samples:
+            return (start_idx + end_idx) // 2
+
+        min_energy = float("inf")
+        quietest_idx = start_idx
+        upper = segment.shape[0] - self.min_energy_window_samples
+        for i in range(0, upper, self.min_energy_window_samples):
+            window = segment[i : i + self.min_energy_window_samples]
+            energy = torch.sqrt(torch.mean(window * window)).item()
+            if energy < min_energy:
+                min_energy = energy
+                quietest_idx = start_idx + i
+        return quietest_idx
+
+    def _split_audio_chunks_energy(self, waveform: torch.Tensor) -> list[torch.Tensor]:
+        chunk_size = max(1, int(round(self.max_audio_clip_s * self.sampling_rate)))
+        boundary_context_size = max(1, int(round(self.overlap_chunk_second * self.sampling_rate)))
+        total_samples = waveform.shape[0]
+
+        if total_samples <= chunk_size:
+            return [waveform]
+
+        chunks_meta: list[tuple[int, int]] = []
+        idx = 0
+        while idx < total_samples:
+            if idx + chunk_size >= total_samples:
+                chunks_meta.append((idx, total_samples))
+                break
+
+            search_start = max(idx, idx + chunk_size - boundary_context_size)
+            search_end = min(idx + chunk_size, total_samples)
+            if search_end <= search_start:
+                split_point = idx + chunk_size
+            else:
+                split_point = self._find_split_point_energy(waveform, search_start, search_end)
+
+            split_point = max(idx + 1, min(split_point, total_samples))
+            chunks_meta.append((idx, split_point))
+            idx = split_point
+
+        return [waveform[start:end] for start, end in chunks_meta if end > start]
+
+    def _apply_dither(self, waveform: torch.Tensor, audio_lengths: torch.Tensor) -> torch.Tensor:
+        if self.dither <= 0:
+            return waveform
+        generator = torch.Generator(device=waveform.device)
+        for i in range(waveform.shape[0]):
+            valid_samples = min(int(audio_lengths[i].item()), waveform.shape[1])
+            if valid_samples <= 0:
+                continue
+            generator.manual_seed(valid_samples)
+            noise = torch.randn(valid_samples, dtype=waveform.dtype, device=waveform.device, generator=generator)
+            waveform[i, :valid_samples] += self.dither * noise
+        return waveform
 
     def _torch_extract_fbank_features(self, waveform, device="cpu"):
         # spectrogram
@@ -220,9 +297,26 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
                     speech = speech.mean(-1)
 
         if is_batched_torch or is_batched_sequence:
-            raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
+            raw_speech = [speech.to(torch.float32) for speech in raw_speech]
         else:
-            raw_speech = [raw_speech[:, None].to(torch.float32)]
+            raw_speech = [raw_speech.to(torch.float32)]
+
+        # Chunk long audio at energy-based boundaries
+        fast_path_threshold_s = max(0.0, self.max_audio_clip_s - self.overlap_chunk_second)
+        audio_chunk_index: list[tuple[int, int | None]] = []
+        chunked_speech: list[torch.Tensor] = []
+        for sample_idx, speech in enumerate(raw_speech):
+            duration_s = speech.shape[0] / self.sampling_rate
+            if duration_s <= fast_path_threshold_s:
+                chunked_speech.append(speech)
+                audio_chunk_index.append((sample_idx, None))
+            else:
+                chunks = self._split_audio_chunks_energy(speech)
+                for chunk_idx, chunk in enumerate(chunks):
+                    chunked_speech.append(chunk)
+                    audio_chunk_index.append((sample_idx, chunk_idx))
+
+        raw_speech = [speech[:, None] for speech in chunked_speech]
 
         audio_lengths = [len(speech) for speech in raw_speech]
         batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths})
@@ -236,6 +330,9 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
             return_tensors="pt",
         )
         input_features = padded_inputs.input_features.squeeze(-1)
+
+        # dithering
+        input_features = self._apply_dither(input_features, padded_inputs.audio_lengths)
 
         # preemphasis
         if self.preemphasis is not None:
@@ -263,13 +360,15 @@ class CohereAsrFeatureExtractor(SequenceFeatureExtractor):
         input_features = (input_features - mean) / (std + EPSILON)
         input_features *= mask
 
-        return BatchFeature(
+        result = BatchFeature(
             data={
                 "input_features": input_features,
                 "attention_mask": attention_mask,
             },
             tensor_type=return_tensors,
         )
+        result["audio_chunk_index"] = audio_chunk_index
+        return result
 
 
 __all__ = ["CohereAsrFeatureExtractor"]

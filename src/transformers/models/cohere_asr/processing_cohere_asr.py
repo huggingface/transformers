@@ -15,7 +15,13 @@
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+import torch
+
 from ...utils import auto_docstring, logging
+
+
+LANGUAGES = {"ar", "de", "el", "en", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt", "vi", "zh"}
+_NO_SPACE_LANGS = {"ja", "zh"}
 
 
 logger = logging.get_logger(__name__)
@@ -42,20 +48,48 @@ class CohereAsrProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    def get_decoder_prompt_ids(self, language: str, punctuation: bool = True) -> list[int]:
+        """Build the decoder prompt token IDs for the given language and punctuation settings."""
+        if language not in LANGUAGES:
+            raise ValueError(
+                f"Unsupported language: {language!r}. Supported languages: {', '.join(sorted(LANGUAGES))}."
+            )
+        pnc_token = "<|pnc|>" if punctuation else "<|nopnc|>"
+        tokens = [
+            "▁",
+            "<|startofcontext|>",
+            "<|startoftranscript|>",
+            "<|emo:undefined|>",
+            f"<|{language}|>",
+            f"<|{language}|>",
+            pnc_token,
+            "<|noitn|>",
+            "<|notimestamp|>",
+            "<|nodiarize|>",
+        ]
+        return self.tokenizer.convert_tokens_to_ids(tokens)
+
     @auto_docstring
     def __call__(
         self,
         audio: AudioInput,
+        language: str,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        punctuation: bool = True,
         sampling_rate: int | None = None,
         **kwargs: Unpack[CohereAsrProcessorKwargs],
     ):
         r"""
+        language (`str`):
+            Language code (e.g. `"en"`, `"es"`, `"fr"`) used to build the decoder prompt. The processor
+            constructs the full decoder prompt and returns `decoder_input_ids` alongside the audio features.
         sampling_rate (`int`, *optional*):
             The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
             extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
+        punctuation (`bool`, defaults to `True`):
+            Whether to enable punctuation in the decoder prompt.
         """
         audio = make_list_of_audio(audio)
 
@@ -74,16 +108,49 @@ class CohereAsrProcessor(ProcessorMixin):
                 f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
             )
 
-        if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+
+        prompt_ids = self.get_decoder_prompt_ids(language=language, punctuation=punctuation)
+        batch_size = inputs["input_features"].shape[0]
+        inputs["decoder_input_ids"] = torch.tensor([prompt_ids] * batch_size, dtype=torch.long)
+
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        if text is None:
-            return inputs
-        else:
             inputs["labels"] = encodings["input_ids"]
-            return inputs
+
+        return inputs
+
+    def decode(self, *args, audio_chunk_index=None, language=None, **kwargs):
+        texts = self.tokenizer.decode(*args, **kwargs)
+        if audio_chunk_index is None:
+            return texts
+        separator = "" if language in _NO_SPACE_LANGS else " "
+        return self._reassemble_chunk_texts(texts, audio_chunk_index, separator)
+
+    @staticmethod
+    def _reassemble_chunk_texts(
+        texts: list[str],
+        audio_chunk_index: list[tuple[int, int | None]],
+        separator: str = " ",
+    ) -> list[str]:
+        max_sample_idx = max(sample_idx for sample_idx, _ in audio_chunk_index)
+        outputs = [""] * (max_sample_idx + 1)
+        chunked = {}
+
+        for (sample_idx, chunk_idx), text in zip(audio_chunk_index, texts):
+            if chunk_idx is None:
+                outputs[sample_idx] = text
+            else:
+                if sample_idx not in chunked:
+                    chunked[sample_idx] = []
+                chunked[sample_idx].append((chunk_idx, text))
+
+        for sample_idx, chunk_items in chunked.items():
+            chunk_items.sort(key=lambda item: item[0])
+            parts = [t.strip() for _, t in chunk_items if t and t.strip()]
+            outputs[sample_idx] = separator.join(parts)
+
+        return outputs
 
     @property
     def model_input_names(self):
