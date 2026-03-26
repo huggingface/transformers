@@ -1003,7 +1003,7 @@
       - local: model_doc/clap
         title: CLAP
       - local: model_doc/cohere_asr
-        title: CohereASR
+        title: Cohere ASR
       - local: model_doc/csm
         title: CSM
       - local: model_doc/dac

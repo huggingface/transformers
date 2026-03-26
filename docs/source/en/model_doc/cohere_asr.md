@@ -21,7 +21,7 @@ limitations under the License.
 
 ## Overview
 
-TODO
+Cohere ASR, [released](https://cohere.com/blog/transcribe) by Cohere on March 26th, 2026, is a 2B parameter Conformer-based encoder-decoder speech recognition model.
 
 This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb).
 
