@@ -69,7 +69,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.fsdp import initialize_fsdp
+from .integrations.fsdp import apply_fsdp2
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -79,7 +79,7 @@ from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
     distribute_model,
     gather_state_dict_for_save,
-    initialize_tensor_parallelism,
+    init_device_mesh,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -138,8 +138,6 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
     from accelerate.utils import extract_model_from_parallel
 
-
-_torch_distributed_available = torch.distributed.is_available()
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -3244,7 +3242,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
-        if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
+        if self.tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
             raise ImportError(
                 "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
             )
@@ -3367,8 +3365,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     del state_dict[ignore_key]
 
         # If model was sharded with TP, gather full tensors for saving
-        if self._tp_size is not None:
-            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
+        if self.tp_size is not None:
+            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self.tp_size)
 
         # Remove tied weights as safetensors do not handle them
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
@@ -3862,13 +3860,22 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             max_memory (`Dict`, *optional*):
                 A dictionary device identifier to maximum memory if using `device_map`. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
-            tp_plan (`Optional[Union[dict, str]]`, *optional*):
-                A torch tensor parallel plan, see [here](https://pytorch.org/tutorials/intermediate/TP_tutorial.html). Use `tp_plan="auto"` to
-                use the predefined plan based on the model. If it's a dict, then it should match between module names and desired layout.
-                Note that if you use it, you should launch your script accordingly with `torchrun [args] script.py`. This will be much
-                faster than using a `device_map`, but has limitations.
-            tp_size (`str`, *optional*):
-                A torch tensor parallel degree. If not provided would default to world size.
+            distributed_config ([`DistributedConfig`], *optional*):
+                Configuration for native distributed training (FSDP2 + TP) via `torch.distributed`. Mutually
+                exclusive with `quantization_config` (for now) and `device_map`. When set, accelerate is not used for
+                device placement or dispatch. Launch with `torchrun --nproc_per_node=N script.py`.
+
+                Accepts `tp_size`, `tp_plan`, `fsdp_size`, `fsdp_plan`. When a size is specified without a
+                plan, the plan defaults to `"auto"`. `tp_plan="auto"` uses the model's predefined tensor
+                parallel sharding plan. `fsdp_plan="auto"` wraps each transformer layer individually with
+                FSDP2 (`fully_shard`). Both plans also accept a `dict` for manual control: `tp_plan` maps
+                parameter names to parallel styles (e.g. `{"model.layers.*.self_attn.q_proj": "colwise"}`),
+                `fsdp_plan` maps module names to wrap (e.g. `{"model.layers.0": {}, "model.layers.1": {}}`).
+
+                Examples:
+                    - TP-only: `DistributedConfig(tp_size=4)`
+                    - FSDP-only: `DistributedConfig(fsdp_size=4)`
+                    - 2D parallel: `DistributedConfig(tp_size=2, fsdp_size=2)` on 4 GPUs
             device_mesh (`torch.distributed.DeviceMesh`, *optional*):
                 A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
                 If provided, it has to contain dimension named `"tp"` in case it's > 1 dimensional, this dimension will be used for tensor parallelism
@@ -3949,9 +3956,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         adapter_name = kwargs.pop("adapter_name", "default")
         generation_config = kwargs.pop("generation_config", None)
         gguf_file = kwargs.pop("gguf_file", None)
-        tp_plan = kwargs.pop("tp_plan", None)
-        tp_size = kwargs.pop("tp_size", None)
-        fsdp_plan = kwargs.pop("fsdp_plan", None)
         distributed_config: DistributedConfig = kwargs.pop("distributed_config", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -3960,8 +3964,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
 
-        if distributed_config is not None and tp_plan is None:
-            tp_plan = "auto"
+        if distributed_config is not None:
+            if device_map is not None:
+                raise ValueError(
+                    "`distributed_config` and `device_map` are mutually exclusive. "
+                    "`distributed_config` handles device placement natively via torch.distributed."
+                )
+            # NOTE(3outeille): support quantization (fp4/fp8) with distributed training later
+            if quantization_config is not None:
+                raise ValueError(
+                    "Quantization is not currently supported with distributed training. Please disable quantization or distributed_config."
+                )
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -3992,27 +4005,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
             )
 
-        if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
-            logger.info(
-                "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
-                "If your plan is to load the model on each device, you should set device_map={"
-                ": PartialState().process_index} where PartialState comes from accelerate library"
-            )
+        if distributed_config is not None:
+            device_mesh = init_device_mesh(distributed_config)
+        else:
+            # Accelerate path
+            if device_map == "auto" and int(os.environ.get("WORLD_SIZE", "0")):
+                logger.info(
+                    "You've set device_map=`auto` while triggering a distributed run with torchrun. This might lead to unexpected behavior. "
+                    "If your plan is to load the model on each device, you should set device_map={"
+                    ": PartialState().process_index} where PartialState comes from accelerate library"
+                )
 
-        if fsdp_plan is not None and (tp_plan is not None or tp_size is not None):
-            raise ValueError("Combining `fsdp_plan` with tensor parallel loading is not supported yet.")
-
-        if tp_plan is not None or tp_size is not None:  # TP warnings, and setup
-            device_map, device_mesh, tp_size = initialize_tensor_parallelism(
-                tp_plan, tp_size=tp_size, device_mesh=device_mesh, device_map=device_map
-            )
-
-        if fsdp_plan is not None:
-            device_map, device_mesh, _ = initialize_fsdp(
-                fsdp_plan=fsdp_plan,
-                device_mesh=device_mesh,
-                device_map=device_map,
-            )
+            device_map = check_and_set_device_map(device_map)  # validate & normalize (requires accelerate)
 
         if gguf_file is not None and not is_accelerate_available():
             raise ValueError("accelerate is required when loading a GGUF file `pip install accelerate`.")
@@ -4025,7 +4029,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             download_kwargs_with_commit,
             **adapter_kwargs,
         )
-        device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -4138,17 +4141,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
-        if _torch_distributed_available and device_mesh is not None and (tp_plan is not None or fsdp_plan is not None):
-            model = distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size, fsdp_plan=fsdp_plan)
-
-        # Prepare the full device map
-        if isinstance(device_map, dict):
-            device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
-        elif device_map is not None:
-            device_map = {"": device_map}
+        if distributed_config is not None:
+            if torch.distributed.is_initialized() and device_mesh is not None:
+                model = distribute_model(model, distributed_config, device_mesh)
+        else:
+            # Accelerate path: auto device mapping
+            if device_map is not None:
+                device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Finalize model weight initialization
-        active_tp_plan = getattr(model, "_tp_plan", None) if tp_size is not None else None
+        active_tp_plan = getattr(model, "_tp_plan", None) if getattr(distributed_config, "tp_plan", None) else None
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4170,6 +4172,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
+
+        # TODO(3outeille): will be applied during meta once weight loader supports FSDP-managed params.
+        # For now, apply FSDP2 after weight loading. Only on the native distributed path (never accelerate).
+        if (
+            distributed_config is not None
+            and distributed_config.fsdp_plan is not None
+            and not getattr(model, "_is_fsdp_managed_module", False)
+        ):
+            model = apply_fsdp2(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
@@ -4442,8 +4453,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Returns the model's tensor parallelism degree.
         """
-        # if None, the model didn't undergo tensor parallel sharding
-        return self._tp_size
+        dc = getattr(self.config, "distributed_config", None)
+        return dc.tp_size if dc is not None else None
 
     @property
     def supports_pp_plan(self):

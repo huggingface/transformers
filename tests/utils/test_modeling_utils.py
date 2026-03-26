@@ -431,43 +431,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
-    def test_model_from_pretrained_fsdp_distributes_before_loading(self):
-        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, n_positions=8, n_ctx=8, vocab_size=32))
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            call_order = []
-
-            def fake_distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size, fsdp_plan=None):
-                call_order.append("distribute")
-                self.assertEqual(fsdp_plan, {"mode": "auto"})
-                model._tp_plan = {"model.layers.*.mlp.experts.gate_up_proj": "packed_colwise"}
-                model._is_fsdp_managed_module = True
-                return model
-
-            def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
-                call_order.append("load")
-                self.assertEqual(load_config.device_mesh, "fake-mesh")
-                self.assertEqual(load_config.device_map, {"": torch.device("cpu")})
-                self.assertIsNone(load_config.tp_plan)
-                return mock.Mock(), None
-
-            with (
-                patch(
-                    "transformers.modeling_utils.initialize_fsdp", return_value=(torch.device("cpu"), "fake-mesh", 2)
-                ),
-                patch("transformers.modeling_utils.distribute_model", side_effect=fake_distribute_model),
-                patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
-                patch.object(
-                    GPT2LMHeadModel,
-                    "_finalize_model_loading",
-                    side_effect=lambda model, load_config, loading_info: loading_info,
-                ),
-            ):
-                GPT2LMHeadModel.from_pretrained(tmp_dir, fsdp_plan={"mode": "auto"})
-
-        self.assertEqual(call_order, ["distribute", "load"])
-
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
         def test_func():
