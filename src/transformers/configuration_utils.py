@@ -287,6 +287,21 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
+        # BC for legacy configs where rope_theta is defined at the top level while rope_parameters is
+        # set via the rope_scaling property setter (from kwargs) without including rope_theta.
+        # This happens when rope_parameters is not a declared dataclass field, so convert_rope_params_to_dict
+        # was not called before the kwargs loop, but rope_scaling/rope_theta were then set as attrs.
+        rope_params = getattr(self, "rope_parameters", None)
+        if (
+            isinstance(rope_params, dict)
+            and "rope_theta" not in rope_params
+            and hasattr(self, "rope_theta")
+        ):
+            rope_type = rope_params.get("rope_type", rope_params.get("type", "default"))
+            if rope_type == "default":
+                rope_params.setdefault("rope_type", "default")
+                rope_params["rope_theta"] = self.rope_theta
+
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls_has_custom_init = "__init__" in cls.__dict__
