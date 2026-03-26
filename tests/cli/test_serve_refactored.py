@@ -70,28 +70,36 @@ def test_host_port_blocking(cli):
 
 class TestProcessorInputsFromMessages(unittest.TestCase):
     def test_llm_string_content(self):
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": "Hello"}]
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
         self.assertEqual(result, [{"role": "user", "content": "Hello"}])
 
     def test_llm_list_content_text_only(self):
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "A"}, {"type": "text", "text": "B"}]}]
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
         self.assertEqual(result, [{"role": "user", "content": "A B"}])
 
     def test_vlm_string_content_wrapped(self):
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": "Hello"}]
         result = get_processor_inputs_from_messages(messages, Modality.VLM)
         self.assertEqual(result, [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}])
 
     def test_vlm_text_and_image_url(self):
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [
             {
@@ -109,7 +117,9 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
 
     def test_llm_multi_turn_conversation(self):
         """Multi-turn conversation with string content should pass through as-is."""
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [
             {"role": "user", "content": "How are you?"},
@@ -124,7 +134,9 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
 
     def test_llm_list_content_with_type(self):
         """LLM messages with typed content list should extract text and join."""
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [
             {"role": "user", "content": [{"type": "text", "text": "Hello"}, {"type": "text", "text": "world"}]}
@@ -137,7 +149,9 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         """Base64 image URLs should be decoded and saved to a temp file."""
         import os
 
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         # Minimal valid 1x1 PNG as base64
         base64_url = (
@@ -160,7 +174,9 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
 
     def test_vlm_multi_turn(self):
         """VLM multi-turn: string content should be wrapped in text type."""
-        from transformers.cli.serving.utils import Modality, get_processor_inputs_from_messages
+        from transformers.cli.serving.utils import BaseHandler, Modality
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [
             {"role": "user", "content": "Describe the image"},
@@ -1046,10 +1062,10 @@ class TestResponseGenerationConfig(unittest.TestCase):
 
 @require_openai
 class TestResponseUsage(unittest.TestCase):
-    def test_make_usage(self):
-        from transformers.cli.serving.response import _make_usage
+    def testcompute_usage(self):
+        from transformers.cli.serving.response import compute_usage
 
-        usage = _make_usage(input_tokens=100, output_tokens=50)
+        usage = compute_usage(input_tokens=100, output_tokens=50)
         self.assertEqual(usage.input_tokens, 100)
         self.assertEqual(usage.output_tokens, 50)
         self.assertEqual(usage.total_tokens, 150)
@@ -1060,9 +1076,9 @@ class TestResponseUsage(unittest.TestCase):
         """Usage should serialize correctly inside a Response."""
         from openai.types.responses import Response
 
-        from transformers.cli.serving.response import _make_usage
+        from transformers.cli.serving.response import compute_usage
 
-        usage = _make_usage(10, 5)
+        usage = compute_usage(10, 5)
         response = Response(
             id="resp_test",
             created_at=0,
