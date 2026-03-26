@@ -211,6 +211,7 @@ class ContinuousBatchProcessor:
                     f"because the attention implementation is not FA3. Got {self.config._attn_implementation = }."
                 )
                 self.cache.max_blocks_per_request = 0
+
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
         self.scheduler.reset()
@@ -819,7 +820,7 @@ class ContinuousBatchingManager:
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             self.model.config,
-            self.generation_config,
+            self.continuous_batching_config,
             self.model.device,
             self.model.dtype,
             tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting

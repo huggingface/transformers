@@ -1585,7 +1585,7 @@ class ContinuousBatchingConfig:
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
         use_default_compile_configs (`bool`, *optional*, defaults to `False`):
             If True, a default compile config will be used for paths that are not explicitly set.
-        scheduler (`str`, *optional*, defaults to `"fifo"`):
+        scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
@@ -1632,8 +1632,8 @@ class ContinuousBatchingConfig:
     # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
     use_default_compile_configs: bool = False
 
-    # Scheduler type used
-    scheduler: str = "fifo"
+    # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
+    scheduler_type: str = "fifo"
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
@@ -1641,9 +1641,6 @@ class ContinuousBatchingConfig:
 
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
-
-    # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
-    scheduler_type: str = "fifo"
 
     def account_for_cb_deprecated_arguments(
         self,
