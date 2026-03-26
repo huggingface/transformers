@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -41,6 +42,10 @@ from ..owlv2.image_processing_owlv2 import box_iou
 
 if is_scipy_available():
     from scipy import ndimage as ndi
+
+
+if TYPE_CHECKING:
+    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
 if is_torch_available():
     import torch
 if is_torchvision_available():
@@ -176,7 +181,12 @@ class Owlv2ImageProcessorPil(PilBackend):
         super().__init__(**kwargs)
 
     @requires(backends=("vision", "torch"))
-    def post_process_object_detection(self, *args, **kwargs):
+    def post_process_object_detection(
+        self,
+        outputs: "Owlv2ObjectDetectionOutput",
+        threshold: float = 0.1,
+        target_sizes: TensorType | list[tuple] | None = None,
+    ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.
@@ -226,7 +236,7 @@ class Owlv2ImageProcessorPil(PilBackend):
         return results
 
     @requires(backends=("vision", "torch"))
-    def post_process_image_guided_detection(self, *args, **kwargs):
+    def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
