@@ -46,7 +46,7 @@ jobs:
         run: |
           git config --global --add safe.directory /__w/transformers/transformers
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            commit_id=$(echo "${{ github.event.pull_request.head.sha }}")
+            commit_id=$(echo "${PR_HEAD_SHA}")
           elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
             commit_id=$GITHUB_SHA
           fi
@@ -59,3 +59,4 @@ jobs:
           # HF_HUB_VERBOSITY: debug
           # TRANSFORMERS_VERBOSITY: debug
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
