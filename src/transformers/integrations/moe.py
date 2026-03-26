@@ -17,7 +17,12 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available, is_torch_less_or_equal, is_torchdynamo_compiling, is_torch_greater_or_equal
+from ..utils.import_utils import (
+    is_torch_available,
+    is_torch_greater_or_equal,
+    is_torch_less_or_equal,
+    is_torchdynamo_compiling,
+)
 
 
 if is_torch_available():
