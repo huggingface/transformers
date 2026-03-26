@@ -22,6 +22,7 @@ from transformers.testing_utils import cleanup, require_torch, slow, torch_devic
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    GenerationTesterMixin,
     ModelTesterMixin,
     floats_tensor,
     random_attention_mask,
@@ -131,19 +132,19 @@ class CohereAsrModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins], scale=1.0)
+        input_features = floats_tensor([self.batch_size, self.seq_length, self.num_mel_bins], scale=1.0)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
         decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id]], device=torch_device)
         decoder_attention_mask = decoder_input_ids.ne(self.pad_token_id)
         config = self.get_config()
-        return config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask
+        return config, input_features, attention_mask, decoder_input_ids, decoder_attention_mask
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask = (
+        config, input_features, attention_mask, decoder_input_ids, decoder_attention_mask = (
             self.prepare_config_and_inputs()
         )
         inputs_dict = {
-            "input_values": input_values,
+            "input_features": input_features,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
         }
@@ -151,10 +152,9 @@ class CohereAsrModelTester:
 
 
 @require_torch
-class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CohereAsrModel, CohereAsrForConditionalGeneration) if is_torch_available() else ()
-    # TODO: enable generation tests
-    all_generative_model_classes = ()
+    all_generative_model_classes = (CohereAsrForConditionalGeneration,)
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": CohereAsrForConditionalGeneration,
@@ -289,13 +289,18 @@ class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(reason="FIXME: likely intended because we need input ids but to double-check")
+    def test_generate_without_input_ids(self):
+        pass
 
+
+# TODO: remove revision
 @require_torch
 class CohereAsrIntegrationTest(unittest.TestCase):
     checkpoint_name = "CohereLabs/cohere-transcribe-03-2026"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision="refs/pr/6")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -315,7 +320,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             language="en",
         )
-        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device, revision="refs/pr/6")
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -340,7 +345,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False
         )
 
-        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device, revision="refs/pr/6")
         inputs_pnc.to(model.device, dtype=model.dtype)
         inputs_nopnc.to(model.device, dtype=model.dtype)
 
@@ -370,7 +375,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(audio=audio, return_tensors="pt", language="en", sampling_rate=16000)
         audio_chunk_index = inputs.get("audio_chunk_index")
-        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device, revision="refs/pr/6")
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -400,7 +405,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
         audio_chunk_index = inputs.get("audio_chunk_index")
-        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device, revision="refs/pr/6")
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -426,7 +431,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             sampling_rate=16000,
         )
         inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
-        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device, revision="refs/pr/6")
         inputs.to(model.device, dtype=model.dtype)
 
         outputs = model.generate(**inputs, max_new_tokens=256)

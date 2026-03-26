@@ -297,7 +297,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
 class CohereAsrPreTrainedModel(PreTrainedModel):
     config: CohereAsrConfig
     base_model_prefix = "model"
-    main_input_name = "input_values"
+    main_input_name = "input_features"
     input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CohereAsrEncoderLayer", "CohereAsrDecoderLayer"]
@@ -454,7 +454,7 @@ class CohereAsrModel(CohereAsrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
@@ -466,12 +466,12 @@ class CohereAsrModel(CohereAsrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        input_features (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
             `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
-            `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+            `input_features`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
@@ -488,15 +488,16 @@ class CohereAsrModel(CohereAsrPreTrainedModel):
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/cohere_asr-tiny")
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_values = inputs.input_values
+        >>> input_features = inputs.input_features
         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-        >>> last_hidden_state = model(input_values, decoder_input_ids=decoder_input_ids).last_hidden_state
+        >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
         >>> list(last_hidden_state.shape)
         [1, 2, 288]
         ```
         """
+        # Main difference: uses `input_features` instead of `input_values`
         if encoder_outputs is None:
-            encoder_outputs: BaseModelOutput = self.encoder(input_values, attention_mask=attention_mask, **kwargs)
+            encoder_outputs: BaseModelOutput = self.encoder(input_features, attention_mask=attention_mask, **kwargs)
 
         decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
             input_ids=decoder_input_ids,
@@ -567,7 +568,7 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_values: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
@@ -580,12 +581,12 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        input_features (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
             `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
-            `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+            `input_features`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
@@ -604,15 +605,15 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_values = inputs.input_values
+        >>> input_features = inputs.input_features
 
-        >>> generated_ids = model.generate(input_values, max_new_tokens=100)
+        >>> generated_ids = model.generate(input_features, max_new_tokens=100)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
-
+        # Main difference: uses `input_features` instead of `input_values`
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
@@ -620,7 +621,7 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
                 )
 
         outputs: Seq2SeqModelOutput = self.model(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,

@@ -21,10 +21,16 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
@@ -34,6 +40,7 @@ from ..moonshine.modeling_moonshine import (
     MoonshineModel,
     MoonshinePreTrainedModel,
     eager_attention_forward,
+    shift_tokens_right,
 )
 from .configuration_cohere_asr import CohereAsrConfig
 
@@ -241,6 +248,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
 
 
 class CohereAsrPreTrainedModel(MoonshinePreTrainedModel):
+    main_input_name = "input_features"
     _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
 
 
@@ -340,12 +348,170 @@ class CohereAsrModel(MoonshineModel):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
 
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_position_ids: tuple[torch.LongTensor] | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqModelOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+            Float values of the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for padding
+            and conversion into a tensor of type `torch.FloatTensor`.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoFeatureExtractor, CohereAsrModel
+        >>> from datasets import load_dataset
+
+        >>> model = CohereAsrModel.from_pretrained("UsefulSensors/cohere_asr-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/cohere_asr-tiny")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_features = inputs.input_features
+        >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+        >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+        >>> list(last_hidden_state.shape)
+        [1, 2, 288]
+        ```
+        """
+        # Main difference: uses `input_features` instead of `input_values`
+        if encoder_outputs is None:
+            encoder_outputs: BaseModelOutput = self.encoder(input_features, attention_mask=attention_mask, **kwargs)
+
+        decoder_outputs: BaseModelOutputWithPastAndCrossAttentions = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_attention_mask=encoder_outputs.attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            position_ids=decoder_position_ids,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
 
 class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_position_ids: tuple[torch.LongTensor] | None = None,
+        use_cache: bool | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Seq2SeqLMOutput:
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+            Float values of the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for padding
+            and conversion into a tensor of type `torch.FloatTensor`.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, CohereAsrForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/cohere_asr-tiny")
+        >>> model = CohereAsrForConditionalGeneration.from_pretrained("UsefulSensors/cohere_asr-tiny")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_features = inputs.input_features
+
+        >>> generated_ids = model.generate(input_features, max_new_tokens=100)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription
+        'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        ```"""
+        # Main difference: uses `input_features` instead of `input_values`
+        if labels is not None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
+        outputs: Seq2SeqModelOutput = self.model(
+            input_features,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            decoder_position_ids=decoder_position_ids,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        logits = self.proj_out(outputs.last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
 
     def prepare_inputs_for_generation(self, *args, audio_chunk_index=None, **kwargs):
         # audio_chunk_index is returned by the processor but not used by the model, absorb it here

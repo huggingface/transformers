@@ -71,6 +71,8 @@ class CohereAsrConfig(PreTrainedConfig):
     hidden_act: str = "relu"
     max_position_embeddings: int = 1024
     pad_token_id: int | None = 2
+    eos_token_id: int | None = 3
+    bos_token_id: int | None = 4
     is_encoder_decoder: bool = True
     initializer_range: float = 0.02
     attention_dropout: float | int = 0.0

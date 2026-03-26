@@ -33,8 +33,9 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 from transformers import AutoProcessor, CohereAsrForConditionalGeneration
 from transformers.audio_utils import load_audio
 
-processor = AutoProcessor.from_pretrained("CohereLabs/cohere-transcribe-03-2026")
-model = CohereAsrForConditionalGeneration.from_pretrained("CohereLabs/cohere-transcribe-03-2026", device_map="auto")
+revision = "refs/pr/6"
+processor = AutoProcessor.from_pretrained("CohereLabs/cohere-transcribe-03-2026", revision=revision)
+model = CohereAsrForConditionalGeneration.from_pretrained("CohereLabs/cohere-transcribe-03-2026", device_map="auto", revision=revision)
 
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
