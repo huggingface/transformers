@@ -986,6 +986,7 @@ def get_parallel_materialization_context(
 
     return None
 
+
 def dot_natural_key(s: str):
     """Sort key for state-dict names: split on ``"."`` and sort digits numerically
     and strings alphabetically. We emit a tuple at each point to sort ints
