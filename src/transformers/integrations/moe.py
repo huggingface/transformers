@@ -17,7 +17,7 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import is_torch_available, is_torch_less_or_equal, is_torchdynamo_compiling, is_torch_greater_or_equal
 
 
 if is_torch_available():
@@ -279,7 +279,11 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         if hasattr(torch.nn.functional, "grouped_mm"):
             return torch.cuda.get_device_capability(weight.device) >= (8, 0)
         if hasattr(torch, "_grouped_mm"):
-            return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+            if is_torch_greater_or_equal("2.9", accept_dev=True):
+                return torch.cuda.get_device_capability(weight.device) >= (8, 0)
+            else:
+                return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+
         return False
 
     return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
