@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -35,21 +34,20 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_cohere_asr import CohereAsrConfig
 
 
 class CohereAsrDecoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
@@ -97,6 +95,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+# Modular automatically inherits RoPE, hence no inheritance for now
 class CohereAsrSelfAttention(nn.Module):
     def __init__(self, config: CohereAsrConfig, layer_idx: int):
         super().__init__()
@@ -125,8 +124,7 @@ class CohereAsrSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        past_key_values=None,
+        past_key_values: Cache | None = None,
         **kwargs,
     ):
         input_shape = hidden_states.shape[:-1]
@@ -164,6 +162,7 @@ class CohereAsrSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Modular automatically inherits RoPE, hence no inheritance for now
 class CohereAsrCrossAttention(nn.Module):
     def __init__(self, config: CohereAsrConfig, layer_idx: int):
         super().__init__()
@@ -191,36 +190,41 @@ class CohereAsrCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cross_attention_states: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values=None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        kv_input_shape = cross_attention_states.shape[:-1]
-        kv_hidden_shape = (*kv_input_shape, -1, self.head_dim)
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = encoder_hidden_states.shape[1]
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+
+        # get query proj
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+
+        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
+        if past_key_values is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+        else:
+            key_states = self.k_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+
+            if past_key_values is not None:
+                # save all states to the cache
+                key_states, value_states = past_key_values.cross_attention_cache.update(
+                    key_states, value_states, self.layer_idx
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
-        if past_key_values is not None:
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
-            past_key_values.is_updated[self.layer_idx] = True
-            cross_cache = past_key_values.cross_attention_cache
-            if is_updated:
-                key_states = cross_cache.layers[self.layer_idx].keys
-                value_states = cross_cache.layers[self.layer_idx].values
-            else:
-                key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-                value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-                key_states, value_states = cross_cache.update(key_states, value_states, self.layer_idx)
-        else:
-            key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-            value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -232,8 +236,7 @@ class CohereAsrCrossAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -244,7 +247,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = CohereAsrSelfAttention(config=config, layer_idx=layer_idx)
         self.encoder_attn = CohereAsrCrossAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = CohereAsrDecoderMLP(config, config.hidden_act)
+        self.mlp = CohereAsrDecoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
@@ -258,9 +261,6 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         encoder_position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        encoder_position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -271,8 +271,6 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -282,10 +280,9 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
             hidden_states = self.post_attention_layernorm(hidden_states)
             hidden_states, _ = self.encoder_attn(
                 hidden_states=hidden_states,
-                cross_attention_states=encoder_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
             )
             hidden_states = residual + hidden_states
 
@@ -309,6 +306,7 @@ class CohereAsrPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
+    # TODO arthur, how do we separate when it cross / self coming from different layer?
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
@@ -319,73 +317,6 @@ class CohereAsrPreTrainedModel(PreTrainedModel):
         output_conv3_length = int((output_conv2_length - 3) / 2 + 1)
 
         return output_conv3_length
-
-
-class CohereAsrRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: CohereAsrConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: CohereAsrConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -405,7 +336,6 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([CohereAsrDecoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
         self.norm = nn.LayerNorm(config.hidden_size)
-        self.rotary_emb = CohereAsrRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.pos_emb = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
@@ -472,9 +402,6 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        # No RoPE — position info is already in the embeddings via fixed sinusoidal pos_emb
-        position_embeddings = None
-
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -483,8 +410,6 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

@@ -17,8 +17,8 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
@@ -27,9 +27,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..moonshine.modeling_moonshine import (
     MoonshineDecoder,
-    MoonshineDecoderMLP,
     MoonshineForConditionalGeneration,
     MoonshineModel,
     MoonshinePreTrainedModel,
@@ -38,21 +38,11 @@ from ..moonshine.modeling_moonshine import (
 from .configuration_cohere_asr import CohereAsrConfig
 
 
-class CohereAsrDecoderMLP(MoonshineDecoderMLP):
-    def __init__(self, config, hidden_act):
-        super(nn.Module, self).__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class CohereAsrDecoderMLP(CLIPMLP):
+    pass
 
 
+# Modular automatically inherits RoPE, hence no inheritance for now
 class CohereAsrSelfAttention(nn.Module):
     def __init__(self, config: CohereAsrConfig, layer_idx: int):
         super().__init__()
@@ -81,8 +71,7 @@ class CohereAsrSelfAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        past_key_values=None,
+        past_key_values: Cache | None = None,
         **kwargs,
     ):
         input_shape = hidden_states.shape[:-1]
@@ -120,6 +109,7 @@ class CohereAsrSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Modular automatically inherits RoPE, hence no inheritance for now
 class CohereAsrCrossAttention(nn.Module):
     def __init__(self, config: CohereAsrConfig, layer_idx: int):
         super().__init__()
@@ -147,36 +137,41 @@ class CohereAsrCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cross_attention_states: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values=None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        kv_input_shape = cross_attention_states.shape[:-1]
-        kv_hidden_shape = (*kv_input_shape, -1, self.head_dim)
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = encoder_hidden_states.shape[1]
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+
+        # get query proj
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+
+        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
+        if past_key_values is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
+            value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
+        else:
+            key_states = self.k_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+
+            if past_key_values is not None:
+                # save all states to the cache
+                key_states, value_states = past_key_values.cross_attention_cache.update(
+                    key_states, value_states, self.layer_idx
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-
-        if past_key_values is not None:
-            is_updated = past_key_values.is_updated.get(self.layer_idx)
-            past_key_values.is_updated[self.layer_idx] = True
-            cross_cache = past_key_values.cross_attention_cache
-            if is_updated:
-                key_states = cross_cache.layers[self.layer_idx].keys
-                value_states = cross_cache.layers[self.layer_idx].values
-            else:
-                key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-                value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-                key_states, value_states = cross_cache.update(key_states, value_states, self.layer_idx)
-        else:
-            key_states = self.k_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
-            value_states = self.v_proj(cross_attention_states).view(kv_hidden_shape).transpose(1, 2)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -188,8 +183,7 @@ class CohereAsrCrossAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -200,7 +194,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = CohereAsrSelfAttention(config=config, layer_idx=layer_idx)
         self.encoder_attn = CohereAsrCrossAttention(config=config, layer_idx=layer_idx)
 
-        self.mlp = CohereAsrDecoderMLP(config, config.hidden_act)
+        self.mlp = CohereAsrDecoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
@@ -214,9 +208,6 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         encoder_position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        encoder_position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
@@ -227,8 +218,6 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -238,10 +227,9 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
             hidden_states = self.post_attention_layernorm(hidden_states)
             hidden_states, _ = self.encoder_attn(
                 hidden_states=hidden_states,
-                cross_attention_states=encoder_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
             )
             hidden_states = residual + hidden_states
 
@@ -265,6 +253,7 @@ class CohereAsrDecoder(MoonshineDecoder):
 
     def __init__(self, config):
         super().__init__(config)
+        del self.rotary_emb
         self.norm = nn.LayerNorm(config.hidden_size)
         self.pos_emb = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
@@ -327,9 +316,6 @@ class CohereAsrDecoder(MoonshineDecoder):
         )
 
         hidden_states = inputs_embeds
-        # No RoPE — position info is already in the embeddings via fixed sinusoidal pos_emb
-        position_embeddings = None
-
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -338,8 +324,6 @@ class CohereAsrDecoder(MoonshineDecoder):
                 encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -365,7 +349,7 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
 
     def prepare_inputs_for_generation(self, *args, audio_chunk_index=None, **kwargs):
         # audio_chunk_index is returned by the processor but not used by the model, absorb it here
-        return super().prepare_inputs_for_generation(*args, **kwargs)
+        return GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
 
 __all__ = [
