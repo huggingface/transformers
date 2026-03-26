@@ -41,10 +41,8 @@ from ..owlv2.image_processing_owlv2 import box_iou
 
 if is_scipy_available():
     from scipy import ndimage as ndi
-if is_torch_available():
-    import torch
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+import torch
+import torchvision.transforms.v2.functional as tvF
 
 
 def _preprocess_resize_output_shape(image, output_shape):
@@ -175,62 +173,11 @@ class Owlv2ImageProcessorPil(PilBackend):
         super().__init__(**kwargs)
 
     @requires(backends=("vision", "torch"))
-    def post_process_object_detection(
-        self,
-        outputs: "Owlv2ObjectDetectionOutput",
-        threshold: float = 0.1,
-        target_sizes: TensorType | list[tuple] | None = None,
-    ):
-        """
-        Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`Owlv2ObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*, defaults to 0.1):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
-            - "scores": The confidence scores for each predicted box on the image.
-            - "labels": Indexes of the classes predicted by the model on the image.
-            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
-        """
-        requires_backends(self, "torch")
-        batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
-        batch_size = len(batch_logits)
-
-        if target_sizes is not None and len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as images")
-
-        # batch_logits of shape (batch_size, num_queries, num_classes)
-        batch_class_logits = torch.max(batch_logits, dim=-1)
-        batch_scores = torch.sigmoid(batch_class_logits.values)
-        batch_labels = batch_class_logits.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        batch_boxes = center_to_corners_format(batch_boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        if target_sizes is not None:
-            batch_boxes = _scale_boxes(batch_boxes, target_sizes)
-
-        results = []
-        for scores, labels, boxes in zip(batch_scores, batch_labels, batch_boxes):
-            keep = scores > threshold
-            scores = scores[keep]
-            labels = labels[keep]
-            boxes = boxes[keep]
-            results.append({"scores": scores, "labels": labels, "boxes": boxes})
-
-        return results
+    def post_process_object_detection(self, *args, **kwargs):
+        return super().post_process_object_detection(*args, **kwargs)
 
     @requires(backends=("vision", "torch"))
-    def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
+    def post_process_image_guided_detection(self, *args, **kwargs):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
