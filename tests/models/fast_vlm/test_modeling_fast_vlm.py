@@ -228,6 +228,10 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_get_image_features_attentions(self):
         pass
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
         # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
