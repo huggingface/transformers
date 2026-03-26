@@ -126,39 +126,46 @@ class TestGetAutoDocstringNames(unittest.TestCase):
 
     def test_detects_simple_decorator(self):
         """Test that a class decorated with @auto_docstring is detected."""
-        path = self._write_temp(textwrap.dedent("""\
+        path = self._write_temp(
+            textwrap.dedent("""\
             from transformers import auto_docstring
 
             @auto_docstring
             class Foo:
                 pass
-        """))
+        """)
+        )
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, {"Foo"})
 
     def test_detects_decorator_with_call(self):
         """Test that a class decorated with @auto_docstring(args) (called form) is detected."""
-        path = self._write_temp(textwrap.dedent("""\
+        path = self._write_temp(
+            textwrap.dedent("""\
             @auto_docstring(custom_args='x')
             class Bar:
                 pass
-        """))
+        """)
+        )
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, {"Bar"})
 
     def test_ignores_other_decorators(self):
         """Test that classes with non-auto_docstring decorators are not detected."""
-        path = self._write_temp(textwrap.dedent("""\
+        path = self._write_temp(
+            textwrap.dedent("""\
             @dataclass
             class Baz:
                 pass
-        """))
+        """)
+        )
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, set())
 
     def test_multiple_classes(self):
         """Test that only decorated classes and functions are returned when multiple definitions exist."""
-        path = self._write_temp(textwrap.dedent("""\
+        path = self._write_temp(
+            textwrap.dedent("""\
             @auto_docstring
             class A:
                 pass
@@ -169,17 +176,20 @@ class TestGetAutoDocstringNames(unittest.TestCase):
             @auto_docstring()
             def func_c():
                 pass
-        """))
+        """)
+        )
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, {"A", "func_c"})
 
     def test_caching(self):
         """Test that repeated calls for the same file return the cached (identical) result object."""
-        path = self._write_temp(textwrap.dedent("""\
+        path = self._write_temp(
+            textwrap.dedent("""\
             @auto_docstring
             class X:
                 pass
-        """))
+        """)
+        )
         result1 = _get_auto_docstring_names(path)
         result2 = _get_auto_docstring_names(path)
         self.assertIs(result1, result2)
@@ -194,11 +204,13 @@ class TestGetAutoDocstringNames(unittest.TestCase):
         """Test that has_auto_docstring_decorator looks up names from the pre-populated cache."""
         from unittest.mock import patch
 
-        path = self._write_temp(textwrap.dedent("""\
+        path = self._write_temp(
+            textwrap.dedent("""\
             @auto_docstring
             class Cached:
                 pass
-        """))
+        """)
+        )
         _auto_docstring_cache[path] = {"Cached"}
 
         # Create classes whose __name__ matches/doesn't match the cache
