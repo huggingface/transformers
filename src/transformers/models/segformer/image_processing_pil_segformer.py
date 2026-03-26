@@ -37,13 +37,13 @@ from ...utils.import_utils import requires
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
-import torch
+if is_torch_available():
+    import torch
     import torch.nn.functional as F
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
-@auto_docstring
 @requires(backends=("vision", "torch", "torchvision"))
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""

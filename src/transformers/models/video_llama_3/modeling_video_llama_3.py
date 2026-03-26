@@ -21,10 +21,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import torch
-import torch.nn as nn
-from torch.nn import LayerNorm
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -37,12 +33,19 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torch_available,
     torch_compilable_check,
 )
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    from torch.nn import LayerNorm
 
 
 class VideoLlama3VisionRotaryEmbedding(nn.Module):

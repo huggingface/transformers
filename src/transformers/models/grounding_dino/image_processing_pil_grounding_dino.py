@@ -71,7 +71,9 @@ if TYPE_CHECKING:
 
 if is_vision_available():
     import PIL.Image
-import torch
+if is_torch_available():
+    import torch
+
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 

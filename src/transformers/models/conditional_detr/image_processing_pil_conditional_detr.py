@@ -68,8 +68,9 @@ from .image_processing_conditional_detr import (
 
 if is_vision_available():
     import PIL.Image
-import torch
-from torch import nn
+if is_torch_available():
+    import torch
+    from torch import nn
 
 
 logger = logging.get_logger(__name__)

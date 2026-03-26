@@ -20,6 +20,7 @@
 from typing import TYPE_CHECKING
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -35,7 +36,7 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_vision_available
 
 
 if TYPE_CHECKING:
@@ -43,9 +44,6 @@ if TYPE_CHECKING:
 
 if is_vision_available():
     from PIL import Image, ImageDraw
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):

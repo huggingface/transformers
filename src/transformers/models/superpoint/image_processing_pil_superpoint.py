@@ -86,7 +86,8 @@ class SuperPointImageProcessorPil(PilBackend):
         rescale_factor: float,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = False,
-        **kwargs) -> BatchFeature:
+        **kwargs,
+    ) -> BatchFeature:
         processed_images = []
         for image in images:
             # Resize (must happen before grayscale for PIL backend to work correctly)

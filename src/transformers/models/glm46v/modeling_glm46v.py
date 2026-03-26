@@ -23,7 +23,6 @@ import itertools
 from dataclasses import dataclass
 from typing import Any
 
-import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache
@@ -35,10 +34,15 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torch_available,
     torch_compilable_check,
 )
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
+
+
+if is_torch_available():
+    import torch
 
 
 @auto_docstring

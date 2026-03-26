@@ -35,13 +35,13 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
     is_torch_available,
     is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_yolos import YolosImageProcessorKwargs
 
 
@@ -49,7 +49,7 @@ if is_vision_available():
     import PIL.Image
 if is_torch_available():
     import torch
-from torch import nn
+    from torch import nn
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -695,6 +695,7 @@ class YolosImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None
     ):

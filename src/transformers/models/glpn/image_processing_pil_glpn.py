@@ -16,27 +16,18 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-    requires_backends)
+from ...utils import TensorType, auto_docstring, logging, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_glpn import GLPNImageProcessorKwargs
 
 
-from torchvision.transforms.v2 import functional as tvF
-
-
-import torch
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
@@ -74,7 +65,8 @@ class GLPNImageProcessorPil(PilBackend):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         size_divisor: int = 32,
-        **kwargs) -> np.ndarray:
+        **kwargs,
+    ) -> np.ndarray:
         """Resize so height and width are rounded down to the closest multiple of size_divisor."""
         height, width = image.shape[-2:]
         new_h = height // size_divisor * size_divisor
@@ -98,7 +90,8 @@ class GLPNImageProcessorPil(PilBackend):
         pad_size: SizeDict | None,
         return_tensors: str | TensorType | None,
         size_divisor: int = 32,
-        **kwargs) -> BatchFeature:
+        **kwargs,
+    ) -> BatchFeature:
         """Custom preprocessing for GLPN."""
         processed_images = []
         for image in images:
@@ -112,9 +105,8 @@ class GLPNImageProcessorPil(PilBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_depth_estimation(
-        self,
-        outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None = None) -> list[dict[str, TensorType]]:
+        self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
+    ) -> list[dict[str, TensorType]]:
         """
         Convert raw model outputs to final depth predictions.
         Only supports PyTorch.

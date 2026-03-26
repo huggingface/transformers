@@ -17,17 +17,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
 from ...utils.import_utils import requires
 from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
 
+
+if is_torch_available():
+    import torch
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -79,7 +83,7 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

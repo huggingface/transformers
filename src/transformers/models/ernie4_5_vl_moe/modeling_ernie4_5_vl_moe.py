@@ -22,10 +22,6 @@ import itertools
 from collections.abc import Callable
 from typing import Any, Optional
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -42,12 +38,19 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torch_available,
     logging,
     torch_compilable_check,
 )
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)

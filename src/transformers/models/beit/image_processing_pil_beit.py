@@ -14,6 +14,9 @@
 """Image processor class for BEiT."""
 
 import numpy as np
+import torch
+import torch.nn.functional as F
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -26,15 +29,9 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 from .image_processing_beit import BeitImageProcessorKwargs
-
-
-import torch
-import torch.nn.functional as F
-
-from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring

@@ -27,13 +27,10 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    SizeDict)
+    SizeDict,
+)
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    logging,
-    requires_backends)
+from ...utils import TensorType, auto_docstring, logging, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
 
@@ -43,6 +40,7 @@ if TYPE_CHECKING:
 
 import torch
 from torchvision.transforms.v2 import functional as tvF
+
 
 logger = logging.get_logger(__name__)
 
@@ -75,7 +73,8 @@ class DPTImageProcessorPil(PilBackend):
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
-        **kwargs: Unpack[DPTImageProcessorKwargs]) -> BatchFeature:
+        **kwargs: Unpack[DPTImageProcessorKwargs],
+    ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps to preprocess.
@@ -90,7 +89,8 @@ class DPTImageProcessorPil(PilBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs) -> BatchFeature:
+        **kwargs,
+    ) -> BatchFeature:
         """Handle extra inputs beyond images."""
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
@@ -105,7 +105,8 @@ class DPTImageProcessorPil(PilBackend):
                 images=segmentation_maps,
                 expected_ndims=2,
                 do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST)
+                input_data_format=ChannelDimension.FIRST,
+            )
 
             segmentation_maps_kwargs = kwargs.copy()
             segmentation_maps_kwargs.update({"do_normalize": False, "do_rescale": False})
@@ -135,7 +136,8 @@ class DPTImageProcessorPil(PilBackend):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         ensure_multiple_of: int = 1,
         keep_aspect_ratio: bool = False,
-        **kwargs) -> np.ndarray:
+        **kwargs,
+    ) -> np.ndarray:
         """Resize with aspect ratio and multiple constraints."""
         if size.height is None or size.width is None:
             raise ValueError(f"Size must contain 'height' and 'width' keys. Got {size.keys()}")
@@ -143,14 +145,11 @@ class DPTImageProcessorPil(PilBackend):
             image,
             output_size=(size.height, size.width),
             keep_aspect_ratio=keep_aspect_ratio,
-            multiple=ensure_multiple_of)
+            multiple=ensure_multiple_of,
+        )
         return super().resize(image, output_size, resample, **kwargs)
 
-    def pad_image(
-        self,
-        image: np.ndarray,
-        size_divisor: int = 1,
-        **kwargs) -> np.ndarray:
+    def pad_image(self, image: np.ndarray, size_divisor: int = 1, **kwargs) -> np.ndarray:
         """Center pad image to be a multiple of size_divisor."""
 
         def _get_pad(size, size_divisor):
@@ -167,7 +166,8 @@ class DPTImageProcessorPil(PilBackend):
             image,
             padding=((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)),
             data_format=ChannelDimension.FIRST,
-            input_data_format=ChannelDimension.FIRST)
+            input_data_format=ChannelDimension.FIRST,
+        )
 
     def _preprocess(
         self,
@@ -185,7 +185,8 @@ class DPTImageProcessorPil(PilBackend):
         keep_aspect_ratio: bool,
         ensure_multiple_of: int,
         size_divisor: int | None = None,
-        **kwargs) -> np.ndarray:
+        **kwargs,
+    ) -> np.ndarray:
         """Custom preprocessing for DPT."""
         processed_images = []
         for image in images:
@@ -193,11 +194,8 @@ class DPTImageProcessorPil(PilBackend):
                 image = self.reduce_label(image)
             if do_resize:
                 image = self.resize(
-                    image,
-                    size,
-                    resample,
-                    ensure_multiple_of=ensure_multiple_of,
-                    keep_aspect_ratio=keep_aspect_ratio)
+                    image, size, resample, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio
+                )
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
@@ -231,9 +229,8 @@ class DPTImageProcessorPil(PilBackend):
         return semantic_segmentation
 
     def post_process_depth_estimation(
-        self,
-        outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None = None) -> list[dict[str, TensorType]]:
+        self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
+    ) -> list[dict[str, TensorType]]:
         """Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions."""
         requires_backends(self, "torch")
         predicted_depth = outputs.predicted_depth

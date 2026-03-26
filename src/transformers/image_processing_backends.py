@@ -58,7 +58,6 @@ from .utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
-    requires_backends,
 )
 from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
 
@@ -71,11 +70,11 @@ if is_torch_available():
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
+
     from .image_utils import pil_torch_interpolation_mapping, torch_pil_interpolation_mapping
 else:
     pil_torch_interpolation_mapping = None
     torch_pil_interpolation_mapping = None
-
 
 
 logger = logging.get_logger(__name__)

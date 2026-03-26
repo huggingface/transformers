@@ -52,7 +52,8 @@ from ...utils.import_utils import requires
 from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
-import torch
+if is_torch_available():
+    import torch
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
@@ -114,7 +115,6 @@ def prepare_coco_detection_annotation_pil(
     return new_target
 
 
-@auto_docstring
 @requires(backends=("vision", "torch", "torchvision"))
 class RTDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
@@ -493,6 +493,7 @@ class RTDetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs,

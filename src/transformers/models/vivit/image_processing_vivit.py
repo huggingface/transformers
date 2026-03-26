@@ -300,7 +300,7 @@ class VivitImageProcessor(BaseImageProcessor):
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: str | ChannelDimension | None = None,
-    ) -> PIL.Image.Image:
+    ) -> "PIL.Image.Image":
         """
         Preprocess an image or batch of images.
 

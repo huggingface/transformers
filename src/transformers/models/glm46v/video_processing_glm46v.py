@@ -40,6 +40,7 @@ from .image_processing_glm46v import smart_resize
 if is_torch_available():
     import torch
 
+
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 

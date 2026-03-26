@@ -37,24 +37,31 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
     get_image_size_for_max_height_width,
-    get_max_height_width)
+    get_max_height_width,
+)
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torch_available,
+    is_torchvision_available,
     logging,
-    requires_backends)
+    requires_backends,
+)
 from ...utils.import_utils import requires
 from .image_processing_mask2former import (
     Mask2FormerImageProcessorKwargs,
     compute_segments,
     convert_segmentation_to_rle,
-    remove_low_and_no_objects)
+    remove_low_and_no_objects,
+)
 
 
-import torch
-from torch import nn
-from torchvision.transforms.v2 import functional as tvF
+if is_torch_available():
+    import torch
+    from torch import nn
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -64,7 +71,8 @@ def convert_segmentation_map_to_binary_masks(
     segmentation_map: np.ndarray,
     instance_id_to_semantic_id: dict[int, int] | None = None,
     ignore_index: int | None = None,
-    do_reduce_labels: bool = False):
+    do_reduce_labels: bool = False,
+):
     """Convert segmentation map to binary masks using NumPy operations."""
     if do_reduce_labels and ignore_index is None:
         raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
@@ -95,7 +103,6 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels
 
 
-@auto_docstring
 @requires(backends=("vision", "torch", "torchvision"))
 class Mask2FormerImageProcessorPil(PilBackend):
     valid_kwargs = Mask2FormerImageProcessorKwargs
@@ -153,7 +160,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         size: SizeDict,
         size_divisor: int = 0,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
-        **kwargs) -> np.ndarray:
+        **kwargs,
+    ) -> np.ndarray:
         """
         Resize the image to the given size with optional size_divisor.
 
@@ -171,10 +179,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
         if size.shortest_edge and size.longest_edge:
             # Get current image size
             height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
-            new_size = get_size_with_aspect_ratio(
-                (height, width),
-                size.shortest_edge,
-                size.longest_edge)
+            new_size = get_size_with_aspect_ratio((height, width), size.shortest_edge, size.longest_edge)
         elif size.max_height and size.max_width:
             height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
             new_size = get_image_size_for_max_height_width((height, width), size.max_height, size.max_width)
@@ -198,7 +203,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         padded_size: tuple[int, int],
         segmentation_maps: list[np.ndarray] | None = None,
         fill: int = 0,
-        ignore_index: int = 255) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray] | None]:
+        ignore_index: int = 255,
+    ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray] | None]:
         """
         Pad images and optionally segmentation maps to the given size.
 
@@ -237,7 +243,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
                     mode=PaddingMode.CONSTANT,
                     constant_values=fill,
                     data_format=ChannelDimension.FIRST,
-                    input_data_format=ChannelDimension.FIRST)
+                    input_data_format=ChannelDimension.FIRST,
+                )
             padded_images.append(image)
 
             # Make a pixel mask for the image
@@ -260,7 +267,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
                         mode=PaddingMode.CONSTANT,
                         constant_values=ignore_index,
                         data_format=ChannelDimension.FIRST,
-                        input_data_format=ChannelDimension.FIRST)
+                        input_data_format=ChannelDimension.FIRST,
+                    )
                 padded_segmentation_maps.append(mask)
 
         return padded_images, pixel_masks, padded_segmentation_maps
@@ -271,7 +279,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
-        **kwargs: Unpack[Mask2FormerImageProcessorKwargs]) -> BatchFeature:
+        **kwargs: Unpack[Mask2FormerImageProcessorKwargs],
+    ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps.
@@ -287,7 +296,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        **kwargs: Unpack[Mask2FormerImageProcessorKwargs]) -> BatchFeature:
+        **kwargs: Unpack[Mask2FormerImageProcessorKwargs],
+    ) -> BatchFeature:
         """
         Preprocess image-like inputs.
         To be overridden by subclasses when image-like inputs other than images should be processed.
@@ -302,7 +312,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 images=segmentation_maps,
                 expected_ndims=2,
                 do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST)
+                input_data_format=ChannelDimension.FIRST,
+            )
         return self._preprocess(images, segmentation_maps, instance_id_to_semantic_id, **kwargs)
 
     def _preprocess(
@@ -323,7 +334,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         ignore_index: int | None,
         do_reduce_labels: bool | None,
         return_tensors: str | TensorType | None,
-        **kwargs) -> BatchFeature:
+        **kwargs,
+    ) -> BatchFeature:
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
 
@@ -342,10 +354,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 seg_map = segmentation_maps[idx]
                 if do_resize:
                     seg_map = self.resize(
-                        image=seg_map,
-                        size=size,
-                        size_divisor=size_divisor,
-                        resample=PILImageResampling.NEAREST)
+                        image=seg_map, size=size, size_divisor=size_divisor, resample=PILImageResampling.NEAREST
+                    )
                 resized_segmentation_maps.append(seg_map)
 
         # Determine padded size
@@ -369,10 +379,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 if segmentation_map.ndim == 3 and segmentation_map.shape[0] == 1:
                     segmentation_map = segmentation_map.squeeze(0)
                 masks, classes = convert_segmentation_map_to_binary_masks(
-                    segmentation_map,
-                    instance_id,
-                    ignore_index=ignore_index,
-                    do_reduce_labels=do_reduce_labels)
+                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
+                )
                 mask_labels.append(masks)
                 class_labels.append(classes)
 
@@ -395,8 +403,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         )
 
         encoded_inputs = BatchFeature(
-            data={"pixel_values": padded_images, "pixel_mask": pixel_masks},
-            tensor_type=return_tensors)
+            data={"pixel_values": padded_images, "pixel_mask": pixel_masks}, tensor_type=return_tensors
+        )
         # we cannot batch them since they don't share a common class size
         if segmentation_maps is not None:
             encoded_inputs["mask_labels"] = [
@@ -474,7 +482,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: list[tuple[int, int]] | None = None,
         return_coco_annotation: bool | None = False,
-        return_binary_maps: bool | None = False) -> list[dict]:
+        return_binary_maps: bool | None = False,
+    ) -> list[dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into instance segmentation predictions.
         Only supports PyTorch. If instances could overlap, set either return_coco_annotation or return_binary_maps
@@ -594,7 +603,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: set[int] | None = None,
-        target_sizes: list[tuple[int, int]] | None = None) -> list[dict]:
+        target_sizes: list[tuple[int, int]] | None = None,
+    ) -> list[dict]:
         """
         Converts the output of [`Mask2FormerForUniversalSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
@@ -675,7 +685,8 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
                 label_ids_to_fuse=label_ids_to_fuse,
-                target_size=target_size)
+                target_size=target_size,
+            )
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
