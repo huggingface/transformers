@@ -205,7 +205,7 @@ class TestBuildGenerationConfig(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
 
-        return ChatCompletionHandler(model_manager=MagicMock())
+        from transformers.cli.serving.utils import GenerationState; return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_max_tokens(self):
         from transformers import GenerationConfig
@@ -282,7 +282,7 @@ class TestValidation(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
 
-        return ChatCompletionHandler(model_manager=MagicMock())
+        from transformers.cli.serving.utils import GenerationState; return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_valid_request_passes(self):
         handler = self._make_handler()
@@ -375,7 +375,7 @@ class TestChunkSSE(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
 
-        return ChatCompletionHandler(model_manager=MagicMock())
+        from transformers.cli.serving.utils import GenerationState; return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_build_chunk_sse_content(self):
         handler = self._make_handler()
@@ -570,6 +570,7 @@ class TestAppRoutes(unittest.TestCase):
         from transformers.cli.serving.model_manager import ModelManager
         from transformers.cli.serving.response import ResponseHandler
         from transformers.cli.serving.server import build_server
+        from transformers.cli.serving.transcription import TranscriptionHandler
 
         cls.model_manager = MagicMock(spec=ModelManager)
         cls.model_manager.get_gen_models.return_value = [
@@ -577,7 +578,8 @@ class TestAppRoutes(unittest.TestCase):
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
-        cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler)
+        cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
+        cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler, cls.transcription_handler)
 
     def _run(self, coro):
         return asyncio.get_event_loop().run_until_complete(coro)
@@ -646,7 +648,7 @@ class TestChatCompletion(unittest.TestCase):
     def setUpClass(cls):
         from transformers.cli.serve_refactored import Serve
 
-        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        cls.serve = Serve(port=cls.PORT, non_blocking=True)
         import requests
 
         for _ in range(30):
@@ -917,6 +919,36 @@ class TestChatCompletion(unittest.TestCase):
             self.assertIsNotNone(results[i])
             self.assertTrue(len(results[i]) > 0, f"Request {i} produced empty output")
 
+    def test_request_cancellation(self):
+        """Closing a stream early doesn't crash and the server stays healthy."""
+        import requests as req
+
+        with req.post(
+            f"http://localhost:{self.PORT}/v1/chat/completions",
+            json={
+                "model": self.MODEL,
+                "stream": True,
+                "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
+                "max_tokens": 500,
+            },
+            stream=True,
+            timeout=30,
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
+            chunks_read = 0
+            for _ in resp.iter_lines():
+                chunks_read += 1
+                if chunks_read >= 3:
+                    break
+
+        # Server should still be healthy and serve subsequent requests
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "Say hi"}],
+            max_tokens=10,
+        )
+        self.assertIsNotNone(resp.choices[0].message.content)
+
 
 # ---------------------------------------------------------------------------
 # 8. Unit tests — Response handler
@@ -928,7 +960,7 @@ class TestResponseInputConversion(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.response import ResponseHandler
 
-        return ResponseHandler(model_manager=MagicMock())
+        from transformers.cli.serving.utils import GenerationState; return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_string_input(self):
         handler = self._make_handler()
@@ -976,7 +1008,7 @@ class TestResponseValidation(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.response import ResponseHandler
 
-        return ResponseHandler(model_manager=MagicMock())
+        from transformers.cli.serving.utils import GenerationState; return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_unsupported_fields_rejected(self):
         from fastapi import HTTPException
@@ -997,7 +1029,7 @@ class TestResponseGenerationConfig(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.response import ResponseHandler
 
-        return ResponseHandler(model_manager=MagicMock())
+        from transformers.cli.serving.utils import GenerationState; return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_max_output_tokens(self):
         from transformers import GenerationConfig
@@ -1097,7 +1129,7 @@ class TestResponsesIntegration(unittest.TestCase):
     def setUpClass(cls):
         from transformers.cli.serve_refactored import Serve
 
-        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        cls.serve = Serve(port=cls.PORT, non_blocking=True)
         import requests
 
         for _ in range(30):
@@ -1359,7 +1391,7 @@ class TestLoadModel(unittest.TestCase):
 
         from transformers.cli.serve_refactored import Serve
 
-        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        cls.serve = Serve(port=cls.PORT, non_blocking=True)
         for _ in range(30):
             try:
                 if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
@@ -1652,7 +1684,7 @@ class TestVLM(unittest.TestCase):
 
         from transformers.cli.serve_refactored import Serve
 
-        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        cls.serve = Serve(port=cls.PORT, non_blocking=True)
         for _ in range(60):
             try:
                 if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
@@ -1726,7 +1758,7 @@ class TestTranscription(unittest.TestCase):
 
         from transformers.cli.serve_refactored import Serve
 
-        cls.serve = Serve(port=cls.PORT, non_blocking=True, log_level="warning")
+        cls.serve = Serve(port=cls.PORT, non_blocking=True)
         for _ in range(30):
             try:
                 if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
@@ -1813,3 +1845,257 @@ class TestTranscription(unittest.TestCase):
             timeout=30,
         )
         self.assertNotEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# Continuous Batching integration tests
+# ---------------------------------------------------------------------------
+
+
+@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
+@require_openai
+class TestContinuousBatchingChatCompletion(unittest.TestCase):
+    """Integration tests for /v1/chat/completions with continuous batching."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+    PORT = 8891
+
+    @classmethod
+    def setUpClass(cls):
+        from transformers.cli.serve_refactored import Serve
+
+        cls.serve = Serve(
+            force_model=cls.MODEL,
+            port=cls.PORT,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+            default_seed=42,
+            non_blocking=True,
+        )
+        import requests
+
+        for _ in range(30):
+            try:
+                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+
+        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def test_streaming(self):
+        """Streaming chat completion with CB produces text."""
+        text = ""
+        for chunk in self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "system", "content": "You are a sports assistant designed to craft sports programs."},
+                {"role": "user", "content": "Tell me what you can do."},
+            ],
+            stream=True,
+            max_tokens=30,
+        ):
+            if chunk.choices[0].delta.content:
+                text += chunk.choices[0].delta.content
+        self.assertTrue(len(text) > 0)
+
+    def test_non_streaming(self):
+        """Non-streaming chat completion with CB returns a full response."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "Say hello"}],
+            max_tokens=20,
+        )
+        self.assertIsNotNone(resp.choices[0].message.content)
+        self.assertTrue(len(resp.choices[0].message.content) > 0)
+
+    def test_multi_turn(self):
+        """Multi-turn conversation works with CB."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": "My name is Alice"},
+                {"role": "assistant", "content": "Nice to meet you!"},
+                {"role": "user", "content": "What is my name?"},
+            ],
+            max_tokens=20,
+        )
+        self.assertIn("Alice", resp.choices[0].message.content)
+
+    def test_request_cancellation(self):
+        """Opening a stream and closing it early triggers CB cancellation."""
+        import requests as req
+
+        request_id = "test-cb-cancel"
+
+        # Open a streaming request and close after a few chunks
+        with req.post(
+            f"http://localhost:{self.PORT}/v1/chat/completions",
+            headers={"X-Request-ID": request_id},
+            json={
+                "model": self.MODEL,
+                "stream": True,
+                "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
+            },
+            stream=True,
+            timeout=30,
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
+            chunks_read = 0
+            for _ in resp.iter_lines():
+                chunks_read += 1
+                if chunks_read >= 3:
+                    break
+
+        # Poll for cancellation in the CB scheduler
+        scheduler = self.serve._generation_state._cb_manager.scheduler
+        deadline = time.time() + 8.0
+        while time.time() < deadline:
+            if scheduler.request_is_cancelled(request_id):
+                break
+            time.sleep(0.1)
+
+        self.assertTrue(
+            scheduler.request_is_cancelled(request_id),
+            f"Request {request_id} not cancelled in scheduler after stream close.",
+        )
+
+        # Server should still be healthy and serve subsequent requests
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "Say hi"}],
+            max_tokens=10,
+        )
+        self.assertIsNotNone(resp.choices[0].message.content)
+
+
+@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
+@require_openai
+class TestContinuousBatchingResponses(unittest.TestCase):
+    """Integration tests for /v1/responses with continuous batching."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+    PORT = 8893
+
+    @classmethod
+    def setUpClass(cls):
+        from transformers.cli.serve_refactored import Serve
+
+        cls.serve = Serve(
+            force_model=cls.MODEL,
+            port=cls.PORT,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+            default_seed=42,
+            non_blocking=True,
+        )
+        import requests
+
+        for _ in range(30):
+            try:
+                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
+
+        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def test_streaming(self):
+        """Streaming response with CB produces text."""
+        text = ""
+        stream = self.client.responses.create(
+            model=self.MODEL,
+            input="Say hello in one sentence.",
+            stream=True,
+            max_output_tokens=30,
+        )
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self.assertTrue(len(text) > 0)
+
+    def test_non_streaming(self):
+        """Non-streaming response with CB returns text."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="Say hello in one sentence.",
+            stream=False,
+            max_output_tokens=30,
+        )
+        content = resp.output[0].content[0].text
+        self.assertTrue(len(content) > 0)
+
+    def test_multi_turn(self):
+        """Multi-turn conversation works with CB via Responses API."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {"role": "user", "content": "My name is Alice"},
+                {"role": "assistant", "content": "Nice to meet you!"},
+                {"role": "user", "content": "What is my name?"},
+            ],
+            stream=False,
+            max_output_tokens=20,
+        )
+        content = resp.output[0].content[0].text
+        self.assertIn("Alice", content)
+
+    def test_request_cancellation(self):
+        """Opening a stream and closing it early triggers CB cancellation."""
+        import requests as req
+
+        request_id = "test-cb-resp-cancel"
+
+        with req.post(
+            f"http://localhost:{self.PORT}/v1/responses",
+            headers={"X-Request-ID": request_id},
+            json={
+                "model": self.MODEL,
+                "stream": True,
+                "input": "Count slowly so I can cancel you.",
+                "max_output_tokens": 500,
+            },
+            stream=True,
+            timeout=30,
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
+            # Read enough data to ensure CB generation has started, then close.
+            received = b""
+            for chunk in resp.iter_content(chunk_size=512):
+                received += chunk
+                if b"output_text.delta" in received:
+                    break
+
+        # Poll for cancellation in the CB scheduler
+        scheduler = self.serve._generation_state._cb_manager.scheduler
+        deadline = time.time() + 8.0
+        while time.time() < deadline:
+            if scheduler.request_is_cancelled(request_id):
+                break
+            time.sleep(0.1)
+
+        self.assertTrue(
+            scheduler.request_is_cancelled(request_id),
+            f"Request {request_id} not cancelled in scheduler after stream close.",
+        )
+
+        # Server should still serve subsequent requests
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="Say hi",
+            stream=False,
+            max_output_tokens=10,
+        )
+        self.assertTrue(len(resp.output[0].content[0].text) > 0)
