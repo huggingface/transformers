@@ -749,4 +749,4 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
         )
 
 
-__all__ = ["CohereAsrEncoder", "CohereAsrDecoder", "CohereAsrForConditionalGeneration", "CohereAsrPreTrainedModel"]
+__all__ = ["CohereAsrPreTrainedModel", "CohereAsrModel", "CohereAsrForConditionalGeneration"]

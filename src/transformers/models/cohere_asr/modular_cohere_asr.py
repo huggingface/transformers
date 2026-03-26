@@ -32,6 +32,7 @@ from ..moonshine_streaming.modeling_moonshine_streaming import (
     MoonshineStreamingDecoderMLP,
     MoonshineStreamingForConditionalGeneration,
     MoonshineStreamingModel,
+    MoonshineStreamingPreTrainedModel,
     eager_attention_forward,
 )
 from .configuration_cohere_asr import CohereAsrConfig
@@ -251,6 +252,9 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class CohereAsrPreTrainedModel(MoonshineStreamingPreTrainedModel): ...
+
+
 class CohereAsrDecoder(MoonshineStreamingDecoder):
     _can_record_outputs = {
         "attentions": OutputRecorder(CohereAsrSelfAttention, index=1, layer_name="self_attn"),
@@ -359,8 +363,7 @@ class CohereAsrForConditionalGeneration(MoonshineStreamingForConditionalGenerati
 
 
 __all__ = [
-    "CohereAsrEncoder",
-    "CohereAsrDecoder",
-    "CohereAsrForConditionalGeneration",
     "CohereAsrPreTrainedModel",
+    "CohereAsrModel",
+    "CohereAsrForConditionalGeneration",
 ]
