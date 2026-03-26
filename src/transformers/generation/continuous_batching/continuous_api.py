@@ -852,7 +852,6 @@ class ContinuousBatchingManager:
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
         try:
-
             # Try to retrieve an already initialized batch processor
             batch_processor = getattr(self, "batch_processor", None)
             # If the batch processor already exists, we just reset it for a new generation loop
