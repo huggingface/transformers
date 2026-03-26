@@ -438,9 +438,9 @@ class GemmaTokenizer(LlamaTokenizer):
 
 By default, if you inherit from a class and override a method with one or more decorators in the parent method, the decorators are also added to the unraveled code *only if you don't add any yourself*. Otherwise, the redefined decorator is used.
 
-Two decorators are used commonly throughout the library. One enables [capturing model intermediate outputs](https://huggingface.co/docs/transformers/model_output_tracing), and the other [automatically generates docstrings](https://huggingface.co/docs/transformers/auto_docstring).
+Two decorators appear throughout the library. One enables [capturing model intermediate outputs](./model_output_tracing), and another for [auto-generating docstrings](./auto_docstring).
 
-Below is an example snippet showing a parent class with a decorator and subclass inheriting from it. Note that the parent decorator is kept.
+In the example below, a subclass inherits from a decorated parent. The parent's decorator carries over to the unraveled code.
 
 ```py
 class DummyModel(nn.Module):
