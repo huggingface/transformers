@@ -77,7 +77,7 @@ from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
-    distribute_model,
+    apply_tensor_parallel,
     gather_state_dict_for_save,
     init_device_mesh,
     shard_and_distribute_module,
@@ -4142,8 +4142,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
+            # DTensor-based TP: parallelize_module converts params to TP DTensors on meta
             if torch.distributed.is_initialized() and device_mesh is not None:
-                model = distribute_model(model, distributed_config, device_mesh)
+                model = apply_tensor_parallel(model, distributed_config, device_mesh)
+            # FSDP2 on meta: fully_shard sees TP DTensors, records correct TP-local _orig_size
+            if distributed_config.fsdp_plan is not None:
+                model = apply_fsdp2(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
         else:
             # Accelerate path: auto device mapping
             if device_map is not None:
@@ -4577,9 +4581,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             value = torch.empty_like(param, device=param_device)
             # For TP, we may need to shard the param
             if device_mesh is not None:
-                shard_and_distribute_module(
-                    self, value, param, key, None, False, device_mesh.get_local_rank(), device_mesh
+                tp_mesh = (
+                    device_mesh["tp"]
+                    if device_mesh.ndim > 1 and "tp" in (device_mesh.mesh_dim_names or ())
+                    else device_mesh
                 )
+                shard_and_distribute_module(self, value, param, key, None, False, tp_mesh.get_local_rank(), tp_mesh)
             # Otherwise, just move it to device
             else:
                 _load_parameter_into_model(self, key, value)

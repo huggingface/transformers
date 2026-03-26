@@ -1411,7 +1411,7 @@ def shard_and_distribute_module(
 
     """
     param_name, param_type = parameter_name.rsplit(".", 1) if "." in parameter_name else parameter_name
-    tp_plan = model.tp_plan or {}
+    tp_plan = model._tp_plan or {}
     module_to_tp = model.get_submodule(param_name)
     rank = int(rank)
     current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
@@ -1476,8 +1476,38 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, distributed_config, device_mesh):
-    """Attach TP hooks to model modules. FSDP2 wrapping happens after weight loading."""
+def _resolve_tp_plan_to_pytorch(model, tp_plan, tp_mesh):
+    """Convert our wildcard tp_plan to PyTorch's parallelize_module format.
+
+    Our format:  {"model.layers.*.self_attn.q_proj": "colwise", ...}
+    PyTorch format: {"layers.0.self_attn.q_proj": ColwiseParallel(), ...}
+    """
+    from torch.distributed.tensor.parallel import ColwiseParallel, RowwiseParallel
+
+    STYLE_MAP = {
+        "colwise": ColwiseParallel,
+        "colwise_gather_output": lambda: ColwiseParallel(use_local_output=False),
+        "rowwise": RowwiseParallel,
+        "rowwise_split_input": lambda: RowwiseParallel(input_layouts=torch.distributed.tensor.Shard(-1)),
+    }
+
+    pytorch_plan = {}
+    for name, module in model.named_modules():
+        style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
+        if style_name is None:
+            continue
+        style_cls = STYLE_MAP.get(style_name)
+        if style_cls is None:
+            continue
+        pytorch_plan[name] = style_cls() if isinstance(style_cls, type) else style_cls()
+
+    return pytorch_plan
+
+
+def apply_tensor_parallel(model, distributed_config, device_mesh):
+    """Apply DTensor-based tensor parallelism via PyTorch's parallelize_module."""
+    from torch.distributed.tensor.parallel import parallelize_module
+
     model.config.distributed_config = distributed_config
     model._device_mesh = device_mesh
 
@@ -1486,21 +1516,9 @@ def distribute_model(model, distributed_config, device_mesh):
     if tp_plan == "auto":
         tp_plan = model._tp_plan
     if tp_plan is not None and device_mesh["tp"] is not None and torch.distributed.is_initialized():
-        for v in tp_plan.values():
-            if v not in ALL_PARALLEL_STYLES:
-                raise ValueError(f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}")
-
-        for name, module in model.named_modules():
-            if not getattr(module, "_is_hooked", False):
-                plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
-                add_tensor_parallel_hooks_to_module(
-                    model=model,
-                    module=module,
-                    tp_plan=tp_plan,
-                    layer_name=name,
-                    current_module_plan=plan,
-                    device_mesh=device_mesh["tp"],
-                )
-            module._is_hooked = True
+        tp_mesh = device_mesh["tp"]
+        pytorch_plan = _resolve_tp_plan_to_pytorch(model, tp_plan, tp_mesh)
+        if pytorch_plan:
+            parallelize_module(model, tp_mesh, pytorch_plan)
 
     return model
