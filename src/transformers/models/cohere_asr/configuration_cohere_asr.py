@@ -22,7 +22,7 @@ from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 
 
 @auto_docstring(checkpoint="TODO")
-@strict(accept_kwargs=True)
+@strict
 class CohereAsrConfig(PreTrainedConfig):
     r"""
     Example:
