@@ -38,27 +38,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
-
-      - name: Install hf-doc-builder
-        working-directory: /transformers
-        run: |
-          doc_builder_requirement="$(python3 - <<'PY'
-          import os
-          import sys
-
-          sys.path.insert(0, "src")
-
-          from transformers.dependency_versions_table import deps
-
-          requirement = deps["hf-doc-builder"]
-          branch = os.environ.get("DOC_BUILDER_BRANCH")
-          if branch:
-              requirement = requirement.rsplit("@", 1)[0] + f"@{branch}"
-          print(requirement)
-          PY
-          )"
-          python3 -m pip install --no-cache-dir "$doc_builder_requirement"
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[doc]
 
       - name: GPU visibility
         working-directory: /transformers
@@ -115,27 +95,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
-
-      - name: Install hf-doc-builder
-        working-directory: /transformers
-        run: |
-          doc_builder_requirement="$(python3 - <<'PY'
-          import os
-          import sys
-
-          sys.path.insert(0, "src")
-
-          from transformers.dependency_versions_table import deps
-
-          requirement = deps["hf-doc-builder"]
-          branch = os.environ.get("DOC_BUILDER_BRANCH")
-          if branch:
-              requirement = requirement.rsplit("@", 1)[0] + f"@{branch}"
-          print(requirement)
-          PY
-          )"
-          python3 -m pip install --no-cache-dir "$doc_builder_requirement"
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[doc]
 
       - name: GPU visibility
         working-directory: /transformers
