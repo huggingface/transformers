@@ -431,7 +431,6 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
-
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
         def test_func():
