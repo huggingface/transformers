@@ -1,4 +1,5 @@
 # docstyle-ignore
+# python
 INSTALL_CONTENT = """
 # Transformers installation
 ! pip install transformers datasets evaluate accelerate
