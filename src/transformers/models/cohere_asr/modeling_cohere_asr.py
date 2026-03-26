@@ -434,10 +434,6 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
         else:
             self.proj = nn.Identity()
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
-        if config.encoder_config.hidden_size != config.hidden_size:
-            self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
-        else:
-            self.proj = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()

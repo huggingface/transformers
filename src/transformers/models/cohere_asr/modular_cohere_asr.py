@@ -263,10 +263,6 @@ class CohereAsrDecoder(MoonshineStreamingDecoder):
         self.norm = nn.LayerNorm(config.hidden_size)
         self.pos_emb = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
-        if config.encoder_config.hidden_size != config.hidden_size:
-            self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
-        else:
-            self.proj = nn.Identity()
         self.post_init()
 
     def forward(
