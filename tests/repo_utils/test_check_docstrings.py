@@ -17,6 +17,7 @@ import inspect
 import os
 import sys
 import tempfile
+import textwrap
 import unittest
 
 
@@ -118,49 +119,86 @@ class TestGetAutoDocstringNames(unittest.TestCase):
         _auto_docstring_cache.clear()
 
     def _write_temp(self, source):
-        f = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False)
-        f.write(source)
-        f.close()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(source)
         self.addCleanup(os.unlink, f.name)
         return f.name
 
     def test_detects_simple_decorator(self):
-        path = self._write_temp("from transformers import auto_docstring\n\n@auto_docstring\nclass Foo:\n    pass\n")
+        """Test that a class decorated with @auto_docstring is detected."""
+        path = self._write_temp(textwrap.dedent("""\
+            from transformers import auto_docstring
+
+            @auto_docstring
+            class Foo:
+                pass
+        """))
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, {"Foo"})
 
     def test_detects_decorator_with_call(self):
-        path = self._write_temp("@auto_docstring(custom_args='x')\nclass Bar:\n    pass\n")
+        """Test that a class decorated with @auto_docstring(args) (called form) is detected."""
+        path = self._write_temp(textwrap.dedent("""\
+            @auto_docstring(custom_args='x')
+            class Bar:
+                pass
+        """))
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, {"Bar"})
 
     def test_ignores_other_decorators(self):
-        path = self._write_temp("@dataclass\nclass Baz:\n    pass\n")
+        """Test that classes with non-auto_docstring decorators are not detected."""
+        path = self._write_temp(textwrap.dedent("""\
+            @dataclass
+            class Baz:
+                pass
+        """))
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, set())
 
     def test_multiple_classes(self):
-        path = self._write_temp(
-            "@auto_docstring\nclass A:\n    pass\n\nclass B:\n    pass\n\n@auto_docstring()\ndef func_c():\n    pass\n"
-        )
+        """Test that only decorated classes and functions are returned when multiple definitions exist."""
+        path = self._write_temp(textwrap.dedent("""\
+            @auto_docstring
+            class A:
+                pass
+
+            class B:
+                pass
+
+            @auto_docstring()
+            def func_c():
+                pass
+        """))
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, {"A", "func_c"})
 
     def test_caching(self):
-        path = self._write_temp("@auto_docstring\nclass X:\n    pass\n")
+        """Test that repeated calls for the same file return the cached (identical) result object."""
+        path = self._write_temp(textwrap.dedent("""\
+            @auto_docstring
+            class X:
+                pass
+        """))
         result1 = _get_auto_docstring_names(path)
         result2 = _get_auto_docstring_names(path)
         self.assertIs(result1, result2)
 
     def test_syntax_error_returns_empty(self):
+        """Test that a file with a syntax error returns an empty set instead of raising."""
         path = self._write_temp("def broken(\n")
         names = _get_auto_docstring_names(path)
         self.assertEqual(names, set())
 
     def test_has_auto_docstring_decorator_uses_cache(self):
+        """Test that has_auto_docstring_decorator looks up names from the pre-populated cache."""
         from unittest.mock import patch
 
-        path = self._write_temp("@auto_docstring\nclass Cached:\n    pass\n")
+        path = self._write_temp(textwrap.dedent("""\
+            @auto_docstring
+            class Cached:
+                pass
+        """))
         _auto_docstring_cache[path] = {"Cached"}
 
         # Create classes whose __name__ matches/doesn't match the cache
@@ -176,12 +214,13 @@ class TestBuildAstIndexes(unittest.TestCase):
     """Tests for _build_ast_indexes with pre-parsed tree."""
 
     def test_finds_decorated_items(self):
-        source = (
-            "@auto_docstring\n"
-            "class MyModel:\n"
-            "    def __init__(self, hidden_size=768):\n"
-            "        self.hidden_size = hidden_size\n"
-        )
+        """Test that _build_ast_indexes finds a decorated class and extracts its __init__ args."""
+        source = textwrap.dedent("""\
+            @auto_docstring
+            class MyModel:
+                def __init__(self, hidden_size=768):
+                    self.hidden_size = hidden_size
+        """)
         items = _build_ast_indexes(source)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].name, "MyModel")
@@ -189,7 +228,12 @@ class TestBuildAstIndexes(unittest.TestCase):
         self.assertIn("hidden_size", items[0].args)
 
     def test_shared_tree(self):
-        source = "@auto_docstring\nclass A:\n    pass\n"
+        """Test that passing a pre-parsed AST tree produces the same results as letting the function parse internally."""
+        source = textwrap.dedent("""\
+            @auto_docstring
+            class A:
+                pass
+        """)
         tree = ast.parse(source)
         items_with_tree = _build_ast_indexes(source, tree=tree)
         items_without = _build_ast_indexes(source)
@@ -197,12 +241,21 @@ class TestBuildAstIndexes(unittest.TestCase):
         self.assertEqual(items_with_tree[0].name, items_without[0].name)
 
     def test_no_decorated_items(self):
-        source = "class Plain:\n    pass\n"
+        """Test that a class without the auto_docstring decorator is not indexed."""
+        source = textwrap.dedent("""\
+            class Plain:
+                pass
+        """)
         items = _build_ast_indexes(source)
         self.assertEqual(items, [])
 
     def test_function_decorated(self):
-        source = "@auto_docstring\ndef my_func(x, y=10):\n    pass\n"
+        """Test that a decorated function is indexed with its arguments."""
+        source = textwrap.dedent("""\
+            @auto_docstring
+            def my_func(x, y=10):
+                pass
+        """)
         items = _build_ast_indexes(source)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].name, "my_func")
@@ -211,14 +264,15 @@ class TestBuildAstIndexes(unittest.TestCase):
         self.assertIn("y", items[0].args)
 
     def test_custom_args_from_variable(self):
-        source = (
-            'MY_ARGS = "custom param docs"\n'
-            "\n"
-            "@auto_docstring(custom_args=MY_ARGS)\n"
-            "class WithCustom:\n"
-            "    def __init__(self):\n"
-            "        pass\n"
-        )
+        """Test that custom_args passed as a module-level variable are resolved to their string value."""
+        source = textwrap.dedent("""\
+            MY_ARGS = "custom param docs"
+
+            @auto_docstring(custom_args=MY_ARGS)
+            class WithCustom:
+                def __init__(self):
+                    pass
+        """)
         items = _build_ast_indexes(source)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].custom_args_text, "custom param docs")
@@ -228,7 +282,14 @@ class TestFindTypedDictClasses(unittest.TestCase):
     """Tests for _find_typed_dict_classes with pre-parsed tree."""
 
     def test_finds_typed_dict(self):
-        source = "from typing import TypedDict\n\nclass MyKwargs(TypedDict):\n    field_a: str\n    field_b: int\n"
+        """Test that a TypedDict subclass is found and its public fields are extracted."""
+        source = textwrap.dedent("""\
+            from typing import TypedDict
+
+            class MyKwargs(TypedDict):
+                field_a: str
+                field_b: int
+        """)
         result = _find_typed_dict_classes(source)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["name"], "MyKwargs")
@@ -236,7 +297,11 @@ class TestFindTypedDictClasses(unittest.TestCase):
         self.assertIn("field_b", result[0]["all_fields"])
 
     def test_shared_tree(self):
-        source = "class MyKwargs(TypedDict):\n    x: int\n"
+        """Test that passing a pre-parsed AST tree produces the same results as internal parsing."""
+        source = textwrap.dedent("""\
+            class MyKwargs(TypedDict):
+                x: int
+        """)
         tree = ast.parse(source)
         r1 = _find_typed_dict_classes(source, tree=tree)
         r2 = _find_typed_dict_classes(source)
@@ -244,17 +309,30 @@ class TestFindTypedDictClasses(unittest.TestCase):
         self.assertEqual(r1[0]["name"], r2[0]["name"])
 
     def test_skips_standard_kwargs(self):
-        source = "class TextKwargs(TypedDict):\n    field: str\n"
+        """Test that well-known kwargs TypedDicts (e.g. TextKwargs) are excluded from results."""
+        source = textwrap.dedent("""\
+            class TextKwargs(TypedDict):
+                field: str
+        """)
         result = _find_typed_dict_classes(source)
         self.assertEqual(result, [])
 
     def test_no_typed_dicts(self):
-        source = "class Regular:\n    pass\n"
+        """Test that source with no TypedDict subclasses returns an empty list."""
+        source = textwrap.dedent("""\
+            class Regular:
+                pass
+        """)
         result = _find_typed_dict_classes(source)
         self.assertEqual(result, [])
 
     def test_skips_private_fields(self):
-        source = "class MyKwargs(TypedDict):\n    public: int\n    _private: str\n"
+        """Test that fields starting with an underscore are excluded from the extracted TypedDict fields."""
+        source = textwrap.dedent("""\
+            class MyKwargs(TypedDict):
+                public: int
+                _private: str
+        """)
         result = _find_typed_dict_classes(source)
         self.assertEqual(len(result), 1)
         self.assertIn("public", result[0]["all_fields"])
