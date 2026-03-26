@@ -37,7 +37,7 @@ from ...utils.generic import maybe_autocast
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
 from ..siglip.image_processing_siglip import SiglipImageProcessor
-
+from ...utils.import_utils import requires
 
 logger = logging.get_logger(__name__)
 
@@ -61,6 +61,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("vision", "torch"))
 class PI0Processor(PaligemmaProcessor):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
