@@ -24,7 +24,7 @@ from ..auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="")
 @strict
 class EncoderDecoderConfig(PreTrainedConfig):
     r"""

@@ -33,12 +33,7 @@ from ...utils import (
     is_torchvision_available,
     requires_backends,
 )
-try:
-    from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...feature_extraction_utils import BatchFeature as FuyuBatchFeature  # type: ignore
-    from ...processing_utils import ImagesKwargs as FuyuImagesKwargs  # type: ignore
-    make_list_of_list_of_images = None  # type: ignore
+from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
 
 
 if is_torch_available():
@@ -225,7 +220,7 @@ class FuyuImageProcessorPil(PilBackend):
         """
         Convert an image into a tensor of patches using numpy operations.
         Args:
-            image (`np.ndarray` or `"torch.Tensor"`):
+            image (`np.ndarray` or `torch.Tensor`):
                 Image to convert. Shape: [batch, channels, height, width] or [channels, height, width]
             patch_size (`SizeDict`, *optional*):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
@@ -311,13 +306,13 @@ class FuyuImageProcessorPil(PilBackend):
         This method uses PyTorch operations as it operates on model inputs which are tensors.
 
         Args:
-            image_input (`"torch.Tensor"` of shape [batch_size, subsequence_size, num_channels, height, width]):
+            image_input (`torch.Tensor` of shape [batch_size, subsequence_size, num_channels, height, width]):
                 Tensor of images padded to model input size.
-            image_present (`"torch.Tensor"` of shape [batch_size, subsequence_size, num_images]):
+            image_present (`torch.Tensor` of shape [batch_size, subsequence_size, num_images]):
                 Tensor of 1s and 0s indicating whether an image is present.
-            image_unpadded_h (`"torch.Tensor"` of shape [batch_size, subsequence_size]):
+            image_unpadded_h (`torch.Tensor` of shape [batch_size, subsequence_size]):
                 Tensor of unpadded image heights.
-            image_unpadded_w (`"torch.Tensor"` of shape [batch_size, subsequence_size]):
+            image_unpadded_w (`torch.Tensor` of shape [batch_size, subsequence_size]):
                 Tensor of unpadded image widths.
             image_placeholder_id (int):
                 The id of the image placeholder token. Comes from an associated tokenizer.
@@ -340,10 +335,10 @@ class FuyuImageProcessorPil(PilBackend):
             patch_size = SizeDict(**patch_size)
         patch_height, patch_width = patch_size.height, patch_size.width
         # Only images that are present
-        images: list[list["torch.Tensor"]] = []
-        batch_image_patches: list[list["torch.Tensor"]] = []
+        images: list[list[torch.Tensor]] = []
+        batch_image_patches: list[list[torch.Tensor]] = []
         # Image input ids for every subsequence, including ones with no image present
-        batch_image_input_ids: list[list["torch.Tensor"]] = []
+        batch_image_input_ids: list[list[torch.Tensor]] = []
         for batch_index in range(image_input.shape[0]):
             image_input_ids = []
             image_patches = []
@@ -395,8 +390,8 @@ class FuyuImageProcessorPil(PilBackend):
             batch_image_input_ids.append(image_input_ids)
             batch_image_patches.append(image_patches)
         # Create image patch indices
-        image_patch_indices_per_batch: list[list["torch.Tensor"]] = []
-        image_patch_indices_per_subsequence: list[list["torch.Tensor"]] = []
+        image_patch_indices_per_batch: list[list[torch.Tensor]] = []
+        image_patch_indices_per_subsequence: list[list[torch.Tensor]] = []
 
         for sample_image_input_ids in batch_image_input_ids:
             index_offset = 0

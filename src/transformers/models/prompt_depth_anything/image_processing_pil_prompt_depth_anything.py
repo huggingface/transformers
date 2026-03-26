@@ -50,10 +50,7 @@ if is_torch_available():
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as PromptDepthAnythingImageProcessorKwargs  # type: ignore
+from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):

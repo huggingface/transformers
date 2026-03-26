@@ -34,10 +34,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-try:
-    from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as DeepseekVLImageProcessorKwargs  # type: ignore
+from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
 @auto_docstring

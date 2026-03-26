@@ -50,10 +50,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
 from ...utils.import_utils import requires_backends
-try:
-    from .image_processing_deformable_detr import DeformableDetrImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as DeformableDetrImageProcessorKwargs  # type: ignore
+from .image_processing_deformable_detr import DeformableDetrImageProcessorKwargs
 
 
 if is_vision_available():
@@ -675,7 +672,7 @@ class DeformableDetrImageProcessorPil(PilBackend):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             top_k (`int`, *optional*, defaults to 100):
@@ -708,7 +705,7 @@ class DeformableDetrImageProcessorPil(PilBackend):
         if target_sizes is not None:
             if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = "torch.Tensor"([i[1] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)

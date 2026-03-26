@@ -34,10 +34,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
-try:
-    from .image_processing_sam import SamImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as SamImageProcessorKwargs  # type: ignore
+from .image_processing_sam import SamImageProcessorKwargs
 
 
 if is_torch_available():
@@ -267,7 +264,7 @@ class SamImageProcessorPil(PilBackend):
         Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
         Args:
-            image (`np.ndarray | PIL.Image.Image | "torch.Tensor"`):
+            image (`np.ndarray | PIL.Image.Image | torch.Tensor`):
                 Input original image
             target_size (`int`):
                 Target size of the resized image
@@ -281,7 +278,7 @@ class SamImageProcessorPil(PilBackend):
                 Number of points to sample from each crop.
             crop_n_points_downscale_factor (`list[int]`, *optional*, defaults to 1):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
-            device (`"torch.device"`, *optional*, defaults to None):
+            device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
         """
         image = self.process_image(image)
@@ -320,9 +317,9 @@ class SamImageProcessorPil(PilBackend):
         bounding boxes and pad the predicted masks if necessary.
 
         Args:
-            masks (`"torch.Tensor"`):
+            masks (`torch.Tensor`):
                 Input masks.
-            iou_scores (`"torch.Tensor"`):
+            iou_scores (`torch.Tensor`):
                 List of IoU scores.
             original_size (`tuple[int,int]`):
                 Size of the original image.
@@ -395,12 +392,12 @@ class SamImageProcessorPil(PilBackend):
         Remove padding and upscale masks to the original image size.
 
         Args:
-            masks (`Union[List["torch.Tensor"], List[np.ndarray]]`):
+            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union["torch.Tensor", List[Tuple[int,int]]]`):
+            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
-            reshaped_input_sizes (`Union["torch.Tensor", List[Tuple[int,int]]]`):
+            reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 The threshold to use for binarizing the masks.
@@ -410,23 +407,23 @@ class SamImageProcessorPil(PilBackend):
                 The target size the images were padded to before being passed to the model. If None, the target size is
                 assumed to be the processor's `pad_size`.
         Returns:
-            (`"torch.Tensor"`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
+            (`torch.Tensor`): Batched masks in batch_size, num_channels, height, width) format, where (height, width)
             is given by original_size.
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for post_process_masks")
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
-        if isinstance(original_sizes, ("torch.Tensor", np.ndarray)):
+        if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
             original_sizes = original_sizes.tolist()
-        if isinstance(reshaped_input_sizes, ("torch.Tensor", np.ndarray)):
+        if isinstance(reshaped_input_sizes, (torch.Tensor, np.ndarray)):
             reshaped_input_sizes = reshaped_input_sizes.tolist()
 
         output_masks = []
         for i, original_size in enumerate(original_sizes):
             if isinstance(masks[i], np.ndarray):
                 masks[i] = torch.from_numpy(masks[i])
-            elif not isinstance(masks[i], "torch.Tensor"):
+            elif not isinstance(masks[i], torch.Tensor):
                 raise TypeError("Input masks should be a list of `torch.tensors` or a list of `np.ndarray`")
             interpolated_mask = F.interpolate(masks[i], target_image_size, mode="bilinear", align_corners=False)
             interpolated_mask = interpolated_mask[..., : reshaped_input_sizes[i][0], : reshaped_input_sizes[i][1]]
@@ -442,11 +439,11 @@ class SamImageProcessorPil(PilBackend):
         Post processes mask that are generated by calling the Non Maximum Suppression algorithm on the predicted masks.
 
         Args:
-            all_masks (`"torch.Tensor"`):
+            all_masks (`torch.Tensor`):
                 List of all predicted segmentation masks
-            all_scores (`"torch.Tensor"`):
+            all_scores (`torch.Tensor`):
                 List of all predicted iou scores
-            all_boxes (`"torch.Tensor"`):
+            all_boxes (`torch.Tensor`):
                 List of all bounding boxes of the predicted masks
             crops_nms_thresh (`float`):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
@@ -482,8 +479,8 @@ def _batched_mask_to_box(masks: "torch.Tensor"):
     """
     # torch.max below raises an error on empty inputs, just skip in this case
 
-    if "torch.numel"(masks) == 0:
-        return "torch.zeros"(*masks.shape[:-2], 4, device=masks.device)
+    if torch.numel(masks) == 0:
+        return torch.zeros(*masks.shape[:-2], 4, device=masks.device)
 
     # Normalize shape to Cxheightxwidth
     shape = masks.shape
@@ -491,14 +488,14 @@ def _batched_mask_to_box(masks: "torch.Tensor"):
 
     # Get top and bottom edges
     in_height, _ = torch.max(masks, dim=-1)
-    in_height_coords = in_height * "torch.arange"(height, device=in_height.device)[None, :]
+    in_height_coords = in_height * torch.arange(height, device=in_height.device)[None, :]
     bottom_edges, _ = torch.max(in_height_coords, dim=-1)
     in_height_coords = in_height_coords + height * (~in_height)
     top_edges, _ = torch.min(in_height_coords, dim=-1)
 
     # Get left and right edges
     in_width, _ = torch.max(masks, dim=-2)
-    in_width_coords = in_width * "torch.arange"(width, device=in_width.device)[None, :]
+    in_width_coords = in_width * torch.arange(width, device=in_width.device)[None, :]
     right_edges, _ = torch.max(in_width_coords, dim=-1)
     in_width_coords = in_width_coords + width * (~in_width)
     left_edges, _ = torch.min(in_width_coords, dim=-1)
@@ -526,8 +523,8 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
         offset = offset.unsqueeze(1)
     boxes = (boxes + offset).float()
 
-    near_crop_edge = "torch.isclose"(boxes, crop_box_torch[None, :], atol=atol, rtol=0)
-    near_image_edge = "torch.isclose"(boxes, orig_box_torch[None, :], atol=atol, rtol=0)
+    near_crop_edge = torch.isclose(boxes, crop_box_torch[None, :], atol=atol, rtol=0)
+    near_image_edge = torch.isclose(boxes, orig_box_torch[None, :], atol=atol, rtol=0)
     near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
     return torch.any(near_crop_edge, dim=1)
 
@@ -710,11 +707,11 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
     Perform NMS (Non Maximum Suppression) on the outputs.
 
     Args:
-            rle_masks (`"torch.Tensor"`):
+            rle_masks (`torch.Tensor`):
                 binary masks in the RLE format
-            iou_scores (`"torch.Tensor"` of shape (nb_masks, 1)):
+            iou_scores (`torch.Tensor` of shape (nb_masks, 1)):
                 iou_scores predicted by the model
-            mask_boxes (`"torch.Tensor"`):
+            mask_boxes (`torch.Tensor`):
                 The bounding boxes corresponding to segmentation masks
             amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
                 NMS threshold.

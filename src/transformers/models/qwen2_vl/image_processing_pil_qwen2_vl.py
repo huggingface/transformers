@@ -28,11 +28,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as Qwen2VLImageProcessorKwargs  # type: ignore
-    smart_resize = None  # type: ignore
+from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
 
 if is_torchvision_available():

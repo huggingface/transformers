@@ -37,24 +37,15 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_smolvlm import (
-        MAX_IMAGE_SIZE,
-        SmolVLMImageProcessorKwargs,
-        _resize_output_size_rescale_to_max_len,
-        _resize_output_size_scale_below_upper_bound,
-        get_max_height_width,
-        get_num_channels,
-        get_resize_output_image_size,
-    )
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    MAX_IMAGE_SIZE = None  # type: ignore
-    from ...processing_utils import ImagesKwargs as SmolVLMImageProcessorKwargs  # type: ignore
-    _resize_output_size_rescale_to_max_len = None  # type: ignore
-    _resize_output_size_scale_below_upper_bound = None  # type: ignore
-    get_max_height_width = None  # type: ignore
-    get_num_channels = None  # type: ignore
-    get_resize_output_image_size = None  # type: ignore
+from .image_processing_smolvlm import (
+    MAX_IMAGE_SIZE,
+    SmolVLMImageProcessorKwargs,
+    _resize_output_size_rescale_to_max_len,
+    _resize_output_size_scale_below_upper_bound,
+    get_max_height_width,
+    get_num_channels,
+    get_resize_output_image_size,
+)
 
 
 if is_torchvision_available():

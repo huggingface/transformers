@@ -26,10 +26,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as Swin2SRImageProcessorKwargs  # type: ignore
+from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
 
 if is_torchvision_available():

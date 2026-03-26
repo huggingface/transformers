@@ -27,10 +27,7 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
-try:
-    from .image_processing_superglue import validate_and_format_image_pairs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    validate_and_format_image_pairs = None  # type: ignore
+from .image_processing_superglue import validate_and_format_image_pairs
 
 
 if TYPE_CHECKING:
@@ -159,14 +156,14 @@ class SuperGlueImageProcessorPil(PilBackend):
         outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> "list[dict[str, torch.Tensor]]":
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
             outputs ([`SuperGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
-            target_sizes (`"torch.Tensor"` or `list[tuple[tuple[int, int]]]`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
@@ -225,7 +222,7 @@ class SuperGlueImageProcessorPil(PilBackend):
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
-        keypoint_matching_output: list[dict[str, "torch.Tensor"]],
+        keypoint_matching_output: list[dict[str, torch.Tensor]],
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
@@ -234,7 +231,7 @@ class SuperGlueImageProcessorPil(PilBackend):
             images (`ImageInput`):
                 Image pairs to plot. Same as `SuperGlueImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, "torch.Tensor"]]]):
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
 
         Returns:

@@ -34,10 +34,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as LlavaOnevisionImageProcessorKwargs  # type: ignore
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 if is_torchvision_available():

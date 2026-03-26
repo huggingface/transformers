@@ -26,10 +26,7 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
-try:
-    from .image_processing_glm4v import smart_resize
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    smart_resize = None  # type: ignore
+from .image_processing_glm4v import smart_resize
 
 
 if is_torchvision_available():

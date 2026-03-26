@@ -37,10 +37,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-try:
-    from .image_processing_mobilevit import MobileVitImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as MobileVitImageProcessorKwargs  # type: ignore
+from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 
 if is_torch_available():
@@ -189,7 +186,7 @@ class MobileViTImageProcessorPil(PilBackend):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            if isinstance(target_sizes, "torch.Tensor"):
+            if isinstance(target_sizes, torch.Tensor):
                 target_sizes = target_sizes.numpy()
             semantic_segmentation = []
             for idx in range(len(logits)):

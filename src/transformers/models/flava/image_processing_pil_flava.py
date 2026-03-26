@@ -38,24 +38,15 @@ from ...utils import (
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_flava import (
-        FLAVA_CODEBOOK_MEAN,
-        FLAVA_CODEBOOK_STD,
-        FLAVA_IMAGE_MEAN,
-        FLAVA_IMAGE_STD,
-        LOGIT_LAPLACE_EPS,
-        FlavaImageProcessorKwargs,
-        FlavaMaskingGenerator,
-    )
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    FLAVA_CODEBOOK_MEAN = None  # type: ignore
-    FLAVA_CODEBOOK_STD = None  # type: ignore
-    FLAVA_IMAGE_MEAN = None  # type: ignore
-    FLAVA_IMAGE_STD = None  # type: ignore
-    LOGIT_LAPLACE_EPS = None  # type: ignore
-    from ...processing_utils import ImagesKwargs as FlavaImageProcessorKwargs  # type: ignore
-    FlavaMaskingGenerator = None  # type: ignore
+from .image_processing_flava import (
+    FLAVA_CODEBOOK_MEAN,
+    FLAVA_CODEBOOK_STD,
+    FLAVA_IMAGE_MEAN,
+    FLAVA_IMAGE_STD,
+    LOGIT_LAPLACE_EPS,
+    FlavaImageProcessorKwargs,
+    FlavaMaskingGenerator,
+)
 
 
 @auto_docstring

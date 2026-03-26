@@ -13,17 +13,14 @@
 # limitations under the License.
 from typing import Union
 
+import torch
+from torchvision.ops import masks_to_boxes
+
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.ops import masks_to_boxes
 from ...video_utils import VideoInput
 from .modeling_sam3_video import Sam3VideoInferenceSession
 

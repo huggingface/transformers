@@ -32,11 +32,7 @@ from ...utils import TensorType, auto_docstring, is_torchvision_available
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as PixtralImageProcessorKwargs  # type: ignore
-    get_resize_output_image_size = None  # type: ignore
+from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
 
 
 @auto_docstring

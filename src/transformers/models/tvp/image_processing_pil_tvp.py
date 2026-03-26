@@ -31,10 +31,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_tvp import TvpImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as TvpImageProcessorKwargs  # type: ignore
+from .image_processing_tvp import TvpImageProcessorKwargs
 
 
 if is_torchvision_available():

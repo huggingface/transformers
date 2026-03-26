@@ -50,20 +50,13 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-try:
-    from .image_processing_detr import (
-        DetrImageProcessorKwargs,
-        compute_segments,
-        convert_segmentation_to_rle,
-        get_size_with_aspect_ratio,
-        remove_low_and_no_objects,
-    )
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as DetrImageProcessorKwargs  # type: ignore
-    compute_segments = None  # type: ignore
-    convert_segmentation_to_rle = None  # type: ignore
-    get_size_with_aspect_ratio = None  # type: ignore
-    remove_low_and_no_objects = None  # type: ignore
+from .image_processing_detr import (
+    DetrImageProcessorKwargs,
+    compute_segments,
+    convert_segmentation_to_rle,
+    get_size_with_aspect_ratio,
+    remove_low_and_no_objects,
+)
 
 
 if is_vision_available():
@@ -686,7 +679,7 @@ class DetrImageProcessorPil(PilBackend):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
         Returns:
@@ -716,7 +709,7 @@ class DetrImageProcessorPil(PilBackend):
         if target_sizes is not None:
             if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = "torch.Tensor"([i[1] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
@@ -743,7 +736,7 @@ class DetrImageProcessorPil(PilBackend):
                 A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If unset, predictions will not be resized.
         Returns:
-            `list["torch.Tensor"]`:
+            `list[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
@@ -761,7 +754,7 @@ class DetrImageProcessorPil(PilBackend):
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
-        segmentation = "torch.einsum"("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
         batch_size = class_queries_logits.shape[0]
 
         # Resize logits and compute semantic segmentation maps

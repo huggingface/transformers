@@ -35,10 +35,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-try:
-    from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as DeepseekVLHybridImageProcessorKwargs  # type: ignore
+from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
 if is_torch_available():

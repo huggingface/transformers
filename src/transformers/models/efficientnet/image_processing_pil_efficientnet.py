@@ -25,10 +25,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as EfficientNetImageProcessorKwargs  # type: ignore
+from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 
 if is_torchvision_available():

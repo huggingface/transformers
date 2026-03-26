@@ -46,22 +46,14 @@ if is_torch_available():
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_oneformer import (
-        OneFormerImageProcessorKwargs,
-        compute_segments,
-        convert_segmentation_to_rle,
-        load_metadata,
-        prepare_metadata,
-        remove_low_and_no_objects,
-    )
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as OneFormerImageProcessorKwargs  # type: ignore
-    compute_segments = None  # type: ignore
-    convert_segmentation_to_rle = None  # type: ignore
-    load_metadata = None  # type: ignore
-    prepare_metadata = None  # type: ignore
-    remove_low_and_no_objects = None  # type: ignore
+from .image_processing_oneformer import (
+    OneFormerImageProcessorKwargs,
+    compute_segments,
+    convert_segmentation_to_rle,
+    load_metadata,
+    prepare_metadata,
+    remove_low_and_no_objects,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -566,7 +558,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            `List["torch.Tensor"]`:
+            `List[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
@@ -579,7 +571,7 @@ class OneFormerImageProcessorPil(PilBackend):
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
-        segmentation = "torch.einsum"("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
         batch_size = class_queries_logits.shape[0]
 
         # Resize logits and compute semantic segmentation maps
@@ -660,7 +652,7 @@ class OneFormerImageProcessorPil(PilBackend):
         num_classes = class_queries_logits.shape[-1] - 1
 
         # Loop over items in batch size
-        results: list[dict[str, "torch.Tensor"]] = []
+        results: list[dict[str, torch.Tensor]] = []
 
         for i in range(batch_size):
             # [Q, K]

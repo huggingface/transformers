@@ -36,10 +36,7 @@ if is_torch_available():
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as ImageGPTImageProcessorKwargs  # type: ignore
+from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
 
 
 def squared_euclidean_distance(a, b):
@@ -77,7 +74,7 @@ class ImageGPTImageProcessorPil(PilBackend):
         **kwargs: Unpack[ImageGPTImageProcessorKwargs],
     ):
         r"""
-        clusters (`np.ndarray` or `list[list[int]]` or `"torch.Tensor"`, *optional*):
+        clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*):
             The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
             in `preprocess`.
         """
@@ -138,7 +135,7 @@ class ImageGPTImageProcessorPil(PilBackend):
 
     def to_dict(self):
         output = super().to_dict()
-        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray | "torch.Tensor"):
+        if output.get("clusters") is not None and isinstance(output["clusters"], np.ndarray | torch.Tensor):
             output["clusters"] = output["clusters"].tolist()
 
         return output

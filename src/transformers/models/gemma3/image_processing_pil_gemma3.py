@@ -39,10 +39,7 @@ from ...utils import (
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as Gemma3ImageProcessorKwargs  # type: ignore
+from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
 
 
 @auto_docstring

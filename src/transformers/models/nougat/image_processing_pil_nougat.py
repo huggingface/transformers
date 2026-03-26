@@ -43,10 +43,7 @@ from ...utils import (
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_nougat import NougatImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as NougatImageProcessorKwargs  # type: ignore
+from .image_processing_nougat import NougatImageProcessorKwargs
 
 
 @auto_docstring

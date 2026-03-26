@@ -25,11 +25,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs, get_resize_output_image_size
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as BridgeTowerImageProcessorKwargs  # type: ignore
-    get_resize_output_image_size = None  # type: ignore
+from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs, get_resize_output_image_size
 
 
 if is_torchvision_available():

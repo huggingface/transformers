@@ -14,15 +14,8 @@ from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_ar
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
 from ...utils.import_utils import requires_backends
-try:
-    from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as EfficientLoFTRImageProcessorKwargs  # type: ignore
-    validate_and_format_image_pairs = None  # type: ignore
-try:
-    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    EfficientLoFTRKeypointMatchingOutput = None  # type: ignore
+from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
+from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
 if is_vision_available():
@@ -137,14 +130,14 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
         outputs: "EfficientLoFTRKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> "list[dict[str, torch.Tensor]]":
+    ) -> list[dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
             outputs ([`EfficientLoFTRKeypointMatchingOutput`]):
                 Raw outputs of the model.
-            target_sizes (`"torch.Tensor"` or `List[Tuple[Tuple[int, int]]]`, *optional*):
+            target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
@@ -195,7 +188,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
-        keypoint_matching_output: list[dict[str, "torch.Tensor"]],
+        keypoint_matching_output: list[dict[str, torch.Tensor]],
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
@@ -204,7 +197,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
             images (`ImageInput`):
                 Image pairs to plot. Same as `EfficientLoFTRImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, "torch.Tensor"]]]):
+            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
                 A post processed keypoint matching output
 
         Returns:

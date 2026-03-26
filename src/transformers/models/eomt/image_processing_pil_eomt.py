@@ -45,18 +45,12 @@ if is_torch_available():
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-try:
-    from .image_processing_eomt import (
-        EomtImageProcessorKwargs,
-        compute_segments,
-        get_target_size,
-        remove_low_and_no_objects,
-    )
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as EomtImageProcessorKwargs  # type: ignore
-    compute_segments = None  # type: ignore
-    get_target_size = None  # type: ignore
-    remove_low_and_no_objects = None  # type: ignore
+from .image_processing_eomt import (
+    EomtImageProcessorKwargs,
+    compute_segments,
+    get_target_size,
+    remove_low_and_no_objects,
+)
 
 
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
@@ -168,7 +162,7 @@ class EomtImageProcessorPil(PilBackend):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: "list[torch.Tensor] | None" = None,
+        segmentation_maps: list[torch.Tensor] | None = None,
         instance_id_to_semantic_id: dict[int, int] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
@@ -310,16 +304,16 @@ class EomtImageProcessorPil(PilBackend):
 
     def merge_image_patches(
         self,
-        segmentation_logits: "torch.Tensor",
+        segmentation_logits: torch.Tensor,
         patch_offsets: list[tuple[int, int, int]],
         target_sizes: list[tuple[int, int]],
         size: dict[str, int],
-    ) -> "list[torch.Tensor]":
+    ) -> list[torch.Tensor]:
         """
         Reconstructs full-size semantic segmentation logits from patch predictions.
 
         Args:
-            segmentation_logits (`"torch.Tensor"`):
+            segmentation_logits (`torch.Tensor`):
                 A tensor of shape `(num_patches, num_classes, patch_height, patch_width)` representing predicted logits
                 for each image patch.
             patch_offsets (`list[tuple[int, int, int]]`):
@@ -367,10 +361,10 @@ class EomtImageProcessorPil(PilBackend):
 
     def unpad_image(
         self,
-        segmentation_logits: "torch.Tensor",
+        segmentation_logits: torch.Tensor,
         target_sizes: list[tuple[int, int]],
         size: dict[str, int],
-    ) -> "list[torch.Tensor]":
+    ) -> list[torch.Tensor]:
         """Restores panoptic segmentation logits to their original image resolutions."""
 
         resized_logits = []
@@ -411,7 +405,7 @@ class EomtImageProcessorPil(PilBackend):
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
-        segmentation_logits = "torch.einsum"("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         if patch_offsets:
             output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, target_sizes, size)
@@ -537,7 +531,7 @@ class EomtImageProcessorPil(PilBackend):
             for j in range(num_queries):
                 score = pred_scores[j].item()
 
-                if not "torch.all"(pred_masks[j] == 0) and score >= threshold:
+                if not torch.all(pred_masks[j] == 0) and score >= threshold:
                     segmentation[pred_masks[j] == 1] = current_segment_id
                     segments.append(
                         {

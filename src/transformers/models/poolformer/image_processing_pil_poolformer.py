@@ -27,10 +27,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_poolformer import PoolFormerImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as PoolFormerImageProcessorKwargs  # type: ignore
+from .image_processing_poolformer import PoolFormerImageProcessorKwargs
 
 
 if is_torchvision_available():

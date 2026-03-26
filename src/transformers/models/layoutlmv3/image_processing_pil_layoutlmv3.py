@@ -27,11 +27,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
-try:
-    from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessorKwargs, apply_tesseract
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as LayoutLMv3ImageProcessorKwargs  # type: ignore
-    apply_tesseract = None  # type: ignore
+from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessorKwargs, apply_tesseract
 
 
 if is_torchvision_available():

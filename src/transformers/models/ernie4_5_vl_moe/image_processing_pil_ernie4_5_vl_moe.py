@@ -25,11 +25,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
-try:
-    from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as Ernie4_5_VLMoeImageProcessorKwargs  # type: ignore
-    smart_resize = None  # type: ignore
+from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
 
 
 if is_torch_available():

@@ -29,10 +29,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-try:
-    from .image_processing_textnet import TextNetImageProcessorKwargs
-except (ImportError, ModuleNotFoundError, AttributeError, NameError):
-    from ...processing_utils import ImagesKwargs as TextNetImageProcessorKwargs  # type: ignore
+from .image_processing_textnet import TextNetImageProcessorKwargs
 
 
 if is_torchvision_available():
