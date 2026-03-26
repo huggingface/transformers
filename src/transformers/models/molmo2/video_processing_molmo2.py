@@ -8,7 +8,6 @@ from functools import partial
 from io import BytesIO
 from urllib.parse import urlparse
 
-import einops
 import numpy as np
 import requests
 import torch
@@ -153,7 +152,8 @@ def arange_for_pooling(
     idx_arr = np.pad(
         idx_arr, [[h_pad // 2, (h_pad + 1) // 2], [w_pad // 2, (w_pad + 1) // 2]], mode="constant", constant_values=-1
     )
-    return einops.rearrange(idx_arr, "(h dh) (w dw) -> h w (dh dw)", dh=pool_h, dw=pool_w)
+    h, w = idx_arr.shape[0] // pool_h, idx_arr.shape[1] // pool_w
+    return idx_arr.reshape(h, pool_h, w, pool_w).transpose(0, 2, 1, 3).reshape(h, w, pool_h * pool_w)
 
 
 def image_to_patches_and_grids(

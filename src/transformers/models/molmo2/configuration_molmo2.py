@@ -4,6 +4,8 @@ Molmo2 configuration
 
 from typing import Any
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -12,6 +14,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@strict
 class Molmo2VitConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Molmo2VisionTransformer`].
@@ -84,6 +87,7 @@ class Molmo2VitConfig(PreTrainedConfig):
         return h // self.image_patch_size, w // self.image_patch_size
 
 
+@strict
 class Molmo2AdapterConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of Molmo2Adapter. With Molmo2VitConfig,
@@ -152,6 +156,7 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+@strict
 class Molmo2TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Molmo2TextModel`]. It is used to instantiate a
@@ -254,6 +259,7 @@ class Molmo2TextConfig(PreTrainedConfig):
         rope_config_validation(self)
 
 
+@strict
 class Molmo2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Molmo2ForConditionalGeneration`].

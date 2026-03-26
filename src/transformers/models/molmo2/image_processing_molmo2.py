@@ -1,6 +1,5 @@
 """Image processor class for Molmo2"""
 
-import einops
 import numpy as np
 import torch
 import torchvision.transforms
@@ -242,7 +241,8 @@ def arange_for_pooling(
     idx_arr = np.pad(
         idx_arr, [[h_pad // 2, (h_pad + 1) // 2], [w_pad // 2, (w_pad + 1) // 2]], mode="constant", constant_values=-1
     )
-    return einops.rearrange(idx_arr, "(h dh) (w dw) -> h w (dh dw)", dh=pool_h, dw=pool_w)
+    h, w = idx_arr.shape[0] // pool_h, idx_arr.shape[1] // pool_w
+    return idx_arr.reshape(h, pool_h, w, pool_w).transpose(0, 2, 1, 3).reshape(h, w, pool_h * pool_w)
 
 
 def image_to_patches_and_grids(
@@ -362,8 +362,8 @@ class Molmo2ImageProcessor(BaseImageProcessor):
         self.size = size
 
         self.resample = resample
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = list(image_mean) if image_mean is not None else list(IMAGENET_STANDARD_MEAN)
+        self.image_std = list(image_std) if image_std is not None else list(IMAGENET_STANDARD_STD)
         self.do_convert_rgb = do_convert_rgb
 
         self.max_crops = max_crops

@@ -1120,7 +1120,7 @@ def token_type_ids_mask_function(
 
 
 class Molmo2Model(Molmo2PreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
