@@ -39,6 +39,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("audioflamingo3", "WhisperFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),
         ("clvp", "ClvpFeatureExtractor"),
+        ("cohere_asr", "CohereAsrFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
         ("dac", "DacFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
