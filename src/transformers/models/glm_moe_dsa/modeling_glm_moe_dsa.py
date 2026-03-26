@@ -86,7 +86,6 @@ def apply_rotary_pos_emb(
     Returns:
         `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
     """
-
     # Interleaved (GPT-J style): (x[0], x[1]), (x[2], x[3]), ...
     # RotaryEmbedding outputs cos/sin with repeated halves for NeoX compatibility,
     # while interleaved rotation expects [.., D/2] frequencies.
