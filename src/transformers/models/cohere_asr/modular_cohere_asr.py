@@ -27,18 +27,18 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ..auto.modeling_auto import AutoModel
-from ..moonshine_streaming.modeling_moonshine_streaming import (
-    MoonshineStreamingDecoder,
-    MoonshineStreamingDecoderMLP,
-    MoonshineStreamingForConditionalGeneration,
-    MoonshineStreamingModel,
-    MoonshineStreamingPreTrainedModel,
+from ..moonshine.modeling_moonshine import (
+    MoonshineDecoder,
+    MoonshineDecoderMLP,
+    MoonshineForConditionalGeneration,
+    MoonshineModel,
+    MoonshinePreTrainedModel,
     eager_attention_forward,
 )
 from .configuration_cohere_asr import CohereAsrConfig
 
 
-class CohereAsrDecoderMLP(MoonshineStreamingDecoderMLP):
+class CohereAsrDecoderMLP(MoonshineDecoderMLP):
     def __init__(self, config, hidden_act):
         super(nn.Module, self).__init__()
         self.config = config
@@ -252,10 +252,10 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CohereAsrPreTrainedModel(MoonshineStreamingPreTrainedModel): ...
+class CohereAsrPreTrainedModel(MoonshinePreTrainedModel): ...
 
 
-class CohereAsrDecoder(MoonshineStreamingDecoder):
+class CohereAsrDecoder(MoonshineDecoder):
     _can_record_outputs = {
         "attentions": OutputRecorder(CohereAsrSelfAttention, index=1, layer_name="self_attn"),
         "hidden_states": CohereAsrDecoderLayer,
@@ -267,6 +267,7 @@ class CohereAsrDecoder(MoonshineStreamingDecoder):
         self.norm = nn.LayerNorm(config.hidden_size)
         self.pos_emb = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
+        self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
         self.post_init()
 
     def forward(
@@ -349,13 +350,13 @@ class CohereAsrDecoder(MoonshineStreamingDecoder):
         )
 
 
-class CohereAsrModel(MoonshineStreamingModel):
+class CohereAsrModel(MoonshineModel):
     def __init__(self, config):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
 
 
-class CohereAsrForConditionalGeneration(MoonshineStreamingForConditionalGeneration):
+class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)

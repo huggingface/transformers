@@ -23,7 +23,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -297,19 +296,6 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CohereAsrLayerNorm(nn.Module):
-    def __init__(self, dim: int, unit_offset: bool = True, device=None, dtype=None):
-        super().__init__()
-        self.unit_offset = float(unit_offset)
-        self.ln = nn.LayerNorm(dim, elementwise_affine=False, device=device, dtype=dtype)
-        self.gamma = nn.Parameter(torch.ones(dim, device=device, dtype=dtype))
-
-    def forward(self, x: Tensor) -> Tensor:
-        normed = self.ln(x)
-        gamma = self.gamma + self.unit_offset
-        return normed * gamma
-
-
 @auto_docstring
 class CohereAsrPreTrainedModel(PreTrainedModel):
     config: CohereAsrConfig
@@ -324,21 +310,15 @@ class CohereAsrPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     # TODO arthur, how do we separate when it cross / self coming from different layer?
 
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor) -> torch.LongTensor:
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
         """
         Computes the output length of the convolutional layers
         """
-        frame_len = int(round(self.config.encoder_config.sample_rate * self.config.encoder_config.frame_ms / 1000.0))
-        output_lengths = input_lengths // frame_len
-        output_lengths = (output_lengths - 1) // 2 + 1
-        output_lengths = (output_lengths - 1) // 2 + 1
-        return output_lengths
+        output_conv1_length = int((input_lengths - 127) / 64 + 1)
+        output_conv2_length = int((output_conv1_length - 7) / 3 + 1)
+        output_conv3_length = int((output_conv2_length - 3) / 2 + 1)
 
-    def _init_weights(self, module: nn.Module):
-        if isinstance(module, CohereAsrLayerNorm):
-            nn.init.constant_(module.gamma, 1.0 - module.unit_offset)
-        else:
-            super()._init_weights(module)
+        return output_conv3_length
 
 
 class CohereAsrRotaryEmbedding(nn.Module):
@@ -428,12 +408,8 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
         self.rotary_emb = CohereAsrRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.pos_emb = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-
-        if config.encoder_config.hidden_size != self.config.hidden_size:
-            self.proj = nn.Linear(config.encoder_config.hidden_size, self.config.hidden_size, bias=False)
-        else:
-            self.proj = nn.Identity()
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
+        self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
