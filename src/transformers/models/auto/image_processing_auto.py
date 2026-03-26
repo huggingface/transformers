@@ -17,6 +17,7 @@ import importlib
 import json
 import os
 from collections import OrderedDict
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 # Build the list of all image processors
@@ -61,7 +62,8 @@ if TYPE_CHECKING:
     # the transformers package is used with Microsoft's Pylance language server.
     IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, dict[str, str | None]] = OrderedDict()
 else:
-    with open("auto_mappings.json", "r") as f:
+    root_path = Path(__file__).resolve().parents[0]
+    with open(f"{root_path}/auto_mappings.json", "r") as f:
         all_mappings = json.load(f)
 
     IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, str] = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"]

@@ -19,6 +19,7 @@ import os
 import re
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
+from pathlib import Path
 from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
@@ -30,7 +31,8 @@ logger = logging.get_logger(__name__)
 
 _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
-with open("auto_mappings.json", "r") as f:
+root_path = Path(__file__).resolve().parents[0]
+with open(f"{root_path}/auto_mappings.json", "r") as f:
     all_mappings = json.load(f)
 
 CONFIG_MAPPING_NAMES: OrderedDict[str, str] = all_mappings["CONFIG_MAPPING_NAMES"]
