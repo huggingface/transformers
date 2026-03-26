@@ -223,7 +223,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--post_release", action="store_true", help="Whether this is pre or post release.")
     parser.add_argument("--patch", action="store_true", help="Whether or not this is a patch release.")
-    parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompts and use defaults.")
+    parser.add_argument(
+        "--yes", "-y", action="store_true", help="Skip the post-release confirmation prompt and use the default version."
+    )
     args = parser.parse_args()
     if not args.post_release:
         pre_release_work(patch=args.patch)
