@@ -14,16 +14,13 @@
 """Fast Image processor class for SAM2."""
 
 import numpy as np
+import torch
+import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
-
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
 
 
 class Sam2VideoVideoProcessor(BaseVideoProcessor):

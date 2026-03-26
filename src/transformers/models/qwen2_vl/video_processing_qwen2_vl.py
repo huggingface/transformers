@@ -20,6 +20,9 @@
 
 import math
 
+import torch
+import torchvision.transforms.v2.functional as tvF
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -30,17 +33,10 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_available
+from ...utils import TensorType, add_start_docstrings
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_vl import smart_resize
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):

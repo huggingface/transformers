@@ -16,7 +16,10 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
+import torch
+import torch.nn as nn
 from huggingface_hub.dataclasses import strict
+from torch.nn import LayerNorm
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -40,15 +43,9 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torch_available,
+    is_torchvision_available,
     logging,
 )
-
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    from torch.nn import LayerNorm
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
@@ -84,6 +81,10 @@ from ..siglip.modeling_siglip import (
     SiglipEncoderLayer,
     SiglipMLP,
 )
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -1132,7 +1133,7 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1234,7 +1235,7 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1390,7 +1391,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

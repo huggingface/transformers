@@ -21,6 +21,8 @@
 import math
 from collections.abc import Iterable
 
+import torch
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -32,11 +34,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring, is_torchvision_available
 
 
 if is_torchvision_available():

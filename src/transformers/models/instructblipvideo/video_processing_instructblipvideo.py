@@ -16,18 +16,14 @@
 Video processor class for InstructBLIPVideo
 """
 
+import torch
+import torchvision.transforms.v2.functional as tvF
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
-from ...utils import TensorType, is_torch_available, is_torchvision_available
+from ...utils import TensorType
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 class InstructBlipVideoVideoProcessor(BaseVideoProcessor):

@@ -19,16 +19,14 @@
 # limitations under the License.
 import math
 
+import torch
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 
 
 if is_torchvision_available():
