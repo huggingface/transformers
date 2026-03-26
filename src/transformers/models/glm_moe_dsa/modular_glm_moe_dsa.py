@@ -166,7 +166,7 @@ class GlmMoeDsaIndexer(nn.Module):
     Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. 
+    main MLA attention.
 
     **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
     from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
