@@ -121,6 +121,7 @@ else:
             ("mistral3", "PixtralProcessor"),
             ("mllama", "MllamaProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
+            ("molmo2", "Molmo2Processor"),
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
