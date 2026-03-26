@@ -39,6 +39,7 @@ def build_server(
     model_manager: ModelManager,
     chat_handler: ChatCompletionHandler,
     response_handler: ResponseHandler,
+    transcription_handler: TranscriptionHandler,
     enable_cors: bool = False,
 ) -> FastAPI:
     """Build and return a configured FastAPI application.
@@ -85,13 +86,11 @@ def build_server(
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict):
-        return chat_handler.handle_request(body, request.state.request_id)
+        return await chat_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):
-        return response_handler.handle_request(body, request.state.request_id)
-
-    transcription_handler = TranscriptionHandler(model_manager)
+        return await response_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/audio/transcriptions")
     async def audio_transcriptions(request: Request):

@@ -25,11 +25,16 @@ import json
 import re
 import tempfile
 import threading
+from abc import ABC, abstractmethod
 from concurrent.futures import Future
 from io import BytesIO
 from queue import Queue
 
+from transformers.utils import logging
 from transformers.utils.import_utils import is_openai_available, is_vision_available
+
+
+logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
@@ -93,6 +98,12 @@ class _StreamError:
 
     def __init__(self, msg: str):
         self.msg = msg
+
+
+class _GenerationCancelled(Exception):
+    """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -334,17 +345,12 @@ def make_progress_tqdm_class(callback, model_id: str):
 
 
 class DirectStreamer:
-    """Streamer that decodes tokens incrementally and pushes text to an asyncio.Queue.
+    """Streamer for ``model.generate()`` (used by :class:`GenerateManager`).
 
-    Uses the Rust ``DecodeStream.step()`` for O(1) per-token decode, unlike
-    ``TextIteratorStreamer`` which re-decodes the full sequence each time.
-
-    Args:
-        tokenizer: The raw ``tokenizers.Tokenizer`` instance (i.e. the Rust tokenizer,
-            typically accessed as ``processor._tokenizer`` or ``processor.tokenizer._tokenizer``).
-        loop: The asyncio event loop to push results to.
-        queue: The asyncio.Queue to push decoded text chunks to.
-        skip_special_tokens: Whether to skip special tokens during decoding.
+    Implements the ``put``/``end`` protocol that ``model.generate()`` expects:
+    generate calls ``put(token_tensor)`` after each decode step, and ``end()``
+    when generation is complete. Tokens are decoded incrementally via the Rust
+    ``DecodeStream`` (O(1) per token) and pushed as text to an asyncio.Queue.
     """
 
     def __init__(self, tokenizer, loop, queue, skip_special_tokens: bool = True):
@@ -355,14 +361,17 @@ class DirectStreamer:
         self._queue = queue
         self._decode_stream = DecodeStream([], skip_special_tokens)
         self._first = True
+        self._cancelled = threading.Event()
         self.total_tokens = 0
 
     def put(self, value) -> None:
+        """Called by ``model.generate()`` after each decode step with new token(s)."""
+        if self._cancelled.is_set():
+            raise _GenerationCancelled()
+        # The first put() contains the prompt tokens — skip since we only stream generated tokens.
         if self._first:
             self._first = False
-            return  # skip prompt tokens
-        if len(value.shape) > 1:
-            value = value[0]
+            return
         for token_id in value.tolist():
             self.total_tokens += 1
             text = self._decode_stream.step(self._tokenizer, token_id)
@@ -370,7 +379,52 @@ class DirectStreamer:
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
 
     def end(self) -> None:
+        """Called by ``model.generate()`` when generation is complete."""
         self._loop.call_soon_threadsafe(self._queue.put_nowait, None)
+
+    def cancel(self) -> None:
+        """Signal cancellation. The next ``put()`` call will raise and abort ``model.generate()``."""
+        self._cancelled.set()
+
+
+class CBStreamer:
+    """Streamer for continuous batching (used by :class:`CBGenerateManager`).
+
+    Same ``put``/``end`` protocol as :class:`DirectStreamer`, but called manually
+    by :class:`CBGenerateManager` instead of by ``model.generate()``:
+    ``put(output)`` receives a CB ``GenerationOutput``, decodes new tokens, and
+    pushes text to the asyncio.Queue. ``end()`` signals the stream is complete.
+    """
+
+    def __init__(self, cb_manager, request_id, tokenizer, loop, queue):
+        from tokenizers.decoders import DecodeStream
+
+        self._cb = cb_manager
+        self._request_id = request_id
+        self._loop = loop
+        self._queue = queue
+        self._tokenizer = tokenizer
+        self._decode_stream = DecodeStream([], True)
+        self._prev_len = 0
+        self.total_tokens = 0
+
+    def put(self, output) -> None:
+        """Decode new tokens from a CB ``GenerationOutput`` and push text to the queue."""
+        new_tokens = output.generated_tokens[self._prev_len :]
+        self._prev_len = len(output.generated_tokens)
+        for token_id in new_tokens:
+            self.total_tokens += 1
+            text = self._decode_stream.step(self._tokenizer, token_id)
+            if text is not None:
+                self._queue.put_nowait(text)
+
+    def end(self) -> None:
+        """Signal end of stream."""
+        self._queue.put_nowait(None)
+
+    def cancel(self) -> None:
+        """Cancel the CB request."""
+        self._cb.cancel_request(self._request_id)
 
 
 # ---------------------------------------------------------------------------
@@ -392,16 +446,10 @@ def reset_torch_cache() -> None:
 
 
 class InferenceThread:
-    """A single persistent thread that runs all model.generate() calls.
+    """Persistent thread for ``model.generate()`` calls.
 
-    torch.compile with ``mode="reduce-overhead"`` uses CUDA graphs, which store
-    state in thread-local storage (TLS). If generate() is called from different
-    threads (e.g. a new Thread per streaming request), the CUDA graph state is
-    lost or corrupted — causing silent wrong output or crashes.
-
-    This class ensures all inference runs on the **same thread**, matching what
-    vLLM does with its engine loop. Both streaming and non-streaming requests
-    submit work here.
+    ``torch.compile`` with CUDA graphs stores state in thread-local storage.
+    All inference must run on the same thread to avoid corrupted graph state.
     """
 
     def __init__(self):
@@ -411,18 +459,263 @@ class InferenceThread:
 
     def _run(self):
         while True:
-            fn, args, kwargs, future = self._queue.get()
+            fn, args, kwargs, future, loop = self._queue.get()
             try:
                 result = fn(*args, **kwargs)
-                future.set_result(result)
+                if loop is not None:
+                    loop.call_soon_threadsafe(future.set_result, result)
+                else:
+                    future.set_result(result)
             except Exception as e:
-                future.set_exception(e)
+                if loop is not None:
+                    loop.call_soon_threadsafe(future.set_exception, e)
+                else:
+                    future.set_exception(e)
 
     def submit(self, fn, *args, **kwargs) -> Future:
-        """Submit a callable to run on the inference thread. Returns a Future."""
+        """Submit a callable to the inference thread. Returns a blocking Future."""
         future: Future = Future()
-        self._queue.put((fn, args, kwargs, future))
+        self._queue.put((fn, args, kwargs, future, None))
         return future
+
+    def async_submit(self, fn, *args, **kwargs) -> asyncio.Future:
+        """Submit a callable to the inference thread. Returns an awaitable asyncio.Future."""
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self._queue.put((fn, args, kwargs, future, loop))
+        return future
+
+
+# ---------------------------------------------------------------------------
+# Generation managers
+# ---------------------------------------------------------------------------
+
+
+class BaseGenerateManager(ABC):
+    """Base class for generation managers.
+
+    Subclasses:
+    - :class:`GenerateManager` — sequential ``model.generate()`` on a persistent thread.
+    - :class:`CBGenerateManager` — continuous batching with paged attention.
+    """
+
+    @abstractmethod
+    def generate_streaming(self, model, processor, inputs, gen_config, request_id=None):
+        """Start streaming generation.
+
+        Returns ``(queue, context)`` where *queue* yields ``str | _StreamError | None``
+        and *context* exposes ``.total_tokens`` and ``.cancel()``.
+        """
+
+    @abstractmethod
+    def generate_non_streaming(self, model, processor, inputs, gen_config, request_id=None):
+        """Run generation to completion. Returns ``(text, input_len, generated_ids)``."""
+
+    @abstractmethod
+    def stop(self):
+        """Stop the generation manager and free resources."""
+
+
+class GenerateManager(BaseGenerateManager):
+    """Sequential generation via ``model.generate()`` on a persistent thread."""
+
+    def __init__(self):
+        self._thread = InferenceThread()
+
+    def generate_streaming(self, model, processor, inputs, gen_config, request_id=None):
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+
+        def _run():
+            try:
+                model.generate(**gen_kwargs)
+            except _GenerationCancelled:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except Exception as e:
+                loop.call_soon_threadsafe(queue.put_nowait, _StreamError(str(e)))
+
+        self.submit(_run)
+        return queue, streamer
+
+    async def generate_non_streaming(self, model, processor, inputs, gen_config, request_id=None):
+        sequences = await self.async_submit(
+            model.generate, **inputs, generation_config=gen_config, tokenizer=processor
+        )
+        input_len = inputs["input_ids"].shape[-1]
+        generated_ids = sequences[0, input_len:]
+        text = processor.decode(generated_ids, skip_special_tokens=True)
+        return text, input_len, generated_ids
+
+    def submit(self, fn, *args, **kwargs):
+        """Submit a callable to the inference thread. Returns a blocking Future."""
+        return self._thread.submit(fn, *args, **kwargs)
+
+    def async_submit(self, fn, *args, **kwargs):
+        """Submit a callable to the inference thread. Returns an awaitable asyncio.Future."""
+        return self._thread.async_submit(fn, *args, **kwargs)
+
+    def stop(self):
+        pass  # inference thread is a daemon
+
+
+class CBGenerateManager(BaseGenerateManager):
+    """Continuous batching generation via paged attention.
+
+    Translates between the handler's text-level asyncio.Queue and CB's
+    token-level interface. Per-request: ``max_new_tokens``, ``eos_token_id``.
+
+    The CB manager is initialized lazily on the first request via
+    :meth:`ensure_initialized`, using that request's ``gen_config`` for shared
+    sampling params (temperature, top_p, do_sample).
+
+    .. todo:: Remove :meth:`init_cb` when CB supports per-request
+       generation config. At that point, ``gen_config`` can be passed directly
+       to ``add_request`` and the CB manager no longer needs a shared config.
+    """
+
+    def __init__(self):
+        self._cb = None
+
+    def init_cb(self, model, gen_config):
+        """Initialize the CB manager on first call with the request's generation config.
+
+        .. todo:: Remove when CB supports per-request generation config.
+        """
+        if self._cb is not None:
+            return
+        from transformers import LogitsProcessorList
+
+        self._cb = model.init_continuous_batching(generation_config=gen_config)
+        # TODO: logits processors should be fixed in CB and correctly applied
+        self._cb.logit_processor = LogitsProcessorList()
+        self._cb.start()
+
+    def generate_streaming(self, model, processor, inputs, gen_config, request_id=None):
+        loop = asyncio.get_running_loop()
+        text_queue: asyncio.Queue = asyncio.Queue()
+
+        input_ids = inputs["input_ids"]
+        request_id = self._cb.add_request(
+            input_ids,
+            request_id=request_id,
+            max_new_tokens=gen_config.max_new_tokens,
+            min_new_tokens=gen_config.min_new_tokens,
+            streaming=True,
+            eos_token_id=gen_config.eos_token_id,
+        )
+        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+
+        # Consume CB outputs and decode tokens into the SSE text queue.
+        # It's a coroutine on the event loop (via async_request_id_iter)
+        # to avoid spawning a thread per concurrent request.
+        async def _read_and_decode():
+            try:
+                async for output in self._cb.async_request_id_iter(request_id):
+                    streamer.put(output)
+                    if output.is_finished():
+                        break
+                streamer.end()
+            except Exception as e:
+                text_queue.put_nowait(_StreamError(str(e)))
+
+        asyncio.ensure_future(_read_and_decode())
+        return text_queue, streamer
+
+    async def generate_non_streaming(self, model, processor, inputs, gen_config, request_id=None):
+        """Non-streaming CB generation, fully async (no per-request thread).
+
+        Uses ``register_async_future`` — the dispatcher resolves a single
+        asyncio.Future when the result arrives. No per-request queue, no polling
+        loop — scales to thousands of concurrent requests with minimal event loop
+        overhead.
+        """
+        input_ids = inputs["input_ids"]
+        input_len = len(input_ids)
+
+        # Register future BEFORE add_request to avoid race with fast completion
+        request_id = request_id or f"cb_{id(inputs)}"
+        future = self._cb.register_async_future(request_id)
+
+        self._cb.add_request(
+            input_ids,
+            request_id=request_id,
+            max_new_tokens=gen_config.max_new_tokens,
+            min_new_tokens=gen_config.min_new_tokens,
+            streaming=False,
+            eos_token_id=gen_config.eos_token_id,
+        )
+        result = await future
+        if result is None:
+            raise RuntimeError(f"CB manager stopped before producing a result for {request_id}")
+        generated_ids = result.generated_tokens
+        text = processor.decode(generated_ids, skip_special_tokens=True)
+        return text, input_len, generated_ids
+
+
+    @property
+    def scheduler(self):
+        """The CB scheduler (for testing/monitoring)."""
+        return self._cb.batch_processor.scheduler
+
+    def stop(self):
+        if self._cb is not None:
+            self._cb.stop(block=True, timeout=2)
+
+
+# ---------------------------------------------------------------------------
+# Generation state (shared across handlers)
+# ---------------------------------------------------------------------------
+
+
+class GenerationState:
+    """Shared generation state across all handlers.
+
+    Manages per-model :class:`GenerateManager` instances (each with its own
+    :class:`InferenceThread` so different models can run concurrently while
+    ``torch.compile`` / CUDA graphs require same-model-same-thread) and a
+    single :class:`CBGenerateManager` for continuous batching.
+    """
+
+    def __init__(self, continuous_batching: bool = False):
+        self._continuous_batching = continuous_batching
+        self._generate_managers: dict[str, GenerateManager] = {}
+        self._cb_manager: CBGenerateManager | None = None
+        self._cb_model_id: str | None = None
+
+    def use_continuous_batching(self, model, modality: Modality) -> bool:
+        """Check if CB can be used. Logs a warning on fallback."""
+        if not self._continuous_batching:
+            return False
+        can = hasattr(model, "init_continuous_batching") and modality == Modality.LLM
+        if not can:
+            logger.warning_once(
+                f"{model.__class__.__name__} does not support continuous batching. "
+                "Falling back to sequential generation."
+            )
+        return can
+
+    def get_manager(self, model_id: str, use_cb: bool) -> BaseGenerateManager:
+        """Return a per-model generation manager, lazily created on first request."""
+        if use_cb:
+            if self._cb_model_id != model_id:
+                if self._cb_manager is not None:
+                    self._cb_manager.stop()
+                    self._cb_manager = None
+            if self._cb_manager is None:
+                self._cb_manager = CBGenerateManager()
+                self._cb_model_id = model_id
+            return self._cb_manager
+        if model_id not in self._generate_managers:
+            self._generate_managers[model_id] = GenerateManager()
+        return self._generate_managers[model_id]
+
+    def shutdown(self):
+        """Stop any active generation managers."""
+        if self._cb_manager is not None:
+            self._cb_manager.stop()
+            self._cb_manager = None
 
 
 # ---------------------------------------------------------------------------
@@ -433,22 +726,22 @@ class InferenceThread:
 class BaseHandler:
     """Shared logic for chat completion and responses handlers.
 
-    Subclasses implement ``_streaming`` and ``_non_streaming`` for their
-    specific SSE / JSON formats, plus ``_validate_request``.
+    Provides model resolution, generation config building, and SSE formatting.
+    Generation is delegated to the shared :class:`GenerationState`.
     """
 
     def __init__(
         self,
         model_manager,
+        generation_state: GenerationState,
         force_model=None,
         force_processor=None,
-        inference_thread=None,
         compile=False,
     ):
         self.model_manager = model_manager
+        self.generation_state = generation_state
         self.force_model = force_model
         self.force_processor = force_processor
-        self._inference_thread = inference_thread or InferenceThread()
         self._compile = compile
 
     @staticmethod
@@ -459,7 +752,10 @@ class BaseHandler:
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def _resolve_model(self, body: dict):
-        """Apply force_model, load model + processor. Returns (model_id, model, processor)."""
+        """Apply force_model, load model + processor.
+
+        Returns ``(model_id, model, processor)``.
+        """
         if self.force_model is not None:
             body["model"] = self.force_model
 
@@ -469,7 +765,7 @@ class BaseHandler:
 
         return model_id, model, processor
 
-    def _build_generation_config(self, body: dict, model_generation_config, processor=None):
+    def _build_generation_config(self, body: dict, model_generation_config, processor=None, use_cb=False):
         """Build a GenerationConfig from shared params (temperature, top_p, seed, generation_config JSON).
 
         Subclasses should call ``super()._build_generation_config(...)`` then apply
@@ -505,37 +801,11 @@ class BaseHandler:
         if self._compile and generation_config.cache_implementation is None:
             generation_config.cache_implementation = "static"
 
+        # CB manages its own paged KV cache
+        if use_cb:
+            generation_config.use_cache = False
+
         return generation_config
-
-    def _start_streaming(self, model, processor, inputs, gen_config):
-        """Set up DirectStreamer + queue, submit generate to inference thread.
-
-        Returns ``(queue, streamer)`` — caller reads from queue to build SSE events.
-        """
-        loop = asyncio.get_running_loop()
-        queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
-        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
-
-        def _run():
-            try:
-                model.generate(**gen_kwargs)
-            except Exception as e:
-                loop.call_soon_threadsafe(queue.put_nowait, _StreamError(str(e)))
-
-        self._inference_thread.submit(_run)
-        return queue, streamer
-
-    def _generate_non_streaming(self, model, processor, inputs, gen_config):
-        """Run generate on the inference thread, decode output. Returns ``(text, input_len, generated_ids)``."""
-        future = self._inference_thread.submit(
-            model.generate, **inputs, generation_config=gen_config, tokenizer=processor
-        )
-        sequences = future.result()
-        input_len = inputs["input_ids"].shape[-1]
-        generated_ids = sequences[0, input_len:]
-        text = processor.decode(generated_ids, skip_special_tokens=True)
-        return text, input_len, generated_ids
 
 
 # ---------------------------------------------------------------------------

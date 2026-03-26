@@ -19,6 +19,7 @@ Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -42,6 +43,7 @@ from transformers import GenerationConfig, PreTrainedModel
 from ...utils import logging
 from .utils import (
     UNUSED_CHAT_COMPLETION_FIELDS,
+    BaseGenerateManager,
     BaseHandler,
     ToolCallParser,
     TransformersCompletionCreateParamsStreaming,
@@ -62,7 +64,7 @@ class ChatCompletionHandler(BaseHandler):
 
     # ----- entry point -----
 
-    def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate the request, load the model, and dispatch to streaming or non-streaming."""
         self._validate_request(body)
 
@@ -73,20 +75,35 @@ class ChatCompletionHandler(BaseHandler):
             return JSONResponse({}, status_code=200)
 
         model_id, model, processor = self._resolve_model(body)
-
         modality = self.model_manager.get_model_modality(model, processor=processor)
+        use_cb = self.generation_state.use_continuous_batching(model, modality)
+        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
         processor_inputs = get_processor_inputs_from_messages(messages, modality)
 
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=body.get("tools"),
-            return_tensors="pt",
-            return_dict=True,
-            tokenize=True,
-        ).to(model.device)
+        if use_cb:
+            # CB handles device placement internally — don't create tensors or move
+            # anything to CUDA here. Pass plain token ID lists only.
+            inputs = processor.apply_chat_template(
+                processor_inputs,
+                add_generation_prompt=True,
+                tools=body.get("tools"),
+                return_dict=True,
+                tokenize=True,
+            )
+        else:
+            inputs = processor.apply_chat_template(
+                processor_inputs,
+                add_generation_prompt=True,
+                tools=body.get("tools"),
+                return_tensors="pt",
+                return_dict=True,
+                tokenize=True,
+            ).to(model.device)
 
-        gen_config = self._build_generation_config(body, model.generation_config, processor)
+        gen_config = self._build_generation_config(body, model.generation_config, processor, use_cb=use_cb)
+        # TODO: remove when CB supports per-request generation config
+        if use_cb:
+            gen_manager.init_cb(model, gen_config)
 
         # Detect tool support for the loaded model
         # TODO: after tool_call start token, use constrained generation to:
@@ -102,15 +119,17 @@ class ChatCompletionHandler(BaseHandler):
                 model_id,
                 inputs,
                 gen_config,
+                gen_manager=gen_manager,
                 tool_format=tool_format,
             )
-        return self._non_streaming(
+        return await self._non_streaming(
             request_id,
             model,
             processor,
             model_id,
             inputs,
             gen_config,
+            gen_manager=gen_manager,
             tool_format=tool_format,
         )
 
@@ -124,68 +143,76 @@ class ChatCompletionHandler(BaseHandler):
         model_id: str,
         inputs: dict[str, torch.Tensor],
         gen_config: GenerationConfig,
+        gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
-        queue, streamer = self._start_streaming(model, processor, inputs, gen_config)
-        input_len = inputs["input_ids"].shape[-1]
+        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        input_ids = inputs["input_ids"]
+        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
         parser = ToolCallParser(tool_format) if tool_format else None
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             has_tool_calls = False
-            yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
+            try:
+                yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
 
-            while True:
-                text = await queue.get()
-                if text is None:
-                    break
-                elif isinstance(text, _StreamError):
-                    yield f'data: {{"error": "{text.msg}"}}\n\n'
-                    return
+                while True:
+                    text = await queue.get()
+                    if text is None:
+                        break
+                    elif isinstance(text, _StreamError):
+                        yield f'data: {{"error": "{text.msg}"}}\n\n'
+                        return
 
-                # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
-                chunk_kwargs = {"content": text}
-                if parser is not None and (result := parser.feed(text)) is not None:
-                    if result is ToolCallParser.CONSUMED:
-                        continue
-                    has_tool_calls = True
-                    chunk_kwargs = {
-                        "tool_calls": [
-                            ChoiceDeltaToolCall(
-                                index=0,
-                                type="function",
-                                id=f"{request_id}_tool_call",
-                                function={"name": result["name"], "arguments": result["arguments"]},
-                            )
-                        ]
-                    }
+                    # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
+                    chunk_kwargs = {"content": text}
+                    if parser is not None and (result := parser.feed(text)) is not None:
+                        if result is ToolCallParser.CONSUMED:
+                            continue
+                        has_tool_calls = True
+                        chunk_kwargs = {
+                            "tool_calls": [
+                                ChoiceDeltaToolCall(
+                                    index=0,
+                                    type="function",
+                                    id=f"{request_id}_tool_call",
+                                    function={"name": result["name"], "arguments": result["arguments"]},
+                                )
+                            ]
+                        }
 
-                yield self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs)
+                    yield self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs)
 
-            hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
-            if has_tool_calls:
-                finish_reason = "tool_calls"
-            elif hit_max:
-                finish_reason = "length"
-            else:
-                finish_reason = "stop"
-            usage = CompletionUsage(
-                prompt_tokens=input_len,
-                completion_tokens=streamer.total_tokens,
-                total_tokens=input_len + streamer.total_tokens,
-            )
-            yield self._build_chunk_sse(
-                request_id,
-                finish_reason=finish_reason,
-                model=model_id,
-                usage=usage,
-            )
+                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+                if has_tool_calls:
+                    finish_reason = "tool_calls"
+                elif hit_max:
+                    finish_reason = "length"
+                else:
+                    finish_reason = "stop"
+                usage = CompletionUsage(
+                    prompt_tokens=input_len,
+                    completion_tokens=streamer.total_tokens,
+                    total_tokens=input_len + streamer.total_tokens,
+                )
+                yield self._build_chunk_sse(
+                    request_id,
+                    finish_reason=finish_reason,
+                    model=model_id,
+                    usage=usage,
+                )
+            except (GeneratorExit, asyncio.CancelledError):
+                # Client disconnected — abort generation to free GPU.
+                # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
+                streamer.cancel()
+                raise
 
         return StreamingResponse(sse_gen(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 
-    def _non_streaming(
+    async def _non_streaming(
         self,
         request_id: str,
         model: PreTrainedModel,
@@ -193,10 +220,11 @@ class ChatCompletionHandler(BaseHandler):
         model_id: str,
         inputs: dict[str, torch.Tensor],
         gen_config: GenerationConfig,
+        gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
-        content, input_len, generated_ids = self._generate_non_streaming(model, processor, inputs, gen_config)
+        content, input_len, generated_ids = await gen_manager.generate_non_streaming(model, processor, inputs, gen_config, request_id=request_id)
 
         hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
         completion_tokens = len(generated_ids)
@@ -252,9 +280,9 @@ class ChatCompletionHandler(BaseHandler):
         if unused:
             raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
-    def _build_generation_config(self, body: dict, model_generation_config, processor=None):
+    def _build_generation_config(self, body: dict, model_generation_config, processor=None, use_cb=False):
         """Chat Completions params on top of base config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, processor)
+        generation_config = super()._build_generation_config(body, model_generation_config, processor, use_cb=use_cb)
 
         if body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])

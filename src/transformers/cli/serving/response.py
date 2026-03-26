@@ -19,6 +19,7 @@ Supports streaming (SSE) and non-streaming (JSON) responses.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -47,7 +48,14 @@ from openai.types.responses import (
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
 from ...utils import logging
-from .utils import BaseHandler, ToolCallParser, _StreamError, detect_tool_format, get_processor_inputs_from_messages
+from .utils import (
+    BaseGenerateManager,
+    BaseHandler,
+    ToolCallParser,
+    _StreamError,
+    detect_tool_format,
+    get_processor_inputs_from_messages,
+)
 
 
 if TYPE_CHECKING:
@@ -78,29 +86,45 @@ class ResponseHandler(BaseHandler):
 
     # ----- entry point -----
 
-    def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate, load model, dispatch to streaming or non-streaming."""
         self._validate_request(body)
 
         model_id, model, processor = self._resolve_model(body)
+        modality = self.model_manager.get_model_modality(model, processor=processor)
+        use_cb = self.generation_state.use_continuous_batching(model, modality)
+        gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
 
         # Two-step input conversion (chat completions skips step 1 since messages are already standard):
         # 1. Normalize Responses API input (string/list/dict + instructions) → standard messages list
         # 2. Transform message content for the HF processor (VLM image handling, text joining, etc.)
         messages = self._input_to_messages(body)
-        modality = self.model_manager.get_model_modality(model, processor=processor)
         processor_inputs = get_processor_inputs_from_messages(messages, modality)
 
-        inputs = processor.apply_chat_template(
-            processor_inputs,
-            add_generation_prompt=True,
-            tools=body.get("tools"),
-            return_tensors="pt",
-            return_dict=True,
-            tokenize=True,
-        ).to(model.device)
+        if use_cb:
+            # CB handles device placement internally — don't create tensors or move
+            # anything to CUDA here. Pass plain token ID lists only.
+            inputs = processor.apply_chat_template(
+                processor_inputs,
+                add_generation_prompt=True,
+                tools=body.get("tools"),
+                return_dict=True,
+                tokenize=True,
+            )
+        else:
+            inputs = processor.apply_chat_template(
+                processor_inputs,
+                add_generation_prompt=True,
+                tools=body.get("tools"),
+                return_tensors="pt",
+                return_dict=True,
+                tokenize=True,
+            ).to(model.device)
 
-        gen_config = self._build_generation_config(body, model.generation_config, processor)
+        gen_config = self._build_generation_config(body, model.generation_config, processor, use_cb=use_cb)
+        # TODO: remove when CB supports per-request generation config
+        if use_cb:
+            gen_manager.init_cb(model, gen_config)
         tool_format = detect_tool_format(model) if body.get("tools") else None
 
         if body.get("stream", True):
@@ -112,9 +136,10 @@ class ResponseHandler(BaseHandler):
                 body,
                 inputs,
                 gen_config,
+                gen_manager=gen_manager,
                 tool_format=tool_format,
             )
-        return self._non_streaming(
+        return await self._non_streaming(
             request_id,
             model,
             processor,
@@ -122,6 +147,7 @@ class ResponseHandler(BaseHandler):
             body,
             inputs,
             gen_config,
+            gen_manager=gen_manager,
             tool_format=tool_format,
         )
 
@@ -164,11 +190,13 @@ class ResponseHandler(BaseHandler):
         body: dict,
         inputs: dict,
         gen_config: GenerationConfig,
+        gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
-        queue, streamer = self._start_streaming(model, processor, inputs, gen_config)
-        input_len = inputs["input_ids"].shape[-1]
+        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        input_ids = inputs["input_ids"]
+        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
         parser = ToolCallParser(tool_format) if tool_format else None
 
         seq = 0
@@ -191,204 +219,212 @@ class ResponseHandler(BaseHandler):
         async def event_stream() -> AsyncGenerator[str, None]:
             nonlocal seq, output_index
 
-            # 1. Created + In progress
-            yield self.chunk_to_sse(
-                ResponseCreatedEvent(
-                    type="response.created",
-                    sequence_number=seq,
-                    response=Response(**response_base, status="queued", output=[]),
-                )
-            )
-            seq += 1
-            yield self.chunk_to_sse(
-                ResponseInProgressEvent(
-                    type="response.in_progress",
-                    sequence_number=seq,
-                    response=Response(**response_base, status="in_progress", output=[]),
-                )
-            )
-            seq += 1
-
-            # 2. Output item added (message)
-            yield self.chunk_to_sse(
-                ResponseOutputItemAddedEvent(
-                    type="response.output_item.added",
-                    sequence_number=seq,
-                    output_index=output_index,
-                    item=ResponseOutputMessage(
-                        id=msg_id,
-                        type="message",
-                        status="in_progress",
-                        role="assistant",
-                        content=[],
-                    ),
-                )
-            )
-            seq += 1
-
-            # 3. Content part added
-            yield self.chunk_to_sse(
-                ResponseContentPartAddedEvent(
-                    type="response.content_part.added",
-                    item_id=msg_id,
-                    sequence_number=seq,
-                    output_index=output_index,
-                    content_index=0,
-                    part=ResponseOutputText(type="output_text", text="", annotations=[]),
-                )
-            )
-            seq += 1
-
-            # 4. Stream tokens
-            full_text = ""
-            tool_calls = []
-
-            while True:
-                text = await queue.get()
-                if text is None:
-                    break
-                if isinstance(text, _StreamError):
-                    logger.error(f"Exception in response generation: {text.msg}")
-                    yield self.chunk_to_sse(ResponseErrorEvent(type="error", sequence_number=seq, message=text.msg))
-                    seq += 1
-                    yield self.chunk_to_sse(
-                        ResponseFailedEvent(
-                            type="response.failed",
-                            sequence_number=seq,
-                            response=Response(
-                                **response_base,
-                                status="failed",
-                                output=[],
-                                error=ResponseError(code="server_error", message=text.msg),
-                            ),
-                        )
-                    )
-                    return
-
-                # Tool call parsing
-                if parser is not None and (result := parser.feed(text)) is not None:
-                    if result is not ToolCallParser.CONSUMED:
-                        # Emit tool call as a function_call output item
-                        tc_id = f"{request_id}_tool_call"
-                        name = result["name"]
-                        arguments = result["arguments"]
-                        tc_item = ResponseFunctionToolCall(
-                            id=tc_id,
-                            call_id=tc_id,
-                            type="function_call",
-                            name=name,
-                            arguments=arguments,
-                            status="completed",
-                        )
-                        tool_calls.append(tc_item)
-                        # output[0] = message, output[1..N] = tool calls (required by OpenAI SSE spec)
-                        output_index += 1
-                        yield self.chunk_to_sse(
-                            ResponseOutputItemAddedEvent(
-                                type="response.output_item.added",
-                                sequence_number=seq,
-                                output_index=output_index,
-                                item=tc_item,
-                            )
-                        )
-                        seq += 1
-                        yield self.chunk_to_sse(
-                            ResponseFunctionCallArgumentsDoneEvent(
-                                type="response.function_call_arguments.done",
-                                sequence_number=seq,
-                                item_id=tc_id,
-                                output_index=output_index,
-                                arguments=arguments,
-                                name=name,
-                            )
-                        )
-                        seq += 1
-                        yield self.chunk_to_sse(
-                            ResponseOutputItemDoneEvent(
-                                type="response.output_item.done",
-                                sequence_number=seq,
-                                output_index=output_index,
-                                item=tc_item,
-                            )
-                        )
-                        seq += 1
-                    continue
-
-                full_text += text
+            try:
+                # 1. Created + In progress
                 yield self.chunk_to_sse(
-                    ResponseTextDeltaEvent(
-                        type="response.output_text.delta",
-                        item_id=msg_id,
+                    ResponseCreatedEvent(
+                        type="response.created",
                         sequence_number=seq,
-                        output_index=0,
-                        content_index=0,
-                        delta=text,
-                        logprobs=[],
+                        response=Response(**response_base, status="queued", output=[]),
+                    )
+                )
+                seq += 1
+                yield self.chunk_to_sse(
+                    ResponseInProgressEvent(
+                        type="response.in_progress",
+                        sequence_number=seq,
+                        response=Response(**response_base, status="in_progress", output=[]),
                     )
                 )
                 seq += 1
 
-            # 5. Close text output
-            output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
-            yield self.chunk_to_sse(
-                ResponseTextDoneEvent(
-                    type="response.output_text.done",
-                    item_id=msg_id,
-                    sequence_number=seq,
-                    output_index=0,
-                    content_index=0,
-                    text=full_text,
-                    logprobs=[],
+                # 2. Output item added (message)
+                yield self.chunk_to_sse(
+                    ResponseOutputItemAddedEvent(
+                        type="response.output_item.added",
+                        sequence_number=seq,
+                        output_index=output_index,
+                        item=ResponseOutputMessage(
+                            id=msg_id,
+                            type="message",
+                            status="in_progress",
+                            role="assistant",
+                            content=[],
+                        ),
+                    )
                 )
-            )
-            seq += 1
-            yield self.chunk_to_sse(
-                ResponseContentPartDoneEvent(
-                    type="response.content_part.done",
-                    item_id=msg_id,
-                    sequence_number=seq,
-                    output_index=0,
-                    content_index=0,
-                    part=output_text_part,
-                )
-            )
-            seq += 1
+                seq += 1
 
-            msg_item = ResponseOutputMessage(
-                id=msg_id,
-                type="message",
-                status="completed",
-                role="assistant",
-                content=[output_text_part],
-                annotations=[],
-            )
-            yield self.chunk_to_sse(
-                ResponseOutputItemDoneEvent(
-                    type="response.output_item.done",
-                    sequence_number=seq,
-                    output_index=0,
-                    item=msg_item,
+                # 3. Content part added
+                yield self.chunk_to_sse(
+                    ResponseContentPartAddedEvent(
+                        type="response.content_part.added",
+                        item_id=msg_id,
+                        sequence_number=seq,
+                        output_index=output_index,
+                        content_index=0,
+                        part=ResponseOutputText(type="output_text", text="", annotations=[]),
+                    )
                 )
-            )
-            seq += 1
+                seq += 1
 
-            # 6. Completed
-            all_output = [msg_item] + list(tool_calls)
-            usage = _make_usage(input_len, streamer.total_tokens)
-            yield self.chunk_to_sse(
-                ResponseCompletedEvent(
-                    type="response.completed",
-                    sequence_number=seq,
-                    response=Response(**response_base, status="completed", output=all_output, usage=usage),
+                # 4. Stream tokens
+                full_text = ""
+                tool_calls = []
+
+                while True:
+                    text = await queue.get()
+                    if text is None:
+                        break
+                    if isinstance(text, _StreamError):
+                        logger.error(f"Exception in response generation: {text.msg}")
+                        yield self.chunk_to_sse(
+                            ResponseErrorEvent(type="error", sequence_number=seq, message=text.msg)
+                        )
+                        seq += 1
+                        yield self.chunk_to_sse(
+                            ResponseFailedEvent(
+                                type="response.failed",
+                                sequence_number=seq,
+                                response=Response(
+                                    **response_base,
+                                    status="failed",
+                                    output=[],
+                                    error=ResponseError(code="server_error", message=text.msg),
+                                ),
+                            )
+                        )
+                        return
+
+                    # Tool call parsing
+                    if parser is not None and (result := parser.feed(text)) is not None:
+                        if result is not ToolCallParser.CONSUMED:
+                            # Emit tool call as a function_call output item
+                            tc_id = f"{request_id}_tool_call"
+                            name = result["name"]
+                            arguments = result["arguments"]
+                            tc_item = ResponseFunctionToolCall(
+                                id=tc_id,
+                                call_id=tc_id,
+                                type="function_call",
+                                name=name,
+                                arguments=arguments,
+                                status="completed",
+                            )
+                            tool_calls.append(tc_item)
+                            # output[0] = message, output[1..N] = tool calls (required by OpenAI SSE spec)
+                            output_index += 1
+                            yield self.chunk_to_sse(
+                                ResponseOutputItemAddedEvent(
+                                    type="response.output_item.added",
+                                    sequence_number=seq,
+                                    output_index=output_index,
+                                    item=tc_item,
+                                )
+                            )
+                            seq += 1
+                            yield self.chunk_to_sse(
+                                ResponseFunctionCallArgumentsDoneEvent(
+                                    type="response.function_call_arguments.done",
+                                    sequence_number=seq,
+                                    item_id=tc_id,
+                                    output_index=output_index,
+                                    arguments=arguments,
+                                    name=name,
+                                )
+                            )
+                            seq += 1
+                            yield self.chunk_to_sse(
+                                ResponseOutputItemDoneEvent(
+                                    type="response.output_item.done",
+                                    sequence_number=seq,
+                                    output_index=output_index,
+                                    item=tc_item,
+                                )
+                            )
+                            seq += 1
+                        continue
+
+                    full_text += text
+                    yield self.chunk_to_sse(
+                        ResponseTextDeltaEvent(
+                            type="response.output_text.delta",
+                            item_id=msg_id,
+                            sequence_number=seq,
+                            output_index=0,
+                            content_index=0,
+                            delta=text,
+                            logprobs=[],
+                        )
+                    )
+                    seq += 1
+
+                # 5. Close text output
+                output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
+                yield self.chunk_to_sse(
+                    ResponseTextDoneEvent(
+                        type="response.output_text.done",
+                        item_id=msg_id,
+                        sequence_number=seq,
+                        output_index=0,
+                        content_index=0,
+                        text=full_text,
+                        logprobs=[],
+                    )
                 )
-            )
-            seq += 1
+                seq += 1
+                yield self.chunk_to_sse(
+                    ResponseContentPartDoneEvent(
+                        type="response.content_part.done",
+                        item_id=msg_id,
+                        sequence_number=seq,
+                        output_index=0,
+                        content_index=0,
+                        part=output_text_part,
+                    )
+                )
+                seq += 1
+
+                msg_item = ResponseOutputMessage(
+                    id=msg_id,
+                    type="message",
+                    status="completed",
+                    role="assistant",
+                    content=[output_text_part],
+                    annotations=[],
+                )
+                yield self.chunk_to_sse(
+                    ResponseOutputItemDoneEvent(
+                        type="response.output_item.done",
+                        sequence_number=seq,
+                        output_index=0,
+                        item=msg_item,
+                    )
+                )
+                seq += 1
+
+                # 6. Completed
+                all_output = [msg_item] + list(tool_calls)
+                usage = _make_usage(input_len, streamer.total_tokens)
+                yield self.chunk_to_sse(
+                    ResponseCompletedEvent(
+                        type="response.completed",
+                        sequence_number=seq,
+                        response=Response(**response_base, status="completed", output=all_output, usage=usage),
+                    )
+                )
+                seq += 1
+            except (GeneratorExit, asyncio.CancelledError):
+                # Client disconnected — abort generation to free GPU.
+                # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
+                streamer.cancel()
+                raise
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 
-    def _non_streaming(
+    async def _non_streaming(
         self,
         request_id: str,
         model: PreTrainedModel,
@@ -397,10 +433,11 @@ class ResponseHandler(BaseHandler):
         body: dict,
         inputs: dict,
         gen_config: GenerationConfig,
+        gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
-        full_text, input_len, generated_ids = self._generate_non_streaming(model, processor, inputs, gen_config)
+        full_text, input_len, generated_ids = await gen_manager.generate_non_streaming(model, processor, inputs, gen_config, request_id=request_id)
 
         created_at = time.time()
         resp_id = f"resp_{request_id}"
@@ -459,9 +496,9 @@ class ResponseHandler(BaseHandler):
         if unused:
             raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
-    def _build_generation_config(self, body: dict, model_generation_config, processor=None):
+    def _build_generation_config(self, body: dict, model_generation_config, processor=None, use_cb=False):
         """Responses API params on top of base config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, processor)
+        generation_config = super()._build_generation_config(body, model_generation_config, processor, use_cb=use_cb)
 
         if body.get("max_output_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_output_tokens"])

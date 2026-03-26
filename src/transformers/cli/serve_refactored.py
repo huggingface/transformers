@@ -75,6 +75,12 @@ class Serve:
                 help="Enable static cache + torch.compile for faster decode (~2.6x). First request triggers compilation (~30s)."
             ),
         ] = False,
+        continuous_batching: Annotated[
+            bool,
+            typer.Option(
+                help="Enable continuous batching with paged attention for higher throughput on concurrent requests."
+            ),
+        ] = False,
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
         ] = False,
@@ -88,7 +94,8 @@ class Serve:
         from .serving.model_manager import ModelManager
         from .serving.response import ResponseHandler
         from .serving.server import build_server
-        from .serving.utils import InferenceThread
+        from .serving.transcription import TranscriptionHandler
+        from .serving.utils import GenerationState
 
         # Seed
         if default_seed is not None:
@@ -113,28 +120,33 @@ class Serve:
             processor_id=processor,
         )
         self._model_manager = model_manager
+        self._generation_state = GenerationState(continuous_batching=continuous_batching)
 
-        # Single persistent thread for all generate() calls — required for
-        # torch.compile + CUDA graphs which use thread-local storage.
-        inference_thread = InferenceThread()
-
-        chat_handler = ChatCompletionHandler(
+        self._chat_handler = ChatCompletionHandler(
             model_manager=model_manager,
+            generation_state=self._generation_state,
             force_model=force_model,
             force_processor=processor,
-            inference_thread=inference_thread,
             compile=compile,
         )
 
-        response_handler = ResponseHandler(
+        self._response_handler = ResponseHandler(
             model_manager=model_manager,
+            generation_state=self._generation_state,
             force_model=force_model,
             force_processor=processor,
-            inference_thread=inference_thread,
             compile=compile,
         )
 
-        app = build_server(model_manager, chat_handler, response_handler=response_handler, enable_cors=enable_cors)
+        self._transcription_handler = TranscriptionHandler(model_manager, self._generation_state)
+
+        app = build_server(
+            model_manager,
+            self._chat_handler,
+            response_handler=self._response_handler,
+            transcription_handler=self._transcription_handler,
+            enable_cors=enable_cors,
+        )
 
         config = uvicorn.Config(app, host=host, port=port, log_level=log_level)
         self.server = uvicorn.Server(config)
@@ -158,6 +170,8 @@ class Serve:
         self._model_manager.shutdown()
 
     def kill_server(self):
+        self._generation_state.shutdown()
+        self._model_manager.shutdown()
         if not self._thread or not self._thread.is_alive():
             return
         self.server.should_exit = True

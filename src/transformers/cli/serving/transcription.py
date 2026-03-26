@@ -18,14 +18,13 @@ Handler for the /v1/audio/transcriptions endpoint.
 from __future__ import annotations
 
 import io
-from threading import Thread
 from typing import TYPE_CHECKING
 
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ...utils import logging
 from .model_manager import ModelManager
-from .utils import DirectStreamer, _StreamError
+from .utils import DirectStreamer, GenerationState, _StreamError
 
 
 if TYPE_CHECKING:
@@ -40,12 +39,14 @@ class TranscriptionHandler:
     Accepts a multipart/form-data request with an audio file and model name,
     runs speech-to-text, and returns an OpenAI-compatible Transcription response.
 
-    Supports streaming (``stream=true`` in form data) which yields text chunks
-    as SSE events, or non-streaming which returns a single JSON response.
+    Standalone (does not extend :class:`BaseHandler`) because audio requests use
+    multipart form data, not JSON bodies, and don't need generation config or
+    validation. Shares the :class:`GenerationState` for thread safety.
     """
 
-    def __init__(self, model_manager: ModelManager):
+    def __init__(self, model_manager: ModelManager, generation_state: GenerationState):
         self.model_manager = model_manager
+        self._generation_state = generation_state
 
     async def handle_request(self, request: Request) -> JSONResponse | StreamingResponse:
         """Parse multipart form, run transcription, return result."""
@@ -72,26 +73,33 @@ class TranscriptionHandler:
         )
         audio_inputs["input_features"] = audio_inputs["input_features"].to(audio_model.dtype)
 
-        if stream:
-            return self._streaming(audio_model, audio_processor, audio_inputs)
-        return self._non_streaming(audio_model, audio_processor, audio_inputs)
+        # Transcription uses the per-model InferenceThread (no CB for audio).
+        gen_manager = self._generation_state.get_manager(model_id_and_revision, use_cb=False)
+        tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
 
-    def _non_streaming(self, audio_model, audio_processor, audio_inputs) -> JSONResponse:
+        if stream:
+            return self._streaming(gen_manager, audio_model, tokenizer, audio_inputs)
+        return await self._non_streaming(gen_manager, audio_model, audio_processor, audio_inputs)
+
+    async def _non_streaming(self, gen_manager, audio_model, audio_processor, audio_inputs) -> JSONResponse:
+        # Audio models have different inputs (input_features) and decode (batch_decode)
+        # than text models, so we use async_submit() directly instead of
+        # generate_non_streaming(). TODO: add generate_audio_non_streaming() when
+        # more audio modalities are supported.
         from openai.types.audio import Transcription
 
-        generated_ids = audio_model.generate(**audio_inputs)
+        generated_ids = await gen_manager.async_submit(audio_model.generate, **audio_inputs)
         text = audio_processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
         return JSONResponse(Transcription(text=text).model_dump(exclude_none=True))
 
-    def _streaming(self, audio_model, audio_processor, audio_inputs) -> StreamingResponse:
+    def _streaming(self, gen_manager, audio_model, tokenizer, audio_inputs) -> StreamingResponse:
+        # Same as _non_streaming — uses submit() directly because audio inputs
+        # differ from text. TODO: add generate_audio_streaming() when more audio
+        # modalities are supported.
         import asyncio
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-
-        # For processors like WhisperProcessor, the fast tokenizer is at .tokenizer
-        tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
         streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**audio_inputs, "streamer": streamer}
 
@@ -101,7 +109,7 @@ class TranscriptionHandler:
             except Exception as e:
                 loop.call_soon_threadsafe(queue.put_nowait, _StreamError(str(e)))
 
-        Thread(target=_run, daemon=True).start()
+        gen_manager.submit(_run)
 
         async def sse_gen():
             while True:
