@@ -17,23 +17,28 @@
 
 Helper sections in this file:
 
-1. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
+1. **Model patches** (`patch_untraceable_patterns`): reversible patches applied during
+   `torch.export` tracing to replace non-exportable model patterns (data-dependent
+   loops, in-place ops, mask checks) with export-safe equivalents.
+2. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    for Cache objects and other custom types so `torch.export` can trace through them.
-2. **Model signature patch** (`patch_model`): replaces `model.forward` with a flat
-   explicit signature so `torch.export` does not choke on `**kwargs: Unpack[...]`.
-3. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
+3. **Model signature patch** (`patch_forward_signature`): replaces `model.forward`
+   with a flat explicit signature so `torch.export` does not choke on `**kwargs`.
+4. **Dynamic shapes** (`get_auto_dynamic_shapes`): automatic `Dim.AUTO` inference
    for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
 """
 
 import copy
+import functools
 import importlib
 import inspect
+import sys
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .utils import prepare_for_export
 
@@ -89,7 +94,7 @@ class DynamoExporter(HfExporter):
         )
 
         register_cache_pytrees_for_model(model)
-        with patch_model(model, sample_inputs):
+        with patch_untraceable_patterns(model), patch_forward_signature(model, sample_inputs):
             exported_program: ExportedProgram = torch.export.export(
                 model,
                 args=(),
@@ -100,6 +105,135 @@ class DynamoExporter(HfExporter):
             )
 
         return exported_program
+
+
+# ── Untraceable pattern patches ────────────────────────────────────────────
+# Reversible patches applied by `patch_untraceable_patterns` during
+# `torch.export` tracing. Each replaces a non-exportable model pattern
+# (data-dependent control flow, in-place ops on views, etc.) with an
+# export-safe equivalent.
+#
+# Each patcher takes a module and returns `(attr, replacement)` if the
+# module matches, or `None` otherwise. Originals are saved by the context
+# manager and restored when tracing completes.
+#
+# To add a new patch: define a `_patch_*` function and append to _MODEL_PATCHERS.
+
+
+def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
+    """Export-safe mamba/linear-attn mask: keeps only `has_previous_state` (a Python bool)."""
+    if getattr(past_key_values_or_cache_position, "has_previous_state", False):
+        return None
+    return attention_mask
+
+
+def _patch_mamba_mask(module):
+    """Replace data-dependent `torch.all(mask == 1)` in mamba mask update."""
+    if hasattr(module, "_update_mamba_mask"):
+        return ("_update_mamba_mask", _exportable_update_mask)
+
+
+def _patch_linear_attn_mask(module):
+    """Replace data-dependent mask check in linear attention (falcon_h1)."""
+    if hasattr(module, "_update_linear_attn_mask"):
+        return ("_update_linear_attn_mask", _exportable_update_mask)
+
+
+def _patch_classifier_cast(module):
+    """Disable classifier dtype cast in nllb-moe (not traceable)."""
+    if hasattr(module, "_cast_classifier"):
+        return ("_cast_classifier", lambda *args, **kwargs: None)
+
+
+def _patch_chunked_vision_attention(module):
+    """Replace split → loop → cat with reshaped batch SDPA for vision attention."""
+    if hasattr(module, "qkv") and "zip(*splits)" in inspect.getsource(module.forward):
+        return ("forward", functools.partial(_reshaped_vision_attention_forward, module))
+
+
+def _reshaped_vision_attention_forward(
+    self,
+    hidden_states: "torch.Tensor",
+    cu_seqlens: "torch.Tensor",
+    rotary_pos_emb: "torch.Tensor | None" = None,
+    position_embeddings: "tuple[torch.Tensor, torch.Tensor] | None" = None,
+    **kwargs,
+) -> "torch.Tensor":
+    """Export-safe vision attention: reshape segments into batch dim, single SDPA call."""
+    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    seq_length = hidden_states.shape[0]
+    num_segments = cu_seqlens.shape[0] - 1
+    torch_compilable_check(
+        seq_length % num_segments == 0,
+        "Chunked vision attention requires uniform segment lengths during export. "
+        "Ensure all images have the same resolution (use do_resize=True in the processor) "
+        "or pad inputs to a common size.",
+    )
+    batched_shape = (num_segments, self.num_heads, seq_length // num_segments, self.head_dim)
+
+    query_states, key_states, value_states = (
+        self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+    )
+
+    model_module = sys.modules[type(self).__module__]
+    eager_attention_forward = getattr(model_module, "eager_attention_forward")
+    apply_rotary_pos_emb_vision = getattr(model_module, "apply_rotary_pos_emb_vision")
+
+    cos, sin = position_embeddings
+    query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+    query_states = query_states.transpose(0, 1).unsqueeze(0)
+    key_states = key_states.transpose(0, 1).unsqueeze(0)
+    value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        self.config._attn_implementation, eager_attention_forward
+    )
+
+    attn_output, _ = attention_interface(
+        self,
+        query_states.reshape(batched_shape),
+        key_states.reshape(batched_shape),
+        value_states.reshape(batched_shape),
+        attention_mask=None,
+        scaling=self.scaling,
+        dropout=0.0 if not self.training else self.attention_dropout,
+        is_causal=False,
+    )
+
+    attn_output = attn_output.reshape(seq_length, -1).contiguous()
+    return self.proj(attn_output)
+
+
+_MODEL_PATCHERS = [
+    _patch_mamba_mask,
+    _patch_classifier_cast,
+    _patch_linear_attn_mask,
+    _patch_chunked_vision_attention,
+]
+
+
+@contextmanager
+def patch_untraceable_patterns(model: "PreTrainedModel"):
+    """Temporarily replace untraceable model patterns with export-safe equivalents.
+
+    Iterates every module, applies matching patchers from `_MODEL_PATCHERS`,
+    and reverts all changes when the context exits.
+    """
+    saved = []
+    for module in model.modules():
+        for patcher in _MODEL_PATCHERS:
+            result = patcher(module)
+            if result is not None:
+                attr, replacement = result
+                saved.append((module, attr, getattr(module, attr)))
+                setattr(module, attr, replacement)
+    try:
+        yield
+    finally:
+        for module, attr, original in reversed(saved):
+            setattr(module, attr, original)
 
 
 # ── Pytree registration ─────────────────────────────────────────────────────
@@ -287,7 +421,7 @@ def register_cache_pytrees_for_model(model: "PreTrainedModel"):
 
 
 @contextmanager
-def patch_model(model: "PreTrainedModel", inputs: dict[str, Any]):
+def patch_forward_signature(model: "PreTrainedModel", inputs: dict[str, Any]):
     """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
 
     `torch.export` infers the exported function signature from `model.forward.__signature__`.
@@ -295,9 +429,6 @@ def patch_model(model: "PreTrainedModel", inputs: dict[str, Any]):
     `torch.export` to expand the signature into a large `combined_args` bundle that
     mismatches the `dynamic_shapes` dict. This patch replaces the forward with a
     minimal signature containing only the keys present in `inputs`.
-
-    Note: this is a *signature* patch only (not an output patch). See
-    `patch_model_outputs` in `exporter_onnx` for the ONNX output-flattening wrapper.
     """
     original_forward = model.forward
 

@@ -35,11 +35,10 @@ import copy
 import enum
 import functools
 import inspect
-import sys
 from contextlib import contextmanager
 from typing import Any
 
-from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ..modeling_utils import PreTrainedModel
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
 
@@ -148,87 +147,6 @@ def cast_leaf_tensors(obj: Any, dtype: torch.dtype, device: torch.device) -> Any
     return _map_leaf_tensors(obj, _cast)
 
 
-# ── Model patching ──────────────────────────────────────────────────────────
-# Backend-agnostic patches applied by prepare_for_export before any export.
-
-
-def _patch_chunked_vision_attention(module: torch.nn.Module):
-    """Patch vision attention modules that use split → loop → cat over cu_seqlens.
-
-    Wraps the original forward so that the attention dispatch reshapes segments into
-    the batch dimension (single parallel call) instead of looping.
-    Detected by the presence of `cu_seqlens` in the forward signature.
-    """
-    original_forward = module.forward
-
-    @functools.wraps(original_forward)
-    def _patched_forward(
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        model_module = sys.modules[type(module).__module__]
-        eager_attention_forward = getattr(model_module, "eager_attention_forward")
-        apply_rotary_pos_emb_vision = getattr(model_module, "apply_rotary_pos_emb_vision")
-
-        seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = (
-            module.qkv(hidden_states).reshape(seq_length, 3, module.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        )
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
-
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            module.config._attn_implementation, eager_attention_forward
-        )
-
-        # Reshape (1, heads, seq, dim) → (num_segments, heads, seg_len, dim)
-        num_segments = cu_seqlens.shape[0] - 1
-        seg_len = query_states.shape[2] // num_segments
-        shape = (num_segments, module.num_heads, seg_len, module.head_dim)
-        attn_output, _ = attention_interface(
-            module,
-            query_states.reshape(shape),
-            key_states.reshape(shape),
-            value_states.reshape(shape),
-            attention_mask=None,
-            scaling=module.scaling,
-            dropout=0.0 if not module.training else module.attention_dropout,
-            is_causal=False,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = module.proj(attn_output)
-        return attn_output
-
-    module.forward = _patched_forward
-
-
-def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
-    """Export-safe replacement for `_update_mamba_mask` / `_update_linear_attn_mask`.
-
-    The original functions return `None` in two cases:
-      1. Decode step — `past_key_values.has_previous_state` is True, or `cache_position[0] > 0`
-      2. No padding — `torch.all(attention_mask == 1)`
-
-    Both cases are problematic for `torch.export`: case 2 uses `torch.all` (data-dependent),
-    and case 1 with `cache_position` (falcon_h1) indexes a tensor value.
-    This replacement keeps only the `has_previous_state` check (a Python bool, constant at
-    trace time). Models that pass `cache_position` instead (falcon_h1) fall through to
-    returning the attention_mask as-is.
-    """
-    if getattr(past_key_values_or_cache_position, "has_previous_state", False):
-        return None
-    return attention_mask
-
-
 def prepare_for_export(
     model: PreTrainedModel | torch.nn.Module, inputs: dict[str, Any]
 ) -> tuple[PreTrainedModel | torch.nn.Module, dict[str, Any]]:
@@ -292,46 +210,36 @@ def prepare_for_export(
             # disable mamba kernels for every submodel (mamba, jamba)
             if hasattr(module.config, "use_mamba_kernels"):
                 module.config.use_mamba_kernels = False
-        # disable classifier cast for nllb-moe
-        if hasattr(module, "_cast_classifier"):
-            module._cast_classifier = lambda *args, **kwargs: None
-        # Replace mamba/linear-attn mask update: remove the data-dependent `torch.all(mask == 1)` check
-        # but keep the `has_previous_state` check (a Python bool, safe for tracing).
-        if hasattr(module, "_update_mamba_mask"):
-            module._update_mamba_mask = _exportable_update_mask
-        if hasattr(module, "_update_linear_attn_mask"):
-            module._update_linear_attn_mask = _exportable_update_mask
         # Reset internal caches that are not part of past_key_values (e.g. DSA indexer in glm_moe_dsa)
         if hasattr(module, "_cached_keys"):
             module._cached_keys = None
-        # Patch vision attention modules that use split → loop → cat over cu_seqlens.
-        if (
-            hasattr(module, "qkv")
-            and hasattr(module, "proj")
-            and "cu_seqlens" in inspect.signature(module.forward).parameters
-        ):
-            _patch_chunked_vision_attention(module)
 
     # Pre-compute position_ids for models with get_rope_index (Qwen-VL family, GLM-4V, etc.).
     # get_rope_index uses data-dependent ops (itertools.groupby, nonzero) that are not traceable.
     # Computing eagerly and injecting into inputs makes the forward skip the branch entirely.
     if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
-        with torch.no_grad():
-            position_ids, rope_deltas = model.get_rope_index(
-                **{
-                    k: inputs[k]
-                    for k in (
-                        "input_ids",
-                        "mm_token_type_ids",
-                        "image_grid_thw",
-                        "video_grid_thw",
-                        "second_per_grid_ts",
-                        "attention_mask",
-                    )
-                    if k in inputs
-                }
-            )
-        inputs["position_ids"] = position_ids
+        # Only pre-compute for the prefill stage. In the decode stage, input_ids has seq_len=1
+        # while attention_mask covers the full sequence — get_rope_index can't handle that mismatch.
+        input_ids = inputs.get("input_ids")
+        attn_mask = inputs.get("attention_mask")
+        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
+        if is_prefill:
+            with torch.no_grad():
+                position_ids, rope_deltas = model.get_rope_index(
+                    **{
+                        k: inputs[k]
+                        for k in (
+                            "input_ids",
+                            "attention_mask",
+                            "image_grid_thw",
+                            "video_grid_thw",
+                            "mm_token_type_ids",
+                            "second_per_grid_ts",
+                        )
+                        if k in inputs
+                    }
+                )
+            inputs["position_ids"] = position_ids
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
