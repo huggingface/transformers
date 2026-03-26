@@ -751,7 +751,6 @@ class ParakeetTDTDecoder(nn.Module):
         decoder_cache: ParakeetTDTDecoderCache | None = None,
         decoder_cache_update_mask: torch.BoolTensor | None = None,
     ) -> torch.Tensor:
-        input_ids = input_ids.to(self.decoder_projector.weight.device)
         hidden_cell_states = (
             (decoder_cache.hidden_state, decoder_cache.cell_state)
             if decoder_cache is not None and decoder_cache.is_initialized
@@ -1005,7 +1004,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         self,
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        input_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
         encoder_outputs: tuple[torch.FloatTensor] | None = None,
         encoder_frame_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetTDTDecoderCache | None = None,
@@ -1015,7 +1014,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTOutput:
         r"""
-        input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
         encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
@@ -1078,10 +1077,10 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
             blank_tokens = torch.full(
                 (labels.shape[0], 1), self.config.blank_token_id, dtype=labels.dtype, device=labels.device
             )
-            input_ids = torch.cat([blank_tokens, labels], dim=1)
-        elif input_ids is None and decoder_cache is None:
+            decoder_input_ids = torch.cat([blank_tokens, labels], dim=1)
+        elif decoder_input_ids is None and decoder_cache is None:
             # for inference: start with blank token if not provided
-            input_ids = torch.full(
+            decoder_input_ids = torch.full(
                 (projected_encoder_output.shape[0], 1),
                 self.config.blank_token_id,
                 dtype=torch.long,
@@ -1091,9 +1090,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         if use_decoder_cache and decoder_cache is None:
             decoder_cache = ParakeetTDTDecoderCache()
 
-        # Run decoder if we have input_ids (initial step or after emitting a token)
-        if input_ids is not None:
-            decoder_output = self.decoder(input_ids, decoder_cache, decoder_cache_update_mask)
+        # Run decoder if we have decoder_input_ids (initial step or after emitting a token)
+        if decoder_input_ids is not None:
+            decoder_output = self.decoder(decoder_input_ids, decoder_cache, decoder_cache_update_mask)
         else:
             # Reuse cached decoder_output (blank-skipping path)
             decoder_output = decoder_cache.cache
@@ -1271,7 +1270,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
 
             # Run decoder for emitted tokens — only update cache for samples that emitted
             model_forward(
-                input_ids=tokens.unsqueeze(1),
+                decoder_input_ids=tokens.unsqueeze(1),
                 encoder_outputs=encoder_outputs,
                 encoder_frame_ids=torch.clamp(time_indices, max=sequence_length - 1),
                 decoder_cache=decoder_cache,

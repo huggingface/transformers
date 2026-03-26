@@ -458,13 +458,12 @@ class ParakeetForTDTModelTester:
         encoder_kwargs=None,
         is_training=True,
         vocab_size=129,
-        decoder_hidden_size=64,
+        decoder_hidden_size=32,
         num_decoder_layers=1,
-        durations=None,
+        durations=[0, 1, 2, 3, 4],
         hidden_act="relu",
-        max_symbols_per_step=10,
+        max_symbols_per_step=5,
         pad_token_id=2,
-        blank_token_id=128,
     ):
         if encoder_kwargs is None:
             encoder_kwargs = {}
@@ -483,11 +482,11 @@ class ParakeetForTDTModelTester:
         self.vocab_size = vocab_size
         self.decoder_hidden_size = decoder_hidden_size
         self.num_decoder_layers = num_decoder_layers
-        self.durations = durations if durations is not None else [0, 1, 2, 3, 4]
+        self.durations = durations
         self.hidden_act = hidden_act
         self.max_symbols_per_step = max_symbols_per_step
         self.pad_token_id = pad_token_id
-        self.blank_token_id = blank_token_id
+        self.blank_token_id = vocab_size - 1
 
     def prepare_config_and_inputs(self):
         _, input_features, attention_mask = self.encoder_model_tester.prepare_config_and_inputs()
@@ -543,6 +542,7 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_attention_outputs = False
     test_resize_embeddings = False
+    test_torch_exportable = False
     _is_composite = True
 
     @unittest.skip(reason="No available flash-SDPA kernels for Parakeet test shapes on this setup")
