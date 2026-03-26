@@ -25,12 +25,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
@@ -83,7 +79,7 @@ class Swin2SRImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

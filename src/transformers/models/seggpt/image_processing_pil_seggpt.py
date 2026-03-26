@@ -39,7 +39,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class SegGptImageProcessorPil(PilBackend):
     valid_kwargs = SegGptImageProcessorKwargs
 

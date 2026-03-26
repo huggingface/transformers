@@ -41,6 +41,7 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import OwlViTImageProcessor
 from ..owlvit.image_processing_pil_owlvit import OwlViTImageProcessorPil
 
@@ -404,6 +405,14 @@ class Owlv2ImageProcessorPil(OwlViTImageProcessorPil):
 
         image = to_channel_dimension_format(image, ChannelDimension.FIRST)
         return image
+
+    @requires(backends=("vision", "torch"))
+    def post_process_object_detection(self, *args, **kwargs):
+        return super().post_process_object_detection(*args, **kwargs)
+
+    @requires(backends=("vision", "torch"))
+    def post_process_image_guided_detection(self, *args, **kwargs):
+        return super().post_process_image_guided_detection(*args, **kwargs)
 
     def _preprocess(
         self,

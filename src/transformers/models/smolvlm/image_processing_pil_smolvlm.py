@@ -36,7 +36,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_smolvlm import (
     MAX_IMAGE_SIZE,
     SmolVLMImageProcessorKwargs,
@@ -47,9 +47,6 @@ from .image_processing_smolvlm import (
     get_resize_output_image_size,
 )
 
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
@@ -196,7 +193,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

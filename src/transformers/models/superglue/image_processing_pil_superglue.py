@@ -93,7 +93,7 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class SuperGlueImageProcessorPil(PilBackend):
     valid_kwargs = SuperGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

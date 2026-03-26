@@ -37,7 +37,7 @@ if is_torch_available():
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class Pix2StructImageProcessorPil(PilBackend):
     rescale_factor = None
     do_normalize = True

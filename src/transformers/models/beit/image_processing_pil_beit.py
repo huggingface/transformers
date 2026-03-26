@@ -27,6 +27,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils.import_utils import requires
 from .image_processing_beit import BeitImageProcessorKwargs
 
 
@@ -39,6 +40,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class BeitImageProcessorPil(PilBackend):
     """PIL backend for BEiT with reduce_label support."""
 

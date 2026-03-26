@@ -45,7 +45,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class FuyuImageProcessorPil(PilBackend):
     do_resize = True
     size = {"height": 1080, "width": 1920}

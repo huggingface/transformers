@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class DPTImageProcessorPil(PilBackend):
     """PIL backend for DPT with custom resize and pad."""
 

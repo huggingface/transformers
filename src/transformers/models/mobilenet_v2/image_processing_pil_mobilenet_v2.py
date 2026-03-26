@@ -41,7 +41,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class MobileNetV2ImageProcessorPil(PilBackend):
     """PIL backend for MobileNetV2 with reduce_label support."""
 

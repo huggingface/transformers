@@ -67,7 +67,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("torch", "torchvision"))
 class VitPoseImageProcessorPil(PilBackend):
     """PIL backend for VitPose with affine transform."""
 

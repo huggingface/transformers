@@ -52,7 +52,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class GLPNImageProcessorPil(PilBackend):
     """PIL backend for GLPN with size_divisor resize."""
 

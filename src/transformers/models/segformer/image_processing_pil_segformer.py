@@ -33,6 +33,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils.import_utils import requires
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
@@ -44,6 +45,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""
 

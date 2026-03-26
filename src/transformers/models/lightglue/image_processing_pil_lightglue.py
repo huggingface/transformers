@@ -34,6 +34,7 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
 
 
@@ -88,6 +89,7 @@ def convert_to_grayscale(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class LightGlueImageProcessorPil(PilBackend):
     valid_kwargs = LightGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

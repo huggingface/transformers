@@ -33,12 +33,7 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 from .image_processing_vilt import ViltImageProcessorKwargs
 
@@ -123,7 +118,7 @@ class ViltImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
         size_divisor: int | None = None,
     ) -> np.ndarray:
         """
@@ -132,7 +127,7 @@ class ViltImageProcessorPil(PilBackend):
         Args:
             image (`np.ndarray`): Image to resize.
             size (`SizeDict`): Size dictionary with shortest_edge key.
-            resample (`PILImageResampling | tvF.InterpolationMode | int`, *optional*): Interpolation method to use.
+            resample (`PILImageResampling | int`, *optional*): Interpolation method to use.
             size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
 
         Returns:
@@ -205,7 +200,7 @@ class ViltImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_mask2former import (
     Mask2FormerImageProcessorKwargs,
     compute_segments,
@@ -103,6 +104,7 @@ def convert_segmentation_map_to_binary_masks(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Mask2FormerImageProcessorPil(PilBackend):
     valid_kwargs = Mask2FormerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

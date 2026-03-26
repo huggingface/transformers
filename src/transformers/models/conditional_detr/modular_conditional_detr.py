@@ -235,6 +235,7 @@ class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
 
         return results
 
+    @requires(backends=("vision", "torch"))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.

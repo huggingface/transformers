@@ -31,7 +31,7 @@ if is_torch_available():
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class Kosmos2_5ImageProcessorPil(PilBackend):
     do_normalize = True
     do_convert_rgb = True

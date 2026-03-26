@@ -24,14 +24,9 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, logging
 from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
 
-
-if is_torch_available():
-    import torch
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -82,7 +77,7 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

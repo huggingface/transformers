@@ -34,14 +34,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorKwargs
 
 
 if is_torch_available():
     import torch
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 @auto_docstring
@@ -150,8 +148,8 @@ class DeepseekVLHybridImageProcessorPil(PilBackend):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
+        high_res_resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

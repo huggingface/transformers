@@ -61,6 +61,7 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_grounding_dino import GroundingDinoImageProcessorKwargs
 
 
@@ -703,6 +704,7 @@ class GroundingDinoImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",

@@ -49,7 +49,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
-from ...utils.import_utils import requires_backends
+from ...utils.import_utils import requires, requires_backends
 from .image_processing_deformable_detr import DeformableDetrImageProcessorKwargs
 
 
@@ -660,6 +660,7 @@ class DeformableDetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):

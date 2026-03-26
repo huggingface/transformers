@@ -13,7 +13,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
-from ...utils.import_utils import requires_backends
+from ...utils.import_utils import requires, requires_backends
 from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
@@ -66,6 +66,7 @@ def convert_to_grayscale(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class EfficientLoFTRImageProcessorPil(PilBackend):
     valid_kwargs = EfficientLoFTRImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

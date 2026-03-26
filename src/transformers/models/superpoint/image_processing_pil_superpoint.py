@@ -64,7 +64,7 @@ def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
 
 
 @auto_docstring
-@requires(backends=["vision", "torch", "torchvision"])
+@requires(backends=("vision", "torch", "torchvision"))
 class SuperPointImageProcessorPil(PilBackend):
     valid_kwargs = SuperPointImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
