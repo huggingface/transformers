@@ -1311,6 +1311,7 @@ class Qwen3_5ModelOutputWithPast(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
+
 class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
     config: Qwen3_5TextConfig
 
