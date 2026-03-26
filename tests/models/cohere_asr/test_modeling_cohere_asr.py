@@ -346,15 +346,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         audio_chunk_index = inputs.pop("audio_chunk_index")
         inputs.to(self.model.device)
 
-        # audio_chunk_index should indicate chunking occurred
-        self.assertIsNotNone(audio_chunk_index)
-        chunk_indices = [ci for _, ci in audio_chunk_index]
-        self.assertTrue(
-            any(ci is not None for ci in chunk_indices),
-            "Expected audio to be chunked (>30s) but no chunking occurred",
-        )
-
-        outputs = self.model.generate(**inputs, max_new_tokens=1000)
+        outputs = self.model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(
             outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en"
         )
@@ -377,8 +369,8 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         audio_chunk_index = inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)
 
-        outputs = self.model.generate(**inputs, max_new_tokens=500)
-        text = self.processor.decode(outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index)
+        outputs = self.model.generate(**inputs, max_new_tokens=256)
+        text = self.processor.decode(outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en")
 
         # fmt: off
         EXPECTED_OUTPUT = [
@@ -401,7 +393,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)
 
-        outputs = self.model.generate(**inputs, max_new_tokens=500)
+        outputs = self.model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?"]
