@@ -541,9 +541,9 @@ class HostDeviceIOPair:
     def reset(self) -> None:
         self.host_io.reset()
         self.device_io.reset()
-        self.h2d_over.synchronize()
-        self.compute_over.synchronize()
-        self.d2h_over.synchronize()
+        for event in [self.h2d_over, self.compute_over, self.d2h_over]:
+            if event is not None:
+                event.synchronize()
 
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
