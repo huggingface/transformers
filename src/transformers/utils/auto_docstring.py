@@ -4249,6 +4249,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
             )[model_name_lowercase]
         except KeyError:
             pass
+        except ImportError:
+            # In some environments, certain model classes might not be available. In that case, we can skip this part.
+            pass
 
     if model_name_lowercase and model_name_lowercase not in getattr(
         getattr(auto_module, PLACEHOLDER_TO_AUTO_MODULE["config_class"][0]),
