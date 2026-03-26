@@ -124,6 +124,8 @@ class CohereAsrProcessor(ProcessorMixin):
         texts = self.tokenizer.decode(*args, **kwargs)
         if audio_chunk_index is None:
             return texts
+        if language is None:
+            raise ValueError("`language` must be provided when `audio_chunk_index` is given.")
         separator = "" if language in _NO_SPACE_LANGS else " "
         return self._reassemble_chunk_texts(texts, audio_chunk_index, separator)
 
