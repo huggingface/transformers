@@ -25,7 +25,7 @@ Apply `@capture_outputs` to the base model's `forward()` method. It attaches for
 
 `OutputRecorder` accepts a `target_class` (an `nn.Module` subclass whose outputs to collect) and an optional `index` to select which element of the module's output tuple to get. Pass `layer_name` to attach hooks only to modules with a specific attribute name. Use `layer_name` when two layers share the same class, for example self-attention vs. cross-attention.
 
-The exampple below shows how these decoratos are used in practice, including different levels output control. See [LlamaModel](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py) for real world usage in codebase.
+The example below shows both decorators in practice with different levels of output control. See [LlamaModel](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py) for real world reference.
 
 ```python
 from ...processing_utils import Unpack
@@ -76,11 +76,13 @@ class MyModel(MyPreTrainedModel):
         )
 ```
 
-## Advanced usage: swapping intermediate capturing layers at load time
+## Patch layer classes
 
-The output-tracing system described above depends on `_can_record_outputs` pointing at the *exact* classes that a model's layers instantiate. When you swap out a layer implementation — for example, to use a custom attention kernel, a quantised expert layer, or an architecture variant — those pointers need to stay in sync. The patching API provides a clean, global registry for this, and automatically keeps `_can_record_outputs` consistent.
+Output tracing depends on `_can_record_outputs` pointing at the *exact* classes a model's layers instantiate. If you swap a layer implementation for a custom attention kernel, a quantized expert layer, or an architecture variant, those pointers must stay in sync. The [patching API](./monkey_patching) provides a clean global registry for keeping `_can_record_outputs` consistent.
 
-First let's see how you can swap layers and use custom layers with `register_patch_mapping`. Keys to `register_patch_mapping` can be exact class names or regex patterns — exact matches take priority, then patterns are tested with `re.search()`. Trying to register the same key twice raises `ValueError` unless you pass `overwrite=True`. The replacement must be a subclass of `nn.Module`; anything else raises an error.
+`register_patch_mapping` maps original class names to replacement `nn.Module` subclasses. Keys can be exact class names or regex patterns. Exact matches take priority. Patterns are tested with `re.search()`, so unanchored patterns match anywhere in the class name. Registering the same key twice raises `ValueError` unless you pass `overwrite=True`.
+
+Remove entries with `unregister_patch_mapping`.
 
 
 ```python
