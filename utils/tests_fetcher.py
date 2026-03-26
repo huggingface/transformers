@@ -1123,6 +1123,7 @@ def create_test_list_from_filter(full_test_list, out_path):
 
     # Only get `tests_hub`, which means we have 0 test file for all other jobs --> No job at all to run.
     if len(to_output) == 1:
+        print("No test file found for any job, skipping `tests_hub` as well.")
         to_output = []
 
     for _, file_name, files_to_test in to_output:
