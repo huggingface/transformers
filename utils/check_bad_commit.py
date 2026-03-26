@@ -15,11 +15,11 @@
 # limitations under the License.
 import argparse
 import copy
-from collections import defaultdict
 import json
 import os
 import re
 import subprocess
+from collections import defaultdict
 
 import git
 import requests
