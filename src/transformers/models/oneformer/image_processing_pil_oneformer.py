@@ -37,6 +37,7 @@ from ...utils import (
     is_torchvision_available,
     logging,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -78,6 +79,7 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class OneFormerImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

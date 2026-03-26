@@ -24,6 +24,7 @@ from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_pix2struct import (
     Pix2StructImageProcessorKwargs,
     render_text,
@@ -36,6 +37,7 @@ if is_torch_available():
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class Pix2StructImageProcessorPil(PilBackend):
     rescale_factor = None
     do_normalize = True

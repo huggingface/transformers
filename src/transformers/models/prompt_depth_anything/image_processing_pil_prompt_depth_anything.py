@@ -39,6 +39,7 @@ from ...utils import (
     is_torchvision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -96,6 +97,7 @@ def _get_resize_output_image_size(
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class PromptDepthAnythingImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "prompt_depth"]
 

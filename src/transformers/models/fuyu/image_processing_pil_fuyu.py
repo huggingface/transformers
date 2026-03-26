@@ -33,6 +33,7 @@ from ...utils import (
     is_torchvision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
 
 
@@ -44,6 +45,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class FuyuImageProcessorPil(PilBackend):
     do_resize = True
     size = {"height": 1080, "width": 1920}

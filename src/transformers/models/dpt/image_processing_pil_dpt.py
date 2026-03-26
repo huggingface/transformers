@@ -38,6 +38,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
 
 
@@ -54,6 +55,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class DPTImageProcessorPil(PilBackend):
     """PIL backend for DPT with custom resize and pad."""
 

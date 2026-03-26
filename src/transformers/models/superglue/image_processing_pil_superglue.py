@@ -27,6 +27,7 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
+from ...utils.import_utils import requires
 from .image_processing_superglue import validate_and_format_image_pairs
 
 
@@ -92,6 +93,7 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class SuperGlueImageProcessorPil(PilBackend):
     valid_kwargs = SuperGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

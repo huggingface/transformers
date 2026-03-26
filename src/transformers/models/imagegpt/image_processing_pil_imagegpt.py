@@ -26,15 +26,11 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torchvision_available,
 )
 
 
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
 
@@ -87,7 +83,7 @@ class ImageGPTImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

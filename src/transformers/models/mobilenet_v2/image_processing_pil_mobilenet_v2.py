@@ -29,6 +29,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils.import_utils import requires
 from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
 
 
@@ -40,6 +41,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class MobileNetV2ImageProcessorPil(PilBackend):
     """PIL backend for MobileNetV2 with reduce_label support."""
 

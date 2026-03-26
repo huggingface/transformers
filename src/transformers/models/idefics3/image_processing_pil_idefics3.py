@@ -29,7 +29,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_idefics3 import (
     MAX_IMAGE_SIZE,
     Idefics3ImageProcessorKwargs,
@@ -47,10 +47,6 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:h, :w] = 1
     return mask
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
@@ -189,7 +185,7 @@ class Idefics3ImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

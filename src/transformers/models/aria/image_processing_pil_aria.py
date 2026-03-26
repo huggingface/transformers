@@ -25,12 +25,8 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_aria import AriaImageProcessorKwargs
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
@@ -67,7 +63,7 @@ class AriaImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         target_resolution: tuple,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
     ) -> np.ndarray:
         """Resize an image to a target resolution while maintaining aspect ratio."""
         new_height, new_width = get_patch_output_size(
@@ -92,7 +88,7 @@ class AriaImageProcessorPil(PilBackend):
         image: np.ndarray,
         grid_pinpoints: list[list[int]],
         patch_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
     ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -104,7 +100,7 @@ class AriaImageProcessorPil(PilBackend):
                 A list of possible resolutions as (height, width) pairs.
             patch_size (`int`):
                 Size of each square patch to divide the image into.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`):
+            resample (`PILImageResampling | int | None`):
                 Resampling filter to use when resizing.
 
         Returns:
@@ -133,7 +129,7 @@ class AriaImageProcessorPil(PilBackend):
         min_image_size: int = 336,
         split_resolutions: list[list[int]] | None = None,
         split_image: bool = False,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
         **kwargs,
     ) -> BatchFeature:
         if max_image_size not in [490, 980]:

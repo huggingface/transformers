@@ -16,17 +16,22 @@
 import math
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs, torch_extract_patches
 
 
+if is_torch_available():
+    import torch
+
+
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class Kosmos2_5ImageProcessorPil(PilBackend):
     do_normalize = True
     do_convert_rgb = True

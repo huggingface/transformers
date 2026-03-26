@@ -37,6 +37,7 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -92,6 +93,7 @@ def convert_segmentation_map_to_binary_masks(
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class EomtImageProcessorPil(PilBackend):
     valid_kwargs = EomtImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

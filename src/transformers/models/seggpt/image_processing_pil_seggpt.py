@@ -27,6 +27,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
 
 
@@ -38,6 +39,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class SegGptImageProcessorPil(PilBackend):
     valid_kwargs = SegGptImageProcessorKwargs
 

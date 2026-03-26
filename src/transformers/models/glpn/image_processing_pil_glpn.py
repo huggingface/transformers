@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_glpn import GLPNImageProcessorKwargs
 
 
@@ -51,6 +52,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class GLPNImageProcessorPil(PilBackend):
     """PIL backend for GLPN with size_divisor resize."""
 

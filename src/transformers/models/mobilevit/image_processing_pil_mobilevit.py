@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 
@@ -50,6 +51,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class MobileViTImageProcessorPil(PilBackend):
     """PIL backend for MobileViT with flip_channel_order and reduce_label support."""
 

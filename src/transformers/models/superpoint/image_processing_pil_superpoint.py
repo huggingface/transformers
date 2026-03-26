@@ -22,6 +22,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
 
@@ -63,6 +64,7 @@ def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
 
 
 @auto_docstring
+@requires(backends=["vision", "torch", "torchvision"])
 class SuperPointImageProcessorPil(PilBackend):
     valid_kwargs = SuperPointImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

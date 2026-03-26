@@ -404,6 +404,7 @@ class TorchvisionBackend(BaseImageProcessor):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
+@requires(backends=("vision",))
 class PilBackend(BaseImageProcessor):
     """PIL/NumPy backend for portable CPU-only image processing."""
 
