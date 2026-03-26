@@ -280,6 +280,9 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
+    # On CUDA, `grouped_mm` availability also depends on GPU compute capability:
+    # `torch.nn.functional.grouped_mm` in torch>=2.10 and `torch._grouped_mm` in torch>=2.9 support SM80+
+    # but older `torch._grouped_mm` requires SM90+.
     if weight.device.type == "cuda":
         if hasattr(torch.nn.functional, "grouped_mm"):
             return torch.cuda.get_device_capability(weight.device) >= (8, 0)
