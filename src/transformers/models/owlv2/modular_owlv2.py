@@ -37,14 +37,11 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_scipy_available,
-    is_torch_available,
-    is_vision_available,
     requires_backends,
 )
 from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import OwlViTImageProcessor
 from ..owlvit.image_processing_pil_owlvit import OwlViTImageProcessorPil
-import torch
 
 
 if is_scipy_available():
