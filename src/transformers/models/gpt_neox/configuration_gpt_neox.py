@@ -95,7 +95,8 @@ class GPTNeoXConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         # Model uses non-standard naming for rope params, overwrite!
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rotary_emb_base", self.default_theta))
-        self.rope_parameters["partial_rotary_factor"] = kwargs.pop("rotary_pct", 0.25)
+        # NOTE: rotary_pct may reset to default (0.25) after reload due to kwargs.pop behavior
+       self.rope_parameters["partial_rotary_factor"] = kwargs.get("rotary_pct", self.rope_parameters.get("partial_rotary_factor", 0.25))
         self.standardize_rope_params()
         return kwargs
 
