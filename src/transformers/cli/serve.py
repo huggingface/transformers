@@ -1257,7 +1257,7 @@ class Serve:
             return StreamingResponse(cancellation_wrapper_stream(request_id), media_type="text/event-stream")
         else:
             chunk = cancellation_wrapper_buffer(request_id)
-            json_chunk = chunk.model_dump_json(exclude_none=True)
+            json_chunk = chunk.model_dump(exclude_none=True)
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
@@ -1633,9 +1633,7 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(
-            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )["input_ids"]
+        inputs = processor.apply_chat_template(inputs, tokenize=True, add_generation_prompt=True, return_tensors="pt")
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 
