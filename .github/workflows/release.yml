@@ -101,5 +101,5 @@ jobs:
             --body "Automatic dev version bump after release v${{ steps.version.outputs.version }}" \
             --base main \
             --head bump-dev-version-${{ steps.version.outputs.version }} \
-            --reviewer core-maintainers
+            --reviewer huggingface/core-maintainers
 
