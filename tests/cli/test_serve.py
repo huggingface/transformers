@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import os
 import tempfile
 import time
@@ -25,10 +26,19 @@ from parameterized import parameterized
 from transformers import GenerationConfig
 from transformers.cli.serve import Modality, Serve
 from transformers.testing_utils import require_openai, slow
-from transformers.utils.import_utils import is_openai_available
+from transformers.utils.import_utils import (
+    is_fastapi_available,
+    is_openai_available,
+    is_pydantic_available,
+    is_uvicorn_available,
+)
 
 
-if is_openai_available():
+serve_dependencies_available = (
+    is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
+)
+
+if serve_dependencies_available:
     from openai import APIConnectionError, OpenAI
     from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall, ChoiceDeltaToolCallFunction
     from openai.types.responses import (
@@ -855,3 +865,193 @@ class ServeInfrastructureTest(unittest.TestCase):
         self.assertIsNotNone(response, "Failed to connect to the server health endpoint.")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+
+def parse_sse_events(response):
+    """Parse SSE lines from a streaming httpx response into a list of dicts."""
+    events = []
+    for line in response.iter_lines():
+        if not line:
+            continue
+        if line.startswith("data: "):
+            events.append(json.loads(line[6:]))
+    return events
+
+
+@slow
+@require_openai
+class ServeLoadModelIntegrationTest(unittest.TestCase):
+    """Tests the /load_model SSE endpoint."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.port = 8043
+        cls.server = Serve(port=cls.port, non_blocking=True)
+        cls.base_url = f"http://localhost:{cls.port}"
+        # Wait for the server to be ready
+        response = _call_healthcheck(cls.base_url)
+        assert response is not None and response.status_code == 200
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.kill_server()
+
+    def setUp(self):
+        # Clear the in-memory model cache so each test starts fresh
+        self.server.reset_loaded_models()
+
+    def _load_model(self, model: str):
+        with httpx.Client(timeout=120) as client:
+            with client.stream("POST", f"{self.base_url}/load_model", json={"model": model}) as response:
+                events = parse_sse_events(response)
+                return response, events
+
+    def test_load_model_fresh(self):
+        """POST /load_model with a valid model returns SSE events ending with ready."""
+        response, events = self._load_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/event-stream", response.headers.get("content-type", ""))
+
+        # Extract stages from loading events
+        stages = [e["stage"] for e in events if e["status"] == "loading" and "stage" in e]
+        self.assertIn("processor", stages)
+        self.assertIn("config", stages)
+        self.assertIn("weights", stages)
+
+        # Stages must appear in the correct order
+        stage_indices = {stage: i for i, stage in enumerate(stages) if stage in ("processor", "config", "weights")}
+        self.assertLess(stage_indices["processor"], stage_indices["config"])
+        self.assertLess(stage_indices["config"], stage_indices["weights"])
+
+        # Last event is ready with cached: false
+        last = events[-1]
+        self.assertEqual(last["status"], "ready")
+        self.assertFalse(last["cached"])
+
+        # Every event has status and model
+        for event in events:
+            self.assertIn("status", event)
+            self.assertIn("model", event)
+
+    def test_load_model_cached(self):
+        """Loading a model that is already in memory returns a single ready event with cached: true."""
+        # First load to ensure the model is in memory
+        self._load_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+        # Second load should be cached
+        _, events = self._load_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+        ready_events = [e for e in events if e["status"] == "ready"]
+        self.assertEqual(len(ready_events), 1)
+        self.assertTrue(ready_events[0]["cached"])
+
+        # No loading events should be present
+        loading_events = [e for e in events if e["status"] == "loading"]
+        self.assertEqual(len(loading_events), 0)
+
+    def test_load_model_error(self):
+        """Loading a nonexistent model produces an error event."""
+        _, events = self._load_model("nonexistent/model-that-does-not-exist")
+
+        error_events = [e for e in events if e["status"] == "error"]
+        self.assertGreaterEqual(len(error_events), 1, "Expected at least one error event")
+        self.assertIn("message", error_events[0])
+
+    def test_load_model_missing_field(self):
+        """POST /load_model with no model field returns 422."""
+        with httpx.Client(timeout=30) as client:
+            response = client.post(f"{self.base_url}/load_model", json={})
+            self.assertEqual(response.status_code, 422)
+
+    def test_load_model_event_schema(self):
+        """Every event in a load_model stream conforms to the expected schema."""
+        _, events = self._load_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+        for event in events:
+            self.assertIsInstance(event["status"], str)
+            self.assertIsInstance(event["model"], str)
+
+            if event["status"] == "loading":
+                self.assertIn("stage", event)
+
+                if event["stage"] in ("download", "weights") and "progress" in event:
+                    progress = event["progress"]
+                    self.assertIn("current", progress)
+                    self.assertIn("total", progress)
+                    self.assertIsInstance(progress["current"], int)
+
+            if event["status"] == "ready":
+                self.assertIn("cached", event)
+                self.assertIsInstance(event["cached"], bool)
+
+    def test_load_model_stage_ordering(self):
+        """Stages in loading events follow the expected order."""
+        _, events = self._load_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+        stages = [e["stage"] for e in events if e["status"] == "loading" and "stage" in e]
+
+        # Deduplicate while preserving order (stages repeat for progress ticks)
+        seen = set()
+        unique_stages = []
+        for s in stages:
+            if s not in seen:
+                seen.add(s)
+                unique_stages.append(s)
+
+        expected_order = ["processor", "config", "download", "weights"]
+        # Filter expected_order to only stages that are actually present
+        expected_present = [s for s in expected_order if s in unique_stages]
+
+        self.assertEqual(unique_stages, expected_present, "Stages appeared out of order")
+
+    def test_concurrent_load_same_model(self):
+        """Two concurrent /load_model requests for the same model should both receive progress events
+        and a final ready event, but the model should only be loaded once."""
+        import concurrent.futures
+
+        model = "Qwen/Qwen2.5-0.5B-Instruct"
+        results = [None, None]
+
+        def load_in_thread(index):
+            with httpx.Client(timeout=120) as client:
+                with client.stream("POST", f"{self.base_url}/load_model", json={"model": model}) as response:
+                    events = parse_sse_events(response)
+                    results[index] = (response.status_code, events)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(load_in_thread, i) for i in range(2)]
+            concurrent.futures.wait(futures)
+            # Re-raise any exceptions from threads
+            for f in futures:
+                f.result()
+
+        for i in range(2):
+            status_code, events = results[i]
+            self.assertEqual(status_code, 200, f"Caller {i} got non-200 status")
+            self.assertTrue(len(events) > 0, f"Caller {i} received no events")
+
+            ready_events = [e for e in events if e["status"] == "ready"]
+            self.assertEqual(len(ready_events), 1, f"Caller {i} should get exactly one ready event")
+            self.assertIn("model", ready_events[0])
+
+    def test_concurrent_load_second_caller_gets_cached_if_first_finishes(self):
+        """If the first /load_model finishes before the second arrives,
+        the second caller should get a cached response."""
+        model = "Qwen/Qwen2.5-0.5B-Instruct"
+
+        # First load — blocks until complete
+        _, events1 = self._load_model(model)
+        ready1 = [e for e in events1 if e["status"] == "ready"]
+        self.assertEqual(len(ready1), 1)
+        self.assertFalse(ready1[0]["cached"])
+
+        # Second load — model is now in memory
+        _, events2 = self._load_model(model)
+        ready2 = [e for e in events2 if e["status"] == "ready"]
+        self.assertEqual(len(ready2), 1)
+        self.assertTrue(ready2[0]["cached"])
+
+        # No loading events on the cached path
+        loading2 = [e for e in events2 if e["status"] == "loading"]
+        self.assertEqual(len(loading2), 0)

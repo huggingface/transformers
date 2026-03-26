@@ -30,7 +30,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Regex pattern used to find the checkpoint mentioned in the docstring of `config_class`.
 # For example, `[google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)`
-_re_checkpoint = re.compile(r"""@auto_docstring\((?s).*?checkpoint\s*=\s*["']([^"']+)["']""")
+_re_checkpoint = re.compile(r"""(?s)@auto_docstring\(.*?checkpoint\s*=\s*["']([^"']+)["']""")
 
 
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {

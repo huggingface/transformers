@@ -320,7 +320,7 @@ def sort_checkpoints(
     if use_mtime and len(checkpoints_sorted) > 1:
         mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
         if mtime_diff < 1.0:
-            logger.warning("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            logger.warning_once("mtime may not be reliable on this filesystem, falling back to numerical ordering")
             return sort_checkpoints(
                 output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
             )
@@ -572,6 +572,7 @@ class SchedulerType(ExplicitEnum):
        - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
        - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
        - "warmup_stable_decay" = [`get_wsd_schedule`]
+       - "greedy" = [`get_greedy_schedule`]
     """
 
     LINEAR = "linear"
@@ -585,6 +586,7 @@ class SchedulerType(ExplicitEnum):
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
     COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
+    GREEDY = "greedy"
 
 
 class TrainerMemoryTracker:
@@ -1064,7 +1066,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
         strict (`bool`, *optional*, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
-        prefer_safe (`bool`, *optional*, defaults to `False`):
+        prefer_safe (`bool`, *optional*, defaults to `True`):
             If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
             safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
 
@@ -1105,7 +1107,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_missing_keys}."
         if len(unexpected_keys) > 0:
             str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
-            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+            error_message += f"\nUnexpected key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
     if load_safe:

@@ -14,7 +14,6 @@
 """AutoProcessor class."""
 
 import importlib
-import inspect
 import json
 from collections import OrderedDict
 from typing import TYPE_CHECKING
@@ -133,9 +132,11 @@ else:
             ("paligemma", "PaliGemmaProcessor"),
             ("perception_lm", "PerceptionLMProcessor"),
             ("phi4_multimodal", "Phi4MultimodalProcessor"),
+            ("pi0", "PI0Processor"),
             ("pix2struct", "Pix2StructProcessor"),
             ("pixtral", "PixtralProcessor"),
             ("pop2piano", "Pop2PianoProcessor"),
+            ("pp_chart2table", "PPChart2TableProcessor"),
             ("qwen2_5_omni", "Qwen2_5OmniProcessor"),
             ("qwen2_5_vl", "Qwen2_5_VLProcessor"),
             ("qwen2_audio", "Qwen2AudioProcessor"),
@@ -297,7 +298,18 @@ class AutoProcessor:
 
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `cached_file`.
-        cached_file_kwargs = {key: kwargs[key] for key in inspect.signature(cached_file).parameters if key in kwargs}
+        _hub_valid_kwargs = (
+            "cache_dir",
+            "force_download",
+            "proxies",
+            "token",
+            "revision",
+            "local_files_only",
+            "subfolder",
+            "repo_type",
+            "user_agent",
+        )
+        cached_file_kwargs = {key: kwargs[key] for key in _hub_valid_kwargs if key in kwargs}
         # We don't want to raise
         cached_file_kwargs.update(
             {

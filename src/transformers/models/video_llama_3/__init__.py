@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_video_llama_3 import *
+    from .image_processing_pil_video_llama_3 import *
     from .image_processing_video_llama_3 import *
-    from .image_processing_video_llama_3_fast import *
     from .modeling_video_llama_3 import *
     from .processing_video_llama_3 import *
     from .video_processing_video_llama_3 import *

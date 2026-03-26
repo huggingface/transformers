@@ -94,7 +94,7 @@ def decode_spans(
     scores_flat = candidates.flatten()
     if topk == 1:
         idx_sort = [np.argmax(scores_flat)]
-    elif len(scores_flat) < topk:
+    elif len(scores_flat) <= topk:
         idx_sort = np.argsort(-scores_flat)
     else:
         idx = np.argpartition(-scores_flat, topk)[0:topk]

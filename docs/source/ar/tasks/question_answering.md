@@ -252,23 +252,7 @@ pip install transformers datasets evaluate
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
-أبسط طريقة لتجربة نموذجك المُدرَّب للاستدلال هي استخدامه في [`pipeline`]. قم بإنشاء كائن لـ `pipeline` للإجابة على الأسئلة باستخدام نموذجك، ومرِّر النص إليه:
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline("question-answering", model="my_awesome_qa_model")
->>> question_answerer(question=question, context=context)
-{'score': 0.2058267742395401,
- 'start': 10,
- 'end': 95,
- 'answer': '176 مليار معامل ويمكنه إنشاء نصوص بـ 46 لغة طبيعية و 13'}
-```
-
-يمكنك أيضًا تكرار نتائج `pipeline` يدويًا إذا أردت:
-
- 
- قسّم النص وأرجع تنسورات PyTorch:
+أبسط طريقة لتجربة نموذجك المُدرَّب للاستدلال هي استخدامه مباشرة مع tokenizer والنموذج. قسّم النص وأرجع تنسورات PyTorch:
 
 ```py
 >>> from transformers import AutoTokenizer

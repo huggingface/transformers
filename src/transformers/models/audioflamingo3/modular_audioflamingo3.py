@@ -107,7 +107,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         for layer in self.layers:
             drop = self.training and torch.rand([]) < self.layerdrop
             if not drop:
-                hidden_states = layer(hidden_states, attention_mask)[0]
+                hidden_states = layer(hidden_states, attention_mask)
 
         # AvgPool (time/2) + LayerNorm
         hidden_states = hidden_states.permute(0, 2, 1)

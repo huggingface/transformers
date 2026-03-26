@@ -367,11 +367,14 @@ class Qwen3_5MoeVisionText2TextModelTester:
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
         input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -485,6 +488,193 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
+
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs throw an explicit error when image count mismatches image-token count in text.
+        Also checks multi-image cases where one prompt has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            _ = model(**input_dict)
+            curr_input_dict = copy.deepcopy(input_dict)
+
+            patch_size = config.vision_config.patch_size
+            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
+            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            if hasattr(model.base_model, "rope_deltas"):
+                model.base_model.rope_deltas = None
+
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
+            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
+            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            with self.assertRaises(ValueError):
+                _ = model(
+                    input_ids=input_ids,
+                    pixel_values=pixel_values,
+                    image_grid_thw=image_grid_thw,
+                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
+                )
+
+            if hasattr(model.base_model, "rope_deltas"):
+                model.base_model.rope_deltas = None
+
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_token_type_ids = torch.cat(
+                [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
+            )
+            _ = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+    def test_image_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        bsz = self.model_tester.batch_size
+        channels = config.vision_config.in_chans
+        temporal_patch = config.vision_config.temporal_patch_size
+        patch_size = config.vision_config.patch_size
+        num_images = 2
+
+        input_ids = ids_tensor([bsz, self.model_tester.seq_length], self.model_tester.vocab_size)
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
+
+        patches_per_image = 1
+        pixel_values = floats_tensor(
+            [
+                bsz * num_images * patches_per_image,
+                channels * temporal_patch * (patch_size**2),
+            ]
+        )
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images))
+        self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
+
+        insertion_point = 0
+        tokens_per_image = 3  # vision_start + image_token + vision_end
+        required_seq_length = insertion_point + num_images * tokens_per_image
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
+
+        for b in range(bsz):
+            for image_idx in range(num_images):
+                image_start = insertion_point + image_idx * tokens_per_image
+                input_ids[b, image_start] = self.model_tester.vision_start_token_id
+                input_ids[b, image_start + 1] = self.model_tester.image_token_id
+                input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.image_token_id] = 1
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.assertIsNotNone(outputs)
+
+    def test_video_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        bsz = self.model_tester.batch_size
+        channels = config.vision_config.in_chans
+        temporal_patch = config.vision_config.temporal_patch_size
+        patch_size = config.vision_config.patch_size
+
+        input_ids = ids_tensor([bsz, self.model_tester.seq_length], self.model_tester.vocab_size)
+
+        frames = 4
+        num_video = 2
+        frame_timestamp_tokens = 5
+        patch_h = self.model_tester.image_size // patch_size
+        patch_w = self.model_tester.image_size // patch_size
+        patch_t = frames // temporal_patch
+        patches_per_video = patch_t * patch_h * patch_w
+        patches_per_frame = patch_h * patch_w
+        pixel_values_videos = floats_tensor(
+            [
+                bsz * num_video * patches_per_video,
+                channels * temporal_patch * (patch_size**2),
+            ]
+        )
+
+        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video))
+        self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
+
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
+
+        insertion_point = 0
+        tokens_per_frame = frame_timestamp_tokens + 1 + patches_per_frame + 1
+        tokens_per_video = patch_t * tokens_per_frame
+        required_seq_length = insertion_point + num_video * tokens_per_video
+        if required_seq_length > input_ids.shape[1]:
+            pad_extension = torch.full(
+                (bsz, required_seq_length - input_ids.shape[1]),
+                self.model_tester.pad_token_id,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
+            )
+            input_ids = torch.cat([input_ids, pad_extension], dim=1)
+
+        timestamp_start_token_id = self.model_tester.vision_end_token_id + 1
+        self.assertLessEqual(timestamp_start_token_id + frame_timestamp_tokens, self.model_tester.vocab_size)
+        timestamp_token_ids = torch.arange(
+            timestamp_start_token_id,
+            timestamp_start_token_id + frame_timestamp_tokens,
+            device=input_ids.device,
+            dtype=input_ids.dtype,
+        )
+
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
+        for b in range(bsz):
+            for video_idx in range(num_video):
+                video_start = insertion_point + video_idx * tokens_per_video
+                for frame_idx in range(patch_t):
+                    frame_start = video_start + frame_idx * tokens_per_frame
+                    input_ids[b, frame_start : frame_start + frame_timestamp_tokens] = timestamp_token_ids
+
+                    vision_start_pos = frame_start + frame_timestamp_tokens
+                    input_ids[b, vision_start_pos] = self.model_tester.vision_start_token_id
+
+                    frame_token_start = vision_start_pos + 1
+                    frame_token_end = frame_token_start + patches_per_frame
+                    input_ids[b, frame_token_start:frame_token_end] = self.model_tester.video_token_id
+                    input_ids[b, frame_token_end] = self.model_tester.vision_end_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            outputs = model(
+                input_ids=input_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_grid_thw=video_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            self.assertIsNotNone(outputs)
 
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
