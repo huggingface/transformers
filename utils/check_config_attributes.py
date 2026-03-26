@@ -99,6 +99,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "ConditionalDetrConfig": True,
     "DabDetrConfig": True,
     "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
     "DetrConfig": True,
     "DFineConfig": True,
     "GroundingDinoConfig": True,

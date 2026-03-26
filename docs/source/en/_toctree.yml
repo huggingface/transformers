@@ -974,6 +974,8 @@
         title: UperNet
       - local: model_doc/uvdoc
         title: UVDoc
+      - local: model_doc/videomt
+        title: VidEoMT
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
