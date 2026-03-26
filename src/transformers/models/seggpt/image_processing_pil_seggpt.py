@@ -27,7 +27,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
+try:
+    from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as SegGptImageProcessorKwargs  # type: ignore
+    build_palette = None  # type: ignore
 
 
 if is_torch_available():

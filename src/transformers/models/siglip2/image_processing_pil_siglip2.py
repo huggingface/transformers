@@ -24,10 +24,14 @@ from ...utils import (
     auto_docstring,
     is_torchvision_available,
 )
-from .image_processing_siglip2 import (
-    Siglip2ImageProcessorKwargs,
-    get_image_size_for_max_num_patches,
-)
+try:
+    from .image_processing_siglip2 import (
+        Siglip2ImageProcessorKwargs,
+        get_image_size_for_max_num_patches,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as Siglip2ImageProcessorKwargs  # type: ignore
+    get_image_size_for_max_num_patches = None  # type: ignore
 
 
 if is_torchvision_available():

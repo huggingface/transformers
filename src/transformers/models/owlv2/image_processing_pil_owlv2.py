@@ -36,7 +36,10 @@ from ...utils import (
     is_torchvision_available,
     requires_backends,
 )
-from ..owlv2.image_processing_owlv2 import box_iou
+try:
+    from ..owlv2.image_processing_owlv2 import box_iou
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    box_iou = None  # type: ignore
 
 
 if is_scipy_available():
@@ -125,19 +128,19 @@ def _scale_boxes(boxes, target_sizes):
     Scale batch of bounding boxes to the target sizes.
 
     Args:
-        boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
+        boxes (`"torch.Tensor"` of shape `(batch_size, num_boxes, 4)`):
             Bounding boxes to scale. Each box is expected to be in (x1, y1, x2, y2) format.
-        target_sizes (`list[tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
+        target_sizes (`list[tuple[int, int]]` or `"torch.Tensor"` of shape `(batch_size, 2)`):
             Target sizes to scale the boxes to. Each target size is expected to be in (height, width) format.
 
     Returns:
-        `torch.Tensor` of shape `(batch_size, num_boxes, 4)`: Scaled bounding boxes.
+        `"torch.Tensor"` of shape `(batch_size, num_boxes, 4)`: Scaled bounding boxes.
     """
 
     if isinstance(target_sizes, (list, tuple)):
         image_height = torch.tensor([i[0] for i in target_sizes])
         image_width = torch.tensor([i[1] for i in target_sizes])
-    elif isinstance(target_sizes, torch.Tensor):
+    elif isinstance(target_sizes, "torch.Tensor"):
         image_height, image_width = target_sizes.unbind(1)
     else:
         raise TypeError("`target_sizes` must be a list, tuple or torch.Tensor")
@@ -193,7 +196,7 @@ class Owlv2ImageProcessorPil(PilBackend):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.1):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
 
@@ -244,7 +247,7 @@ class Owlv2ImageProcessorPil(PilBackend):
                 Minimum confidence threshold to use to filter out predicted boxes.
             nms_threshold (`float`, *optional*, defaults to 0.3):
                 IoU threshold for non-maximum suppression of overlapping boxes.
-            target_sizes (`torch.Tensor`, *optional*):
+            target_sizes (`"torch.Tensor"`, *optional*):
                 Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
                 the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
                 None, predictions will not be unnormalized.
@@ -271,7 +274,7 @@ class Owlv2ImageProcessorPil(PilBackend):
         # Apply non-maximum suppression (NMS)
         if nms_threshold < 1.0:
             for idx in range(target_boxes.shape[0]):
-                for i in torch.argsort(-scores[idx]):
+                for i in "torch.argsort"(-scores[idx]):
                     if not scores[idx][i]:
                         continue
 

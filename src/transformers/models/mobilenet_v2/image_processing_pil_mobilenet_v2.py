@@ -29,7 +29,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
+try:
+    from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as MobileNetV2ImageProcessorKwargs  # type: ignore
 
 
 if is_torch_available():
@@ -175,7 +178,7 @@ class MobileNetV2ImageProcessorPil(PilBackend):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            if isinstance(target_sizes, torch.Tensor):
+            if isinstance(target_sizes, "torch.Tensor"):
                 target_sizes = target_sizes.numpy()
             semantic_segmentation = []
             for idx in range(len(logits)):

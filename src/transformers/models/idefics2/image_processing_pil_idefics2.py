@@ -28,12 +28,18 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_idefics2 import (
-    Idefics2ImageProcessorKwargs,
-    convert_to_rgb,
-    get_max_height_width,
-    get_resize_output_image_size,
-)
+try:
+    from .image_processing_idefics2 import (
+        Idefics2ImageProcessorKwargs,
+        convert_to_rgb,
+        get_max_height_width,
+        get_resize_output_image_size,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as Idefics2ImageProcessorKwargs  # type: ignore
+    convert_to_rgb = None  # type: ignore
+    get_max_height_width = None  # type: ignore
+    get_resize_output_image_size = None  # type: ignore
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:

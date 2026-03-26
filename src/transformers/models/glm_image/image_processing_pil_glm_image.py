@@ -27,7 +27,11 @@ from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
+try:
+    from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as GlmImageImageProcessorKwargs  # type: ignore
+    smart_resize = None  # type: ignore
 
 
 if is_torchvision_available():

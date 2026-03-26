@@ -33,7 +33,10 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .image_processing_glpn import GLPNImageProcessorKwargs
+try:
+    from .image_processing_glpn import GLPNImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as GLPNImageProcessorKwargs  # type: ignore
 
 
 if is_torchvision_available():

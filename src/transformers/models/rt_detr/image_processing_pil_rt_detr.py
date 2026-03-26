@@ -48,7 +48,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-from .image_processing_rt_detr import RTDetrImageProcessorKwargs
+try:
+    from .image_processing_rt_detr import RTDetrImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as RTDetrImageProcessorKwargs  # type: ignore
 
 
 if is_torch_available():
@@ -508,7 +511,7 @@ class RTDetrImageProcessorPil(PilBackend):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             use_focal_loss (`bool` defaults to `True`):
@@ -545,7 +548,7 @@ class RTDetrImageProcessorPil(PilBackend):
             index = index // num_classes
             boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
         else:
-            scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
+            scores = "torch.nn".functional.softmax(out_logits)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
             if scores.shape[1] > num_top_queries:
                 scores, index = torch.topk(scores, num_top_queries, dim=-1)

@@ -34,6 +34,7 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
 from ..siglip.image_processing_siglip import SiglipImageProcessor
@@ -60,6 +61,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@requires(backends=("torch",))
 @auto_docstring
 class PI0Processor(PaligemmaProcessor):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):

@@ -34,7 +34,11 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
-from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
+try:
+    from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as LightGlueImageProcessorKwargs  # type: ignore
+    validate_and_format_image_pairs = None  # type: ignore
 
 
 if TYPE_CHECKING:
@@ -152,14 +156,14 @@ class LightGlueImageProcessorPil(PilBackend):
         outputs: "LightGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> "list[dict[str, torch.Tensor]]":
         """
         Converts the raw output of [`LightGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
             outputs ([`LightGlueKeypointMatchingOutput`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` or `list[tuple[tuple[int, int]]]`, *optional*):
+            target_sizes (`"torch.Tensor"` or `list[tuple[tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before
                 any processing).
@@ -219,7 +223,7 @@ class LightGlueImageProcessorPil(PilBackend):
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
-        keypoint_matching_output: list[dict[str, torch.Tensor]],
+        keypoint_matching_output: list[dict[str, "torch.Tensor"]],
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
@@ -228,7 +232,7 @@ class LightGlueImageProcessorPil(PilBackend):
             images (`ImageInput`):
                 Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2
                 images or a list of list of 2 images list with pixel values ranging from 0 to 255.
-            keypoint_matching_output (List[Dict[str, torch.Tensor]]]):
+            keypoint_matching_output (List[Dict[str, "torch.Tensor"]]]):
                 A post processed keypoint matching output
 
         Returns:

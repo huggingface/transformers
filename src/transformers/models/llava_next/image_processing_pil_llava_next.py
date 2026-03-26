@@ -32,7 +32,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_llava_next import LlavaNextImageProcessorKwargs
+try:
+    from .image_processing_llava_next import LlavaNextImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as LlavaNextImageProcessorKwargs  # type: ignore
 
 
 if is_torchvision_available():

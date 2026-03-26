@@ -24,11 +24,16 @@ from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
-from .image_processing_pix2struct import (
-    Pix2StructImageProcessorKwargs,
-    render_text,
-    torch_extract_patches,
-)
+try:
+    from .image_processing_pix2struct import (
+        Pix2StructImageProcessorKwargs,
+        render_text,
+        torch_extract_patches,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as Pix2StructImageProcessorKwargs  # type: ignore
+    render_text = None  # type: ignore
+    torch_extract_patches = None  # type: ignore
 
 
 if is_torch_available():

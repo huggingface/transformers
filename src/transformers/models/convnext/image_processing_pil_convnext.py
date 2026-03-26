@@ -27,7 +27,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_convnext import ConvNextImageProcessorKwargs
+try:
+    from .image_processing_convnext import ConvNextImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as ConvNextImageProcessorKwargs  # type: ignore
 
 
 if is_torchvision_available():

@@ -30,14 +30,22 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_mllama import (
-    MllamaImageProcessorKwargs,
-    _validate_mllama_preprocess_arguments,
-    convert_to_rgb,
-    get_all_supported_aspect_ratios,
-    get_image_size_fit_to_canvas,
-    get_optimal_tiled_canvas,
-)
+try:
+    from .image_processing_mllama import (
+        MllamaImageProcessorKwargs,
+        _validate_mllama_preprocess_arguments,
+        convert_to_rgb,
+        get_all_supported_aspect_ratios,
+        get_image_size_fit_to_canvas,
+        get_optimal_tiled_canvas,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as MllamaImageProcessorKwargs  # type: ignore
+    _validate_mllama_preprocess_arguments = None  # type: ignore
+    convert_to_rgb = None  # type: ignore
+    get_all_supported_aspect_ratios = None  # type: ignore
+    get_image_size_fit_to_canvas = None  # type: ignore
+    get_optimal_tiled_canvas = None  # type: ignore
 
 
 def split_to_tiles_np(image: np.ndarray, num_tiles_height: int, num_tiles_width: int) -> np.ndarray:

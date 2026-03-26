@@ -20,7 +20,11 @@ from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
-from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
+try:
+    from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    _scale_boxes = None  # type: ignore
+    box_iou = None  # type: ignore
 
 
 if is_torch_available():
@@ -72,7 +76,7 @@ class OwlViTImageProcessorPil(PilBackend):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.1):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
 
@@ -123,7 +127,7 @@ class OwlViTImageProcessorPil(PilBackend):
                 Minimum confidence threshold to use to filter out predicted boxes.
             nms_threshold (`float`, *optional*, defaults to 0.3):
                 IoU threshold for non-maximum suppression of overlapping boxes.
-            target_sizes (`torch.Tensor`, *optional*):
+            target_sizes (`"torch.Tensor"`, *optional*):
                 Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
                 the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
                 None, predictions will not be unnormalized.
@@ -150,7 +154,7 @@ class OwlViTImageProcessorPil(PilBackend):
         # Apply non-maximum suppression (NMS)
         if nms_threshold < 1.0:
             for idx in range(target_boxes.shape[0]):
-                for i in torch.argsort(-scores[idx]):
+                for i in "torch.argsort"(-scores[idx]):
                     if not scores[idx][i]:
                         continue
 

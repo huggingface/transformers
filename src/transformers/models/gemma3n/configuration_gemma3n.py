@@ -24,10 +24,10 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring, is_timm_available, logging, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends, is_torch_available
 
 
-if is_timm_available():
+if is_timm_available() and is_torch_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
 
 

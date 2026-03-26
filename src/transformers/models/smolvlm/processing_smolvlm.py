@@ -22,11 +22,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
-from ...utils import auto_docstring, is_num2words_available, is_vision_available, logging
+from ...utils import auto_docstring, is_num2words_available, is_torch_available, is_vision_available, logging
 from ...video_utils import VideoInput
 
 
-if is_vision_available():
+if is_torch_available():
     from .video_processing_smolvlm import (
         DEFAULT_MEDIA_OUTTRO,
         DEFAULT_VIDEO_INTRO,

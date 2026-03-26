@@ -38,7 +38,10 @@ from ...utils import (
     auto_docstring,
     is_vision_available,
 )
-from .image_processing_janus import JanusImageProcessorKwargs
+try:
+    from .image_processing_janus import JanusImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as JanusImageProcessorKwargs  # type: ignore
 
 
 if is_vision_available():
@@ -227,7 +230,7 @@ class JanusImageProcessorPil(PilBackend):
         Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
         image = (image * image_std) + image_mean
         Args:
-            image (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
+            image (`"torch.Tensor"` of shape `(batch_size, num_channels, image_size, image_size)` or `(num_channels, image_size, image_size)`):
                 Batch of pixel values to postprocess.
             image_mean (`float` or `Iterable[float]`):
                 The mean to use for unnormalization.

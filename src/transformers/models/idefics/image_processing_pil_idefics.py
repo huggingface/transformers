@@ -17,7 +17,12 @@ from ...image_processing_backends import PilBackend
 from ...image_utils import ImageInput, PILImageResampling, make_flat_list_of_images
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torch_available
-from .image_processing_idefics import IDEFICS_STANDARD_MEAN, IDEFICS_STANDARD_STD, IdeficsImageProcessorKwargs
+try:
+    from .image_processing_idefics import IDEFICS_STANDARD_MEAN, IDEFICS_STANDARD_STD, IdeficsImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    IDEFICS_STANDARD_MEAN = None  # type: ignore
+    IDEFICS_STANDARD_STD = None  # type: ignore
+    from ...processing_utils import ImagesKwargs as IdeficsImageProcessorKwargs  # type: ignore
 
 
 @auto_docstring

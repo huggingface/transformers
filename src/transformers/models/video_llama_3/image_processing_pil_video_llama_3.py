@@ -26,7 +26,11 @@ from ...image_processing_backends import PilBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs, smart_resize
+try:
+    from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs, smart_resize
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as VideoLlama3ImageProcessorKwargs  # type: ignore
+    smart_resize = None  # type: ignore
 
 
 if is_torchvision_available():

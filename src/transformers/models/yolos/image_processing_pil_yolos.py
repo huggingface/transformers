@@ -41,7 +41,10 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
-from .image_processing_yolos import YolosImageProcessorKwargs
+try:
+    from .image_processing_yolos import YolosImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as YolosImageProcessorKwargs  # type: ignore
 
 
 if is_vision_available():
@@ -705,7 +708,7 @@ class YolosImageProcessorPil(PilBackend):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
         Returns:
@@ -731,7 +734,7 @@ class YolosImageProcessorPil(PilBackend):
         if target_sizes is not None:
             if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
-                img_w = torch.Tensor([i[1] for i in target_sizes])
+                img_w = "torch.Tensor"([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
 

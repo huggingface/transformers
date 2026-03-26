@@ -26,10 +26,10 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
+from ...utils import auto_docstring, is_torchvision_available, is_vision_available, logging
 
 
-if is_vision_available():
+if is_torchvision_available():
     from .image_processing_pixtral import get_resize_output_image_size
 
 

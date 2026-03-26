@@ -22,7 +22,10 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-from .image_processing_superpoint import SuperPointImageProcessorKwargs
+try:
+    from .image_processing_superpoint import SuperPointImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as SuperPointImageProcessorKwargs  # type: ignore
 
 
 if TYPE_CHECKING:
@@ -114,7 +117,7 @@ class SuperPointImageProcessorPil(PilBackend):
         Args:
             outputs ([`SuperPointKeypointDescriptionOutput`]):
                 Raw outputs of the model containing keypoints in a relative (x, y) format, with scores and descriptors.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`):
+            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. This must be the original
                 image size (before any processing).

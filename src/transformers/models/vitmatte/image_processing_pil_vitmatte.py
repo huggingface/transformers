@@ -30,7 +30,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
-from .image_processing_vitmatte import VitMatteImageProcessorKwargs
+try:
+    from .image_processing_vitmatte import VitMatteImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as VitMatteImageProcessorKwargs  # type: ignore
 
 
 if is_torch_available():

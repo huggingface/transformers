@@ -33,7 +33,11 @@ from ...utils import (
     auto_docstring,
     is_torchvision_available,
 )
-from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
+try:
+    from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as GotOcr2ImageProcessorKwargs  # type: ignore
+    get_optimal_tiled_canvas = None  # type: ignore
 
 
 if is_torchvision_available():

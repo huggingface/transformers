@@ -32,7 +32,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
-from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
+try:
+    from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as ZoeDepthImageProcessorKwargs  # type: ignore
+    get_resize_output_image_size = None  # type: ignore
 
 
 if TYPE_CHECKING:

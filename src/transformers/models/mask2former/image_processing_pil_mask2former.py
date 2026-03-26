@@ -48,12 +48,18 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .image_processing_mask2former import (
-    Mask2FormerImageProcessorKwargs,
-    compute_segments,
-    convert_segmentation_to_rle,
-    remove_low_and_no_objects,
-)
+try:
+    from .image_processing_mask2former import (
+        Mask2FormerImageProcessorKwargs,
+        compute_segments,
+        convert_segmentation_to_rle,
+        remove_low_and_no_objects,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as Mask2FormerImageProcessorKwargs  # type: ignore
+    compute_segments = None  # type: ignore
+    convert_segmentation_to_rle = None  # type: ignore
+    remove_low_and_no_objects = None  # type: ignore
 
 
 if is_torch_available():
@@ -442,7 +448,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            `List[torch.Tensor]`:
+            `List["torch.Tensor"]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
@@ -461,7 +467,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
-        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        segmentation = "torch.einsum"("bqc, bqhw -> bchw", masks_classes, masks_probs)
         batch_size = class_queries_logits.shape[0]
 
         # Resize logits and compute semantic segmentation maps
@@ -553,7 +559,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
             mask_pred = masks_queries_logits[i]
             mask_cls = class_queries_logits[i]
 
-            scores = torch.nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
+            scores = "torch.nn".functional.softmax(mask_cls, dim=-1)[:, :-1]
             labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
 
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
@@ -582,7 +588,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
             for j in range(num_queries):
                 score = pred_scores[j].item()
 
-                if not torch.all(pred_masks[j] == 0) and score >= threshold:
+                if not "torch.all"(pred_masks[j] == 0) and score >= threshold:
                     segmentation[pred_masks[j] == 1] = current_segment_id
                     segments.append(
                         {

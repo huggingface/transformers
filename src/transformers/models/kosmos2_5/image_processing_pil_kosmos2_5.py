@@ -16,14 +16,17 @@
 import math
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
-from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs, torch_extract_patches
+try:
+    from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs, torch_extract_patches
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as Kosmos2_5ImageProcessorKwargs  # type: ignore
+    torch_extract_patches = None  # type: ignore
 
 
 @auto_docstring

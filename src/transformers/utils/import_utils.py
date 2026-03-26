@@ -644,6 +644,8 @@ def is_libcst_available() -> bool:
 
 @lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
     return is_available and version.parse(accelerate_version) >= version.parse(min_version)
 
@@ -672,7 +674,7 @@ def is_pygments_available() -> bool:
 
 @lru_cache
 def is_torchvision_available() -> bool:
-    return _is_package_available("torchvision")[0]
+    return is_torch_available() and _is_package_available("torchvision")[0]
 
 
 @lru_cache
@@ -1166,7 +1168,7 @@ def is_soundfile_available() -> bool:
 
 @lru_cache
 def is_timm_available() -> bool:
-    return _is_package_available("timm")[0]
+    return is_torch_available() and _is_package_available("timm")[0]
 
 
 @lru_cache
@@ -1191,11 +1193,13 @@ def is_numba_available() -> bool:
 
 @lru_cache
 def is_torchaudio_available() -> bool:
-    return _is_package_available("torchaudio")[0]
+    return is_torch_available() and _is_package_available("torchaudio")[0]
 
 
 @lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
 

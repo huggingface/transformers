@@ -29,11 +29,16 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_ovis2 import (
-    Ovis2ImageProcessorKwargs,
-    get_min_tile_covering_grid,
-    get_optimal_tiled_canvas,
-)
+try:
+    from .image_processing_ovis2 import (
+        Ovis2ImageProcessorKwargs,
+        get_min_tile_covering_grid,
+        get_optimal_tiled_canvas,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as Ovis2ImageProcessorKwargs  # type: ignore
+    get_min_tile_covering_grid = None  # type: ignore
+    get_optimal_tiled_canvas = None  # type: ignore
 
 
 if is_torchvision_available():

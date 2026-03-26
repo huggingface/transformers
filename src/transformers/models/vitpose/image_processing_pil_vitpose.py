@@ -38,16 +38,26 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .image_processing_vitpose import (
-    VitPoseImageProcessorKwargs,
-    box_to_center_and_scale,
-    coco_to_pascal_voc,
-    get_keypoint_predictions,
-    get_warp_matrix,
-    post_dark_unbiased_data_processing,
-    scipy_warp_affine,
-    transform_preds,
-)
+try:
+    from .image_processing_vitpose import (
+        VitPoseImageProcessorKwargs,
+        box_to_center_and_scale,
+        coco_to_pascal_voc,
+        get_keypoint_predictions,
+        get_warp_matrix,
+        post_dark_unbiased_data_processing,
+        scipy_warp_affine,
+        transform_preds,
+    )
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as VitPoseImageProcessorKwargs  # type: ignore
+    box_to_center_and_scale = None  # type: ignore
+    coco_to_pascal_voc = None  # type: ignore
+    get_keypoint_predictions = None  # type: ignore
+    get_warp_matrix = None  # type: ignore
+    post_dark_unbiased_data_processing = None  # type: ignore
+    scipy_warp_affine = None  # type: ignore
+    transform_preds = None  # type: ignore
 
 
 if is_torch_available():
@@ -215,7 +225,7 @@ class VitPoseImageProcessorPil(PilBackend):
                 Gaussian kernel size (K) for modulation.
             threshold (`float`, *optional*, defaults to None):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+            target_sizes (`"torch.Tensor"` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will be resize with the default value.
         Returns:
@@ -248,10 +258,10 @@ class VitPoseImageProcessorPil(PilBackend):
         scores = torch.tensor(scores)
         labels = torch.arange(0, num_keypoints)
         bboxes_xyxy = torch.tensor(coco_to_pascal_voc(all_boxes))
-        results: list[list[dict[str, torch.Tensor]]] = []
+        results: list[list[dict[str, "torch.Tensor"]]] = []
         pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
         for image_bboxes in boxes:
-            image_results: list[dict[str, torch.Tensor]] = []
+            image_results: list[dict[str, "torch.Tensor"]] = []
             for _ in image_bboxes:
                 pose, score, bbox_xyxy = next(pose_bbox_pairs)
                 score = score.squeeze()

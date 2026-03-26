@@ -38,7 +38,11 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
+try:
+    from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as DPTImageProcessorKwargs  # type: ignore
+    get_resize_output_image_size = None  # type: ignore
 
 
 if TYPE_CHECKING:
@@ -230,7 +234,7 @@ class DPTImageProcessorPil(PilBackend):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            if isinstance(target_sizes, torch.Tensor):
+            if isinstance(target_sizes, "torch.Tensor"):
                 target_sizes = target_sizes.numpy()
             semantic_segmentation = []
             for idx in range(len(logits)):

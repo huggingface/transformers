@@ -40,7 +40,10 @@ from ...utils import (
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
-from .image_processing_vilt import ViltImageProcessorKwargs
+try:
+    from .image_processing_vilt import ViltImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as ViltImageProcessorKwargs  # type: ignore
 
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset

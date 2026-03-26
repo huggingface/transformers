@@ -27,7 +27,10 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-from .image_processing_beit import BeitImageProcessorKwargs
+try:
+    from .image_processing_beit import BeitImageProcessorKwargs
+except (ImportError, ModuleNotFoundError, AttributeError, NameError):
+    from ...processing_utils import ImagesKwargs as BeitImageProcessorKwargs  # type: ignore
 
 
 if is_torch_available():
@@ -167,7 +170,7 @@ class BeitImageProcessorPil(PilBackend):
                 predictions will not be resized.
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            semantic_segmentation: `list["torch.Tensor"]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
@@ -183,7 +186,7 @@ class BeitImageProcessorPil(PilBackend):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-            if isinstance(target_sizes, torch.Tensor):
+            if isinstance(target_sizes, "torch.Tensor"):
                 target_sizes = target_sizes.numpy()
 
             semantic_segmentation = []
