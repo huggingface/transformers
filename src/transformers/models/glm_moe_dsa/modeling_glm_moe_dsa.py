@@ -94,7 +94,7 @@ def apply_rotary_pos_emb_interleave(x, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    b, h, s, d = q.shape
+    b, h, s, d = x.shape
     x = x.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
     x_rotated = (x * cos) + (rotate_half(x) * sin)
 
