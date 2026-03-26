@@ -149,7 +149,8 @@ class CohereAsrProcessor(ProcessorMixin):
 
         for sample_idx, chunk_items in chunked.items():
             chunk_items.sort(key=lambda item: item[0])
-            parts = [t.strip() for _, t in chunk_items if t and t.strip()]
+            non_empty = [t for _, t in chunk_items if t and t.strip()]
+            parts = [non_empty[0].rstrip()] + [t.strip() for t in non_empty[1:]]
             outputs[sample_idx] = separator.join(parts)
 
         return outputs

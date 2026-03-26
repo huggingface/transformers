@@ -353,7 +353,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = [
-            "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American."
+            " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American."
         ]
         # fmt: on
         self.assertEqual(text, EXPECTED_OUTPUT)
@@ -375,7 +375,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_OUTPUT = [
             " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
-            "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
+            " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
         ]
         # fmt: on
         self.assertEqual(text, EXPECTED_OUTPUT)
