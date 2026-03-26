@@ -1291,7 +1291,7 @@ def is_matplotlib_available() -> bool:
 
 @lru_cache
 def is_mistral_common_available() -> bool:
-    return _is_package_available("mistral_common")[0]
+    return is_vision_available() and _is_package_available("mistral_common")[0]
 
 
 @lru_cache
@@ -2522,14 +2522,14 @@ def requires(*, backends=()):
 
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
-    lambda name, content: name.startswith("tokenization_") and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: name.startswith("image_processing_") and "pil" in name: ("vision",),
-    lambda name, content: name.startswith("image_processing_") and "TorchvisionBackend" in content: (
+    lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
+    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
         "vision",
         "torch",
         "torchvision",
     ),
-    lambda name, content: name.startswith("video_processing_"): ("vision", "torch", "torchvision"),
+    lambda name, content: "image_processing_" in name: ("vision",),
+    lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
 }
 
 
