@@ -499,46 +499,35 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
     mapping["cohere_asr"] = [
-        # Encoder subsampling
         WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
         WeightRenaming(r"encoder\.pre_encode\.out\.", r"encoder.subsampling.linear."),
-        # Decoder embedding (specific renamings before generic decoder renamings)
         WeightRenaming(r"transf_decoder\._embedding\.position_embedding\.pos_enc", r"decoder.pos_emb.weight"),
         WeightRenaming(r"transf_decoder\._embedding\.token_embedding", r"decoder.embed_tokens"),
         WeightRenaming(r"transf_decoder\._embedding\.layer_norm", r"decoder.embedding_layernorm"),
-        # Decoder structure
         WeightRenaming(r"transf_decoder\._decoder\.final_layer_norm", r"decoder.norm"),
         WeightRenaming(r"transf_decoder\._decoder\.layers", r"decoder.layers"),
-        # Encoder-decoder projection
         WeightRenaming(r"encoder_decoder_proj\.", r"decoder.proj."),
-        # Decoder layer internals - self attention
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_q", r"encoder.(.+).self_attn.q_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_k", r"encoder.(.+).self_attn.k_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_v", r"encoder.(.+).self_attn.v_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_out", r"encoder.(.+).self_attn.o_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_pos", r"encoder.(.+).self_attn.relative_k_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_u", r"encoder.(.+).self_attn.bias_u"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_v", r"encoder.(.+).self_attn.bias_v"),
         WeightRenaming(r"\.first_sub_layer\.query_net", r".self_attn.q_proj"),
         WeightRenaming(r"\.first_sub_layer\.key_net", r".self_attn.k_proj"),
         WeightRenaming(r"\.first_sub_layer\.value_net", r".self_attn.v_proj"),
         WeightRenaming(r"\.first_sub_layer\.out_projection", r".self_attn.o_proj"),
-        # Decoder layer internals - cross attention
         WeightRenaming(r"\.second_sub_layer\.query_net", r".encoder_attn.q_proj"),
         WeightRenaming(r"\.second_sub_layer\.key_net", r".encoder_attn.k_proj"),
         WeightRenaming(r"\.second_sub_layer\.value_net", r".encoder_attn.v_proj"),
         WeightRenaming(r"\.second_sub_layer\.out_projection", r".encoder_attn.o_proj"),
-        # Decoder layer internals - MLP
         WeightRenaming(r"\.third_sub_layer\.dense_in", r".mlp.fc1"),
         WeightRenaming(r"\.third_sub_layer\.dense_out", r".mlp.fc2"),
-        # Decoder layer internals - layer norms
         WeightRenaming(r"\.layer_norm_1\.", r".input_layernorm."),
         WeightRenaming(r"\.layer_norm_2\.", r".post_attention_layernorm."),
         WeightRenaming(r"\.layer_norm_3\.", r".final_layernorm."),
-        # Encoder attention projections
-        WeightRenaming(r"self_attn\.linear_q", r"self_attn.q_proj"),
-        WeightRenaming(r"self_attn\.linear_k", r"self_attn.k_proj"),
-        WeightRenaming(r"self_attn\.linear_v", r"self_attn.v_proj"),
-        WeightRenaming(r"self_attn\.linear_out", r"self_attn.o_proj"),
-        WeightRenaming(r"self_attn\.linear_pos", r"self_attn.relative_k_proj"),
-        WeightRenaming(r"self_attn\.pos_bias_u", r"self_attn.bias_u"),
-        WeightRenaming(r"self_attn\.pos_bias_v", r"self_attn.bias_v"),
-        # Encoder convolution module
         WeightRenaming(r"\.conv\.batch_norm", r".conv.norm"),
-        # LM head
         WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
     ]
 

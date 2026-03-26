@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig
 
 
-@auto_docstring(checkpoint="TODO")
+@auto_docstring(checkpoint="CohereLabs/cohere-transcribe-03-2026")
 @strict
 class CohereAsrConfig(PreTrainedConfig):
     r"""

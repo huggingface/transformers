@@ -252,7 +252,8 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class CohereAsrPreTrainedModel(MoonshinePreTrainedModel): ...
+class CohereAsrPreTrainedModel(MoonshinePreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
 
 
 class CohereAsrDecoder(MoonshineDecoder):
@@ -361,6 +362,10 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
         super().__init__(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.post_init()
+
+    def prepare_inputs_for_generation(self, *args, audio_chunk_index=None, **kwargs):
+        # audio_chunk_index is returned by the processor but not used by the model, absorb it here
+        return super().prepare_inputs_for_generation(*args, **kwargs)
 
 
 __all__ = [

@@ -308,6 +308,7 @@ class CohereAsrPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
+    _keys_to_ignore_on_load_unexpected = [r"preprocessor\.featurizer\..*"]
     # TODO arthur, how do we separate when it cross / self coming from different layer?
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -723,6 +724,10 @@ class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixi
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def prepare_inputs_for_generation(self, *args, audio_chunk_index=None, **kwargs):
+        # audio_chunk_index is returned by the processor but not used by the model, absorb it here
+        return super().prepare_inputs_for_generation(*args, **kwargs)
 
 
 __all__ = ["CohereAsrPreTrainedModel", "CohereAsrModel", "CohereAsrForConditionalGeneration"]

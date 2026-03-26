@@ -33,8 +33,8 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 from transformers import AutoProcessor, CohereAsrForConditionalGeneration
 from transformers.audio_utils import load_audio
 
-processor = AutoProcessor.from_pretrained("cohere-ai/cohere-asr")
-model = CohereAsrForConditionalGeneration.from_pretrained("cohere-ai/cohere-asr", device_map="auto")
+processor = AutoProcessor.from_pretrained("CohereLabs/cohere-transcribe-03-2026")
+model = CohereAsrForConditionalGeneration.from_pretrained("CohereLabs/cohere-transcribe-03-2026", device_map="auto")
 
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
@@ -42,13 +42,11 @@ audio = load_audio(
 )
 
 inputs = processor(audio, sampling_rate=16000, return_tensors="pt", language="en")
-inputs.pop("audio_chunk_index", None)
-inputs.to(model.device)
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=256)
 text = processor.decode(outputs, skip_special_tokens=True)
 print(text)
-# [' Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.']
 ```
 
 ### Punctuation control
@@ -62,7 +60,7 @@ inputs_nopnc = processor(audio, sampling_rate=16000, return_tensors="pt", langua
 
 ### Long-form transcription
 
-For audio longer than the model's chunk size, the feature extractor automatically splits the waveform into chunks.
+For audio longer than the feature extractor's `max_audio_clip_s`, the feature extractor automatically splits the waveform into chunks.
 The processor reassembles the per-chunk transcriptions using the returned `audio_chunk_index`.
 
 ```python
@@ -72,8 +70,8 @@ audio_long = load_audio(
 )
 
 inputs = processor(audio=audio_long, return_tensors="pt", language="en", sampling_rate=16000)
-audio_chunk_index = inputs.pop("audio_chunk_index")
-inputs.to(model.device)
+audio_chunk_index = inputs.get("audio_chunk_index")
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=256)
 text = processor.decode(outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en")
@@ -83,7 +81,7 @@ print(text)
 ### Batched inference
 
 Multiple audio files can be processed in a single call. When the batch mixes short-form and long-form audio, the
-processor handles chunking and reassembly transparently.
+processor handles chunking and reassembly.
 
 ```python
 audio_short = load_audio(
@@ -96,8 +94,8 @@ audio_long = load_audio(
 )
 
 inputs = processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
-audio_chunk_index = inputs.pop("audio_chunk_index", None)
-inputs.to(model.device)
+audio_chunk_index = inputs.get("audio_chunk_index")
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=256)
 text = processor.decode(
@@ -117,8 +115,7 @@ audio_es = load_audio(
 )
 
 inputs = processor(audio_es, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
-inputs.pop("audio_chunk_index", None)
-inputs.to(model.device)
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=256)
 text = processor.decode(outputs, skip_special_tokens=True)

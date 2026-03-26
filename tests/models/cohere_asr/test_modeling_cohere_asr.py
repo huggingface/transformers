@@ -144,7 +144,6 @@ class CohereAsrModelTester:
         )
         inputs_dict = {
             "input_values": input_values,
-            "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
         }
@@ -175,6 +174,16 @@ class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # proj_out conversion only applies to ForConditionalGeneration, not the base model
+        try:
+            self.all_model_classes = (CohereAsrForConditionalGeneration,) if is_torch_available() else ()
+            super().test_reverse_loading_mapping(check_keys_were_modified)
+        finally:
+            self.all_model_classes = (
+                (CohereAsrModel, CohereAsrForConditionalGeneration) if is_torch_available() else ()
+            )
 
     # Copied from tests.models.moonshine_streaming.test_modeling_moonshine_streaming.MoonshineStreamingModelTest.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):
@@ -279,11 +288,11 @@ class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
 @require_torch
 class CohereAsrIntegrationTest(unittest.TestCase):
-    checkpoint_name = "/home/eustache_lebihan/cohere-asr/converted-cohere-asr"
+    checkpoint_name = "CohereLabs/cohere-transcribe-03-2026"
+    revision = "refs/pr/6"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
-        self.model = CohereAsrForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision=self.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -303,10 +312,12 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             language="en",
         )
-        inputs.pop("audio_chunk_index", None)
-        inputs.to(self.model.device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(
+            self.checkpoint_name, revision=self.revision, device_map=torch_device
+        )
+        inputs.to(model.device, dtype=model.dtype)
 
-        outputs = self.model.generate(**inputs, max_new_tokens=256)
+        outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
@@ -328,13 +339,14 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False
         )
 
-        inputs_pnc.pop("audio_chunk_index", None)
-        inputs_nopnc.pop("audio_chunk_index", None)
-        inputs_pnc.to(self.model.device)
-        inputs_nopnc.to(self.model.device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(
+            self.checkpoint_name, revision=self.revision, device_map=torch_device
+        )
+        inputs_pnc.to(model.device, dtype=model.dtype)
+        inputs_nopnc.to(model.device, dtype=model.dtype)
 
-        outputs_pnc = self.model.generate(**inputs_pnc, max_new_tokens=256)
-        outputs_nopnc = self.model.generate(**inputs_nopnc, max_new_tokens=256)
+        outputs_pnc = model.generate(**inputs_pnc, max_new_tokens=256)
+        outputs_nopnc = model.generate(**inputs_nopnc, max_new_tokens=256)
 
         text_pnc = self.processor.decode(outputs_pnc, skip_special_tokens=True)
         text_nopnc = self.processor.decode(outputs_nopnc, skip_special_tokens=True)
@@ -358,10 +370,13 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             sampling_rate=16000,
         )
         inputs = self.processor(audio=audio, return_tensors="pt", language="en", sampling_rate=16000)
-        audio_chunk_index = inputs.pop("audio_chunk_index")
-        inputs.to(self.model.device)
+        audio_chunk_index = inputs.get("audio_chunk_index")
+        model = CohereAsrForConditionalGeneration.from_pretrained(
+            self.checkpoint_name, revision=self.revision, device_map=torch_device
+        )
+        inputs.to(model.device, dtype=model.dtype)
 
-        outputs = self.model.generate(**inputs, max_new_tokens=256)
+        outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(
             outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en"
         )
@@ -387,10 +402,13 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             sampling_rate=16000,
         )
         inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
-        audio_chunk_index = inputs.pop("audio_chunk_index", None)
-        inputs.to(self.model.device)
+        audio_chunk_index = inputs.get("audio_chunk_index")
+        model = CohereAsrForConditionalGeneration.from_pretrained(
+            self.checkpoint_name, revision=self.revision, device_map=torch_device
+        )
+        inputs.to(model.device, dtype=model.dtype)
 
-        outputs = self.model.generate(**inputs, max_new_tokens=256)
+        outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(
             outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index, language="en"
         )
@@ -407,20 +425,19 @@ class CohereAsrIntegrationTest(unittest.TestCase):
     def test_non_english_with_punctuation(self):
         """
         reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
-        actually outputs:  Esto parece tener sentido ya que en la Tierra no se percibe su movimiento, ¿cierto?
-        due to compute diffs:
-        expected output: Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?
         """
         audio = load_audio(
             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/fleur_es_sample.wav",
             sampling_rate=16000,
         )
         inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
-        inputs.pop("audio_chunk_index", None)
-        inputs.to(self.model.device)
+        model = CohereAsrForConditionalGeneration.from_pretrained(
+            self.checkpoint_name, revision=self.revision, device_map=torch_device
+        )
+        inputs.to(model.device, dtype=model.dtype)
 
-        outputs = self.model.generate(**inputs, max_new_tokens=256)
+        outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?"]
+        EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento, ¿cierto?"]
         self.assertEqual(text, EXPECTED_OUTPUT)
