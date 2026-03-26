@@ -286,7 +286,7 @@ class RequestState:
         )
 
     def fork(self, new_request_id: str) -> "RequestState":
-        """Fork the request into a new request with the same state expect for request_id, created_time and lifespan."""
+        """Fork the request into a new request with the same state except for request_id, created_time and lifespan."""
         t = time.perf_counter()
         new_request = RequestState(
             request_id=new_request_id,
