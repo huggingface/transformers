@@ -1270,7 +1270,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel, GenerationMixin):
                 all_durations_tensor[emit_mask, emit_indices] = durations[emit_mask]
             token_counts += emit_mask.long()
 
-            # Run decoder for emitted tokens — only update cache for samples that emitted
+            # Update decoder cache for emitted tokens (using potentially compiled forward)
             model_forward(
                 decoder_input_ids=tokens.unsqueeze(1),
                 encoder_outputs=encoder_outputs,
