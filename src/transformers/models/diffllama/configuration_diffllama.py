@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="kajuma/DiffLlama-0.3B-handcut")
-@strict(accept_kwargs=True)
+@strict
 class DiffLlamaConfig(PreTrainedConfig):
     r"""
     lambda_std_dev (`float`, *optional*, defaults to 0.1):
@@ -41,7 +41,8 @@ class DiffLlamaConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "diffllama"
     keys_to_ignore_at_inference = ["past_key_values"]
