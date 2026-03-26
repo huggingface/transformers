@@ -23,6 +23,7 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    FSDPShardOperation,
     MergeModulelist,
     PermuteForRope,
     WeightConverter,
@@ -31,6 +32,7 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
+    spawn_parallel_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
@@ -214,7 +216,66 @@ class DummyRoot(nn.Module):
         self.mlp = DummyMLP()
 
 
+class FakeMesh:
+    def __init__(self, world_size: int, rank: int):
+        self.shape = (world_size,)
+        self._rank = rank
+
+    def get_local_rank(self):
+        return self._rank
+
+    def get_coordinate(self):
+        return (self._rank,)
+
+
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_fsdp_shard_aware_mixtral_conversion_uses_only_local_experts(self):
+        shard_op = FSDPShardOperation(
+            device_mesh=FakeMesh(world_size=2, rank=0),
+            rank=0,
+            empty_param=torch.empty((2, 4, 2)),
+            placements=(torch.distributed.tensor.placement_types.Shard(0),),
+        )
+        converter = WeightConverter(
+            ["experts.*.w1.weight", "experts.*.w3.weight"],
+            "experts.gate_up_proj.weight",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+                torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w1.weight",
+                "experts.*.w1.weight",
+                spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
+            )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+                torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w3.weight",
+                "experts.*.w3.weight",
+                spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
+            )
+
+        converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
+
+        self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
+        torch.testing.assert_close(
+            converted["model.layers.0.experts.gate_up_proj.weight"],
+            torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
+        )
+
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot()
         model.config = PretrainedConfig()
@@ -467,6 +528,10 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     self, "quantization_config", SimpleNamespace(weight_block_size=bs)
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
+                "get_quantize_ops": lambda self: __import__(
+                    "transformers.integrations.finegrained_fp8",
+                    fromlist=["Fp8Quantize"],
+                ).Fp8Quantize(self),
                 "pre_quantized": False,
             },
         )
@@ -499,11 +564,11 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         model_state = model.state_dict()
         self.assertFalse(torch.allclose(raw_k, expected_k))
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.k_proj.weight"], expected_k)
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.v_proj.weight"], expected_v)
+        torch.testing.assert_close(model_state["layers.0.self_attn.k_proj.weight"], expected_k)
+        torch.testing.assert_close(model_state["layers.0.self_attn.v_proj.weight"], expected_v)
 
-        q_weight_key = "model.layers.0.self_attn.q_proj.weight"
-        scale_key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
+        q_weight_key = "layers.0.self_attn.q_proj.weight"
+        scale_key = "layers.0.self_attn.q_proj.weight_scale_inv"
         self.assertIn(scale_key, model_state)
         expected_dtype = torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.int8
         self.assertEqual(model_state[q_weight_key].dtype, expected_dtype)
@@ -514,11 +579,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
         )
 
-        dequant = Fp8Dequantize(block_size=block_size)
+        dequant = Fp8Dequantize(quantizer)
         dequantized_q = dequant.convert(
-            [model_state[q_weight_key], model_state[scale_key]],
-            context={"quantization_config": quantizer.quantization_config},
-        )
+            {
+                "weight$": [model_state[q_weight_key]],
+                "weight_scale_inv": [model_state[scale_key]],
+            },
+            full_layer_name=q_weight_key,
+        )[q_weight_key]
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
 
     def test_ernie4_5_vl_moe_conversion(self):

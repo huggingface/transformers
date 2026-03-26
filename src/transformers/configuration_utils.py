@@ -985,6 +985,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Pop "kwargs" since they are unpacked and set in the post init
         output.pop("kwargs", None)
 
+        if "distributed_config" in output and hasattr(output["distributed_config"], "to_dict"):
+            output["distributed_config"] = output["distributed_config"].to_dict()
+
         def to_list(value):
             if isinstance(value, tuple):
                 value = [to_list(item) for item in value]
