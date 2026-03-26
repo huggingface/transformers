@@ -2522,9 +2522,7 @@ def requires(*, backends=()):
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: name.startswith("tokenization_") and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: name.startswith("image_processing_") and "pil" in name: (
-        "vision",
-    ),
+    lambda name, content: name.startswith("image_processing_") and "pil" in name: ("vision",),
     lambda name, content: name.startswith("image_processing_") and "TorchvisionBackend" in content: (
         "vision",
         "torch",
