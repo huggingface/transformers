@@ -104,6 +104,7 @@ unregister_patch_mapping(["Qwen2MoeExperts", ".*Attention$"])
 Now that the layers have been swapped, we need to update the `OutputRecorder` to point at the new target class. `patch_output_recorders` fixes this by walking every submodule of an already-instantiated model and updating each `OutputRecorder.target_class` to the registered replacement:
 
 ```python
+from transformers.monkey_patching import patch_output_recorders
 # Built manually, outside from_pretrained
 model = Qwen2MoeModel(config)
 
