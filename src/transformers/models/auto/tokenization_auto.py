@@ -374,6 +374,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phimoe",
     "step3p5",
     "vipllava",
+    "cohere_asr",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
