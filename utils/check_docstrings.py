@@ -388,6 +388,7 @@ MATH_OPERATORS = {
 def _get_auto_docstring_names(file_path: str) -> set[str]:
     """
     Parse a source file once and return the set of class/function names decorated with @auto_docstring.
+    Walks top-level definitions and one level into class bodies (methods).
     Results are cached per file path.
     """
     if file_path in _auto_docstring_cache:
@@ -398,17 +399,16 @@ def _get_auto_docstring_names(file_path: str) -> set[str]:
         with open(file_path) as f:
             source = f.read()
         tree = ast.parse(source, filename=file_path)
-        for node in ast.iter_child_nodes(tree):
+        for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                for decorator in node.decorator_list:
-                    dec_name = None
-                    if isinstance(decorator, ast.Name):
-                        dec_name = decorator.id
-                    elif isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name):
-                        dec_name = decorator.func.id
-                    if dec_name == "auto_docstring":
-                        names.add(node.name)
-                        break
+                if any(_is_auto_docstring_decorator(dec) for dec in node.decorator_list):
+                    names.add(node.name)
+                # Also check methods inside classes
+                if isinstance(node, ast.ClassDef):
+                    for class_item in node.body:
+                        if isinstance(class_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            if any(_is_auto_docstring_decorator(dec) for dec in class_item.decorator_list):
+                                names.add(class_item.name)
     except (OSError, SyntaxError):
         pass
 
@@ -1970,8 +1970,8 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         tree = ast.parse(content)
         decorated_items = _build_ast_indexes(content, tree=tree)
 
-        # Populate the auto_docstring cache so check_docstrings() won't re-parse these files
-        _auto_docstring_cache[candidate_file] = {item.name for item in decorated_items}
+        # Warm the cache so check_docstrings() won't re-parse this file
+        _get_auto_docstring_names(candidate_file)
 
         missing_docstring_args_warnings = []
         fill_docstring_args_warnings = []
