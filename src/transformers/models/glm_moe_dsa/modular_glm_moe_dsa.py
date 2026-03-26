@@ -433,11 +433,12 @@ class GlmMoeDsaAttention(nn.Module):
         if attention_mask is not None and attention_mask.dim() == 4:
             causal_mask = attention_mask[..., :total_len]
             combined_mask = index_mask + causal_mask
-        elif attention_mask is not None:
-            # 2D mask case: add both masks (both are additive: -inf or 0)
-            combined_mask = index_mask + attention_mask.unsqueeze(1)
         else:
-            combined_mask = index_mask
+            combined_mask = (
+                attention_mask.masked_fill(index_mask == float("-inf"), float("-inf"))
+                if attention_mask is not None
+                else index_mask
+            )
 
         # Flash attention head_dim padding (qk_head_dim != v_head_dim)
         if is_flash_attention_requested(self.config) and self.qk_head_dim != self.v_head_dim:
