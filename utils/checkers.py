@@ -138,6 +138,19 @@ CHECKER_FILE_GLOBS = {
 }
 
 
+def get_checker_cache_globs(checker_name: str) -> list[str] | None:
+    """Return the cache inputs for a checker, including its implementation files."""
+    globs = CHECKER_FILE_GLOBS.get(checker_name)
+    if globs is None:
+        return None
+
+    cache_globs = [*globs, str(Path("utils") / Path(__file__).name)]
+    script = CHECKERS[checker_name][1]
+    if script is not None:
+        cache_globs.append(str(Path("utils") / script))
+    return cache_globs
+
+
 class CheckerCache:
     """Disk-backed cache that tracks file content hashes per checker.
 
@@ -146,8 +159,8 @@ class CheckerCache:
     value from the last clean (rc == 0) run, the checker can be skipped.
     """
 
-    def __init__(self, path: Path = CACHE_PATH):
-        self._path = path
+    def __init__(self, path: Path | None = None):
+        self._path = CACHE_PATH if path is None else path
         self._data = self._load()
 
     def _load(self) -> dict:
@@ -177,14 +190,14 @@ class CheckerCache:
 
     def is_current(self, checker_name: str) -> bool:
         """Return True if the checker's files haven't changed since last clean run."""
-        globs = CHECKER_FILE_GLOBS.get(checker_name)
+        globs = get_checker_cache_globs(checker_name)
         if globs is None:
             return False
         return self._data.get(checker_name) == self._digest_files(globs)
 
     def update(self, checker_name: str) -> None:
         """Record current digest for a checker (call after a clean run)."""
-        globs = CHECKER_FILE_GLOBS.get(checker_name)
+        globs = get_checker_cache_globs(checker_name)
         if globs is None:
             return
         self._data[checker_name] = self._digest_files(globs)
