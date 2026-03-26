@@ -1107,6 +1107,7 @@ def create_test_list_from_filter(full_test_list, out_path):
     os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
 
+    # Collect info: job_name, file_name and files_to_test, so we can process after the loop
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
