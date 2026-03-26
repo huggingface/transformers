@@ -24,7 +24,7 @@ import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import center_to_corners_format, pad, to_channel_dimension_format
+from ...image_transforms import pad, to_channel_dimension_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
