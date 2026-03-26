@@ -74,7 +74,6 @@ class CohereAsrConfig(PreTrainedConfig):
     pad_token_id: int | None = 2
     is_encoder_decoder: bool = True
     initializer_range: float = 0.02
-    rope_parameters: RopeParameters | dict | None = None
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
     decoder_start_token_id: int | None = None
@@ -86,12 +85,6 @@ class CohereAsrConfig(PreTrainedConfig):
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-        if self.rope_parameters is None:
-            self.rope_parameters = {
-                "rope_type": "default",
-                "rope_theta": 10000.0,
-                "partial_rotary_factor": 0.8,
-            }
 
         if isinstance(self.encoder_config, dict):
             self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
