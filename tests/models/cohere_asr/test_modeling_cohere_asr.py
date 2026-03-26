@@ -289,10 +289,9 @@ class CohereAsrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 @require_torch
 class CohereAsrIntegrationTest(unittest.TestCase):
     checkpoint_name = "CohereLabs/cohere-transcribe-03-2026"
-    revision = "refs/pr/6"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, revision=self.revision)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -313,7 +312,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
             language="en",
         )
         model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
+            self.checkpoint_name, device_map=torch_device
         )
         inputs.to(model.device, dtype=model.dtype)
 
@@ -340,7 +339,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
 
         model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
+            self.checkpoint_name, device_map=torch_device
         )
         inputs_pnc.to(model.device, dtype=model.dtype)
         inputs_nopnc.to(model.device, dtype=model.dtype)
@@ -372,7 +371,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         inputs = self.processor(audio=audio, return_tensors="pt", language="en", sampling_rate=16000)
         audio_chunk_index = inputs.get("audio_chunk_index")
         model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
+            self.checkpoint_name, device_map=torch_device
         )
         inputs.to(model.device, dtype=model.dtype)
 
@@ -404,7 +403,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
         audio_chunk_index = inputs.get("audio_chunk_index")
         model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
+            self.checkpoint_name, device_map=torch_device
         )
         inputs.to(model.device, dtype=model.dtype)
 
@@ -432,7 +431,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
         inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
         model = CohereAsrForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
+            self.checkpoint_name, device_map=torch_device
         )
         inputs.to(model.device, dtype=model.dtype)
 
