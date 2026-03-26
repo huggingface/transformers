@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 Shared types, constants, and utilities for the serving layer.
 """
 
-from __future__ import annotations
-
 import asyncio
 import base64
 import copy
@@ -27,63 +25,30 @@ import tempfile
 import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
+from typing import Callable
 from io import BytesIO
 from queue import Queue
+from typing import TYPE_CHECKING
 
 from transformers.utils import logging
-from transformers.utils.import_utils import is_openai_available, is_vision_available
+
+
+if TYPE_CHECKING:
+    import pydantic
+    import tokenizers
+    import torch
+
+    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers.generation.continuous_batching.continuous_api import ContinuousBatchingManager
+    from transformers.generation.continuous_batching.requests import GenerationOutput
+
+    from .model_manager import ModelManager
 
 
 logger = logging.get_logger(__name__)
 
 
-if is_vision_available():
-    from PIL import Image
-
-if is_openai_available():
-    from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
-
-    class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
-        generation_config: str
-        processor: str
-
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 X_REQUEST_ID = "x-request-id"
-
-# Fields accepted by the OpenAI schema but not yet supported.
-# Receiving these raises an error to avoid silent misbehaviour.
-# NOTE: "stop" is NOT in this set — we map it to stop_strings.
-UNUSED_CHAT_COMPLETION_FIELDS = {
-    "audio",
-    "function_call",
-    "functions",
-    "logprobs",
-    "max_completion_tokens",
-    "metadata",
-    "modalities",
-    "n",
-    "parallel_tool_calls",
-    "prediction",
-    "presence_penalty",
-    "reasoning_effort",
-    "response_format",
-    "service_tier",
-    "store",
-    "stream_options",
-    "tool_choice",
-    "top_logprobs",
-    "user",
-    "web_search_options",
-}
-
-
-# ---------------------------------------------------------------------------
-# Types
-# ---------------------------------------------------------------------------
 
 
 class Modality(enum.Enum):
@@ -106,10 +71,6 @@ class _GenerationCancelled(Exception):
 
 
 
-# ---------------------------------------------------------------------------
-# Tool call parsing
-# ---------------------------------------------------------------------------
-
 # Model-specific tokens that mark the start/end of a tool call block.
 # TODO: extract these from the chat template at runtime instead of hardcoding.
 # Qwen/Hermes use <tool_call>/<tool_call>, Mistral uses [TOOL_CALLS], etc.
@@ -122,8 +83,16 @@ _TOOL_CALL_TOKENS = {
 }
 
 
-def detect_tool_format(model) -> dict | None:
-    """Return the tool call token format (``{"start": ..., "end": ...}``) if supported, else ``None``."""
+def detect_tool_format(model: "PreTrainedModel") -> dict | None:
+    """Return the tool call token format for a model, if supported.
+
+    Args:
+        model (`PreTrainedModel`): The loaded model.
+
+    Returns:
+        `dict | None`: A dict ``{"start": str, "end": str}`` with the model's tool call
+        delimiters, or ``None`` if the model family is not recognized.
+    """
     architecture = model.config.architectures[0].lower()
     for family in _TOOL_CALL_TOKENS:
         if family in architecture:
@@ -230,11 +199,6 @@ class ToolCallParser:
         return {"name": result[0], "arguments": result[1]}
 
 
-# ---------------------------------------------------------------------------
-# Progress tracking for model loading
-# ---------------------------------------------------------------------------
-
-
 class DownloadAggregator:
     """Aggregates byte-progress across multiple concurrent download tqdm bars.
 
@@ -242,7 +206,7 @@ class DownloadAggregator:
     a single aggregate ``{"stage": "download", "progress": {...}}`` event whenever any updates.
     """
 
-    def __init__(self, enqueue, model_id: str):
+    def __init__(self, enqueue: Callable, model_id: str):
         self.enqueue = enqueue
         self.model = model_id
         self.bars: dict[int, tuple[int, int | None]] = {}
@@ -276,11 +240,19 @@ class DownloadAggregator:
         )
 
 
-def make_progress_tqdm_class(callback, model_id: str):
+def make_progress_tqdm_class(callback: Callable, model_id: str):
     """Create a tqdm subclass that routes progress to a callback.
 
     Bars with ``unit="B"`` are download bars — aggregated via ``DownloadAggregator``.
     Other bars (e.g. "Loading weights") emit ``weights`` stage events.
+
+    Args:
+        callback (`callable`): Called with a dict payload
+            ``{"status": "loading", "model": ..., "stage": ..., "progress": ...}``.
+        model_id (`str`): The model ID (included in progress payloads).
+
+    Returns:
+        A tqdm subclass that forwards progress to *callback*.
     """
     from tqdm.auto import tqdm as base_tqdm
 
@@ -339,11 +311,6 @@ def make_progress_tqdm_class(callback, model_id: str):
     return ProgressTqdm
 
 
-# ---------------------------------------------------------------------------
-# Streaming
-# ---------------------------------------------------------------------------
-
-
 class DirectStreamer:
     """Streamer for ``model.generate()`` (used by :class:`GenerateManager`).
 
@@ -353,7 +320,15 @@ class DirectStreamer:
     ``DecodeStream`` (O(1) per token) and pushed as text to an asyncio.Queue.
     """
 
-    def __init__(self, tokenizer, loop, queue, skip_special_tokens: bool = True):
+    def __init__(self, tokenizer: "tokenizers.Tokenizer", loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, skip_special_tokens: bool = True):
+        """
+        Args:
+            tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
+            loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
+            queue (`asyncio.Queue`): The queue that receives decoded text chunks.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether to strip special tokens during decoding.
+        """
         from tokenizers.decoders import DecodeStream
 
         self._tokenizer = tokenizer
@@ -364,7 +339,7 @@ class DirectStreamer:
         self._cancelled = threading.Event()
         self.total_tokens = 0
 
-    def put(self, value) -> None:
+    def put(self, value: "torch.Tensor") -> None:
         """Called by ``model.generate()`` after each decode step with new token(s)."""
         if self._cancelled.is_set():
             raise _GenerationCancelled()
@@ -396,7 +371,15 @@ class CBStreamer:
     pushes text to the asyncio.Queue. ``end()`` signals the stream is complete.
     """
 
-    def __init__(self, cb_manager, request_id, tokenizer, loop, queue):
+    def __init__(self, cb_manager: "ContinuousBatchingManager", request_id: str, tokenizer: "tokenizers.Tokenizer", loop: asyncio.AbstractEventLoop, queue: asyncio.Queue):
+        """
+        Args:
+            cb_manager (`ContinuousBatchingManager`): The CB manager instance.
+            request_id (`str`): The request ID to track in the CB scheduler.
+            tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
+            loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
+            queue (`asyncio.Queue`): The queue that receives decoded text chunks.
+        """
         from tokenizers.decoders import DecodeStream
 
         self._cb = cb_manager
@@ -408,7 +391,7 @@ class CBStreamer:
         self._prev_len = 0
         self.total_tokens = 0
 
-    def put(self, output) -> None:
+    def put(self, output: "GenerationOutput") -> None:
         """Decode new tokens from a CB ``GenerationOutput`` and push text to the queue."""
         new_tokens = output.generated_tokens[self._prev_len :]
         self._prev_len = len(output.generated_tokens)
@@ -425,11 +408,6 @@ class CBStreamer:
     def cancel(self) -> None:
         """Cancel the CB request."""
         self._cb.cancel_request(self._request_id)
-
-
-# ---------------------------------------------------------------------------
-# Torch helpers
-# ---------------------------------------------------------------------------
 
 
 def set_torch_seed(seed: int) -> None:
@@ -486,11 +464,6 @@ class InferenceThread:
         return future
 
 
-# ---------------------------------------------------------------------------
-# Generation managers
-# ---------------------------------------------------------------------------
-
-
 class BaseGenerateManager(ABC):
     """Base class for generation managers.
 
@@ -500,16 +473,36 @@ class BaseGenerateManager(ABC):
     """
 
     @abstractmethod
-    def generate_streaming(self, model, processor, inputs, gen_config, request_id=None):
+    def generate_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
         """Start streaming generation.
 
-        Returns ``(queue, context)`` where *queue* yields ``str | _StreamError | None``
-        and *context* exposes ``.total_tokens`` and ``.cancel()``.
+        Args:
+            model (`PreTrainedModel`): The loaded model.
+            processor: The processor or tokenizer for decoding.
+            inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
+            gen_config (`GenerationConfig`): Generation parameters.
+            request_id (`str`, *optional*): Unique request identifier.
+
+        Returns:
+            `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
+            where *queue* yields ``str | _StreamError | None`` and *streamer* exposes
+            ``.total_tokens`` and ``.cancel()``.
         """
 
     @abstractmethod
-    def generate_non_streaming(self, model, processor, inputs, gen_config, request_id=None):
-        """Run generation to completion. Returns ``(text, input_len, generated_ids)``."""
+    def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+        """Run generation to completion.
+
+        Args:
+            model (`PreTrainedModel`): The loaded model.
+            processor: The processor or tokenizer for decoding.
+            inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
+            gen_config (`GenerationConfig`): Generation parameters.
+            request_id (`str`, *optional*): Unique request identifier.
+
+        Returns:
+            `tuple[str, int, list[int]]`: ``(text, input_len, generated_ids)``.
+        """
 
     @abstractmethod
     def stop(self):
@@ -522,7 +515,7 @@ class GenerateManager(BaseGenerateManager):
     def __init__(self):
         self._thread = InferenceThread()
 
-    def generate_streaming(self, model, processor, inputs, gen_config, request_id=None):
+    def generate_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
@@ -539,7 +532,7 @@ class GenerateManager(BaseGenerateManager):
         self.submit(_run)
         return queue, streamer
 
-    async def generate_non_streaming(self, model, processor, inputs, gen_config, request_id=None):
+    async def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
         sequences = await self.async_submit(
             model.generate, **inputs, generation_config=gen_config, tokenizer=processor
         )
@@ -578,10 +571,14 @@ class CBGenerateManager(BaseGenerateManager):
     def __init__(self):
         self._cb = None
 
-    def init_cb(self, model, gen_config):
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig"):
         """Initialize the CB manager on first call with the request's generation config.
 
         .. todo:: Remove when CB supports per-request generation config.
+
+        Args:
+            model (`PreTrainedModel`): The loaded model (must support ``init_continuous_batching``).
+            gen_config (`GenerationConfig`): Generation config used for shared sampling params.
         """
         if self._cb is not None:
             return
@@ -592,7 +589,7 @@ class CBGenerateManager(BaseGenerateManager):
         self._cb.logit_processor = LogitsProcessorList()
         self._cb.start()
 
-    def generate_streaming(self, model, processor, inputs, gen_config, request_id=None):
+    def generate_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
@@ -623,7 +620,7 @@ class CBGenerateManager(BaseGenerateManager):
         asyncio.ensure_future(_read_and_decode())
         return text_queue, streamer
 
-    async def generate_non_streaming(self, model, processor, inputs, gen_config, request_id=None):
+    async def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
         """Non-streaming CB generation, fully async (no per-request thread).
 
         Uses ``register_async_future`` — the dispatcher resolves a single
@@ -664,11 +661,6 @@ class CBGenerateManager(BaseGenerateManager):
             self._cb.stop(block=True, timeout=2)
 
 
-# ---------------------------------------------------------------------------
-# Generation state (shared across handlers)
-# ---------------------------------------------------------------------------
-
-
 class GenerationState:
     """Shared generation state across all handlers.
 
@@ -676,6 +668,11 @@ class GenerationState:
     :class:`InferenceThread` so different models can run concurrently while
     ``torch.compile`` / CUDA graphs require same-model-same-thread) and a
     single :class:`CBGenerateManager` for continuous batching.
+
+    Args:
+        continuous_batching (`bool`, *optional*, defaults to `False`):
+            Whether to use continuous batching with paged attention instead of
+            sequential ``model.generate()`` calls.
     """
 
     def __init__(self, continuous_batching: bool = False):
@@ -684,8 +681,16 @@ class GenerationState:
         self._cb_manager: CBGenerateManager | None = None
         self._cb_model_id: str | None = None
 
-    def use_continuous_batching(self, model, modality: Modality) -> bool:
-        """Check if CB can be used. Logs a warning on fallback."""
+    def use_continuous_batching(self, model: "PreTrainedModel", modality: Modality) -> bool:
+        """Check if continuous batching can be used for this model and modality.
+
+        Args:
+            model (`PreTrainedModel`): The loaded model.
+            modality (`Modality`): The detected model modality (LLM, VLM, etc.).
+
+        Returns:
+            `bool`: ``True`` if CB is enabled and the model supports it, ``False`` otherwise.
+        """
         if not self._continuous_batching:
             return False
         can = hasattr(model, "init_continuous_batching") and modality == Modality.LLM
@@ -697,7 +702,15 @@ class GenerationState:
         return can
 
     def get_manager(self, model_id: str, use_cb: bool) -> BaseGenerateManager:
-        """Return a per-model generation manager, lazily created on first request."""
+        """Return a per-model generation manager, lazily created on first request.
+
+        Args:
+            model_id (`str`): The model ID in ``'model_id@revision'`` format.
+            use_cb (`bool`): Whether to return a CB manager or a sequential one.
+
+        Returns:
+            `BaseGenerateManager`: Either a `GenerateManager` or `CBGenerateManager`.
+        """
         if use_cb:
             if self._cb_model_id != model_id:
                 if self._cb_manager is not None:
@@ -718,25 +731,32 @@ class GenerationState:
             self._cb_manager = None
 
 
-# ---------------------------------------------------------------------------
-# Base handler
-# ---------------------------------------------------------------------------
-
-
 class BaseHandler:
     """Shared logic for chat completion and responses handlers.
 
     Provides model resolution, generation config building, and SSE formatting.
     Generation is delegated to the shared :class:`GenerationState`.
+
+    Args:
+        model_manager (`ModelManager`):
+            Handles model loading, caching, and lifecycle.
+        generation_state (`GenerationState`):
+            Shared state managing per-model generation managers.
+        force_model (`str`, *optional*):
+            If set, override the ``model`` field in every request with this model ID.
+        force_processor (`str`, *optional*):
+            If set, override the processor/tokenizer model ID.
+        compile (`bool`, *optional*, defaults to `False`):
+            Enable ``torch.compile`` with static cache for faster decode.
     """
 
     def __init__(
         self,
-        model_manager,
+        model_manager: "ModelManager",
         generation_state: GenerationState,
-        force_model=None,
-        force_processor=None,
-        compile=False,
+        force_model: str | None = None,
+        force_processor: str | None = None,
+        compile: bool = False,
     ):
         self.model_manager = model_manager
         self.generation_state = generation_state
@@ -745,7 +765,7 @@ class BaseHandler:
         self._compile = compile
 
     @staticmethod
-    def chunk_to_sse(chunk) -> str:
+    def chunk_to_sse(chunk: "str | pydantic.BaseModel") -> str:
         """Format a pydantic model or string as an SSE ``data:`` line."""
         if isinstance(chunk, str):
             return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
@@ -765,11 +785,26 @@ class BaseHandler:
 
         return model_id, model, processor
 
-    def _build_generation_config(self, body: dict, model_generation_config, processor=None, use_cb=False):
+    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None, use_cb: bool = False):
         """Build a GenerationConfig from shared params (temperature, top_p, seed, generation_config JSON).
 
         Subclasses should call ``super()._build_generation_config(...)`` then apply
         endpoint-specific params (``max_tokens``, ``max_output_tokens``, etc.).
+
+        Args:
+            body (`dict`):
+                The raw request body.
+            model_generation_config (`GenerationConfig`):
+                The model's default generation config (will be deep-copied).
+            processor (*optional*):
+                Processor or tokenizer, used to sync ``eos_token_id`` / ``pad_token_id``
+                for GGUF models that lack them.
+            use_cb (`bool`, *optional*, defaults to `False`):
+                Whether continuous batching is active. If ``True``, disables the model's
+                internal KV cache (CB manages its own paged cache).
+
+        Returns:
+            `GenerationConfig`: A new config with request-specific overrides applied.
         """
         from transformers import GenerationConfig
 
@@ -807,42 +842,51 @@ class BaseHandler:
 
         return generation_config
 
+    @staticmethod
+    def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
+        """Convert OpenAI-format messages to the format expected by HF processors.
 
-# ---------------------------------------------------------------------------
-# Message preprocessing: OpenAI messages → processor-compatible format
-# ---------------------------------------------------------------------------
+        For LLMs, collapses list content blocks into plain text. For VLMs, converts
+        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``
+        entries that HF processors understand.
 
+        Args:
+            messages (`list[dict]`): OpenAI-format chat messages.
+            modality (`Modality`): Whether the model is an LLM or VLM.
 
-def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
-    """Convert OpenAI-format messages to the format expected by HF processors."""
-    processor_inputs = []
+        Returns:
+            `list[dict]`: Processor-compatible messages.
+        """
+        processor_inputs = []
 
-    for message in messages:
-        parsed = {"role": message["role"], "content": []}
+        for message in messages:
+            parsed = {"role": message["role"], "content": []}
 
-        if modality == Modality.LLM:
-            if isinstance(message["content"], str):
-                parsed["content"] = message["content"]
-            elif isinstance(message["content"], list):
-                texts = [c["text"] for c in message["content"] if c["type"] == "text"]
-                parsed["content"] = " ".join(texts)
+            if modality == Modality.LLM:
+                if isinstance(message["content"], str):
+                    parsed["content"] = message["content"]
+                elif isinstance(message["content"], list):
+                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
+                    parsed["content"] = " ".join(texts)
 
-        elif modality == Modality.VLM:
-            if isinstance(message["content"], str):
-                parsed["content"].append({"type": "text", "text": message["content"]})
-            else:
-                for content in message["content"]:
-                    if content["type"] == "text":
-                        parsed["content"].append(content)
-                    elif content["type"] == "image_url":
-                        url = content["image_url"]["url"]
-                        if "base64" in url:
-                            image_data = re.sub("^data:image/.+;base64,", "", url)
-                            image = Image.open(BytesIO(base64.b64decode(image_data)))
-                            file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                            image.save(file.name)
-                            url = file.name
-                        parsed["content"].append({"type": "image", "url": url})
+            elif modality == Modality.VLM:
+                if isinstance(message["content"], str):
+                    parsed["content"].append({"type": "text", "text": message["content"]})
+                else:
+                    for content in message["content"]:
+                        if content["type"] == "text":
+                            parsed["content"].append(content)
+                        elif content["type"] == "image_url":
+                            from PIL import Image
 
-        processor_inputs.append(parsed)
-    return processor_inputs
+                            url = content["image_url"]["url"]
+                            if "base64" in url:
+                                image_data = re.sub("^data:image/.+;base64,", "", url)
+                                image = Image.open(BytesIO(base64.b64decode(image_data)))
+                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                                image.save(file.name)
+                                url = file.name
+                            parsed["content"].append({"type": "image", "url": url})
+
+            processor_inputs.append(parsed)
+        return processor_inputs

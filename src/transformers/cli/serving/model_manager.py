@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,13 +15,12 @@
 Model loading, caching, and lifecycle management.
 """
 
-from __future__ import annotations
-
 import asyncio
 import gc
 import json
 import threading
 from functools import lru_cache
+from typing import Callable
 from typing import TYPE_CHECKING
 
 from huggingface_hub import scan_cache_dir
@@ -52,9 +51,9 @@ class TimedModel:
 
     def __init__(
         self,
-        model: PreTrainedModel,
+        model: "PreTrainedModel",
         timeout_seconds: int,
-        processor: ProcessorMixin | PreTrainedTokenizerFast | None = None,
+        processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
@@ -161,7 +160,7 @@ class ModelManager:
 
     def _load_processor(
         self, model_id_and_revision: str, processor_id: str | None = None
-    ) -> ProcessorMixin | PreTrainedTokenizerFast:
+    ) -> "ProcessorMixin | PreTrainedTokenizerFast":
         """Load a processor, trying AutoProcessor first then AutoTokenizer.
 
         Args:
@@ -185,8 +184,17 @@ class ModelManager:
             except OSError:
                 raise OSError(f"Failed to load processor for {model_id} with AutoProcessor and AutoTokenizer.")
 
-    def _load_model(self, model_id_and_revision: str, tqdm_class=None, progress_callback=None) -> PreTrainedModel:
-        """Load a model. GGUF files are detected by the `.gguf` extension and loaded via llama.cpp."""
+    def _load_model(self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None) -> "PreTrainedModel":
+        """Load a model. GGUF files are detected by the ``.gguf`` extension and loaded via llama.cpp.
+
+        Args:
+            model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
+            tqdm_class (*optional*): tqdm subclass for progress bars during ``from_pretrained``.
+            progress_callback (`callable`, *optional*): Called with progress dicts during loading.
+
+        Returns:
+            `PreTrainedModel`: The loaded model.
+        """
         import torch
 
         from transformers import AutoConfig
@@ -227,9 +235,9 @@ class ModelManager:
         self,
         model_id_and_revision: str,
         processor_id: str | None = None,
-        progress_callback=None,
-        tqdm_class=None,
-    ) -> tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]:
+        progress_callback: Callable | None = None,
+        tqdm_class: type | None = None,
+    ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
         """Load a model (or return it from cache), resetting its inactivity timer.
 
         Args:
@@ -275,7 +283,11 @@ class ModelManager:
         2. Load already in progress → join existing subscriber stream
         3. First request → start loading, broadcast to all subscribers
 
-        Yields SSE ``data: ...`` lines.
+        Args:
+            model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
+
+        Yields:
+            `str`: SSE ``data: ...`` lines with progress updates.
         """
         mid = model_id_and_revision
         queue: asyncio.Queue[str | None] = asyncio.Queue()
@@ -357,9 +369,18 @@ class ModelManager:
 
     @staticmethod
     def get_model_modality(
-        model: PreTrainedModel, processor: ProcessorMixin | PreTrainedTokenizerFast | None = None
+        model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None
     ) -> Modality:
-        """Detect whether a model is an LLM or VLM based on its architecture."""
+        """Detect whether a model is an LLM or VLM based on its architecture.
+
+        Args:
+            model (`PreTrainedModel`): The loaded model.
+            processor (`ProcessorMixin | PreTrainedTokenizerFast`, *optional*):
+                If a plain tokenizer (not a multi-modal processor), short-circuits to LLM.
+
+        Returns:
+            `Modality`: The detected modality (``Modality.LLM`` or ``Modality.VLM``).
+        """
         if processor is not None and isinstance(processor, PreTrainedTokenizerBase):
             return Modality.LLM
 
@@ -379,7 +400,15 @@ class ModelManager:
     @staticmethod
     @lru_cache
     def get_gen_models(cache_dir: str | None = None) -> list[dict]:
-        """List generative models (LLMs and VLMs) available in the HuggingFace cache."""
+        """List generative models (LLMs and VLMs) available in the HuggingFace cache.
+
+        Args:
+            cache_dir (`str`, *optional*): Path to the HuggingFace cache directory.
+                Defaults to the standard cache location.
+
+        Returns:
+            `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc.
+        """
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,

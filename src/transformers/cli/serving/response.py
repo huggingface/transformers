@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@ Handler for the /v1/responses endpoint (OpenAI Responses API).
 
 Supports streaming (SSE) and non-streaming (JSON) responses.
 """
-
-from __future__ import annotations
 
 import asyncio
 import time
@@ -54,7 +52,6 @@ from .utils import (
     ToolCallParser,
     _StreamError,
     detect_tool_format,
-    get_processor_inputs_from_messages,
 )
 
 
@@ -87,7 +84,15 @@ class ResponseHandler(BaseHandler):
     # ----- entry point -----
 
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
-        """Validate, load model, dispatch to streaming or non-streaming."""
+        """Validate, load model, dispatch to streaming or non-streaming.
+
+        Args:
+            body (`dict`): The raw JSON request body (OpenAI Responses API format).
+            request_id (`str`): Unique request identifier (from header or auto-generated).
+
+        Returns:
+            `StreamingResponse | JSONResponse`: SSE stream or JSON depending on ``body["stream"]``.
+        """
         self._validate_request(body)
 
         model_id, model, processor = self._resolve_model(body)
@@ -99,7 +104,7 @@ class ResponseHandler(BaseHandler):
         # 1. Normalize Responses API input (string/list/dict + instructions) → standard messages list
         # 2. Transform message content for the HF processor (VLM image handling, text joining, etc.)
         messages = self._input_to_messages(body)
-        processor_inputs = get_processor_inputs_from_messages(messages, modality)
+        processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
 
         if use_cb:
             # CB handles device placement internally — don't create tensors or move
@@ -127,7 +132,8 @@ class ResponseHandler(BaseHandler):
             gen_manager.init_cb(model, gen_config)
         tool_format = detect_tool_format(model) if body.get("tools") else None
 
-        if body.get("stream", True):
+        streaming = body.get("stream", True)
+        if streaming:
             return self._streaming(
                 request_id,
                 model,
@@ -139,23 +145,34 @@ class ResponseHandler(BaseHandler):
                 gen_manager=gen_manager,
                 tool_format=tool_format,
             )
-        return await self._non_streaming(
-            request_id,
-            model,
-            processor,
-            model_id,
-            body,
-            inputs,
-            gen_config,
-            gen_manager=gen_manager,
-            tool_format=tool_format,
-        )
+        else:
+            return await self._non_streaming(
+                request_id,
+                model,
+                processor,
+                model_id,
+                body,
+                inputs,
+                gen_config,
+                gen_manager=gen_manager,
+                tool_format=tool_format,
+            )
 
     # ----- input conversion -----
 
     @staticmethod
     def _input_to_messages(body: dict) -> list[dict]:
-        """Convert the Responses API ``input`` field to a list of chat messages."""
+        """Convert the Responses API ``input`` field to a list of chat messages.
+
+        Handles string, list, and dict inputs. If ``instructions`` is provided, it is
+        prepended as a system message (or replaces an existing one).
+
+        Args:
+            body (`dict`): The raw request body containing ``input`` and optionally ``instructions``.
+
+        Returns:
+            `list[dict]`: Standard OpenAI-format chat messages.
+        """
         inp = body["input"]
         instructions = body.get("instructions")
 
@@ -184,12 +201,12 @@ class ResponseHandler(BaseHandler):
     def _streaming(
         self,
         request_id: str,
-        model: PreTrainedModel,
-        processor: ProcessorMixin | PreTrainedTokenizerFast,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
         model_id: str,
         body: dict,
         inputs: dict,
-        gen_config: GenerationConfig,
+        gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> StreamingResponse:
@@ -405,7 +422,7 @@ class ResponseHandler(BaseHandler):
 
                 # 6. Completed
                 all_output = [msg_item] + list(tool_calls)
-                usage = _make_usage(input_len, streamer.total_tokens)
+                usage = compute_usage(input_len, streamer.total_tokens)
                 yield self.chunk_to_sse(
                     ResponseCompletedEvent(
                         type="response.completed",
@@ -427,12 +444,12 @@ class ResponseHandler(BaseHandler):
     async def _non_streaming(
         self,
         request_id: str,
-        model: PreTrainedModel,
-        processor: ProcessorMixin | PreTrainedTokenizerFast,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
         model_id: str,
         body: dict,
         inputs: dict,
-        gen_config: GenerationConfig,
+        gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> JSONResponse:
@@ -472,7 +489,7 @@ class ResponseHandler(BaseHandler):
                         )
                     )
 
-        usage = _make_usage(input_len, output_tokens)
+        usage = compute_usage(input_len, output_tokens)
         response = Response(
             id=resp_id,
             created_at=created_at,
@@ -496,8 +513,8 @@ class ResponseHandler(BaseHandler):
         if unused:
             raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
-    def _build_generation_config(self, body: dict, model_generation_config, processor=None, use_cb=False):
-        """Responses API params on top of base config."""
+    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None, use_cb: bool = False):
+        """Apply Responses API params (``max_output_tokens``) on top of the base generation config."""
         generation_config = super()._build_generation_config(body, model_generation_config, processor, use_cb=use_cb)
 
         if body.get("max_output_tokens") is not None:
@@ -506,7 +523,16 @@ class ResponseHandler(BaseHandler):
         return generation_config
 
 
-def _make_usage(input_tokens: int, output_tokens: int) -> ResponseUsage:
+def compute_usage(input_tokens: int, output_tokens: int) -> ResponseUsage:
+    """Build a ``ResponseUsage`` object for a Responses API reply.
+
+    Args:
+        input_tokens (`int`): Number of prompt tokens.
+        output_tokens (`int`): Number of generated tokens.
+
+    Returns:
+        `ResponseUsage`: Usage statistics with zero-filled detail fields.
+    """
     return ResponseUsage(
         input_tokens=input_tokens,
         output_tokens=output_tokens,

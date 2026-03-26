@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,18 +17,10 @@ Handler for the /v1/chat/completions endpoint.
 Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
-
-import torch
-
-
-if TYPE_CHECKING:
-    from transformers import PreTrainedTokenizerFast, ProcessorMixin
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -36,21 +28,53 @@ from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatComplet
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta, ChoiceDeltaToolCall
 from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
 from openai.types.completion_usage import CompletionUsage
-
-from transformers import GenerationConfig, PreTrainedModel
 
 from ...utils import logging
 from .utils import (
-    UNUSED_CHAT_COMPLETION_FIELDS,
     BaseGenerateManager,
     BaseHandler,
     ToolCallParser,
-    TransformersCompletionCreateParamsStreaming,
     _StreamError,
     detect_tool_format,
-    get_processor_inputs_from_messages,
 )
+
+
+if TYPE_CHECKING:
+    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+
+
+class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
+    generation_config: str
+    processor: str
+
+
+# Fields accepted by the OpenAI schema but not yet supported.
+# Receiving these raises an error to avoid silent misbehaviour.
+# NOTE: "stop" is NOT in this set — we map it to stop_strings.
+UNUSED_CHAT_COMPLETION_FIELDS = {
+    "audio",
+    "function_call",
+    "functions",
+    "logprobs",
+    "max_completion_tokens",
+    "metadata",
+    "modalities",
+    "n",
+    "parallel_tool_calls",
+    "prediction",
+    "presence_penalty",
+    "reasoning_effort",
+    "response_format",
+    "service_tier",
+    "store",
+    "stream_options",
+    "tool_choice",
+    "top_logprobs",
+    "user",
+    "web_search_options",
+}
 
 
 logger = logging.get_logger(__name__)
@@ -65,7 +89,15 @@ class ChatCompletionHandler(BaseHandler):
     # ----- entry point -----
 
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
-        """Validate the request, load the model, and dispatch to streaming or non-streaming."""
+        """Validate the request, load the model, and dispatch to streaming or non-streaming.
+
+        Args:
+            body (`dict`): The raw JSON request body (OpenAI chat completion format).
+            request_id (`str`): Unique request identifier (from header or auto-generated).
+
+        Returns:
+            `StreamingResponse | JSONResponse`: SSE stream or JSON depending on ``body["stream"]``.
+        """
         self._validate_request(body)
 
         messages = body["messages"]
@@ -78,7 +110,7 @@ class ChatCompletionHandler(BaseHandler):
         modality = self.model_manager.get_model_modality(model, processor=processor)
         use_cb = self.generation_state.use_continuous_batching(model, modality)
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-        processor_inputs = get_processor_inputs_from_messages(messages, modality)
+        processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
 
         if use_cb:
             # CB handles device placement internally — don't create tensors or move
@@ -111,7 +143,8 @@ class ChatCompletionHandler(BaseHandler):
         # 2. force generation to produce valid JSON matching the tool's parameter schema
         tool_format = detect_tool_format(model) if body.get("tools") else None
 
-        if body.get("stream"):
+        streaming = body.get("stream")
+        if streaming:
             return self._streaming(
                 request_id,
                 model,
@@ -122,27 +155,28 @@ class ChatCompletionHandler(BaseHandler):
                 gen_manager=gen_manager,
                 tool_format=tool_format,
             )
-        return await self._non_streaming(
-            request_id,
-            model,
-            processor,
-            model_id,
-            inputs,
-            gen_config,
-            gen_manager=gen_manager,
-            tool_format=tool_format,
-        )
+        else:
+            return await self._non_streaming(
+                request_id,
+                model,
+                processor,
+                model_id,
+                inputs,
+                gen_config,
+                gen_manager=gen_manager,
+                tool_format=tool_format,
+            )
 
     # ----- streaming -----
 
     def _streaming(
         self,
         request_id: str,
-        model: PreTrainedModel,
-        processor: ProcessorMixin | PreTrainedTokenizerFast,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
         model_id: str,
-        inputs: dict[str, torch.Tensor],
-        gen_config: GenerationConfig,
+        inputs: dict,
+        gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> StreamingResponse:
@@ -215,11 +249,11 @@ class ChatCompletionHandler(BaseHandler):
     async def _non_streaming(
         self,
         request_id: str,
-        model: PreTrainedModel,
-        processor: ProcessorMixin | PreTrainedTokenizerFast,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
         model_id: str,
-        inputs: dict[str, torch.Tensor],
-        gen_config: GenerationConfig,
+        inputs: dict,
+        gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_format: dict | None = None,
     ) -> JSONResponse:
@@ -280,8 +314,9 @@ class ChatCompletionHandler(BaseHandler):
         if unused:
             raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
-    def _build_generation_config(self, body: dict, model_generation_config, processor=None, use_cb=False):
-        """Chat Completions params on top of base config."""
+    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None, use_cb: bool = False):
+        """Apply Chat Completions params (``max_tokens``, ``frequency_penalty``, ``logit_bias``,
+        ``stop``) on top of the base generation config."""
         generation_config = super()._build_generation_config(body, model_generation_config, processor, use_cb=use_cb)
 
         if body.get("max_tokens") is not None:
@@ -306,7 +341,19 @@ class ChatCompletionHandler(BaseHandler):
         usage: CompletionUsage | None = None,
         tool_calls: list[dict] | None = None,
     ) -> dict:
-        """Build a non-streaming ChatCompletion response dict."""
+        """Build a non-streaming ChatCompletion response dict.
+
+        Args:
+            request_id (`str`): Unique request identifier.
+            content (`str`): The generated text.
+            model_id (`str`): Model ID to include in the response.
+            finish_reason (`str`): Why generation stopped (``"stop"``, ``"length"``, ``"tool_calls"``).
+            usage (`CompletionUsage`, *optional*): Token usage statistics.
+            tool_calls (`list[dict]`, *optional*): Parsed tool calls, if any.
+
+        Returns:
+            `dict`: Serialized ``ChatCompletion`` ready for JSON response.
+        """
         message = ChatCompletionMessage(content=content, role="assistant", tool_calls=tool_calls)
         result = ChatCompletion(
             id=request_id,
@@ -334,7 +381,20 @@ class ChatCompletionHandler(BaseHandler):
         tool_calls: list | None = None,
         usage: CompletionUsage | None = None,
     ) -> str:
-        """Build a streaming ChatCompletionChunk and format it as an SSE event."""
+        """Build a streaming ``ChatCompletionChunk`` and format it as an SSE ``data:`` line.
+
+        Args:
+            request_id (`str`): Unique request identifier.
+            content (`str`, *optional*): Text content delta.
+            model (`str`, *optional*): Model ID.
+            role (`str`, *optional*): Role (only sent in the first chunk).
+            finish_reason (`str`, *optional*): Set on the final chunk.
+            tool_calls (`list`, *optional*): Tool call deltas.
+            usage (`CompletionUsage`, *optional*): Token usage (sent with the final chunk).
+
+        Returns:
+            `str`: A formatted SSE event string.
+        """
         chunk = ChatCompletionChunk(
             id=request_id,
             created=int(time.time()),
