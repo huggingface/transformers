@@ -1476,13 +1476,20 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def _resolve_tp_plan_to_pytorch(model, tp_plan, tp_mesh):
-    """Convert our wildcard tp_plan to PyTorch's parallelize_module format.
+def apply_tensor_parallel(model, tp_mesh, tp_plan):
+    """Apply tensor parallelism using PyTorch's parallelize_module.
 
-    Our format:  {"model.layers.*.self_attn.q_proj": "colwise", ...}
-    PyTorch format: {"layers.0.self_attn.q_proj": ColwiseParallel(), ...}
+    Converts our wildcard tp_plan (e.g. {"model.layers.*.self_attn.q_proj": "colwise"})
+    to PyTorch's format (e.g. {"model.layers.0.self_attn.q_proj": ColwiseParallel()})
+    and applies it.
     """
-    from torch.distributed.tensor.parallel import ColwiseParallel, RowwiseParallel
+    from torch.distributed.tensor.parallel import ColwiseParallel, RowwiseParallel, parallelize_module
+
+    if tp_plan is None:
+        return model
+
+    if tp_plan == "auto":
+        tp_plan = model._tp_plan
 
     STYLE_MAP = {
         "colwise": ColwiseParallel,
@@ -1492,7 +1499,7 @@ def _resolve_tp_plan_to_pytorch(model, tp_plan, tp_mesh):
     }
 
     pytorch_plan = {}
-    for name, module in model.named_modules():
+    for name, _ in model.named_modules():
         style_name = _get_parameter_tp_plan(parameter_name=name, tp_plan=tp_plan, is_weight=False)
         if style_name is None:
             continue
@@ -1501,24 +1508,7 @@ def _resolve_tp_plan_to_pytorch(model, tp_plan, tp_mesh):
             continue
         pytorch_plan[name] = style_cls() if isinstance(style_cls, type) else style_cls()
 
-    return pytorch_plan
-
-
-def apply_tensor_parallel(model, distributed_config, device_mesh):
-    """Apply DTensor-based tensor parallelism via PyTorch's parallelize_module."""
-    from torch.distributed.tensor.parallel import parallelize_module
-
-    model.config.distributed_config = distributed_config
-    model._device_mesh = device_mesh
-
-    # Resolve tp_plan: "auto" → model's predefined plan dict
-    tp_plan = distributed_config.tp_plan
-    if tp_plan == "auto":
-        tp_plan = model._tp_plan
-    if tp_plan is not None and device_mesh["tp"] is not None and torch.distributed.is_initialized():
-        tp_mesh = device_mesh["tp"]
-        pytorch_plan = _resolve_tp_plan_to_pytorch(model, tp_plan, tp_mesh)
-        if pytorch_plan:
-            parallelize_module(model, tp_mesh, pytorch_plan)
+    if pytorch_plan:
+        parallelize_module(model, tp_mesh, pytorch_plan)
 
     return model

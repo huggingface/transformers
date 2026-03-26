@@ -69,7 +69,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.fsdp import apply_fsdp2
+from .integrations.fsdp import apply_fully_shard_data_parallel
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -4142,12 +4142,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
-            # DTensor-based TP: parallelize_module converts params to TP DTensors on meta
-            if torch.distributed.is_initialized() and device_mesh is not None:
-                model = apply_tensor_parallel(model, distributed_config, device_mesh)
-            # FSDP2 on meta: fully_shard sees TP DTensors, records correct TP-local _orig_size
-            if distributed_config.fsdp_plan is not None:
-                model = apply_fsdp2(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
+            model.config.distributed_config = distributed_config
+            model = apply_tensor_parallel(model, device_mesh["tp"], distributed_config.tp_plan)
+            model = apply_fully_shard_data_parallel(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
         else:
             # Accelerate path: auto device mapping
             if device_map is not None:
@@ -4176,15 +4173,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         loading_info = cls._finalize_model_loading(model, load_config, loading_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
-
-        # TODO(3outeille): will be applied during meta once weight loader supports FSDP-managed params.
-        # For now, apply FSDP2 after weight loading. Only on the native distributed path (never accelerate).
-        if (
-            distributed_config is not None
-            and distributed_config.fsdp_plan is not None
-            and not getattr(model, "_is_fsdp_managed_module", False)
-        ):
-            model = apply_fsdp2(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
