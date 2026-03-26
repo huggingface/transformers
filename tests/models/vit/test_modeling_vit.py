@@ -264,6 +264,9 @@ class ViTModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
+    def test_foo(self):
+        assert 1 == 2
+
     @slow
     def test_inference_image_classification_head(self):
         model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
