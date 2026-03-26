@@ -30,8 +30,9 @@ class Scheduler(ABC):
     def __init__(self, cache: PagedAttentionCache):
         self.cache = cache
         self._cancellation_lock = threading.Lock()
-        # This is to compute the cache used by a new request being scheduled
-        self.cache_budget_module = None if cache.num_full_attention_groups else cache.config.sliding_window
+        # This is to compute the read cache used by a new request being scheduled
+        self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
+        self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
         # Initialize mutable states via reset()
         self.reset()
 
@@ -43,9 +44,6 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
-        # This is to compute the read cache used by a new request being scheduled
-        self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
-        self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
 
     @traced
     def add_waiting_request(self, state: RequestState):
