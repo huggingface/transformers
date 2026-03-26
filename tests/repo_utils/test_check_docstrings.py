@@ -25,7 +25,6 @@ git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
 from check_docstrings import (  # noqa: E402
-    _auto_docstring_cache,
     _build_ast_indexes,
     _find_typed_dict_classes,
     _get_auto_docstring_names,
@@ -113,10 +112,7 @@ class TestGetAutoDocstringNames(unittest.TestCase):
     """Tests for _get_auto_docstring_names and has_auto_docstring_decorator."""
 
     def setUp(self):
-        _auto_docstring_cache.clear()
-
-    def tearDown(self):
-        _auto_docstring_cache.clear()
+        self.cache = {}
 
     def _write_temp(self, source):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -135,7 +131,7 @@ class TestGetAutoDocstringNames(unittest.TestCase):
                 pass
         """)
         )
-        names = _get_auto_docstring_names(path)
+        names = _get_auto_docstring_names(path, cache=self.cache)
         self.assertEqual(names, {"Foo"})
 
     def test_detects_decorator_with_call(self):
@@ -147,7 +143,7 @@ class TestGetAutoDocstringNames(unittest.TestCase):
                 pass
         """)
         )
-        names = _get_auto_docstring_names(path)
+        names = _get_auto_docstring_names(path, cache=self.cache)
         self.assertEqual(names, {"Bar"})
 
     def test_ignores_other_decorators(self):
@@ -159,7 +155,7 @@ class TestGetAutoDocstringNames(unittest.TestCase):
                 pass
         """)
         )
-        names = _get_auto_docstring_names(path)
+        names = _get_auto_docstring_names(path, cache=self.cache)
         self.assertEqual(names, set())
 
     def test_multiple_classes(self):
@@ -178,7 +174,7 @@ class TestGetAutoDocstringNames(unittest.TestCase):
                 pass
         """)
         )
-        names = _get_auto_docstring_names(path)
+        names = _get_auto_docstring_names(path, cache=self.cache)
         self.assertEqual(names, {"A", "func_c"})
 
     def test_caching(self):
@@ -190,14 +186,14 @@ class TestGetAutoDocstringNames(unittest.TestCase):
                 pass
         """)
         )
-        result1 = _get_auto_docstring_names(path)
-        result2 = _get_auto_docstring_names(path)
+        result1 = _get_auto_docstring_names(path, cache=self.cache)
+        result2 = _get_auto_docstring_names(path, cache=self.cache)
         self.assertIs(result1, result2)
 
     def test_syntax_error_returns_empty(self):
         """Test that a file with a syntax error returns an empty set instead of raising."""
         path = self._write_temp("def broken(\n")
-        names = _get_auto_docstring_names(path)
+        names = _get_auto_docstring_names(path, cache=self.cache)
         self.assertEqual(names, set())
 
     def test_has_auto_docstring_decorator_uses_cache(self):
@@ -211,15 +207,15 @@ class TestGetAutoDocstringNames(unittest.TestCase):
                 pass
         """)
         )
-        _auto_docstring_cache[path] = {"Cached"}
+        self.cache[path] = {"Cached"}
 
         # Create classes whose __name__ matches/doesn't match the cache
         Cached = type("Cached", (), {})
         Other = type("Other", (), {})
 
         with patch.object(inspect, "getfile", return_value=path):
-            self.assertTrue(has_auto_docstring_decorator(Cached))
-            self.assertFalse(has_auto_docstring_decorator(Other))
+            self.assertTrue(has_auto_docstring_decorator(Cached, cache=self.cache))
+            self.assertFalse(has_auto_docstring_decorator(Other, cache=self.cache))
 
 
 class TestBuildAstIndexes(unittest.TestCase):

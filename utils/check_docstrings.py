@@ -385,14 +385,14 @@ MATH_OPERATORS = {
 }
 
 
-def _get_auto_docstring_names(file_path: str) -> set[str]:
+def _get_auto_docstring_names(file_path: str, cache: dict[str, set[str]] | None = None) -> set[str]:
     """
     Parse a source file once and return the set of class/function names decorated with @auto_docstring.
     Walks top-level definitions and one level into class bodies (methods).
-    Results are cached per file path.
+    Results can be cached per file path.
     """
-    if file_path in _auto_docstring_cache:
-        return _auto_docstring_cache[file_path]
+    if cache is not None and file_path in cache:
+        return cache[file_path]
 
     names = set()
     try:
@@ -412,19 +412,17 @@ def _get_auto_docstring_names(file_path: str) -> set[str]:
     except (OSError, SyntaxError):
         pass
 
-    _auto_docstring_cache[file_path] = names
+    if cache is not None:
+        cache[file_path] = names
     return names
 
 
-_auto_docstring_cache: dict[str, set[str]] = {}
-
-
-def has_auto_docstring_decorator(obj) -> bool:
+def has_auto_docstring_decorator(obj, cache: dict[str, set[str]] | None = None) -> bool:
     try:
         source_file = inspect.getfile(obj)
     except (TypeError, OSError):
         return False
-    decorated_names = _get_auto_docstring_names(source_file)
+    decorated_names = _get_auto_docstring_names(source_file, cache=cache)
     return obj.__name__ in decorated_names
 
 
@@ -1944,11 +1942,20 @@ def update_file_with_new_docstrings(
     )
 
 
-def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
+def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are decorated with `@auto_docstrings`.
     This function orchestrates the process by finding relevant files, scanning for decorators,
     generating new docstrings, and updating files as needed.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether to fix inconsistencies or not.
+        check_all (`bool`, *optional*, defaults to `False`):
+            Whether to check all files.
+        cache (Dictionary `str` to `Set[str]`, *optional*):
+            To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
+            computed results.
     """
     # 1. Find all model files to check
     matching_files = find_matching_model_files(check_all)
@@ -1971,7 +1978,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         decorated_items = _build_ast_indexes(content, tree=tree)
 
         # Warm the cache so check_docstrings() won't re-parse this file
-        _get_auto_docstring_names(candidate_file)
+        _get_auto_docstring_names(candidate_file, cache=cache)
 
         missing_docstring_args_warnings = []
         fill_docstring_args_warnings = []
@@ -2058,7 +2065,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         )
 
 
-def check_docstrings(overwrite: bool = False, check_all: bool = False):
+def check_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
 
@@ -2067,6 +2074,9 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             Whether to fix inconsistencies or not.
         check_all (`bool`, *optional*, defaults to `False`):
             Whether to check all files.
+        cache (Dictionary `str` to `Set[str]`, *optional*):
+            To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
+            computed results.
     """
     module_diff_files = None
     if not check_all:
@@ -2108,7 +2118,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
                 continue
 
         # Skip objects decorated with @auto_docstring - they have auto-generated documentation
-        if has_auto_docstring_decorator(obj):
+        if has_auto_docstring_decorator(obj, cache=cache):
             continue
 
         # Check docstring
@@ -2165,5 +2175,6 @@ if __name__ == "__main__":
         "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
     )
     args = parser.parse_args()
-    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    auto_docstring_cache: dict[str, set[str]] = {}
+    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
