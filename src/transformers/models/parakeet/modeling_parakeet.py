@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...generation import CompileConfig
+from ...generation import CompileConfig, GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
@@ -692,7 +692,7 @@ class ParakeetGenerateOutput(ParakeetCTCGenerateOutput):
     Parakeet Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
-class ParakeetForCTC(ParakeetPreTrainedModel):
+class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
     config: ParakeetCTCConfig
 
     def __init__(self, config: ParakeetCTCConfig):
@@ -779,9 +779,13 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         return_dict_in_generate: bool = False,
+        compile_config: CompileConfig | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetCTCGenerateOutput | torch.LongTensor:
         r"""
+        compile_config ([`~generation.CompileConfig`], *optional*):
+            If provided, `torch.compile` will be applied to the forward calls in the decoding loop.
+
         Example:
 
         ```python
@@ -802,8 +806,10 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
         >>> print(transcription)
         ```
         """
+        model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
+
         kwargs["return_dict"] = True
-        outputs: CausalLMOutput = self.forward(
+        outputs: CausalLMOutput = model_forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
@@ -1130,7 +1136,7 @@ def tdt_loss(
     Parakeet Encoder with a TDT (Token Duration Transducer) head.
     """
 )
-class ParakeetForTDT(ParakeetPreTrainedModel):
+class ParakeetForTDT(ParakeetPreTrainedModel, GenerationMixin):
     config: ParakeetTDTConfig
     _no_split_modules = ["ParakeetTDTDecoder"]
 
@@ -1310,14 +1316,11 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTGenerateOutput | torch.LongTensor:
         r"""
-        Perform TDT greedy decoding to generate token sequences.
-
-        Args:
-            return_timestamps (`bool`, *optional*, defaults to `False`):
-                Whether to return per-token timestamps and durations. When `True`, forces
-                `return_dict_in_generate=True` and includes `token_timestamps` and `token_durations` in the output.
-            compile_config ([`~generation.CompileConfig`], *optional*):
-                If provided, `torch.compile` will be applied to the forward calls in the decoding loop.
+        return_timestamps (`bool`, *optional*, defaults to `False`):
+            Whether to return per-token timestamps and durations. When `True`, forces
+            `return_dict_in_generate=True` and includes `token_timestamps` and `token_durations` in the output.
+        compile_config ([`~generation.CompileConfig`], *optional*):
+            If provided, `torch.compile` will be applied to the forward calls in the decoding loop.
 
         Example:
 
@@ -1373,7 +1376,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel):
         batch_size, sequence_length = outputs.pooler_output.shape[:2]
         device = outputs.pooler_output.device
 
-        # Use encoder attention mask for valid lengths
         if outputs.attention_mask is not None:
             valid_lengths = outputs.attention_mask.sum(dim=1).int()
         else:
