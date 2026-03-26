@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/swin-tiny-patch4-window7-224")
-@strict(accept_kwargs=True)
+@strict
 class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):

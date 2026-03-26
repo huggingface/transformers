@@ -25,7 +25,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
-@strict(accept_kwargs=True)
+@strict
 class VideoLlama3VisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -59,7 +59,7 @@ class VideoLlama3VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
-@strict(accept_kwargs=True)
+@strict
 class VideoLlama3Config(PreTrainedConfig):
     model_type = "video_llama_3"
     sub_configs = {"vision_config": VideoLlama3VisionConfig, "text_config": AutoConfig}

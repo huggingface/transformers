@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolLM3-3B")
-@strict(accept_kwargs=True)
+@strict
 class SmolLM3Config(PreTrainedConfig):
     r"""
     no_rope_layers (`List[int]`, *optional*):
@@ -52,7 +52,6 @@ class SmolLM3Config(PreTrainedConfig):
     no_rope_layer_interval (`int`, *optional*, defaults to 4):
         If `no_rope_layers` is `None`, it will be created using a NoPE layer every
         `no_rope_layer_interval` layers.
-
 
     ```python
     >>> from transformers import SmolLM3Model, SmolLM3Config
