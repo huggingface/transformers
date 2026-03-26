@@ -290,45 +290,57 @@ class CohereAsrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_shortform_english(self):
+        """
+        reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
+        """
         audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3", sampling_rate=16000)
         inputs = self.processor(
-            audio, 
+            audio,
             sampling_rate=16000,
             return_tensors="pt",
             language="en",
         )
+        inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)
 
         outputs = self.model.generate(**inputs, max_new_tokens=256)
-        text = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = ["Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."]
+        EXPECTED_OUTPUT = [" Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."]
         self.assertEqual(text, EXPECTED_OUTPUT)
 
     @slow
     def test_shortform_english_no_punctuation(self):
+        """
+        reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
+        """
         audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3", sampling_rate=16000)
         inputs_pnc = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=True)
         inputs_nopnc = self.processor(
             audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False
         )
 
+        inputs_pnc.pop("audio_chunk_index", None)
+        inputs_nopnc.pop("audio_chunk_index", None)
         inputs_pnc.to(self.model.device)
         inputs_nopnc.to(self.model.device)
 
         outputs_pnc = self.model.generate(**inputs_pnc, max_new_tokens=256)
         outputs_nopnc = self.model.generate(**inputs_nopnc, max_new_tokens=256)
 
-        text_pnc = self.processor.batch_decode(outputs_pnc, skip_special_tokens=True)
-        text_nopnc = self.processor.batch_decode(outputs_nopnc, skip_special_tokens=True)
+        text_pnc = self.processor.decode(outputs_pnc, skip_special_tokens=True)
+        text_nopnc = self.processor.decode(outputs_nopnc, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_PNC = ["Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."]
-        EXPECTED_OUTPUT_NOPNC = ["yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"]
+        EXPECTED_OUTPUT_PNC = [" Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."]
+        EXPECTED_OUTPUT_NOPNC = [" yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"]
         self.assertEqual(text_pnc, EXPECTED_OUTPUT_PNC)
         self.assertEqual(text_nopnc, EXPECTED_OUTPUT_NOPNC)
 
     @slow
     def test_longform_english(self):
+        """
+        reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
+        """
         audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3", sampling_rate=16000)
         inputs = self.processor(audio=audio, return_tensors="pt", language="en", sampling_rate=16000)
         audio_chunk_index = inputs.pop("audio_chunk_index")
@@ -348,23 +360,29 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         )
 
         # fmt: off
-        EXPECTED_OUTPUT = ["This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American."]
+        EXPECTED_OUTPUT = [
+            "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American."
+        ]
         # fmt: on
         self.assertEqual(text, EXPECTED_OUTPUT)
 
     @slow
     def test_batched_mixed_lengths(self):
+        """
+        reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
+        """
         audio_short = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3", sampling_rate=16000)
         audio_long = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3", sampling_rate=16000)
-        inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt")
+        inputs = self.processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
+        audio_chunk_index = inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)
 
         outputs = self.model.generate(**inputs, max_new_tokens=500)
-        text = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        text = self.processor.decode(outputs, skip_special_tokens=True, audio_chunk_index=audio_chunk_index)
 
         # fmt: off
         EXPECTED_OUTPUT = [
-            "Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
+            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
             "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
         ]
         # fmt: on
@@ -372,12 +390,19 @@ class CohereAsrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_non_english_with_punctuation(self):
+        """
+        reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
+        actually outputs:  Esto parece tener sentido ya que en la Tierra no se percibe su movimiento, ¿cierto?
+        due to compute diffs:
+        expected output: Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?
+        """
         audio = load_audio("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/fleur_es_sample.wav", sampling_rate=16000)
         inputs = self.processor(audio, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
+        inputs.pop("audio_chunk_index", None)
         inputs.to(self.model.device)
 
         outputs = self.model.generate(**inputs, max_new_tokens=500)
-        text = self.processor.batch_decode(outputs, skip_special_tokens=True)
+        text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = ["Esto parece tener sentido ya que en la Tierra no se percibe su movimiento, ¿cierto?"]
+        EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?"]
         self.assertEqual(text, EXPECTED_OUTPUT)
