@@ -48,21 +48,18 @@ class LasrEncoderConfig(PreTrainedConfig):
         The momentum for the batch normalization layers
 
     Example:
-        ```python
-        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
+    ```python
+    >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LasrEncoder` configuration
-        >>> configuration = LasrEncoderConfig()
+    >>> # Initializing a `LasrEncoder` configuration
+    >>> configuration = LasrEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LasrEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LasrEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-
-    This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "lasr_encoder"
@@ -111,17 +108,15 @@ class LasrCTCConfig(PreTrainedConfig):
         of [`LasrForCTC`].
 
     Example:
-        ```python
-        >>> from transformers import LasrForCTC, LasrCTCConfig
-        >>> # Initializing a Lasr configuration
-        >>> configuration = LasrCTCConfig()
-        >>> # Initializing a model from the configuration
-        >>> model = LasrForCTC(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
-    This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    ```python
+    >>> from transformers import LasrForCTC, LasrCTCConfig
+    >>> # Initializing a Lasr configuration
+    >>> configuration = LasrCTCConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = LasrForCTC(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "lasr_ctc"

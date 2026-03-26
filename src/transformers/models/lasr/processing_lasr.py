@@ -96,5 +96,9 @@ class LasrProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
+    def decode(self, *args, **kwargs):
+        """Forward arguments to [`~PreTrainedTokenizer.decode`]."""
+        self.tokenizer.decode(*args, **kwargs)
+
 
 __all__ = ["LasrProcessor"]

@@ -24,11 +24,12 @@ from tokenizers import AddedToken
 
 from transformers import (
     ParakeetCTCConfig,
-    ParakeetEncoder,
     ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
     ParakeetForCTC,
+    ParakeetForTDT,
     ParakeetProcessor,
+    ParakeetTDTConfig,
     ParakeetTokenizer,
 )
 from transformers.convert_slow_tokenizer import ParakeetConverter
@@ -48,6 +49,15 @@ NEMO_TO_HF_WEIGHT_MAPPING = {
     r"linear_pos": r"relative_k_proj",
 }
 
+# Additional mappings for TDT decoder and joint network
+NEMO_TDT_WEIGHT_MAPPING = {
+    r"decoder\.prediction\.embed\.": r"decoder.embedding.",
+    r"decoder\.prediction\.dec_rnn\.lstm\.": r"decoder.lstm.",
+    r"joint\.enc\.": r"encoder_projector.",
+    r"joint\.pred\.": r"decoder.decoder_projector.",
+    r"joint\.joint_net\.2\.": r"joint.head.",
+}
+
 
 def convert_key(key, mapping):
     for pattern, replacement in mapping.items():
@@ -56,22 +66,12 @@ def convert_key(key, mapping):
 
 
 def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str]:
-    """
-    Extract .nemo file (tar archive) and return paths to important files.
-
-    Args:
-        nemo_file_path: Path to .nemo file
-        extract_dir: Directory to extract to
-
-    Returns:
-        Dictionary with paths to model.pt, model_config.yaml, etc.
-    """
+    """Extract .nemo file (tar archive) and return paths to important files."""
     print(f"Extracting NeMo archive: {nemo_file_path}")
 
     with tarfile.open(nemo_file_path, "r", encoding="utf-8") as tar:
         tar.extractall(extract_dir)
 
-    # Log all extracted files for debugging
     all_files = []
     for root, dirs, files in os.walk(extract_dir):
         for file in files:
@@ -80,14 +80,12 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
 
     print(f"All extracted files: {[os.path.basename(f) for f in all_files]}")
 
-    # Find important files with more robust detection
     model_files = {}
     for root, dirs, files in os.walk(extract_dir):
         for file in files:
             file_path = os.path.join(root, file)
             file_lower = file.lower()
 
-            # Look for model weights with various common names
             if (
                 file.endswith(".pt")
                 or file.endswith(".pth")
@@ -102,26 +100,23 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
                 model_files["model_weights"] = file_path
                 print(f"Found model weights: {file}")
 
-            # Look for config files
             elif (
                 file == "model_config.yaml"
                 or file == "config.yaml"
                 or (file.endswith(".yaml") and "config" in file_lower)
             ):
-                if "model_config" not in model_files:  # Prefer model_config.yaml
+                if "model_config" not in model_files:
                     model_files["model_config"] = file_path
                     print(f"Found config file: {file}")
                 if file == "model_config.yaml":
-                    model_files["model_config"] = file_path  # Override with preferred name
+                    model_files["model_config"] = file_path
 
-            # Look for vocabulary files
             elif (
                 file.endswith(".vocab")
                 or file.endswith(".model")
                 or file.endswith(".txt")
                 or ("tokenizer" in file_lower and (file.endswith(".vocab") or file.endswith(".model")))
             ):
-                # Prefer .vocab files over others
                 if "tokenizer_model_file" not in model_files or file.endswith(".model"):
                     model_files["tokenizer_model_file"] = file_path
                     print(f"Found tokenizer model file: {file}")
@@ -130,7 +125,6 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
 
     print(f"Found model files: {list(model_files.keys())}")
 
-    # Validate that we found the required files
     if "model_weights" not in model_files:
         raise FileNotFoundError(
             f"Could not find model weights file in {nemo_file_path}. "
@@ -148,15 +142,25 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
     return model_files
 
 
-def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=None):
+def write_processor(nemo_config: dict, model_files, output_dir, model_type, push_to_repo_id=None):
     tokenizer_converted = ParakeetConverter(model_files["tokenizer_model_file"]).converted()
     tokenizer_converted_fast = ParakeetTokenizer(
         tokenizer_object=tokenizer_converted,
         clean_up_tokenization_spaces=False,
     )
-    tokenizer_converted_fast.add_tokens(
-        [AddedToken("<unk>", normalized=False, special=True), AddedToken("<pad>", normalized=False, special=True)]
-    )
+
+    if tokenizer_converted_fast.convert_tokens_to_ids("<unk>") is None:
+        # Normally CTC and TDT already have
+        tokenizer_converted_fast.add_tokens([AddedToken("<unk>", normalized=False, special=True)])
+        print(f"Added <unk> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<unk>')}")
+    if tokenizer_converted_fast.convert_tokens_to_ids("<pad>") is None:
+        # Normally CTC doesn't have while TDT has at token id = 2
+        tokenizer_converted_fast.add_tokens([AddedToken("<pad>", normalized=False, special=True)])
+        print(f"Added <pad> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<pad>')}")
+    if model_type == "tdt":
+        # TDT needs a separate blank token
+        tokenizer_converted_fast.add_tokens([AddedToken("<blank>", normalized=False, special=True)])
+        print(f"Added <blank> token at ID: {tokenizer_converted_fast.convert_tokens_to_ids('<blank>')}")
     tokenizer_converted_fast.add_special_tokens(
         {
             "pad_token": AddedToken("<pad>", normalized=False, special=True),
@@ -193,7 +197,6 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
             raise ValueError(f"Key {key} not found in feature_extractor_keys_mapping")
 
     feature_extractor = ParakeetFeatureExtractor(**converted_feature_extractor_config)
-
     processor = ParakeetProcessor(
         feature_extractor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
@@ -248,7 +251,6 @@ def convert_encoder_config(nemo_config):
             continue
         if key in encoder_config_keys_mapping:
             converted_encoder_config[encoder_config_keys_mapping[key]] = value
-            # NeMo uses 'use_bias' for both attention and convolution bias, but HF separates them
             if key == "use_bias":
                 converted_encoder_config["convolution_bias"] = value
         else:
@@ -262,7 +264,6 @@ def load_and_convert_state_dict(model_files):
     state_dict = torch.load(model_files["model_weights"], map_location="cpu", weights_only=True)
     converted_state_dict = {}
     for key, value in state_dict.items():
-        # Skip preprocessing weights (featurizer components)
         if key.endswith("featurizer.window") or key.endswith("featurizer.fb"):
             print(f"Skipping preprocessing weight: {key}")
             continue
@@ -291,28 +292,82 @@ def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_re
 
     del model
 
-    # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
     ParakeetForCTC.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 
-def write_encoder_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id=None):
-    """Write encoder model using encoder config and converted state dict."""
-    # Filter to only encoder weights (exclude CTC head if present)
-    encoder_state_dict = {
-        k.replace("encoder.", "", 1) if k.startswith("encoder.") else k: v
-        for k, v in converted_state_dict.items()
-        if k.startswith("encoder.")
-    }
+def convert_tdt_config(nemo_config, encoder_config):
+    """Convert NeMo TDT config to HF TDT config."""
+    decoder_config = nemo_config["decoder"]
+    decoding_config = nemo_config["decoding"]
+    labels = nemo_config["labels"]
+    blank_token_id = len(labels)
+    vocab_size = len(labels) + 1  # +1 for blank token, which is added to tokenizer
 
-    print("Loading the checkpoint in a Parakeet Encoder model (for TDT).")
+    prednet = decoder_config.get("prednet", {})
+    decoder_hidden_size = prednet.get("pred_hidden", 640)
+    num_decoder_layers = prednet.get("pred_rnn_layers", 2)
+    durations = decoding_config.get("durations", [0, 1, 2, 3, 4])
+    print(
+        f"TDT config: vocab_size={vocab_size} (including blank token), "
+        f"decoder_hidden={decoder_hidden_size}, "
+        f"decoder_layers={num_decoder_layers}, durations={durations}, "
+    )
+
+    return ParakeetTDTConfig(
+        vocab_size=vocab_size,
+        decoder_hidden_size=decoder_hidden_size,
+        num_decoder_layers=num_decoder_layers,
+        durations=durations,
+        hidden_act="relu",
+        max_symbols_per_step=10,
+        encoder_config=encoder_config.to_dict(),
+        pad_token_id=labels.index("<pad>"),
+        blank_token_id=blank_token_id,  # blank token is different from pad token for TDT
+    )
+
+
+def load_and_convert_tdt_state_dict(model_files, vocab_size):
+    """Load NeMo TDT state dict and convert keys to HF format, splitting combined head."""
+    state_dict = torch.load(model_files["model_weights"], map_location="cpu", weights_only=True)
+    converted_state_dict = {}
+
+    all_mappings = {**NEMO_TO_HF_WEIGHT_MAPPING, **NEMO_TDT_WEIGHT_MAPPING}
+
+    for key, value in state_dict.items():
+        if key.endswith("featurizer.window") or key.endswith("featurizer.fb"):
+            print(f"Skipping preprocessing weight: {key}")
+            continue
+
+        converted_key = convert_key(key, all_mappings)
+        converted_state_dict[converted_key] = value
+
+    return converted_state_dict
+
+
+def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id=None):
+    """Write TDT model using encoder config, TDT config, and converted state dict."""
+    model_config = convert_tdt_config(nemo_config, encoder_config)
+    print(f"Converted TDT config: {model_config}")
+
+    converted_state_dict = load_and_convert_tdt_state_dict(model_files, model_config.vocab_size)
+
+    print("Loading the checkpoint in a Parakeet TDT model.")
     with torch.device("meta"):
-        model = ParakeetEncoder(encoder_config)
+        model = ParakeetForTDT(model_config)
 
-    model.load_state_dict(encoder_state_dict, strict=True, assign=True)
-    print("Checkpoint loaded successfully.")
+    missing_keys, unexpected_keys = model.load_state_dict(converted_state_dict, strict=False, assign=True)
+
+    if missing_keys:
+        print(f"Warning: Missing keys: {missing_keys}")
+    if unexpected_keys:
+        print(f"Warning: Unexpected keys: {unexpected_keys}")
+
+    if not missing_keys and not unexpected_keys:
+        print("All weights loaded successfully!")
+
     del model.config._name_or_path
 
     print("Saving the model.")
@@ -320,29 +375,25 @@ def write_encoder_model(encoder_config, converted_state_dict, output_dir, push_t
 
     if push_to_repo_id:
         model.push_to_hub(push_to_repo_id)
+
     del model
 
-    # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    ParakeetEncoder.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    ParakeetForTDT.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 
 def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id=None):
     """Main model conversion function."""
-    # Step 1: Convert encoder config (shared across all model types)
     encoder_config = convert_encoder_config(nemo_config)
     print(f"Converted encoder config: {encoder_config}")
 
-    # Step 2: Load and convert state dict (shared across all model types)
-    converted_state_dict = load_and_convert_state_dict(model_files)
-
-    # Step 3: Write model based on type
-    if model_type == "encoder":
-        write_encoder_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id)
-    elif model_type == "ctc":
+    if model_type == "ctc":
+        converted_state_dict = load_and_convert_state_dict(model_files)
         write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id)
+    elif model_type == "tdt":
+        write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id)
     else:
         raise ValueError(f"Model type {model_type} not supported.")
 
@@ -359,16 +410,33 @@ def main(
     model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
     nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
 
-    write_processor(nemo_config, model_files, output_dir, push_to_repo_id)
+    write_processor(nemo_config, model_files, output_dir, model_type, push_to_repo_id)
     write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id)
 
 
+"""
+CTC conversion example:
+```bash
+python src/transformers/models/parakeet/convert_nemo_to_hf.py \
+    --hf_repo_id nvidia/parakeet-ctc-1.1b \
+    --model_type ctc \
+    --output_dir OUTPUT_DIR  \
+    --push_to_repo_id USERNAME/parakeet-ctc-1.1b
+```
+
+TDT conversion example:
+```bash
+python src/transformers/models/parakeet/convert_nemo_to_hf.py \
+    --hf_repo_id nvidia/parakeet-tdt-0.6b-v3 \
+    --model_type tdt \
+    --output_dir OUTPUT_DIR  \
+    --push_to_repo_id USERNAME/parakeet-tdt-0.6b-v3-hf
+```
+"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf_repo_id", required=True, help="Model repo on huggingface.co")
-    parser.add_argument(
-        "--model_type", required=True, choices=["encoder", "ctc"], help="Model type (`encoder`, `ctc`)"
-    )
+    parser.add_argument("--model_type", required=True, choices=["ctc", "tdt"], help="Model type (`ctc`, `tdt`)")
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument("--push_to_repo_id", help="Repository ID to push the model to on the Hub")
     args = parser.parse_args()
