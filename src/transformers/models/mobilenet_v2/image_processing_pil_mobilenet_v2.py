@@ -33,11 +33,8 @@ from ...utils.import_utils import requires
 from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring

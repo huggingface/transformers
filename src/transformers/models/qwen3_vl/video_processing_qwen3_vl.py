@@ -16,15 +16,17 @@
 import math
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ChannelDimension, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available, logging
+from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_available, logging
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
+
+if is_torch_available():
+    import torch
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF

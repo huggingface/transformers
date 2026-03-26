@@ -19,13 +19,12 @@ from ...image_processing_backends import PilBackend
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging, requires_backends
 from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
 
 
-if is_torch_available():
-    import torch
+import torch
 if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTObjectDetectionOutput
 
@@ -33,6 +32,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class OwlViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
@@ -63,8 +63,7 @@ class OwlViTImageProcessorPil(PilBackend):
         self,
         outputs: "OwlViTObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: TensorType | list[tuple] | None = None,
-    ):
+        target_sizes: TensorType | list[tuple] | None = None):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.

@@ -26,9 +26,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_glm46v import Glm46VImageProcessorKwargs, smart_resize
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Glm46VImageProcessorPil(PilBackend):
     do_resize = True

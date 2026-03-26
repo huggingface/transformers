@@ -31,6 +31,7 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
@@ -99,6 +100,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class ViltImageProcessorPil(PilBackend):
     valid_kwargs = ViltImageProcessorKwargs

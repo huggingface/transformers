@@ -15,14 +15,17 @@
 
 import math
 
-import torch
-
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 if is_torchvision_available():

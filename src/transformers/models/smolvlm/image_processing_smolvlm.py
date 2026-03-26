@@ -23,7 +23,6 @@
 import math
 
 import numpy as np
-import torch
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -37,7 +36,11 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+
+
+if is_torch_available():
+    import torch
 
 
 if is_torchvision_available():

@@ -29,27 +29,20 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
-)
+    get_image_size)
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
+    requires_backends)
 from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
@@ -71,8 +64,7 @@ def _get_resize_output_image_size(
     input_image: np.ndarray,
     output_size: tuple[int, int],
     keep_aspect_ratio: bool,
-    multiple: int,
-) -> tuple[int, int]:
+    multiple: int) -> tuple[int, int]:
     """Get the output size for resizing an image."""
     input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
     output_height, output_width = output_size
@@ -123,8 +115,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         self,
         images: ImageInput,
         prompt_depth: ImageInput | None = None,
-        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs]) -> BatchFeature:
         r"""
         prompt_depth (`ImageInput`, *optional*):
             Prompt depth to preprocess.
@@ -137,8 +128,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
-    ) -> np.ndarray:
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None) -> np.ndarray:
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
         """
@@ -150,21 +140,18 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
             image,
             output_size=(size.height, size.width),
             keep_aspect_ratio=keep_aspect_ratio,
-            multiple=ensure_multiple_of,
-        )
+            multiple=ensure_multiple_of)
 
         # Standard resize method with calculated output size
         return self.resize(
             image=image,
             size=SizeDict(height=output_size[0], width=output_size[1]),
-            resample=resample,
-        )
+            resample=resample)
 
     def pad_image(
         self,
         image: np.ndarray,
-        size_divisor: int,
-    ) -> np.ndarray:
+        size_divisor: int) -> np.ndarray:
         """
         Center pad an image to be a multiple of size_divisor.
         """
@@ -190,8 +177,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
             mode=PaddingMode.CONSTANT,
             constant_values=0,
             data_format=ChannelDimension.FIRST,
-            input_data_format=ChannelDimension.FIRST,
-        )
+            input_data_format=ChannelDimension.FIRST)
 
         return padded_image
 
@@ -204,8 +190,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         device: Union[str, "torch.device"] | None = None,
         return_tensors: str | TensorType | None = None,
         prompt_scale_to_meter: float | None = None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         """
         Preprocess image-like inputs, including the main images and optional prompt depth.
         """
@@ -225,8 +210,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
                 do_convert_rgb=False,  # Depth maps should not be converted
                 input_data_format=input_data_format,
                 device=device,
-                expected_ndims=2,
-            )
+                expected_ndims=2)
 
             # Validate prompt_depths has same length as images as in slow processor
             if len(processed_prompt_depths) != len(images):
@@ -271,8 +255,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         keep_aspect_ratio: bool | None = None,
         ensure_multiple_of: int | None = None,
         size_divisor: int | None = None,
-        **kwargs,
-    ) -> list[np.ndarray]:
+        **kwargs) -> list[np.ndarray]:
         """
         Override the base _preprocess method to handle custom PromptDepthAnything parameters.
         """
@@ -284,8 +267,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
                     size=size,
                     keep_aspect_ratio=keep_aspect_ratio,
                     ensure_multiple_of=ensure_multiple_of,
-                    resample=resample,
-                )
+                    resample=resample)
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
             if do_normalize:
@@ -299,8 +281,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
-    ) -> list[dict[str, TensorType]]:
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.

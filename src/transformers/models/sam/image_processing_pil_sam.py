@@ -38,12 +38,10 @@ from ...utils.import_utils import requires
 from .image_processing_sam import SamImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
+import torch
     import torch.nn.functional as F
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 if is_vision_available():
     import PIL

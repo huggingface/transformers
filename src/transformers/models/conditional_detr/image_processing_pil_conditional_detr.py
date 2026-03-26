@@ -68,9 +68,8 @@ from .image_processing_conditional_detr import (
 
 if is_vision_available():
     import PIL.Image
-if is_torch_available():
-    import torch
-    from torch import nn
+import torch
+from torch import nn
 
 
 logger = logging.get_logger(__name__)
@@ -263,6 +262,7 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class ConditionalDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

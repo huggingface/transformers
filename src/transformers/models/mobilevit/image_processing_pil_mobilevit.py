@@ -26,26 +26,19 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    SizeDict,
-)
+    SizeDict)
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
     logging,
-    requires_backends,
-)
+    requires_backends)
 from ...utils.import_utils import requires
 from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -79,8 +72,7 @@ class MobileViTImageProcessorPil(PilBackend):
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
-        **kwargs: Unpack[MobileVitImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[MobileVitImageProcessorKwargs]) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
             The segmentation maps to preprocess.
@@ -95,8 +87,7 @@ class MobileViTImageProcessorPil(PilBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         """Handle extra inputs beyond images."""
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
@@ -111,8 +102,7 @@ class MobileViTImageProcessorPil(PilBackend):
                 images=segmentation_maps,
                 expected_ndims=2,
                 do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
+                input_data_format=ChannelDimension.FIRST)
 
             segmentation_maps_kwargs = kwargs.copy()
             segmentation_maps_kwargs.update(
@@ -161,8 +151,7 @@ class MobileViTImageProcessorPil(PilBackend):
         rescale_factor: float,
         do_reduce_labels: bool = False,
         do_flip_channel_order: bool = True,
-        **kwargs,
-    ) -> list[np.ndarray]:
+        **kwargs) -> list[np.ndarray]:
         """Custom preprocessing for MobileViT."""
         processed_images = []
         for image in images:

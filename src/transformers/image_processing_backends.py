@@ -63,15 +63,18 @@ from .utils import (
 from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
 
 
-from .image_utils import PILImageResampling
+if is_vision_available():
+    from .image_utils import PILImageResampling
 
+if is_torch_available():
+    import torch
 
-import torch
-
-
-from torchvision.transforms.v2 import functional as tvF
-
-from .image_utils import pil_torch_interpolation_mapping, torch_pil_interpolation_mapping
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
+    from .image_utils import pil_torch_interpolation_mapping, torch_pil_interpolation_mapping
+else:
+    pil_torch_interpolation_mapping = None
+    torch_pil_interpolation_mapping = None
 
 
 

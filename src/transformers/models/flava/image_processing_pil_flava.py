@@ -29,6 +29,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
@@ -44,6 +45,7 @@ from .image_processing_flava import (
 )
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class FlavaImageProcessorPil(PilBackend):
     valid_kwargs = FlavaImageProcessorKwargs

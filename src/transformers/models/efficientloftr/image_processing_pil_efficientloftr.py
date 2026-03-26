@@ -12,7 +12,7 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_vision_available
 from ...utils.import_utils import requires, requires_backends
 from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
@@ -21,23 +21,19 @@ from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
-if is_torch_available():
-    import torch
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 def is_grayscale(
-    image: np.ndarray,
-):
+    image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
 
 
 def convert_to_grayscale(
-    image: ImageInput,
-) -> ImageInput:
+    image: ImageInput) -> ImageInput:
     """
     Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
@@ -88,8 +84,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
     def _prepare_images_structure(
         self,
         images: ImageInput,
-        **kwargs,
-    ) -> ImageInput:
+        **kwargs) -> ImageInput:
         # we need to handle image pairs validation and flattening
         images = self.fetch_images(images)
         return validate_and_format_image_pairs(images)
@@ -104,8 +99,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
         rescale_factor: float,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = True,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         all_images = []
         for image in images:
             if do_resize:
@@ -130,8 +124,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
         self,
         outputs: "EfficientLoFTRKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+        threshold: float = 0.0) -> list[dict[str, torch.Tensor]]:
         """
         Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -189,8 +182,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
     def visualize_keypoint_matching(
         self,
         images: ImageInput,
-        keypoint_matching_output: list[dict[str, torch.Tensor]],
-    ) -> list["Image.Image"]:
+        keypoint_matching_output: list[dict[str, torch.Tensor]]) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
 
@@ -229,13 +221,11 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
                 draw.line(
                     (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
                     fill=color,
-                    width=3,
-                )
+                    width=3)
                 draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
                 draw.ellipse(
                     (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),
-                    fill="black",
-                )
+                    fill="black")
 
             results.append(plot_image_pil)
         return results

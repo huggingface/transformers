@@ -37,8 +37,7 @@ from ...utils.import_utils import requires
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
+import torch
     import torch.nn.functional as F
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF

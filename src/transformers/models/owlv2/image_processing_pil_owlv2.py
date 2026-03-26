@@ -46,8 +46,7 @@ if is_scipy_available():
 
 if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ObjectDetectionOutput
-if is_torch_available():
-    import torch
+import torch
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
@@ -152,6 +151,7 @@ def _scale_boxes(boxes, target_sizes):
     return boxes
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Owlv2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

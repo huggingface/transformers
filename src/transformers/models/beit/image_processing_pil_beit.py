@@ -31,12 +31,10 @@ from ...utils.import_utils import requires
 from .image_processing_beit import BeitImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
+import torch
+import torch.nn.functional as F
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring

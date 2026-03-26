@@ -55,9 +55,7 @@ from .image_processing_deformable_detr import DeformableDetrImageProcessorKwargs
 
 if is_vision_available():
     import PIL.Image
-if is_torch_available():
-    import torch
-
+import torch
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
@@ -246,6 +244,7 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class DeformableDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

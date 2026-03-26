@@ -26,9 +26,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Swin2SRImageProcessorPil(PilBackend):
     """PIL backend for Swin2SR with custom pad."""

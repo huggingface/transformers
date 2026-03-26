@@ -21,15 +21,12 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs, torch_extract_patches
 
 
-if is_torch_available():
-    import torch
-
-
+import torch
 @auto_docstring
 @requires(backends=("vision", "torch", "torchvision"))
 class Kosmos2_5ImageProcessorPil(PilBackend):
@@ -50,8 +47,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
     def normalize(
         self,
         image: np.ndarray,
-        **kwargs,
-    ) -> np.ndarray:
+        **kwargs) -> np.ndarray:
         """
         Normalize an image using per-image mean and standard deviation.
 
@@ -76,8 +72,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         max_patches: int,
-        patch_size: SizeDict,
-    ) -> tuple[np.ndarray, int, int, int, int]:
+        patch_size: SizeDict) -> tuple[np.ndarray, int, int, int, int]:
         """
         Extract flattened patches from an image. Uses torch for patch extraction.
 
@@ -117,8 +112,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
             size=(resized_height, resized_width),
             mode="bilinear",
             align_corners=False,
-            antialias=True,
-        )
+            antialias=True)
 
         # [1, rows, columns, patch_height * patch_width * image_channels]
         patches = torch_extract_patches(image_tensor, patch_height, patch_width)
@@ -171,8 +165,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
         max_patches: int,
         patch_size: SizeDict,
         return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         if kwargs.get("data_format") is not None:
             raise ValueError("data_format is not an accepted input as the outputs are ")
 
@@ -186,8 +179,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
             patches, resized_width, resized_height, n_rows, n_columns = self.extract_flattened_patches(
                 image=image,
                 max_patches=max_patches,
-                patch_size=patch_size,
-            )
+                patch_size=patch_size)
             flattened_patches.append(patches)
             width.append(resized_width)
             height.append(resized_height)
@@ -205,8 +197,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
                 "rows": rows,
                 "cols": cols,
             },
-            tensor_type=return_tensors,
-        )
+            tensor_type=return_tensors)
 
         return encoded_outputs
 
@@ -219,8 +210,7 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
     def _standardize_kwargs(
         self,
         patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+        **kwargs) -> dict:
         """
         Process Kosmos2_5-specific kwargs before validation.
         """

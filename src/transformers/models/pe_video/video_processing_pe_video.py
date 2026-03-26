@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
+from ...utils import is_torch_available
 from ...video_processing_utils import BaseVideoProcessor, VideoMetadata
 from ...video_utils import VideoInput
+
+
+if is_torch_available():
+    import torch
 
 
 class PeVideoVideoProcessor(BaseVideoProcessor):

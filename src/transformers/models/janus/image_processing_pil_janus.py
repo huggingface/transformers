@@ -34,6 +34,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
     is_vision_available,
@@ -41,10 +42,10 @@ from ...utils import (
 from .image_processing_janus import JanusImageProcessorKwargs
 
 
-if is_vision_available():
-    import PIL
+import PIL
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class JanusImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

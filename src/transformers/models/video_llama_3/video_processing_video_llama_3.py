@@ -20,8 +20,6 @@
 import math
 from typing import Optional
 
-import torch
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -32,11 +30,14 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, add_start_docstrings, is_torchvision_available
+from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_available
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from .image_processing_video_llama_3 import smart_resize
 
+
+if is_torch_available():
+    import torch
 
 if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF

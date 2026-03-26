@@ -27,9 +27,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_poolformer import PoolFormerImageProcessorKwargs
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class PoolFormerImageProcessorPil(PilBackend):
     """PIL backend for PoolFormer with custom resize (crop_pct)."""

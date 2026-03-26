@@ -26,18 +26,14 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    SizeDict,
-)
+    SizeDict)
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
     is_scipy_available,
-    is_torch_available,
-    is_torchvision_available,
     logging,
-    requires_backends,
-)
+    requires_backends)
 from ...utils.import_utils import requires
 from .image_processing_vitpose import (
     VitPoseImageProcessorKwargs,
@@ -47,15 +43,11 @@ from .image_processing_vitpose import (
     get_warp_matrix,
     post_dark_unbiased_data_processing,
     scipy_warp_affine,
-    transform_preds,
-)
+    transform_preds)
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 if is_scipy_available():
     pass
@@ -90,8 +82,7 @@ class VitPoseImageProcessorPil(PilBackend):
         self,
         images: ImageInput,
         boxes: list[list[list[float]]] | np.ndarray,
-        **kwargs: Unpack[VitPoseImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[VitPoseImageProcessorKwargs]) -> BatchFeature:
         r"""
         boxes (`list[list[list[float]]]` or `np.ndarray`):
             List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the
@@ -106,8 +97,7 @@ class VitPoseImageProcessorPil(PilBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         """Handle extra inputs beyond images."""
         images = self._prepare_image_like_inputs(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
@@ -122,8 +112,7 @@ class VitPoseImageProcessorPil(PilBackend):
         center: tuple[float],
         scale: tuple[float],
         rotation: float,
-        size: SizeDict,
-    ) -> np.ndarray:
+        size: SizeDict) -> np.ndarray:
         """Apply an affine transformation to an image."""
         size_tuple = (size.width, size.height)
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size_tuple) - 1.0, scale * 200.0)
@@ -155,8 +144,7 @@ class VitPoseImageProcessorPil(PilBackend):
         do_affine_transform: bool = True,
         normalize_factor: float = 200.0,
         boxes: list | np.ndarray | None = None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         """Custom preprocessing for VitPose."""
         if boxes is not None and do_affine_transform:
             transformed_images = []
@@ -166,8 +154,7 @@ class VitPoseImageProcessorPil(PilBackend):
                         box,
                         image_width=size.width,
                         image_height=size.height,
-                        normalize_factor=normalize_factor,
-                    )
+                        normalize_factor=normalize_factor)
                     transformed_image = self.affine_transform(image, center, scale, rotation=0, size=size)
                     transformed_images.append(transformed_image)
             images = transformed_images
@@ -186,8 +173,7 @@ class VitPoseImageProcessorPil(PilBackend):
         heatmaps: np.ndarray,
         center: np.ndarray,
         scale: np.ndarray,
-        kernel: int = 11,
-    ):
+        kernel: int = 11):
         """Get final keypoint predictions from heatmaps and transform them back to the image."""
         batch_size, _, height, width = heatmaps.shape
         coords, scores = get_keypoint_predictions(heatmaps)
@@ -202,8 +188,7 @@ class VitPoseImageProcessorPil(PilBackend):
         boxes: list[list[list[float]]] | np.ndarray,
         kernel_size: int = 11,
         threshold: float | None = None,
-        target_sizes: TensorType | list[tuple] | None = None,
-    ):
+        target_sizes: TensorType | list[tuple] | None = None):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 

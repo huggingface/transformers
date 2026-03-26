@@ -39,9 +39,8 @@ from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
-if is_torch_available():
-    import torch
-    from torch import nn
+import torch
+from torch import nn
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF

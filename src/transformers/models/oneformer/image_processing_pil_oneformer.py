@@ -27,25 +27,19 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    get_max_height_width,
-)
+    get_max_height_width)
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-)
+    logging)
 from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
-    from torch import nn
+import torch
+from torch import nn
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 from .image_processing_oneformer import (
     OneFormerImageProcessorKwargs,
@@ -53,8 +47,7 @@ from .image_processing_oneformer import (
     convert_segmentation_to_rle,
     load_metadata,
     prepare_metadata,
-    remove_low_and_no_objects,
-)
+    remove_low_and_no_objects)
 
 
 logger = logging.get_logger(__name__)
@@ -114,8 +107,7 @@ class OneFormerImageProcessorPil(PilBackend):
         task_inputs: list[str] | None = None,
         segmentation_maps: ImageInput | None = None,
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
-        **kwargs: Unpack[OneFormerImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[OneFormerImageProcessorKwargs]) -> BatchFeature:
         r"""
         task_inputs (`list[str]`, *optional*):
             List of tasks (`"panoptic"`, `"instance"`, `"semantic"`) for each image in the batch.
@@ -134,8 +126,7 @@ class OneFormerImageProcessorPil(PilBackend):
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        **kwargs: Unpack[OneFormerImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[OneFormerImageProcessorKwargs]) -> BatchFeature:
         """
         Preprocess image-like inputs.
         To be overridden by subclasses when image-like inputs other than images should be processed.
@@ -150,8 +141,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 images=segmentation_maps,
                 expected_ndims=2,
                 do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
+                input_data_format=ChannelDimension.FIRST)
         return self._preprocess(images, task_inputs, segmentation_maps, instance_id_to_semantic_id, **kwargs)
 
     def _preprocess(
@@ -171,8 +161,7 @@ class OneFormerImageProcessorPil(PilBackend):
         ignore_index: int | None,
         do_reduce_labels: bool | None,
         return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         # Process images one by one (no batching in PIL backend)
         processed_images = []
         processed_segmentation_maps = None
@@ -201,8 +190,7 @@ class OneFormerImageProcessorPil(PilBackend):
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             ignore_index=ignore_index,
             do_reduce_labels=do_reduce_labels,
-            return_tensors=return_tensors,
-        )
+            return_tensors=return_tensors)
 
         return encoded_inputs
 
@@ -210,8 +198,7 @@ class OneFormerImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         output_size: tuple[int, int],
-        constant_values: float = 0,
-    ) -> np.ndarray:
+        constant_values: float = 0) -> np.ndarray:
         """
         Pad an image with zeros to the given size using numpy operations.
 
@@ -245,8 +232,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 mode=PaddingMode.CONSTANT,
                 constant_values=constant_values,
                 data_format=ChannelDimension.FIRST,
-                input_data_format=ChannelDimension.FIRST,
-            )
+                input_data_format=ChannelDimension.FIRST)
 
         return padded_image
 
@@ -254,8 +240,7 @@ class OneFormerImageProcessorPil(PilBackend):
         self,
         images: list[np.ndarray],
         return_pixel_mask: bool = True,
-        return_tensors: str | TensorType | None = None,
-    ) -> BatchFeature:
+        return_tensors: str | TensorType | None = None) -> BatchFeature:
         """
         Pad a batch of images to the same size using numpy operations.
 
@@ -299,8 +284,7 @@ class OneFormerImageProcessorPil(PilBackend):
         segmentation_map: np.ndarray,
         instance_id_to_semantic_id: dict[int, int] | None = None,
         ignore_index: int | None = None,
-        do_reduce_labels: bool = False,
-    ):
+        do_reduce_labels: bool = False):
         """Convert segmentation map to binary masks using NumPy operations."""
         if do_reduce_labels and ignore_index is None:
             raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
@@ -461,8 +445,7 @@ class OneFormerImageProcessorPil(PilBackend):
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
         ignore_index: int | None = None,
         do_reduce_labels: bool = False,
-        return_tensors: str | TensorType | None = None,
-    ) -> BatchFeature:
+        return_tensors: str | TensorType | None = None) -> BatchFeature:
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         do_reduce_labels = self.do_reduce_labels if do_reduce_labels is None else do_reduce_labels
         if task_inputs is None:
@@ -475,8 +458,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 images=segmentation_maps,
                 expected_ndims=2,
                 do_convert_rgb=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
+                input_data_format=ChannelDimension.FIRST)
         pad_size = get_max_height_width(pixel_values_list, input_data_format=ChannelDimension.FIRST)
         encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
 
@@ -499,8 +481,7 @@ class OneFormerImageProcessorPil(PilBackend):
                     segmentation_map,
                     instance_id,
                     ignore_index=ignore_index,
-                    do_reduce_labels=do_reduce_labels,
-                )
+                    do_reduce_labels=do_reduce_labels)
 
                 annotations.append({"masks": masks, "classes": classes})
 
@@ -605,8 +586,7 @@ class OneFormerImageProcessorPil(PilBackend):
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: list[tuple[int, int]] | None = None,
-        return_coco_annotation: bool | None = False,
-    ):
+        return_coco_annotation: bool | None = False):
         """
         Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image instance segmentation
         predictions. Only supports PyTorch.
@@ -705,8 +685,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 mask_threshold,
                 overlap_mask_area_threshold,
                 set(),
-                target_size,
-            )
+                target_size)
 
             # Return segmentation map in run-length encoding (RLE) format
             if return_coco_annotation:
@@ -723,8 +702,7 @@ class OneFormerImageProcessorPil(PilBackend):
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: set[int] | None = None,
-        target_sizes: list[tuple[int, int]] | None = None,
-    ) -> list[dict]:
+        target_sizes: list[tuple[int, int]] | None = None) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
@@ -800,8 +778,7 @@ class OneFormerImageProcessorPil(PilBackend):
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
                 label_ids_to_fuse=label_ids_to_fuse,
-                target_size=target_size,
-            )
+                target_size=target_size)
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results

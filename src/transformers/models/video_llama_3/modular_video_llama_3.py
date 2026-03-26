@@ -16,10 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
-import torch
-import torch.nn as nn
 from huggingface_hub.dataclasses import strict
-from torch.nn import LayerNorm
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -43,8 +40,15 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
+    is_torch_available,
     logging,
 )
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    from torch.nn import LayerNorm
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (

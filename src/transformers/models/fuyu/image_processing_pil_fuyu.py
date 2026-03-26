@@ -23,25 +23,18 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
-)
+    get_image_size)
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
+    requires_backends)
 from ...utils.import_utils import requires
 from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
@@ -74,8 +67,7 @@ class FuyuImageProcessorPil(PilBackend):
     def _prepare_images_structure(
         self,
         images: ImageInput,
-        expected_ndims: int = 3,
-    ) -> ImageInput:
+        expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_list_of_list_of_images(images)
 
@@ -84,8 +76,7 @@ class FuyuImageProcessorPil(PilBackend):
         image: np.ndarray,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
-        **kwargs,
-    ) -> np.ndarray:
+        **kwargs) -> np.ndarray:
         """
         Resize an image to fit within `(size.height, size.width)` while maintaining aspect ratio.
         Only resizes if the image is larger than the target size.
@@ -128,8 +119,7 @@ class FuyuImageProcessorPil(PilBackend):
         padding_value: float | None,
         padding_mode: str | None,
         return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> FuyuBatchFeature:
+        **kwargs) -> FuyuBatchFeature:
         # Process nested images one by one
         original_image_sizes = []
         processed_images = []
@@ -187,8 +177,7 @@ class FuyuImageProcessorPil(PilBackend):
                 "image_unpadded_widths": image_unpadded_widths,
                 "image_scale_factors": image_scale_factors,
             },
-            tensor_type=return_tensors,
-        )
+            tensor_type=return_tensors)
 
     def get_num_patches(self, image_height: int, image_width: int, patch_size: SizeDict | None = None) -> int:
         """
@@ -301,8 +290,7 @@ class FuyuImageProcessorPil(PilBackend):
         image_placeholder_id: int,
         image_newline_id: int,
         variable_sized: bool,
-        patch_size: dict[str, int] | None = None,
-    ) -> FuyuBatchFeature:
+        patch_size: dict[str, int] | None = None) -> FuyuBatchFeature:
         """
         Process images for model input. In particular, variable-sized images are handled here.
         This method uses PyTorch operations as it operates on model inputs which are tensors.
@@ -353,12 +341,10 @@ class FuyuImageProcessorPil(PilBackend):
                         # The min() is required here due to floating point issues
                         new_h = min(
                             image_height,
-                            math.ceil(image_unpadded_h[batch_index, subseq_index] / patch_height) * patch_height,
-                        )
+                            math.ceil(image_unpadded_h[batch_index, subseq_index] / patch_height) * patch_height)
                         new_w = min(
                             image_width,
-                            math.ceil(image_unpadded_w[batch_index, subseq_index] / patch_width) * patch_width,
-                        )
+                            math.ceil(image_unpadded_w[batch_index, subseq_index] / patch_width) * patch_width)
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
                     num_patches = self.get_num_patches(
@@ -380,8 +366,7 @@ class FuyuImageProcessorPil(PilBackend):
                             [tensor_of_image_ids.shape[0], 1],
                             image_newline_id,
                             dtype=torch.int32,
-                            device=image_input.device,
-                        )
+                            device=image_input.device)
                         tensor_of_image_ids = torch.cat([tensor_of_image_ids, newline_ids], dim=1)
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
                     images.append([image])
@@ -433,8 +418,7 @@ class FuyuImageProcessorPil(PilBackend):
     def _standardize_kwargs(
         self,
         patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+        **kwargs) -> dict:
         """
         Process Fuyu-specific kwargs before validation.
         """

@@ -71,9 +71,7 @@ if TYPE_CHECKING:
 
 if is_vision_available():
     import PIL.Image
-if is_torch_available():
-    import torch
-
+import torch
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
@@ -290,6 +288,7 @@ def _scale_boxes(boxes, target_sizes):
     return boxes
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class GroundingDinoImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

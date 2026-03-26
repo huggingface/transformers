@@ -30,6 +30,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
@@ -37,6 +38,7 @@ from ...utils import (
 from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Gemma3ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

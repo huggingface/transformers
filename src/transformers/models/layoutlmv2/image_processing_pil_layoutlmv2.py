@@ -26,9 +26,11 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_layoutlmv2 import LayoutLMv2ImageProcessorKwargs, apply_tesseract
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class LayoutLMv2ImageProcessorPil(PilBackend):
     valid_kwargs = LayoutLMv2ImageProcessorKwargs

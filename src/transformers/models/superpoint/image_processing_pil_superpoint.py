@@ -21,7 +21,7 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
@@ -29,11 +29,8 @@ from .image_processing_superpoint import SuperPointImageProcessorKwargs
 if TYPE_CHECKING:
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 def is_grayscale(image: np.ndarray) -> bool:
@@ -89,8 +86,7 @@ class SuperPointImageProcessorPil(PilBackend):
         rescale_factor: float,
         return_tensors: str | TensorType | None,
         do_grayscale: bool = False,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         processed_images = []
         for image in images:
             # Resize (must happen before grayscale for PIL backend to work correctly)

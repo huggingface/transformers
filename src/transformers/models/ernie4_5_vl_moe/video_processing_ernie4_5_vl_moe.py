@@ -18,11 +18,9 @@ from shutil import SameFileError, copyfile
 from typing import Any
 
 import numpy as np
-import torch
 from huggingface_hub import is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from PIL import ImageDraw, ImageFont
-from torchvision.transforms.functional import pil_to_tensor, to_pil_image
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -45,7 +43,7 @@ from ...utils import (
     safe_load_json_file,
 )
 from ...utils.hub import cached_file
-from ...utils.import_utils import is_torchvision_available, is_tracing, requires
+from ...utils.import_utils import is_torch_available, is_torchvision_available, is_tracing, requires
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -57,7 +55,11 @@ from ...video_utils import (
 from .image_processing_ernie4_5_vl_moe import smart_resize
 
 
+if is_torch_available():
+    import torch
+
 if is_torchvision_available():
+    from torchvision.transforms.functional import pil_to_tensor, to_pil_image
     from torchvision.transforms.v2 import functional as tvF
 
 

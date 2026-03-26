@@ -23,6 +23,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
     is_torch_available,
@@ -50,6 +51,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class ImageGPTImageProcessorPil(PilBackend):
     model_input_names = ["input_ids"]

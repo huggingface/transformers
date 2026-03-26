@@ -52,8 +52,7 @@ from ...utils.import_utils import requires
 from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
-if is_torch_available():
-    import torch
+import torch
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 

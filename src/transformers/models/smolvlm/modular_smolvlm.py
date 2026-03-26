@@ -14,16 +14,19 @@
 # limitations under the License.
 
 
-import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging, torch_compilable_check
+
+
+if is_torch_available():
+    import torch
+    from torch import nn
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil

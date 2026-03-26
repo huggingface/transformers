@@ -18,9 +18,6 @@ from collections.abc import Callable
 from typing import Optional
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -48,9 +45,16 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_torch_available,
     is_torchvision_available,
     logging,
 )
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig

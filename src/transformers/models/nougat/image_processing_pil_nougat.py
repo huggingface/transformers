@@ -34,6 +34,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
@@ -41,6 +42,7 @@ from ...utils import (
 from .image_processing_nougat import NougatImageProcessorKwargs
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class NougatImageProcessorPil(PilBackend):
     valid_kwargs = NougatImageProcessorKwargs

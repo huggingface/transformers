@@ -37,6 +37,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_smolvlm import (
     MAX_IMAGE_SIZE,
     SmolVLMImageProcessorKwargs,
@@ -57,6 +58,7 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class SmolVLMImageProcessorPil(PilBackend):
     resample = PILImageResampling.LANCZOS

@@ -20,6 +20,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
+from ...utils.import_utils import requires
     TensorType,
     auto_docstring,
 )
@@ -57,6 +58,7 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
     return array, mask
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Siglip2ImageProcessorPil(PilBackend):
     valid_kwargs = Siglip2ImageProcessorKwargs

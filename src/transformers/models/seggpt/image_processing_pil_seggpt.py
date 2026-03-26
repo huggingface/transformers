@@ -23,19 +23,15 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    SizeDict,
-)
+    SizeDict)
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring
@@ -107,8 +103,7 @@ class SegGptImageProcessorPil(PilBackend):
         images: ImageInput | None = None,
         prompt_images: ImageInput | None = None,
         prompt_masks: ImageInput | None = None,
-        **kwargs: Unpack[SegGptImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[SegGptImageProcessorKwargs]) -> BatchFeature:
         r"""
         prompt_images (`ImageInput`, *optional*):
             Prompt images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
@@ -134,8 +129,7 @@ class SegGptImageProcessorPil(PilBackend):
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
         num_labels: int | None = None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         data = {}
 
         # Process regular images (do_convert_rgb=False: assume RGB, no mask conversion)
@@ -162,8 +156,7 @@ class SegGptImageProcessorPil(PilBackend):
                     images=prompt_masks,
                     expected_ndims=2,
                     do_convert_rgb=False,
-                    input_data_format=ChannelDimension.FIRST,
-                )
+                    input_data_format=ChannelDimension.FIRST)
                 palette = self.get_palette(num_labels) if num_labels is not None else None
                 prepared_masks = [self.mask_to_rgb(mask, palette=palette) for mask in prepared_masks]
             else:
@@ -189,8 +182,7 @@ class SegGptImageProcessorPil(PilBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        **kwargs,
-    ) -> list[np.ndarray]:
+        **kwargs) -> list[np.ndarray]:
         processed_images = []
         for image in images:
             if do_resize:
@@ -250,8 +242,7 @@ class SegGptImageProcessorPil(PilBackend):
                 mask = torch.nn.functional.interpolate(
                     mask.unsqueeze(0),
                     size=target_sizes[idx],
-                    mode="nearest",
-                )[0]
+                    mode="nearest")[0]
 
             if num_labels is not None:
                 channels, height, width = mask.shape

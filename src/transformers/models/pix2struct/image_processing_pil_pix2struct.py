@@ -23,19 +23,15 @@ from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_pix2struct import (
     Pix2StructImageProcessorKwargs,
     render_text,
-    torch_extract_patches,
-)
+    torch_extract_patches)
 
 
-if is_torch_available():
-    import torch
-
-
+import torch
 @auto_docstring
 @requires(backends=("vision", "torch", "torchvision"))
 class Pix2StructImageProcessorPil(PilBackend):
@@ -51,8 +47,7 @@ class Pix2StructImageProcessorPil(PilBackend):
     def _standardize_kwargs(
         self,
         patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+        **kwargs) -> dict:
         """
         Process custom Pix2Struct kwargs, specifically converting patch_size to SizeDict.
         """
@@ -77,8 +72,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         image: np.ndarray,
         header: str,
         font_bytes: bytes | None = None,
-        font_path: str | None = None,
-    ) -> np.ndarray:
+        font_path: str | None = None) -> np.ndarray:
         """
         Render header text on image using numpy arrays.
 
@@ -144,8 +138,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         max_patches: int,
-        patch_size: SizeDict,
-    ) -> np.ndarray:
+        patch_size: SizeDict) -> np.ndarray:
         """
         Extract flattened patches from an image. Uses torch for patch extraction.
 
@@ -180,8 +173,7 @@ class Pix2StructImageProcessorPil(PilBackend):
             size=(resized_height, resized_width),
             mode="bilinear",
             align_corners=False,
-            antialias=True,
-        )
+            antialias=True)
         image_torch = image_torch.squeeze(0)
 
         # Extract patches: [1, rows, columns, patch_height * patch_width * channels]
@@ -214,8 +206,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         self,
         images: ImageInput,
         header_text: str | list[str] | None = None,
-        **kwargs: Unpack[Pix2StructImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[Pix2StructImageProcessorKwargs]) -> BatchFeature:
         r"""
         header_text (`Union[str, list[str]]`, *optional*):
             Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
@@ -228,8 +219,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         header_text: str | list[str] | None = None,
         do_convert_rgb: bool = True,
         input_data_format: ChannelDimension = ChannelDimension.FIRST,
-        **kwargs: Unpack[Pix2StructImageProcessorKwargs],
-    ) -> BatchFeature:
+        **kwargs: Unpack[Pix2StructImageProcessorKwargs]) -> BatchFeature:
         """
         Preprocess images for Pix2Struct.
         """
@@ -237,8 +227,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         images = self._prepare_image_like_inputs(
             images=images,
             do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-        )
+            input_data_format=input_data_format)
 
         # Handle VQA mode with header rendering
         is_vqa = kwargs.get("is_vqa", self.is_vqa)
@@ -267,8 +256,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         max_patches: int,
         patch_size: SizeDict,
         return_tensors: str | TensorType | None,
-        **kwargs,
-    ) -> BatchFeature:
+        **kwargs) -> BatchFeature:
         """
         Preprocess images to extract flattened patches.
         """
@@ -294,8 +282,7 @@ class Pix2StructImageProcessorPil(PilBackend):
 
         return BatchFeature(
             data={"flattened_patches": flattened_patches, "attention_mask": attention_masks},
-            tensor_type=return_tensors,
-        )
+            tensor_type=return_tensors)
 
 
 __all__ = ["Pix2StructImageProcessorPil"]
