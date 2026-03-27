@@ -16,6 +16,7 @@
 import math
 
 import numpy as np
+import torch
 from PIL import Image
 
 from ...image_processing_backends import PilBackend
@@ -23,19 +24,13 @@ from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
-from .image_processing_pix2struct import (
-    Pix2StructImageProcessorKwargs,
-    render_text,
-    torch_extract_patches,
-)
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils.import_utils import requires
+from .image_processing_pix2struct import Pix2StructImageProcessorKwargs, render_text, torch_extract_patches
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Pix2StructImageProcessorPil(PilBackend):
     rescale_factor = None
     do_normalize = True
@@ -46,11 +41,7 @@ class Pix2StructImageProcessorPil(PilBackend):
     valid_kwargs = Pix2StructImageProcessorKwargs
     model_input_names = ["flattened_patches", "attention_mask"]
 
-    def _standardize_kwargs(
-        self,
-        patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, patch_size: dict[str, int] | SizeDict | None = None, **kwargs) -> dict:
         """
         Process custom Pix2Struct kwargs, specifically converting patch_size to SizeDict.
         """
@@ -71,11 +62,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         pass
 
     def render_header(
-        self,
-        image: np.ndarray,
-        header: str,
-        font_bytes: bytes | None = None,
-        font_path: str | None = None,
+        self, image: np.ndarray, header: str, font_bytes: bytes | None = None, font_path: str | None = None
     ) -> np.ndarray:
         """
         Render header text on image using numpy arrays.
@@ -138,12 +125,7 @@ class Pix2StructImageProcessorPil(PilBackend):
 
         return (image - mean) / adjusted_stddev
 
-    def extract_flattened_patches(
-        self,
-        image: np.ndarray,
-        max_patches: int,
-        patch_size: SizeDict,
-    ) -> np.ndarray:
+    def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: SizeDict) -> np.ndarray:
         """
         Extract flattened patches from an image. Uses torch for patch extraction.
 
@@ -233,9 +215,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         """
         # Prepare images (converts to numpy arrays)
         images = self._prepare_image_like_inputs(
-            images=images,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
         )
 
         # Handle VQA mode with header rendering

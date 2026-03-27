@@ -36,7 +36,8 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_smolvlm import (
     MAX_IMAGE_SIZE,
     SmolVLMImageProcessorKwargs,
@@ -48,10 +49,6 @@ from .image_processing_smolvlm import (
 )
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
     """Make pixel mask: 1=valid, 0=padding. Images are CHW."""
     h, w = image.shape[-2:]
@@ -60,6 +57,7 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class SmolVLMImageProcessorPil(PilBackend):
     resample = PILImageResampling.LANCZOS
@@ -196,7 +194,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

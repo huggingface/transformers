@@ -52,6 +52,7 @@ from ...utils import (
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
@@ -426,6 +427,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 class RTDetrImageProcessorPil(DetrImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

@@ -25,11 +25,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from ...utils import auto_docstring
 
 
 @auto_docstring
@@ -55,7 +51,7 @@ class LevitImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize: shortest_edge is rescaled to int((256/224) * shortest_edge)."""
