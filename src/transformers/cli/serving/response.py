@@ -18,6 +18,7 @@ Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -126,7 +127,7 @@ class ResponseHandler(BaseHandler):
                 tokenize=True,
             ).to(model.device)
 
-        gen_config = self._build_generation_config(body, model.generation_config, processor, use_cb=use_cb)
+        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
         if use_cb:
             gen_manager.init_cb(model, gen_config)
@@ -513,9 +514,9 @@ class ResponseHandler(BaseHandler):
         if unused:
             raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None, use_cb: bool = False):
+    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
         """Apply Responses API params (``max_output_tokens``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, processor, use_cb=use_cb)
+        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
 
         if body.get("max_output_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_output_tokens"])

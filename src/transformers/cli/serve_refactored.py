@@ -56,10 +56,6 @@ class Serve:
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
         ] = None,
         trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
-        # TODO: auto-detect processor from GGUF base_model metadata so this flag isn't needed
-        processor: Annotated[
-            str | None, typer.Option(help="Processor/tokenizer model ID. Needed for GGUF models.")
-        ] = None,
         model_timeout: Annotated[
             int, typer.Option(help="Seconds before idle model is unloaded. Ignored when model is set.")
         ] = 300,
@@ -117,7 +113,6 @@ class Serve:
             quantization=quantization,
             model_timeout=model_timeout,
             force_model=force_model,
-            processor_id=processor,
         )
         self._model_manager = model_manager
         self._generation_state = GenerationState(continuous_batching=continuous_batching)
@@ -126,7 +121,6 @@ class Serve:
             model_manager=model_manager,
             generation_state=self._generation_state,
             force_model=force_model,
-            force_processor=processor,
             compile=compile,
         )
 
@@ -134,7 +128,6 @@ class Serve:
             model_manager=model_manager,
             generation_state=self._generation_state,
             force_model=force_model,
-            force_processor=processor,
             compile=compile,
         )
 

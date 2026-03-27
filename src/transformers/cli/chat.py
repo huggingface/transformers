@@ -332,10 +332,6 @@ class Chat:
                 help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
             ),
         ] = None,
-        processor: Annotated[
-            str | None,
-            typer.Option(help="Processor/tokenizer model ID. Needed for GGUF models whose repos don't include tokenizer files."),
-        ] = None,
     ) -> None:
         """Chat with a model from the command line."""
         self.base_url = base_url
@@ -354,7 +350,6 @@ class Chat:
         config.update(**parse_generate_flags(generate_flags))
         self.config = config
 
-        self.processor = processor
         self.settings = {"base_url": base_url, "model_id": model_id, "config": self.config.to_dict()}
 
         # User settings
@@ -563,8 +558,6 @@ class Chat:
                         "generation_config": config.to_json_string(),
                         "model": self.model_id,
                     }
-                    if self.processor:
-                        extra_body["processor"] = self.processor
 
                     stream = client.chat_completion(
                         chat,

@@ -745,8 +745,6 @@ class BaseHandler:
             Shared state managing per-model generation managers.
         force_model (`str`, *optional*):
             If set, override the ``model`` field in every request with this model ID.
-        force_processor (`str`, *optional*):
-            If set, override the processor/tokenizer model ID.
         compile (`bool`, *optional*, defaults to `False`):
             Enable ``torch.compile`` with static cache for faster decode.
     """
@@ -756,13 +754,11 @@ class BaseHandler:
         model_manager: "ModelManager",
         generation_state: GenerationState,
         force_model: str | None = None,
-        force_processor: str | None = None,
         compile: bool = False,
     ):
         self.model_manager = model_manager
         self.generation_state = generation_state
         self.force_model = force_model
-        self.force_processor = force_processor
         self._compile = compile
 
     @staticmethod
@@ -781,12 +777,11 @@ class BaseHandler:
             body["model"] = self.force_model
 
         model_id = self.model_manager.process_model_name(body["model"])
-        processor_id = self.force_processor or body.get("processor")
-        model, processor = self.model_manager.load_model_and_processor(model_id, processor_id=processor_id)
+        model, processor = self.model_manager.load_model_and_processor(model_id)
 
         return model_id, model, processor
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None, use_cb: bool = False):
+    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
         """Build a GenerationConfig from shared params (temperature, top_p, seed, generation_config JSON).
 
         Subclasses should call ``super()._build_generation_config(...)`` then apply
@@ -797,9 +792,6 @@ class BaseHandler:
                 The raw request body.
             model_generation_config (`GenerationConfig`):
                 The model's default generation config (will be deep-copied).
-            processor (*optional*):
-                Processor or tokenizer, used to sync ``eos_token_id`` / ``pad_token_id``
-                for GGUF models that lack them.
             use_cb (`bool`, *optional*, defaults to `False`):
                 Whether continuous batching is active. If ``True``, disables the model's
                 internal KV cache (CB manages its own paged cache).
@@ -815,14 +807,6 @@ class BaseHandler:
             generation_config = copy.deepcopy(model_generation_config)
             if generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024:
                 generation_config.max_new_tokens = 1024
-
-        # GGUF models may not have eos/pad token IDs set — sync from processor
-        if processor is not None:
-            tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
-            if generation_config.eos_token_id is None and hasattr(tokenizer, "eos_token_id"):
-                generation_config.eos_token_id = tokenizer.eos_token_id
-            if generation_config.pad_token_id is None and hasattr(tokenizer, "pad_token_id"):
-                generation_config.pad_token_id = tokenizer.pad_token_id
 
         if body.get("temperature") is not None:
             generation_config.temperature = float(body["temperature"])

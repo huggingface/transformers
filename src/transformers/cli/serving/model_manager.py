@@ -103,8 +103,6 @@ class ModelManager:
         quantization: Quantization method ("bnb-4bit" or "bnb-8bit").
         model_timeout: Seconds before an idle model is unloaded. -1 disables.
         force_model: If set, preload this model at init time.
-        processor_id: Override processor/tokenizer model ID. Needed for GGUF models
-            whose repos don't include tokenizer files.
     """
 
     def __init__(
@@ -116,8 +114,6 @@ class ModelManager:
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
-        # TODO: auto-detect from GGUF base_model metadata
-        processor_id: str | None = None,
     ):
         self.device = device
         self.dtype = dtype
@@ -137,7 +133,7 @@ class ModelManager:
         self._loading_tasks: dict[str, asyncio.Task] = {}
 
         if force_model is not None:
-            self.load_model_and_processor(self.process_model_name(force_model), processor_id=processor_id)
+            self.load_model_and_processor(self.process_model_name(force_model))
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
@@ -159,21 +155,16 @@ class ModelManager:
         return None
 
     def _load_processor(
-        self, model_id_and_revision: str, processor_id: str | None = None
+        self, model_id_and_revision: str
     ) -> "ProcessorMixin | PreTrainedTokenizerFast":
         """Load a processor, trying AutoProcessor first then AutoTokenizer.
 
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
-            processor_id: Override processor/tokenizer ID (e.g. for GGUF models).
-                Falls back to ``model_id``.
         """
         from transformers import AutoProcessor
 
-        if processor_id:
-            model_id, revision = processor_id, "main"
-        else:
-            model_id, revision = model_id_and_revision.split("@", 1)
+        model_id, revision = model_id_and_revision.split("@", 1)
         try:
             return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
         except OSError:
@@ -185,7 +176,7 @@ class ModelManager:
                 raise OSError(f"Failed to load processor for {model_id} with AutoProcessor and AutoTokenizer.")
 
     def _load_model(self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None) -> "PreTrainedModel":
-        """Load a model. GGUF files are detected by the ``.gguf`` extension and loaded via llama.cpp.
+        """Load a model.
 
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
@@ -200,19 +191,6 @@ class ModelManager:
         from transformers import AutoConfig
 
         model_id, revision = model_id_and_revision.split("@", 1)
-
-        if model_id.endswith(".gguf"):
-            from llama_cpp_transformers import LlamaCppTransformersModel
-
-            flash_attn = True if self.attn_implementation == "flash_attention_2" else "auto"
-            return LlamaCppTransformersModel.from_pretrained(
-                model_id,
-                revision=revision,
-                n_gpu_layers=-1,
-                flash_attn=flash_attn,
-                n_ctx=8192,
-                n_batch=2048,
-            )
 
         dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         model_kwargs = {
@@ -234,7 +212,6 @@ class ModelManager:
     def load_model_and_processor(
         self,
         model_id_and_revision: str,
-        processor_id: str | None = None,
         progress_callback: Callable | None = None,
         tqdm_class: type | None = None,
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
@@ -242,7 +219,6 @@ class ModelManager:
 
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
-            processor_id: Optional per-request processor override.
             progress_callback: If provided, called with dicts like
                 ``{"status": "loading", "model": ..., "stage": ...}`` during loading.
             tqdm_class: Optional tqdm subclass for progress bars during ``from_pretrained``.
@@ -258,7 +234,7 @@ class ModelManager:
             ):
                 if progress_callback is not None:
                     progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "processor"})
-                processor = self._load_processor(model_id_and_revision, processor_id=processor_id)
+                processor = self._load_processor(model_id_and_revision)
                 model = self._load_model(
                     model_id_and_revision, tqdm_class=tqdm_class, progress_callback=progress_callback
                 )
