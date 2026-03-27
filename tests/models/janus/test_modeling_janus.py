@@ -35,6 +35,7 @@ from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -478,6 +479,7 @@ class JanusIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -522,16 +524,15 @@ class JanusIntegrationTest(unittest.TestCase):
                     1762, 4080
                 ],
                 ("xpu", None): [
-                    2567, 4015, 6155, 250, 14695, 3880, 11648, 14407, 8900, 13489, 6305, 2546, 9714, 9599, 6882, 9808,
-                    8618, 12636, 1151, 250, 250, 7311, 5176, 2273, 15628, 4462, 14906, 4221, 4320, 8389, 6415, 13006,
-                    12259, 13430, 6528, 13060, 9178, 12352, 11990, 1552, 11091, 16037, 12295, 3641, 8348, 8348, 3738,
-                    11697, 1762, 12683
+                    4484, 4015, 15750, 376, 2300, 13791, 3609, 2509, 2418, 6347, 7372, 1006, 14519, 6126, 11908,
+                    14968, 9642, 9490, 14427, 196, 15131, 6155, 4015, 2047, 15628, 4656, 14055, 13908, 3077, 4377,
+                    11641, 4835, 8854, 10351, 7339, 2815, 13634, 8134, 257, 3621, 7739, 9954, 5989, 11578, 8763,
+                    12788, 7571, 13595, 1762, 12683
                 ],
             }
         )
-        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # fmt: on
-
+        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # Compare the first 50 generated tokens.
         self.assertTrue(torch.allclose(expected_tokens, out[0][:50]))
 
