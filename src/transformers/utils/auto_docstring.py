@@ -4118,53 +4118,6 @@ class _LazyDocClass:
         return self._val
 
 
-class _LazyDocFunction:
-    """
-    Thin callable wrapper that exposes ``__doc__`` as a lazy property.
-
-    Python function objects store ``__doc__`` in a C-level getset slot that cannot be
-    turned into a Python descriptor without changing the object's type.  This wrapper
-    keeps the original function intact, delegates all calls to it, and generates the
-    docstring on the first ``.__doc__`` access.
-    """
-
-    def __init__(self, func, doc_generator):
-        self._func = func
-        self._doc_gen = doc_generator
-        self._doc = None
-        # Copy standard function metadata (intentionally skip __doc__)
-        self.__module__ = func.__module__
-        self.__name__ = func.__name__
-        self.__qualname__ = func.__qualname__
-        self.__annotations__ = getattr(func, "__annotations__", {})
-        self.__wrapped__ = func
-        self.__dict__.update(getattr(func, "__dict__", {}))
-
-    @property
-    def __doc__(self):
-        if self._doc is None and self._doc_gen is not None:
-            self._doc = self._doc_gen()
-            self._doc_gen = None
-        return self._doc
-
-    @__doc__.setter
-    def __doc__(self, value):
-        self._doc = value
-        self._doc_gen = None
-
-    def __call__(self, *args, **kwargs):
-        return self._func(*args, **kwargs)
-
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self
-        # Return a new wrapper around the bound method so that calling
-        # ``instance.method()`` works transparently.
-        bound = self._func.__get__(obj, objtype)
-        # Share the lazy-doc state: once the unbound wrapper generated the doc,
-        # reuse it for every bound call.
-        return _LazyDocFunction(bound, lambda: self.__doc__)
-
 
 def _apply_lazy_doc(cls, doc_generator):
     """
@@ -4266,24 +4219,24 @@ def auto_method_docstring(
     allowed_params=None,
 ):
     """
-    Wrapper that automatically generates docstring lazily.
+    Wrapper that automatically generates a method docstring.
 
-    Returns a :class:`_LazyDocFunction` whose ``.__doc__`` triggers generation on first
-    access rather than at decoration time.
+    Methods must remain plain functions so that ``torch.compile`` / ``torch._dynamo``
+    can trace them without obstruction.  We therefore generate the docstring eagerly
+    and assign it directly to ``func.__doc__``, returning the original function
+    unchanged.  (Class-level docstrings use :class:`_LazyDocClass` instead and are
+    generated lazily on first ``cls.__doc__`` access.)
     """
-
-    def _generator():
-        return _generate_method_docstring(
-            func,
-            parent_class=parent_class,
-            custom_intro=custom_intro,
-            custom_args=custom_args,
-            checkpoint=checkpoint,
-            source_args_dict=source_args_dict,
-            allowed_params=allowed_params,
-        )
-
-    return _LazyDocFunction(func, _generator)
+    func.__doc__ = _generate_method_docstring(
+        func,
+        parent_class=parent_class,
+        custom_intro=custom_intro,
+        custom_args=custom_args,
+        checkpoint=checkpoint,
+        source_args_dict=source_args_dict,
+        allowed_params=allowed_params,
+    )
+    return func
 
 
 def _generate_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=None, _original_doc=None):
@@ -4509,17 +4462,17 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
     for common arguments (like `input_ids`, `attention_mask`, etc.), and generates complete documentation
     including examples and return value descriptions.
 
-    **Lazy generation** — docstrings are generated on the *first* access of ``.__doc__``, not at decoration /
-    import time.  This means the cost is paid only when documentation is actually needed (e.g. when Sphinx
-    builds the docs or ``help()`` is called), keeping import times fast.
+    **Lazy generation for classes** — class docstrings are generated on the *first* access of ``cls.__doc__``,
+    not at decoration / import time.  This means the cost is paid only when documentation is actually needed
+    (e.g. when Sphinx builds the docs or ``help()`` is called), keeping import times fast.
 
     - For **classes** the decorator stores a :class:`_LazyDocClass` descriptor in ``cls.__dict__['__doc__']``.
       Python's ``type.__doc__`` C getter calls ``__get__`` on that descriptor transparently; no metaclass change
       is required.  After the first access the descriptor replaces itself with the plain generated string so
       subsequent accesses are zero-overhead.
-    - For **methods / functions** the decorator returns a :class:`_LazyDocFunction` wrapper.  The wrapper is a
-      callable that delegates all calls to the original function and exposes ``.__doc__`` as a lazy property.
-      ``inspect.signature()`` works via ``__wrapped__``.
+    - For **methods / functions** the docstring is generated eagerly at decoration time and assigned directly
+      to ``func.__doc__``.  The function itself is returned unchanged, ensuring full compatibility with
+      ``torch.compile`` / ``torch._dynamo`` and ``inspect.signature``.
 
     For complete documentation and examples, read this [guide](https://huggingface.co/docs/transformers/auto_docstring).
 
@@ -4657,9 +4610,8 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         - For model classes, the decorator derives parameter descriptions from the `__init__` method's signature
           and docstring.
         - Return value documentation is automatically generated for methods that return ModelOutput subclasses.
-        - Because methods are wrapped in :class:`_LazyDocFunction`, ``inspect.isfunction(decorated_method)``
-          returns ``False``.  Use ``inspect.signature(decorated_method)`` or access ``decorated_method.__wrapped__``
-          to reach the original function.
+        - Decorated methods remain plain functions (``inspect.isfunction`` returns ``True``) and are fully
+          compatible with ``torch.compile`` / ``torch._dynamo``.
     """
 
     def auto_docstring_decorator(obj):

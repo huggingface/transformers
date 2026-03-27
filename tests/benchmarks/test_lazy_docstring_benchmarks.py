@@ -114,25 +114,23 @@ def test_class_doc_cached_access(benchmark):
 
 
 @pytest.mark.benchmark(group="doc_access")
-def test_method_doc_first_access(benchmark):
-    """Measure the cost of the *first* ``method.__doc__`` access on a decorated method."""
-    from transformers.utils.auto_docstring import _LazyDocFunction
+def test_method_doc_access(benchmark):
+    """Measure ``method.__doc__`` access cost after eager decoration.
+
+    Methods are decorated eagerly (``func.__doc__`` is set at decoration time and
+    the original function is returned unchanged).  Subsequent reads are a plain
+    attribute lookup — essentially free.
+    """
+    from transformers.utils.auto_docstring import auto_method_docstring
 
     def _dummy(x: int, y: int = 0) -> int:
-        """x (`int`): First number.\ny (`int`, *optional*): Second number."""
+        r"""x (`int`): First number.\ny (`int`, *optional*): Second number."""
         return x + y
 
-    gen_calls = [0]
+    _dummy.__qualname__ = "DummyClass.forward"  # appear as a method to auto_method_docstring
+    auto_method_docstring(_dummy)
 
-    def _gen():
-        gen_calls[0] += 1
-        return "Generated docstring for _dummy."
-
-    def make_and_access():
-        w = _LazyDocFunction(_dummy, _gen)
-        return w.__doc__
-
-    benchmark(make_and_access)
+    benchmark(lambda: _dummy.__doc__)
 
 
 # ---------------------------------------------------------------------------
