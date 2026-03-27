@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import pytest
 
 from .generic import strtobool
 
@@ -438,7 +437,6 @@ class NetworkDebugPlugin:
             if shared_dir:
                 _NETWORK_DEBUG_PROFILER.set_shared_dir(shared_dir)
 
-    @pytest.hookimpl(optionalhook=True)
     def pytest_configure_node(self, node):
         """xdist hook: called on the controller to configure each worker node."""
         shared_dir = getattr(node.config, "_network_debug_shared_dir", None)
