@@ -1027,8 +1027,9 @@ class TestResponseInputConversion(unittest.TestCase):
 class TestResponseValidation(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.response import ResponseHandler
+        from transformers.cli.serving.utils import GenerationState
 
-        from transformers.cli.serving.utils import GenerationState; return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_unsupported_fields_rejected(self):
         from fastapi import HTTPException
