@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for ViTMatte."""
 
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend

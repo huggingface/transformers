@@ -6,23 +6,25 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 
+from typing import TYPE_CHECKING
+
 import numpy as np
+from PIL import Image, ImageDraw
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
-from ...utils.import_utils import requires, requires_backends
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
-if is_vision_available():
-    import PIL
-    from PIL import Image, ImageDraw
-if is_torch_available():
+if TYPE_CHECKING:
     import torch
+
+
 def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
@@ -50,14 +52,14 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
         gray_image = np.stack([gray_image] * 3, axis=0)
         return gray_image
 
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     image = image.convert("L")
     return image
 
 
-@requires(backends=("torch",))
+@auto_docstring
 class EfficientLoFTRImageProcessorPil(PilBackend):
     valid_kwargs = EfficientLoFTRImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

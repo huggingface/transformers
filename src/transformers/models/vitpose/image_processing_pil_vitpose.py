@@ -47,7 +47,6 @@ if is_scipy_available():
     pass
 
 if TYPE_CHECKING:
-
     from .modeling_vitpose import VitPoseEstimatorOutput
 
 logger = logging.get_logger(__name__)

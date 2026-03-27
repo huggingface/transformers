@@ -25,11 +25,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import PilBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs, smart_resize
-
-
-if is_torchvision_available():
 
 
 @auto_docstring

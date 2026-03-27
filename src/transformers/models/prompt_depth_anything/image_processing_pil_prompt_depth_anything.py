@@ -37,7 +37,6 @@ from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
-
     from ...modeling_outputs import DepthEstimatorOutput
 
 from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs

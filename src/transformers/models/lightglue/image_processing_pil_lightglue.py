@@ -21,32 +21,21 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+from PIL import Image, ImageDraw
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_vision_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
 
 
 if TYPE_CHECKING:
-    from .modeling_lightglue import LightGlueKeypointMatchingOutput
-
-if is_vision_available():
-    import PIL
-    from PIL import Image, ImageDraw
-if is_torch_available():
     import torch
-if is_torchvision_available():
+
+    from .modeling_lightglue import LightGlueKeypointMatchingOutput
 
 
 def is_grayscale(image: np.ndarray):
@@ -76,14 +65,14 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
         gray_image = np.stack([gray_image] * 3, axis=0)
         return gray_image
 
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     image = image.convert("L")
     return image
 
 
-@requires(backends=("torch",))
+@auto_docstring
 class LightGlueImageProcessorPil(PilBackend):
     valid_kwargs = LightGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -139,12 +128,13 @@ class LightGlueImageProcessorPil(PilBackend):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`LightGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -161,7 +151,8 @@ class LightGlueImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        requires_backends(self, "torch")
+        import torch
+
         if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
@@ -209,7 +200,7 @@ class LightGlueImageProcessorPil(PilBackend):
         return results
 
     def visualize_keypoint_matching(
-        self, images: ImageInput, keypoint_matching_output: list[dict[str, torch.Tensor]]
+        self, images: ImageInput, keypoint_matching_output: list[dict[str, "torch.Tensor"]]
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.

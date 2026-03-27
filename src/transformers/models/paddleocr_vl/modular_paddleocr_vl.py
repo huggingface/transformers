@@ -50,7 +50,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
     torch_compilable_check,
     torch_int,
@@ -86,10 +85,6 @@ from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3VisionEncoder,
     VideoLlama3VisionEncoderLayer,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -147,7 +142,7 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -258,7 +253,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

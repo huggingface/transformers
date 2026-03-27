@@ -21,7 +21,9 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from PIL import Image, ImageDraw
+
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from .image_processing_superglue import validate_and_format_image_pairs
 
@@ -30,10 +32,6 @@ if TYPE_CHECKING:
     import torch
 
     from .modeling_superglue import SuperGlueKeypointMatchingOutput
-
-if is_vision_available():
-    import PIL
-    from PIL import Image, ImageDraw
 
 
 def is_grayscale(image: np.ndarray):
@@ -63,7 +61,7 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
         gray_image = np.stack([gray_image] * 3, axis=0)
         return gray_image
 
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     image = image.convert("L")

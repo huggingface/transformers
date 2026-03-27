@@ -31,11 +31,8 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs, smart_resize
-
-
-if is_torchvision_available():
 
 
 @auto_docstring

@@ -36,7 +36,6 @@ from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_ima
 
 
 if TYPE_CHECKING:
-
     from ...modeling_outputs import DepthEstimatorOutput
 
 
