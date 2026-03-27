@@ -34,6 +34,8 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+
+
 class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     image_grid_pinpoints (`list[list[int]]`, *optional*):
@@ -43,8 +45,6 @@ class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     image_grid_pinpoints: list[list[int]]
-
-
 
 
 @auto_docstring

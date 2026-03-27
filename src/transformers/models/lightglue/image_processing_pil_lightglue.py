@@ -38,6 +38,8 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
+
+
 class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
@@ -45,8 +47,6 @@ class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_grayscale: bool
-
-
 
 
 if TYPE_CHECKING:

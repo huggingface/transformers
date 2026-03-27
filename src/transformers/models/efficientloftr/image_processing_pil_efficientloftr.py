@@ -6,6 +6,8 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -38,8 +40,6 @@ class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
 
     do_grayscale: bool
 
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput

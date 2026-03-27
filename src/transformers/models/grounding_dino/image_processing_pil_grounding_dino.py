@@ -56,6 +56,8 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
 from ...utils.import_utils import requires
+
+
 class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -68,8 +70,6 @@ class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
 
     format: str | AnnotationFormat
     do_convert_annotations: bool
-
-
 
 
 if TYPE_CHECKING:

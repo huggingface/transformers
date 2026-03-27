@@ -50,6 +50,8 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
 from ...utils.import_utils import requires, requires_backends
+
+
 class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -62,8 +64,6 @@ class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
 
     format: str | AnnotationFormat
     do_convert_annotations: bool
-
-
 
 
 if is_vision_available():

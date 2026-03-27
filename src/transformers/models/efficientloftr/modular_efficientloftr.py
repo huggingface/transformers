@@ -1,10 +1,16 @@
-import torch
+from typing import TYPE_CHECKING
 
-from ...utils import TensorType
+from ...utils import TensorType, is_torch_available
 from ...utils.import_utils import requires
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
 from ..superglue.image_processing_superglue import SuperGlueImageProcessor
-from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
+
+
+if is_torch_available():
+    import torch
+
+if TYPE_CHECKING:
+    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
 class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):

@@ -34,6 +34,8 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+
+
 class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
@@ -42,8 +44,6 @@ class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     min_size: int
-
-
 
 
 @auto_docstring

@@ -42,6 +42,8 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
+
+
 class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     ignore_index (`int`, *optional*):
@@ -66,8 +68,6 @@ class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
     num_labels: int | None
     size_divisor: int
     pad_size: SizeDict | None
-
-
 
 
 if is_torch_available():

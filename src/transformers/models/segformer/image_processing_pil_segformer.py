@@ -34,6 +34,8 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
+
+
 class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
@@ -43,8 +45,6 @@ class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_reduce_labels: bool
-
-
 
 
 if is_torch_available():

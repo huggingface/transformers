@@ -35,6 +35,8 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+
+
 class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):
@@ -55,8 +57,6 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     high_res_resample: "PILImageResampling | None"
     high_res_image_mean: float | list[float] | tuple[float, ...]
     high_res_image_std: float | list[float] | tuple[float, ...]
-
-
 
 
 @auto_docstring
