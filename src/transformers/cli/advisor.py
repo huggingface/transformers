@@ -13,16 +13,17 @@
 # limitations under the License.
 
 import torch
+
 from transformers import AutoConfig
-from transformers.utils import is_torch_available, is_accelerate_available
+
 
 def advisor(model_name_or_path: str):
     """
     Unique CLI tool to advise on model loading and quantization based on hardware.
     """
-    print(f"\n--- Transformers Model Advisor ---\n")
+    print("\n--- Transformers Model Advisor ---\n")
     print(f"Analyzing model: {model_name_or_path}")
-    
+
     # 1. System Check
     has_cuda = torch.cuda.is_available()
     vram_gb = 0
@@ -47,7 +48,7 @@ def advisor(model_name_or_path: str):
         params = config.num_hidden_layers * (config.hidden_size**2) * 12
     elif hasattr(config, "n_layer") and hasattr(config, "n_embd"):
         params = config.n_layer * (config.n_embd**2) * 12
-    
+
     params_b = params / (10**9)
     if params_b > 0:
         print(f"Estimated parameters: {params_b:.2f}B")
@@ -59,13 +60,13 @@ def advisor(model_name_or_path: str):
     vram_int8 = params_b * 1
     vram_int4 = params_b * 0.7 # including overhead
 
-    print(f"\nEstimated VRAM Requirements:")
+    print("\nEstimated VRAM Requirements:")
     print(f"  - FP16/BF16: ~{vram_fp16:.2f} GB")
     print(f"  - INT8:      ~{vram_int8:.2f} GB")
     print(f"  - 4-bit:     ~{vram_int4:.2f} GB")
 
     # 3. Recommendations
-    print(f"\n--- Optimization Strategy ---")
+    print("\n--- Optimization Strategy ---")
     if not has_cuda:
         print("Advice: Use CPU offloading and GGUF format if possible (llama.cpp integration).")
     elif vram_gb > vram_fp16 + 2:
