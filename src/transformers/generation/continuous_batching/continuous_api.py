@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 import gc
 import queue
 import threading
@@ -95,6 +96,7 @@ class ContinuousBatchProcessor:
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
+        deliver_outputs: callable,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -103,11 +105,14 @@ class ContinuousBatchProcessor:
             config: The model configuration
             generation_config: The generation configuration
             input_queue: Queue for incoming requests
-            output_queue: Queue for outgoing results
+            output_queue: Queue for outgoing results (used by ``get_result()`` callers)
             stop_event: Event to signal processing should stop
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
+            deliver_outputs: Called with a list of ``GenerationOutput`` at the end of each
+                generation step. Provided by the manager to route results to registered
+                handlers or fall back to the output_queue.
         """
         self.cache = cache
         self.config = config
@@ -118,6 +123,7 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
+        self._deliver_outputs = deliver_outputs
 
         # Generation-related attributes
         self.do_sample = getattr(generation_config, "do_sample", True)
@@ -328,16 +334,11 @@ class ContinuousBatchProcessor:
         return True
 
     @traced
-    def _maybe_send_output(self, state: RequestState) -> None:
-        """Send output to the queue based on streaming mode and request state."""
-        if state.streaming or state.status == RequestStatus.FINISHED:
-            self.output_queue.put(state.to_generation_output())
-
-    @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
+        pending_outputs = []
         for future_state in requests_in_batch:
             state = future_state.state
             # Early return if the request is finished
@@ -367,7 +368,8 @@ class ContinuousBatchProcessor:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
-                self._maybe_send_output(state)
+                if state.streaming or state.status == RequestStatus.FINISHED:
+                    pending_outputs.append(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING:
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
@@ -397,6 +399,10 @@ class ContinuousBatchProcessor:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
                 self.cache.copy_cache(copy_source, copy_destination)
+
+        # Deliver outputs after all GPU work is done to minimize GIL contention
+        if pending_outputs:
+            self._deliver_outputs(pending_outputs)
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -596,7 +602,14 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
         self.input_queue = queue.Queue(maxsize=self.continuous_batching_config.max_queue_size)
+        self._has_new_requests = threading.Event()
         self.output_queue = queue.Queue()
+        # Per-request result handlers: request_id → (callback, event_loop).
+        # Registered via register_result_handler(). The generation thread delivers
+        # outputs directly via call_soon_threadsafe — no dispatcher thread needed.
+        # Unhandled results fall back to the output_queue for get_result() callers.
+        self._result_handlers: dict[str, tuple[callable, asyncio.AbstractEventLoop]] = {}
+        self._result_handlers_lock = threading.Lock()
         self.stop_event = threading.Event()
         self.batch_processor: ContinuousBatchProcessor | None = None
         self._generation_thread = None
@@ -624,6 +637,43 @@ class ContinuousBatchingManager:
         self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
         self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
 
+        # Log probability generation is not supported yet (TODO)
+        if self.log_prob_generation:
+            raise NotImplementedError("log_prob_generation is not supported yet")
+
+    def _register_handler(self, request_id: str, callback: callable, loop: asyncio.AbstractEventLoop) -> None:
+        """Register a result handler for a request."""
+        with self._result_handlers_lock:
+            self._result_handlers[request_id] = (callback, loop)
+
+    def _unregister_handler(self, request_id: str) -> None:
+        """Remove a result handler for a request."""
+        with self._result_handlers_lock:
+            self._result_handlers.pop(request_id, None)
+
+    def _deliver_outputs(self, outputs: list[GenerationOutput]) -> None:
+        """Route outputs directly from the generation thread to registered handlers.
+
+        Called by ``update_batch`` at the end of each generation step. Results with
+        registered handlers are batched per event loop and delivered via a single
+        ``call_soon_threadsafe``. Unhandled results fall back to the output_queue.
+        """
+        deliveries: dict[asyncio.AbstractEventLoop, list[tuple[callable, object]]] = {}
+        with self._result_handlers_lock:
+            for output in outputs:
+                entry = self._result_handlers.get(output.request_id)
+                if entry is not None:
+                    callback, loop = entry
+                    deliveries.setdefault(loop, []).append((callback, output))
+                else:
+                    self.output_queue.put(output)
+
+        for loop, items in deliveries.items():
+            def _deliver_batch(batch_items=items):
+                for cb, res in batch_items:
+                    cb(res)
+            loop.call_soon_threadsafe(_deliver_batch)
+
     @traced
     def start(self) -> None:
         """Start the background generation thread."""
@@ -637,6 +687,7 @@ class ContinuousBatchingManager:
     def is_running(self) -> bool:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
+
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def stop(self, block: bool = True, timeout: float | None = None, keep_for_next_session: bool = False) -> None:
@@ -721,7 +772,6 @@ class ContinuousBatchingManager:
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
 
-        # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
             initial_tokens=list(input_ids),
@@ -732,8 +782,8 @@ class ContinuousBatchingManager:
             streaming=streaming,
         )
 
-        # Use block=True with timeout to handle backpressure if queue is full
-        self.input_queue.put(state, block=True, timeout=10)  # XXX: pass timeout as fn arg?
+        self.input_queue.put(state, block=True, timeout=10)
+        self._has_new_requests.set()
         return request_id
 
     def add_requests(
@@ -774,16 +824,16 @@ class ContinuousBatchingManager:
         """Retrieve one result from the output queue.
 
         Args:
-            timeout: Maximum time to wait for a result
+            request_id: If set, only return results matching this ID (others are requeued).
+            timeout: Maximum time to wait for a result.
 
         Returns:
-            Optional[GenerationOutput]: The result data or None if timeout
+            Optional[GenerationOutput]: The result data or None if timeout.
         """
         if self._generation_thread is None and self.output_queue.empty():
             return None
         try:
             result = self.output_queue.get(block=True, timeout=timeout)
-            # NOTE: requeue logic here
             if request_id is not None and result.request_id != request_id:
                 self.output_queue.put(result)
                 return None
@@ -798,16 +848,41 @@ class ContinuousBatchingManager:
             if result is not None:
                 yield result
 
-    # FIXME: stop iteration when request status is finished?
     def request_id_iter(self, request_id: str) -> Generator[GenerationOutput]:
-        """Iterate over results matching a specific request id as they become available."""
-        request_cancelled = False
-        while self._generation_thread is not None and self._generation_thread.is_alive() and not request_cancelled:
+        """Iterate over results matching a specific request id (blocking).
+
+        Uses the shared output queue with requeue. For high-concurrency serving,
+        use :meth:`register_result_handler` instead.
+        """
+        while self._generation_thread is not None and self._generation_thread.is_alive():
             result = self.get_result(request_id=request_id, timeout=0.1)
             if result is not None:
                 yield result
-            if self.batch_processor is not None:
-                request_cancelled = self.batch_processor.scheduler.request_is_cancelled(request_id)
+                if result.is_finished():
+                    return
+
+
+    def register_result_handler(self, request_id: str, callback: callable) -> None:
+        """Register a callback for result delivery (streaming or non-streaming).
+
+        The callback is invoked on the event loop via ``call_soon_threadsafe``
+        each time a result is produced for this request. For streaming requests,
+        this happens on every token; for non-streaming, only on completion.
+
+        The handler is automatically cleaned up when the request finishes.
+
+        Args:
+            request_id (`str`): The request ID to receive outputs for.
+            callback (`callable`): Called with a ``GenerationOutput`` for each result.
+        """
+        loop = asyncio.get_running_loop()
+
+        def _auto_cleanup(result):
+            callback(result)
+            if result.is_finished():
+                self._unregister_handler(request_id)
+
+        self._register_handler(request_id, _auto_cleanup, loop)
 
     @traced
     def _generation_step(self) -> None:
@@ -862,6 +937,27 @@ class ContinuousBatchingManager:
                 batch_processor = self._create_batch_processor()
 
             # Start the generation loop
+            scheduler = SCHEDULER_MAPPING.get(self.continuous_batching_config.scheduler, None)
+            if scheduler is None:
+                logger.warning(
+                    f"Scheduler '{self.continuous_batching_config.scheduler}' not found. Defaulting to FIFO."
+                )
+                scheduler = FIFOScheduler
+
+            t1 = perf_counter()
+            batch_processor = ContinuousBatchProcessor(
+                cache=paged_attention_cache,
+                config=self.model.config,
+                generation_config=self.generation_config,
+                continuous_batching_config=self.continuous_batching_config,
+                input_queue=self.input_queue,
+                output_queue=self.output_queue,
+                stop_event=self.stop_event,
+                model_device=self.model.device,
+                model_dtype=self.model.dtype,
+                scheduler=scheduler(paged_attention_cache),
+                deliver_outputs=self._deliver_outputs,
+            )
             self.batch_processor = batch_processor
             self.current_batch = 0
 
@@ -892,6 +988,9 @@ class ContinuousBatchingManager:
     def _inner_generation_loop(self, batch_processor: ContinuousBatchProcessor) -> None:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
+            # Wait for new requests instead of busy-spinning.
+            self._has_new_requests.wait(timeout=0.1)
+            self._has_new_requests.clear()
             return
         self._generation_step()
         batch_processor.update_batch()
