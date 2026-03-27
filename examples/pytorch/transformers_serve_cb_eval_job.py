@@ -9,10 +9,10 @@
 # ]
 # ///
 import argparse
-import shlex
 import subprocess
 import sys
 import time
+
 from inspect_ai import eval
 from inspect_ai.log import bundle_log_dir
 from inspect_evals.gpqa import gpqa_diamond
@@ -21,8 +21,8 @@ from inspect_evals.gpqa import gpqa_diamond
 def wait_for_server_up(server_process, timeout=600):
     start_time = time.time()
 
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     while time.time() - start_time < timeout:
         try:
@@ -129,7 +129,7 @@ def main():
         model_base_url="http://localhost:8000/v1",
         display="plain",
         limit=args.limit,
-        model_args=dict(stream=False),
+        model_args={"stream": False},
         max_connections=args.max_connections,
         max_tokens=2048,
     )
