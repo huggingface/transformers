@@ -17,7 +17,7 @@ deps = {
     "filelock": "filelock",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
-    "hf-doc-builder": "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@main",
+    "hf-doc-builder": "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@tarekziade-fix-decorator-call",
     "huggingface-hub": "huggingface-hub>=1.5.0,<2.0",
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jinja2": "jinja2>=3.1.0",
