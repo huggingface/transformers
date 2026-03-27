@@ -53,13 +53,15 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
 from ...utils.import_utils import requires
+from .image_processing_grounding_dino import GroundingDinoImageProcessorKwargs
 
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
+
 
 if is_vision_available():
     import PIL.Image
@@ -67,6 +69,7 @@ if is_torch_available():
     import torch
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+
 
 # inspired by https://github.com/facebookresearch/grounding_dino/blob/master/datasets/coco.py#L33
 def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
@@ -101,6 +104,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
         masks = np.zeros((0, height, width), dtype=np.uint8)
 
     return masks
+
 
 # inspired by https://github.com/facebookresearch/grounding_dino/blob/master/datasets/coco.py#L50
 def prepare_coco_detection_annotation(
@@ -162,6 +166,7 @@ def prepare_coco_detection_annotation(
 
     return new_target
 
+
 def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     """
     Compute the bounding boxes around the provided panoptic segmentation masks.
@@ -195,6 +200,7 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
 
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
+
 # 2 functions below adapted from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
 # Copyright (c) 2018, Alexander Kirillov
 # All rights reserved.
@@ -207,6 +213,7 @@ def rgb_to_id(color):
             color = color.astype(np.int32)
         return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
 
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
@@ -248,6 +255,7 @@ def prepare_coco_panoptic_annotation(
 
     return new_target
 
+
 def _scale_boxes(boxes, target_sizes):
     """
     Scale batch of bounding boxes to the target sizes.
@@ -274,21 +282,6 @@ def _scale_boxes(boxes, target_sizes):
     scale_factor = scale_factor.unsqueeze(1).to(boxes.device)
     boxes = boxes * scale_factor
     return boxes
-
-
-# Copied from transformers.models.grounding_dino.image_processing_grounding_dino.GroundingDinoImageProcessorKwargs
-class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the GROUNDING_DINO model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
 
 
 @auto_docstring
@@ -759,5 +752,6 @@ class GroundingDinoImageProcessorPil(PilBackend):
             results.append({"scores": scores, "labels": labels, "boxes": boxes})
 
         return results
+
 
 __all__ = ["GroundingDinoImageProcessorPil"]

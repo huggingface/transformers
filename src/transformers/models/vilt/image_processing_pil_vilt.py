@@ -41,11 +41,13 @@ from ...utils import (
 MAX_LONGER_EDGE = 1333
 MAX_SHORTER_EDGE = 800
 
+
 def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
     return [max(values_i) for values_i in zip(*values)]
+
 
 def make_pixel_mask(
     image: np.ndarray, output_size: tuple[int, int], input_data_format: str | ChannelDimension | None = None
@@ -63,6 +65,7 @@ def make_pixel_mask(
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:input_height, :input_width] = 1
     return mask
+
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
@@ -237,5 +240,6 @@ class ViltImageProcessorPil(PilBackend):
             data = {"pixel_values": processed_images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
 
 __all__ = ["ViltImageProcessorPil"]

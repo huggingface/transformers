@@ -205,4 +205,5 @@ class BeitImageProcessorPil(PilBackend):
 
         return semantic_segmentation
 
+
 __all__ = ["BeitImageProcessorPil"]

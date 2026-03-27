@@ -60,6 +60,7 @@ class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
     ocr_lang: str | None
     tesseract_config: str | None
 
+
 # Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.normalize_box
 def normalize_box(box, width, height):
     return [
@@ -189,5 +190,6 @@ class LayoutLMv3ImageProcessorPil(PilBackend):
             data["boxes"] = boxes_batch
 
         return data
+
 
 __all__ = ["LayoutLMv3ImageProcessorPil"]

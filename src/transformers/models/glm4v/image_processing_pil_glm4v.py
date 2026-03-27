@@ -84,6 +84,7 @@ class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
 
+
 @auto_docstring
 class Glm4vImageProcessorPil(PilBackend):
     do_resize = True
@@ -260,5 +261,6 @@ class Glm4vImageProcessorPil(PilBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
 
 __all__ = ["Glm4vImageProcessorPil"]

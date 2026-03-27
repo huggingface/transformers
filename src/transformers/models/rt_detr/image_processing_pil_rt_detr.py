@@ -46,23 +46,17 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
+from ...processing_utils import Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
 from ...utils.import_utils import requires
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 if is_torch_available():
     import torch
-if is_torchvision_available():
-    pass
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+
 
 def prepare_coco_detection_annotation_pil(
     image,
@@ -118,24 +112,8 @@ def prepare_coco_detection_annotation_pil(
 
     return new_target
 
+
 @requires(backends=("torch",))
-
-
-# Copied from transformers.models.rt_detr.image_processing_rt_detr.RTDetrImageProcessorKwargs
-class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the RT_DETR model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
-
-
 class RTDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -585,5 +563,6 @@ class RTDetrImageProcessorPil(PilBackend):
             )
 
         return results
+
 
 __all__ = ["RTDetrImageProcessorPil"]

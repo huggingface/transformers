@@ -54,6 +54,7 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     min_patches: int
     max_patches: int
 
+
 # Copied from transformers.models.got_ocr2.image_processing_got_ocr2.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
@@ -304,5 +305,6 @@ class GotOcr2ImageProcessorPil(PilBackend):
                 num_patches += num_columns * num_rows
 
         return num_patches
+
 
 __all__ = ["GotOcr2ImageProcessorPil"]

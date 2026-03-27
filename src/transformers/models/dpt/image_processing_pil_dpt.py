@@ -61,6 +61,7 @@ class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     keep_aspect_ratio: bool
     do_reduce_labels: bool
 
+
 # Copied from transformers.models.dpt.image_processing_dpt.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray,
@@ -306,5 +307,6 @@ class DPTImageProcessorPil(PilBackend):
                 ).squeeze()
             results.append({"predicted_depth": depth})
         return results
+
 
 __all__ = ["DPTImageProcessorPil"]

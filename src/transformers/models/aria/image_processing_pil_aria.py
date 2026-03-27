@@ -226,4 +226,5 @@ class AriaImageProcessorPil(PilBackend):
         num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
         return num_patches
 
+
 __all__ = ["AriaImageProcessorPil"]

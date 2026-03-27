@@ -44,6 +44,7 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: np.ndarray,
     instance_id_to_semantic_id: dict[int, int] | None = None,
@@ -79,6 +80,7 @@ def convert_segmentation_map_to_binary_masks(
         labels = all_labels.astype(np.int64)
     return binary_masks.astype(np.float32), labels
 
+
 # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessorKwargs
 class MaskFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
@@ -104,6 +106,7 @@ class MaskFormerImageProcessorKwargs(ImagesKwargs, total=False):
     num_labels: int | None
     size_divisor: int
     pad_size: SizeDict | None
+
 
 # Copied from transformers.models.maskformer.image_processing_maskformer.binary_mask_to_rle
 def binary_mask_to_rle(mask):
@@ -209,6 +212,7 @@ def compute_segments(
 
     return segmentation, segments
 
+
 # Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
@@ -229,6 +233,7 @@ def convert_segmentation_to_rle(segmentation):
         run_length_encodings.append(rle)
 
     return run_length_encodings
+
 
 # Copied from transformers.models.maskformer.image_processing_maskformer.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
@@ -257,6 +262,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
 
     return masks[to_keep], scores[to_keep], labels[to_keep]
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -834,5 +840,6 @@ class MaskFormerImageProcessorPil(PilBackend):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
 
 __all__ = ["MaskFormerImageProcessorPil"]

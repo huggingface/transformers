@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict

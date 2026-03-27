@@ -19,8 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -35,12 +35,9 @@ from ...image_utils import (
     SizeDict,
     make_nested_list_of_images,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-
-
-if TYPE_CHECKING:
-    import torch
+from .image_processing_smolvlm import SmolVLMImageProcessorKwargs
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
@@ -51,26 +48,9 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
-# Copied from transformers.models.smolvlm.image_processing_smolvlm.MAX_IMAGE_SIZE
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
-# Copied from transformers.models.smolvlm.image_processing_smolvlm.SmolVLMImageProcessorKwargs
-class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    do_image_splitting (`bool`, *optional*, defaults to `True`):
-        Whether to split the image into sub-images concatenated with the original image. They are split into patches
-        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
-        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-    return_row_col_info (`bool`, *optional*, defaults to `False`):
-        Whether to return the row and column information of the images.
-    """
 
-    do_image_splitting: bool
-    max_image_size: dict[str, int]
-    return_row_col_info: bool
-
-# Copied from transformers.models.smolvlm.image_processing_smolvlm._resize_output_size_rescale_to_max_len
 def _resize_output_size_rescale_to_max_len(
     height: int, width: int, min_len: int | None = 1, max_len: int | None = None
 ) -> tuple[int, int]:
@@ -107,7 +87,7 @@ def _resize_output_size_rescale_to_max_len(
     width = max(width, min_len)
     return height, width
 
-# Copied from transformers.models.smolvlm.image_processing_smolvlm._resize_output_size_scale_below_upper_bound
+
 def _resize_output_size_scale_below_upper_bound(
     height: int, width: int, max_len: dict[str, int] | None = None
 ) -> tuple[int, int]:
@@ -138,8 +118,8 @@ def _resize_output_size_scale_below_upper_bound(
     width = max(width, 1)
     return height, width
 
-# Copied from transformers.models.smolvlm.image_processing_smolvlm.get_max_height_width
-def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
+
+def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -152,8 +132,8 @@ def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> 
     max_width = max(size[1] for size in image_sizes)
     return (max_height, max_width)
 
-# Copied from transformers.models.smolvlm.image_processing_smolvlm.get_num_channels
-def get_num_channels(images_list: list[list["torch.Tensor|np.ndarray"]]) -> int:
+
+def get_num_channels(images_list: list[list[np.ndarray]]) -> int:
     """
     Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
     """
@@ -163,15 +143,15 @@ def get_num_channels(images_list: list[list["torch.Tensor|np.ndarray"]]) -> int:
 
     raise ValueError("No images found in the batch.")
 
-# Copied from transformers.models.smolvlm.image_processing_smolvlm.get_resize_output_image_size
+
 def get_resize_output_image_size(
-    image: "torch.Tensor",
+    image: np.ndarray,
     resolution_max_side: int,
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
-        image (`torch.Tensor`):
+        image (`np.ndarray`):
             Image to resize.
         resolution_max_side (`int`):
             The longest edge of the image will be resized to this value. The shortest edge will be resized to keep the
@@ -478,5 +458,6 @@ class SmolVLMImageProcessorPil(PilBackend):
                 num_patches = num_rows * num_cols + 1
 
         return num_patches, num_rows, num_cols
+
 
 __all__ = ["SmolVLMImageProcessorPil"]

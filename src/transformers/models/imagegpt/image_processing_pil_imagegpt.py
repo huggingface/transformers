@@ -34,6 +34,7 @@ from ...utils import (
 if is_torch_available():
     import torch
 
+
 def squared_euclidean_distance(a, b):
     b = b.T
     a2 = np.sum(np.square(a), axis=1)
@@ -41,6 +42,7 @@ def squared_euclidean_distance(a, b):
     ab = np.matmul(a, b)
     d = a2[:, None] - 2 * ab + b2[None, :]
     return d
+
 
 def color_quantize(x, clusters):
     x = x.reshape(-1, 3)
@@ -148,5 +150,6 @@ class ImageGPTImageProcessorPil(PilBackend):
             output["clusters"] = output["clusters"].tolist()
 
         return output
+
 
 __all__ = ["ImageGPTImageProcessorPil"]

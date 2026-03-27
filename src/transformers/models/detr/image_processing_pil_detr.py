@@ -61,6 +61,7 @@ logger = logging.get_logger(__name__)
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
+
 # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
 def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
     """
@@ -94,6 +95,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
         masks = np.zeros((0, height, width), dtype=np.uint8)
 
     return masks
+
 
 # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
 def prepare_coco_detection_annotation(
@@ -155,6 +157,7 @@ def prepare_coco_detection_annotation(
 
     return new_target
 
+
 def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     """
     Compute the bounding boxes around the provided panoptic segmentation masks.
@@ -188,6 +191,7 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
 
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
+
 # 2 functions below adapted from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
 # Copyright (c) 2018, Alexander Kirillov
 # All rights reserved.
@@ -200,6 +204,7 @@ def rgb_to_id(color):
             color = color.astype(np.int32)
         return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
 
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
@@ -255,6 +260,7 @@ class DetrImageProcessorKwargs(ImagesKwargs, total=False):
 
     format: str | AnnotationFormat
     do_convert_annotations: bool
+
 
 # Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
@@ -363,6 +369,7 @@ def compute_segments(
 
     return segmentation, segments
 
+
 # Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
@@ -385,6 +392,7 @@ def convert_segmentation_to_rle(segmentation):
         run_length_encodings.append(rle)
 
     return run_length_encodings
+
 
 # Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
@@ -1123,5 +1131,6 @@ class DetrImageProcessorPil(PilBackend):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
 
 __all__ = ["DetrImageProcessorPil"]

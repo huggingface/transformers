@@ -36,6 +36,7 @@ from ...utils import TensorType, auto_docstring, is_torchvision_available
 if is_torchvision_available():
     pass
 
+
 def get_resize_output_image_size(
     input_image: np.ndarray,
     max_size: int = 448,
@@ -258,5 +259,6 @@ class TvpImageProcessorPil(PilBackend):
             processed_videos = torch.stack(processed_videos, dim=0)
 
         return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
+
 
 __all__ = ["TvpImageProcessorPil"]

@@ -36,6 +36,7 @@ if is_torch_available():
 
 DEFAULT_FONT_PATH = "ybelkada/fonts"
 
+
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessorKwargs
 class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
@@ -54,6 +55,7 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: dict[str, int]
     is_vqa: bool
     header_text: list[str] | str | None
+
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.render_text
 # Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L106
@@ -126,6 +128,7 @@ def render_text(
 
     return img
 
+
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
 if is_torch_available():
     import torch
@@ -145,12 +148,15 @@ if is_torch_available():
                 Width of patches to extract.
         """
         batch_size, channels, height, width = image_tensor.shape
-        patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+        patches = torch.nn.functional.unfold(
+            image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width)
+        )
         patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
         patches = patches.permute(0, 4, 2, 3, 1).reshape(
             batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
         )
         return patches
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -397,5 +403,6 @@ class Pix2StructImageProcessorPil(PilBackend):
             data={"flattened_patches": flattened_patches, "attention_mask": attention_masks},
             tensor_type=return_tensors,
         )
+
 
 __all__ = ["Pix2StructImageProcessorPil"]

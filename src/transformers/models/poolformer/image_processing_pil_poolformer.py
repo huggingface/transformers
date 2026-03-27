@@ -129,4 +129,5 @@ class PoolFormerImageProcessorPil(PilBackend):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+
 __all__ = ["PoolFormerImageProcessorPil"]

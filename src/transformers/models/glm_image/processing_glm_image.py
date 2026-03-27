@@ -20,6 +20,8 @@
 
 import math
 
+import torch
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
@@ -185,8 +187,6 @@ class GlmImageProcessor(ProcessorMixin):
                     is_text_to_image=is_text_to_image,
                 )
             )
-        import torch
-
         image_inputs["image_grid_thw"] = torch.cat(all_grids, dim=0)
 
         # Store images_per_sample for later use (add target images count)
@@ -237,8 +237,6 @@ class GlmImageProcessor(ProcessorMixin):
         prev_token_w: int,
         is_text_to_image: bool = True,
     ):
-        import torch
-
         if is_text_to_image:
             # Text-to-image: 2 target grids (large + small preview)
             return torch.tensor(

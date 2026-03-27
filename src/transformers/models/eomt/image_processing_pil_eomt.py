@@ -38,6 +38,7 @@ from ...utils.import_utils import requires
 if is_torch_available():
     import torch
 
+
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: np.ndarray,
@@ -74,6 +75,7 @@ def convert_segmentation_map_to_binary_masks(
         labels = all_labels
 
     return binary_masks.astype(np.float32), labels.astype(np.int64)
+
 
 # Copied from transformers.models.eomt.image_processing_eomt.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
@@ -112,6 +114,7 @@ class EomtImageProcessorKwargs(ImagesKwargs, total=False):
 
     do_split_image: bool
     ignore_index: int | None
+
 
 # Copied from transformers.models.eomt.image_processing_eomt.compute_segments
 def compute_segments(
@@ -167,6 +170,7 @@ def compute_segments(
         current_segment_id += 1
     return segmentation, segments
 
+
 # Copied from transformers.models.eomt.image_processing_eomt.get_target_size
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     """Returns the height and width from a size dict."""
@@ -174,6 +178,7 @@ def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     target_width = size_dict["longest_edge"] or target_height
 
     return target_height, target_width
+
 
 # Copied from transformers.models.eomt.image_processing_eomt.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
@@ -202,6 +207,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
 
     return masks[to_keep], scores[to_keep], labels[to_keep]
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -631,5 +637,6 @@ class EomtImageProcessorPil(PilBackend):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
 
 __all__ = ["EomtImageProcessorPil"]

@@ -151,6 +151,7 @@ class FuyuBatchFeature(BatchFeature):
         self.data = new_data
         return self
 
+
 # Copied from transformers.models.fuyu.image_processing_fuyu.FuyuImagesKwargs
 class FuyuImagesKwargs(ImagesKwargs, total=False):
     r"""
@@ -166,6 +167,7 @@ class FuyuImagesKwargs(ImagesKwargs, total=False):
     padding_value: float
     padding_mode: str
 
+
 # Copied from transformers.models.fuyu.image_processing_fuyu.make_list_of_list_of_images
 def make_list_of_list_of_images(
     images: list[list[ImageInput]] | list[ImageInput] | ImageInput,
@@ -180,6 +182,7 @@ def make_list_of_list_of_images(
         return [make_list_of_images(image) for image in images]
 
     raise ValueError("images must be a list of list of images or a list of images or an image.")
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -572,5 +575,6 @@ class FuyuImageProcessorPil(PilBackend):
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
         kwargs["patch_size"] = patch_size
         return kwargs
+
 
 __all__ = ["FuyuImageProcessorPil"]

@@ -28,6 +28,7 @@ from ...utils.import_utils import requires
 if is_torch_available():
     import torch
 
+
 # Copied from transformers.models.kosmos2_5.image_processing_kosmos2_5.Kosmos2_5ImageProcessorKwargs
 class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
@@ -40,6 +41,7 @@ class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
 
     patch_size: SizeDict | None
     max_patches: int
+
 
 # Copied from transformers.models.kosmos2_5.image_processing_kosmos2_5.torch_extract_patches
 # Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.
@@ -65,6 +67,7 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
         image_tensor.size(1) * patch_height * patch_width,
     )
     return patches
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -248,5 +251,6 @@ class Kosmos2_5ImageProcessorPil(PilBackend):
             patch_size = SizeDict(**get_size_dict(patch_size, param_name="patch_size"))
         kwargs["patch_size"] = patch_size
         return kwargs
+
 
 __all__ = ["Kosmos2_5ImageProcessorPil"]

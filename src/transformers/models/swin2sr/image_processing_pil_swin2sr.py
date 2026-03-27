@@ -112,4 +112,5 @@ class Swin2SRImageProcessorPil(PilBackend):
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+
 __all__ = ["Swin2SRImageProcessorPil"]

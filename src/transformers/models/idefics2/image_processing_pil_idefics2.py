@@ -54,6 +54,7 @@ class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
 
     do_image_splitting: bool
 
+
 # Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
 def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
@@ -72,6 +73,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     alpha_composite = alpha_composite.convert("RGB")
     return alpha_composite
 
+
 # Copied from transformers.models.idefics2.image_processing_idefics2.get_max_height_width
 def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
     """
@@ -85,6 +87,7 @@ def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> 
     max_height = max(size[0] for size in image_sizes)
     max_width = max(size[1] for size in image_sizes)
     return (max_height, max_width)
+
 
 # Copied from transformers.models.idefics2.image_processing_idefics2.get_resize_output_image_size
 def get_resize_output_image_size(image, size: SizeDict) -> tuple[int, int]:
@@ -270,5 +273,6 @@ class Idefics2ImageProcessorPil(PilBackend):
             data = {"pixel_values": images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
 
 __all__ = ["Idefics2ImageProcessorPil"]

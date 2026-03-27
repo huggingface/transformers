@@ -30,11 +30,13 @@ if TYPE_CHECKING:
 
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
+
 def is_grayscale(image: np.ndarray) -> bool:
     """Checks if an image is grayscale (all RGB channels are identical)."""
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+
 
 def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     """
@@ -159,5 +161,6 @@ class SuperPointImageProcessorPil(PilBackend):
             results.append({"keypoints": keypoints, "scores": scores, "descriptors": descriptors})
 
         return results
+
 
 __all__ = ["SuperPointImageProcessorPil"]

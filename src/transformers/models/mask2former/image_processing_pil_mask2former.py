@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from typing import Any
 
@@ -38,9 +39,10 @@ from ...image_utils import (
     get_image_size_for_max_height_width,
     get_max_height_width,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
+from .image_processing_mask2former import Mask2FormerImageProcessorKwargs
 
 
 if is_torch_available():
@@ -48,6 +50,7 @@ if is_torch_available():
     from torch import nn
 
 logger = logging.get_logger(__name__)
+
 
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: np.ndarray,
@@ -84,36 +87,7 @@ def convert_segmentation_map_to_binary_masks(
         labels = all_labels.astype(np.int64)
     return binary_masks.astype(np.float32), labels
 
-@requires(backends=("torch",))
 
-
-# Copied from transformers.models.mask2former.image_processing_mask2former.Mask2FormerImageProcessorKwargs
-class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    size_divisor (`int`, *optional*, defaults to `32`):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    pad_size (`SizeDict`, *optional*):
-        The size to pad the images to. Must be larger than any image size provided for preprocessing. If `pad_size`
-        is not provided, images will be padded to the largest height and width in the batch.
-    """
-
-    ignore_index: int | None
-    do_reduce_labels: bool
-    num_labels: int | None
-    size_divisor: int
-    pad_size: SizeDict | None
-
-# Copied from transformers.models.mask2former.image_processing_mask2former.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -138,7 +112,6 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# Copied from transformers.models.mask2former.image_processing_mask2former.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -157,7 +130,6 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, mask_k
 
 
-# Copied from transformers.models.mask2former.image_processing_mask2former.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
@@ -217,7 +189,7 @@ def compute_segments(
 
     return segmentation, segments
 
-# Copied from transformers.models.mask2former.image_processing_mask2former.convert_segmentation_to_rle
+
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -238,7 +210,7 @@ def convert_segmentation_to_rle(segmentation):
 
     return run_length_encodings
 
-# Copied from transformers.models.mask2former.image_processing_mask2former.remove_low_and_no_objects
+
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
@@ -267,6 +239,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     return masks[to_keep], scores[to_keep], labels[to_keep]
 
 
+@requires(backends=("torch",))
 class Mask2FormerImageProcessorPil(PilBackend):
     valid_kwargs = Mask2FormerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -853,5 +826,6 @@ class Mask2FormerImageProcessorPil(PilBackend):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
 
 __all__ = ["Mask2FormerImageProcessorPil"]

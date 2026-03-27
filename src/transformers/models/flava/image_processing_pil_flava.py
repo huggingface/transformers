@@ -59,6 +59,7 @@ FLAVA_IMAGE_STD = OPENAI_CLIP_STD
 # Copied from transformers.models.flava.image_processing_flava.LOGIT_LAPLACE_EPS
 LOGIT_LAPLACE_EPS: float = 0.1
 
+
 # Copied from transformers.models.flava.image_processing_flava.FlavaImageProcessorKwargs
 class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     """
@@ -143,6 +144,7 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_do_normalize: bool
     codebook_image_mean: float | Iterable[float]
     codebook_image_std: float | Iterable[float]
+
 
 # Copied from transformers.models.flava.image_processing_flava.FlavaMaskingGenerator
 # Inspired from https://github.com/microsoft/unilm/blob/master/beit/masking_generator.py
@@ -466,5 +468,6 @@ class FlavaImageProcessorPil(PilBackend):
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
 
 __all__ = ["FlavaImageProcessorPil"]

@@ -39,6 +39,7 @@ from ...utils.import_utils import requires
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
+
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
     """Constrain a value to be a multiple of another value."""
     x = round(val / multiple) * multiple
@@ -50,6 +51,7 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = math.ceil(val / multiple) * multiple
 
     return x
+
 
 def _get_resize_output_image_size(
     input_image: np.ndarray, output_size: tuple[int, int], keep_aspect_ratio: bool, multiple: int
@@ -326,5 +328,6 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
             results.append({"predicted_depth": depth})
 
         return results
+
 
 __all__ = ["PromptDepthAnythingImageProcessorPil"]

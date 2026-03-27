@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 
 import numpy as np
@@ -25,26 +26,11 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from .image_processing_glm46v import Glm46VImageProcessorKwargs
 
 
-# Copied from transformers.models.glm46v.image_processing_glm46v.Glm46VImageProcessorKwargs
-class Glm46VImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-
-# Copied from transformers.models.glm46v.image_processing_glm46v.smart_resize
 def smart_resize(
     num_frames: int,
     height: int,
@@ -257,5 +243,6 @@ class Glm46VImageProcessorPil(PilBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
 
 __all__ = ["Glm46VImageProcessorPil"]

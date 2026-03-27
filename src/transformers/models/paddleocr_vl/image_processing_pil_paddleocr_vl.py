@@ -31,28 +31,11 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs
 
 
-# Copied from transformers.models.paddleocr_vl.image_processing_paddleocr_vl.PaddleOCRVLImageProcessorKwargs
-class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 1):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: int
-    max_pixels: int
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-
-# Copied from transformers.models.paddleocr_vl.image_processing_paddleocr_vl.smart_resize
 def smart_resize(
     height: int,
     width: int,
@@ -247,5 +230,6 @@ class PaddleOCRVLImageProcessorPil(PilBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
 
 __all__ = ["PaddleOCRVLImageProcessorPil"]

@@ -136,4 +136,5 @@ class GLPNImageProcessorPil(PilBackend):
             results.append({"predicted_depth": depth})
         return results
 
+
 __all__ = ["GLPNImageProcessorPil"]

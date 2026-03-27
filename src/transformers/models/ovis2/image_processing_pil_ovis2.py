@@ -56,6 +56,7 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
     max_patches: int
     use_covering_area_grid: bool
 
+
 # Copied from transformers.models.ovis2.image_processing_ovis2.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
@@ -121,6 +122,7 @@ def get_min_tile_covering_grid(
     if sufficient_covering_grids:
         return min(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0]
     return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
+
 
 # Copied from transformers.models.ovis2.image_processing_ovis2.get_optimal_tiled_canvas
 @lru_cache(maxsize=100)
@@ -290,5 +292,6 @@ class Ovis2ImageProcessorPil(PilBackend):
             processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+
 
 __all__ = ["Ovis2ImageProcessorPil"]

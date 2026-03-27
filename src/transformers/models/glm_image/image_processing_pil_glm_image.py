@@ -26,32 +26,11 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
+from .image_processing_glm_image import GlmImageImageProcessorKwargs
 
 
-# Copied from transformers.models.glm_image.image_processing_glm_image.GlmImageImageProcessorKwargs
-class GlmImageImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-        The max pixels of the image to resize the image.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: int
-    max_pixels: int
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-
-# Copied from transformers.models.glm_image.image_processing_glm_image.smart_resize
 def smart_resize(
     height: int,
     width: int,
@@ -261,5 +240,6 @@ class GlmImageImageProcessorPil(PilBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
 
 __all__ = ["GlmImageImageProcessorPil"]

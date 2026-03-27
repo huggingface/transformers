@@ -40,6 +40,7 @@ class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
 
     patch_size: dict[str, int] | int
 
+
 # Copied from transformers.models.pixtral.image_processing_pixtral._num_image_tokens
 def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
     """
@@ -221,5 +222,6 @@ class PixtralImageProcessorPil(PilBackend):
         return BatchFeature(
             data={"pixel_values": padded_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
+
 
 __all__ = ["PixtralImageProcessorPil"]

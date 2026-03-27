@@ -69,6 +69,7 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
     mask[:input_height, :input_width] = 1
     return mask
 
+
 # Copied from transformers.models.oneformer.image_processing_oneformer.OneFormerImageProcessorKwargs
 class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
@@ -92,6 +93,7 @@ class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     num_labels: int | None
     ignore_index: int | None
     do_reduce_labels: bool
+
 
 # Copied from transformers.models.oneformer.image_processing_oneformer.binary_mask_to_rle
 def binary_mask_to_rle(mask):
@@ -195,6 +197,7 @@ def compute_segments(
 
     return segmentation, segments
 
+
 # Copied from transformers.models.oneformer.image_processing_oneformer.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
@@ -215,6 +218,7 @@ def convert_segmentation_to_rle(segmentation):
         run_length_encodings.append(rle)
 
     return run_length_encodings
+
 
 # Copied from transformers.models.oneformer.image_processing_oneformer.load_metadata
 def load_metadata(repo_id, class_info_file):
@@ -238,6 +242,7 @@ def load_metadata(repo_id, class_info_file):
 
     return class_info
 
+
 # Copied from transformers.models.oneformer.image_processing_oneformer.prepare_metadata
 def prepare_metadata(class_info):
     metadata = {}
@@ -251,6 +256,7 @@ def prepare_metadata(class_info):
     metadata["thing_ids"] = thing_ids
     metadata["class_names"] = class_names
     return metadata
+
 
 # Copied from transformers.models.oneformer.image_processing_oneformer.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
@@ -279,6 +285,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
 
     return masks[to_keep], scores[to_keep], labels[to_keep]
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -996,5 +1003,6 @@ class OneFormerImageProcessorPil(PilBackend):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
 
 __all__ = ["OneFormerImageProcessorPil"]

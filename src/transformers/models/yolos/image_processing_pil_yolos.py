@@ -33,9 +33,10 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
 from ...utils.import_utils import requires
+from .image_processing_yolos import YolosImageProcessorKwargs
 
 
 if is_vision_available():
@@ -45,6 +46,7 @@ if is_torch_available():
     from torch import nn
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+
 
 # inspired by https://github.com/facebookresearch/yolos/blob/master/datasets/coco.py#L33
 def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
@@ -79,6 +81,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
         masks = np.zeros((0, height, width), dtype=np.uint8)
 
     return masks
+
 
 # inspired by https://github.com/facebookresearch/yolos/blob/master/datasets/coco.py#L50
 def prepare_coco_detection_annotation(
@@ -140,6 +143,7 @@ def prepare_coco_detection_annotation(
 
     return new_target
 
+
 def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     """
     Compute the bounding boxes around the provided panoptic segmentation masks.
@@ -173,6 +177,7 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
 
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
+
 # 2 functions below adapted from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
 # Copyright (c) 2018, Alexander Kirillov
 # All rights reserved.
@@ -185,6 +190,7 @@ def rgb_to_id(color):
             color = color.astype(np.int32)
         return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
+
 
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
@@ -226,6 +232,7 @@ def prepare_coco_panoptic_annotation(
 
     return new_target
 
+
 def get_size_with_aspect_ratio_yolos(
     image_size: tuple[int, int], size: int, max_size: int | None = None, mod_size: int = 16
 ) -> tuple[int, int]:
@@ -265,21 +272,6 @@ def get_size_with_aspect_ratio_yolos(
         oh = oh - (oh % mod_size)
 
     return (oh, ow)
-
-
-# Copied from transformers.models.yolos.image_processing_yolos.YolosImageProcessorKwargs
-class YolosImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the YOLOS model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
 
 
 @auto_docstring
@@ -750,5 +742,6 @@ class YolosImageProcessorPil(PilBackend):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
 
 __all__ = ["YolosImageProcessorPil"]

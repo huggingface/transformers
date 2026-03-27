@@ -48,6 +48,7 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
 # Copied from transformers.models.idefics3.image_processing_idefics3.MAX_IMAGE_SIZE
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
+
 # Copied from transformers.models.idefics3.image_processing_idefics3.Idefics3ImageProcessorKwargs
 class Idefics3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
@@ -63,6 +64,7 @@ class Idefics3ImageProcessorKwargs(ImagesKwargs, total=False):
     do_image_splitting: bool
     max_image_size: dict[str, int]
     return_row_col_info: bool
+
 
 # Copied from transformers.models.idefics3.image_processing_idefics3._resize_output_size_rescale_to_max_len
 def _resize_output_size_rescale_to_max_len(
@@ -101,6 +103,7 @@ def _resize_output_size_rescale_to_max_len(
     width = max(width, min_len)
     return height, width
 
+
 # Copied from transformers.models.idefics3.image_processing_idefics3._resize_output_size_scale_below_upper_bound
 def _resize_output_size_scale_below_upper_bound(
     height: int, width: int, max_len: dict[str, int] | None = None
@@ -132,6 +135,7 @@ def _resize_output_size_scale_below_upper_bound(
     width = max(width, 1)
     return height, width
 
+
 def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -145,6 +149,7 @@ def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]
     max_width = max(size[1] for size in image_sizes)
     return (max_height, max_width)
 
+
 def get_num_channels(images_list: list[list[np.ndarray]]) -> int:
     """
     Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
@@ -154,6 +159,7 @@ def get_num_channels(images_list: list[list[np.ndarray]]) -> int:
             return images[0].shape[0]
 
     raise ValueError("No images found in the batch.")
+
 
 def get_resize_output_image_size(
     image: np.ndarray,
@@ -469,5 +475,6 @@ class Idefics3ImageProcessorPil(PilBackend):
                 num_patches = num_rows * num_cols + 1
 
         return num_patches, num_rows, num_cols
+
 
 __all__ = ["Idefics3ImageProcessorPil"]

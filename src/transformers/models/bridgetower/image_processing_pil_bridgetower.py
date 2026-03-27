@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -43,6 +42,7 @@ class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     size_divisor: int
+
 
 # Copied from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
 def get_resize_output_image_size(
@@ -172,5 +172,6 @@ class BridgeTowerImageProcessorPil(PilBackend):
         data["pixel_values"] = processed_images
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
 
 __all__ = ["BridgeTowerImageProcessorPil"]

@@ -63,6 +63,7 @@ def get_resize_output_image_size(
         new_height = int(new_width * ratio)
     return (new_height, new_width)
 
+
 # Copied from transformers.models.sam.image_processing_sam.SamImageProcessorKwargs
 class SamImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
@@ -75,6 +76,7 @@ class SamImageProcessorKwargs(ImagesKwargs, total=False):
 
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
+
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -465,6 +467,7 @@ class SamImageProcessorPil(PilBackend):
         """
         return _post_process_for_mask_generation(all_masks, all_scores, all_boxes, crops_nms_thresh)
 
+
 def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stability_score_offset: int):
     # One mask is always contained inside the other.
     # Save memory by preventing unnecessary cast to torch.int64
@@ -474,6 +477,7 @@ def _compute_stability_score(masks: "torch.Tensor", mask_threshold: float, stabi
     unions = (masks > (mask_threshold - stability_score_offset)).sum(-1, dtype=torch.int16).sum(-1, dtype=torch.int32)
     stability_scores = intersections / unions
     return stability_scores
+
 
 def _batched_mask_to_box(masks: "torch.Tensor"):
     """
@@ -523,6 +527,7 @@ def _batched_mask_to_box(masks: "torch.Tensor"):
     out = out.reshape(*shape[:-2], 4)
     return out
 
+
 def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     """Filter masks at the edge of a crop, but not at the edge of the original image."""
     crop_box_torch = torch.as_tensor(crop_box, dtype=torch.float, device=boxes.device)
@@ -540,6 +545,7 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
     near_crop_edge = torch.logical_and(near_crop_edge, ~near_image_edge)
     return torch.any(near_crop_edge, dim=1)
 
+
 def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
     left, top, right, bottom = crop_box
     if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
@@ -548,6 +554,7 @@ def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
     pad_x, pad_y = orig_width - (right - left), orig_height - (bottom - top)
     pad = (left, pad_x - left, top, pad_y - top)
     return torch.nn.functional.pad(masks, pad, value=0)
+
 
 def _generate_crop_boxes(
     image,
@@ -600,6 +607,7 @@ def _generate_crop_boxes(
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
 
+
 def _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size):
     """
     Generates 2 ** (layers idx + 1) crops for each crop_n_layers. Crops are in the XYWH format : The XYWH format
@@ -633,6 +641,7 @@ def _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size):
 
     return crop_boxes, layer_idxs
 
+
 def _build_point_grid(n_per_side: int) -> np.ndarray:
     """Generates a 2D grid of points evenly spaced in [0,1]x[0,1]."""
     offset = 1 / (2 * n_per_side)
@@ -641,6 +650,7 @@ def _build_point_grid(n_per_side: int) -> np.ndarray:
     points_y = np.tile(points_one_side[:, None], (1, n_per_side))
     points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
     return points
+
 
 def _generate_crop_images(
     crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format=None
@@ -665,6 +675,7 @@ def _generate_crop_images(
         total_points_per_crop.append(normalized_points)
 
     return cropped_images, total_points_per_crop
+
 
 def _normalize_coordinates(
     target_size: int, coords: np.ndarray, original_size: tuple[int, int], is_bounding_box=False
@@ -693,6 +704,7 @@ def _normalize_coordinates(
 
     return coords
 
+
 def _rle_to_mask(rle: dict[str, Any]) -> np.ndarray:
     """Compute a binary mask from an uncompressed RLE."""
     height, width = rle["size"]
@@ -705,6 +717,7 @@ def _rle_to_mask(rle: dict[str, Any]) -> np.ndarray:
         parity = not parity
     mask = mask.reshape(width, height)
     return mask.transpose()  # Reshape to original shape
+
 
 def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     """
@@ -740,6 +753,7 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
 
     return masks, iou_scores, rle_masks, mask_boxes
 
+
 def _mask_to_rle(input_mask: "torch.Tensor"):
     """
     Encodes masks the run-length encoding (RLE), in the format expected by pycoco tools.
@@ -769,5 +783,6 @@ def _mask_to_rle(input_mask: "torch.Tensor"):
         counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1].item()]
         out.append({"size": [height, width], "counts": counts})
     return out
+
 
 __all__ = ["SamImageProcessorPil"]

@@ -148,7 +148,7 @@ class SegformerImageProcessor(TorchvisionBackend):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,

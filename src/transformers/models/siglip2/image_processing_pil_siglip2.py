@@ -38,6 +38,7 @@ def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
 
+
 def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 0) -> tuple[np.ndarray, np.ndarray]:
     """
     Pad the array along the first dimension.
@@ -64,6 +65,7 @@ class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
 
     patch_size: int
     max_num_patches: int
+
 
 # Copied from transformers.models.siglip2.image_processing_siglip2.get_image_size_for_max_num_patches
 def get_image_size_for_max_num_patches(
@@ -194,5 +196,6 @@ class Siglip2ImageProcessorPil(PilBackend):
             tensor_type=return_tensors,
         )
         return batch_feature
+
 
 __all__ = ["Siglip2ImageProcessorPil"]

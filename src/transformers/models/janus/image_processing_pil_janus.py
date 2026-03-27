@@ -267,4 +267,5 @@ class JanusImageProcessorPil(PilBackend):
         )
         return image
 
+
 __all__ = ["JanusImageProcessorPil"]

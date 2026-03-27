@@ -57,6 +57,7 @@ class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
     do_affine_transform: bool | None
     normalize_factor: float | None
 
+
 # Copied from transformers.models.vitpose.image_processing_vitpose.box_to_center_and_scale
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
@@ -102,6 +103,7 @@ def box_to_center_and_scale(
 
     return center, scale
 
+
 # Copied from transformers.models.vitpose.image_processing_vitpose.coco_to_pascal_voc
 def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     """
@@ -121,6 +123,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     bboxes[:, 3] = bboxes[:, 3] + bboxes[:, 1] - 1
 
     return bboxes
+
 
 # Copied from transformers.models.vitpose.image_processing_vitpose.get_keypoint_predictions
 def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -154,6 +157,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarr
 
     preds = np.where(np.tile(scores, (1, 1, 2)) > 0.0, preds, -1)
     return preds, scores
+
 
 # Copied from transformers.models.vitpose.image_processing_vitpose.get_warp_matrix
 def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
@@ -191,6 +195,7 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
         -0.5 * size_input[0] * math.sin(theta) - 0.5 * size_input[1] * math.cos(theta) + 0.5 * size_target[1]
     )
     return matrix
+
 
 # Copied from transformers.models.vitpose.image_processing_vitpose.post_dark_unbiased_data_processing
 def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
@@ -252,6 +257,7 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
     coords -= np.einsum("ijmn,ijnk->ijmk", hessian, derivative).squeeze()
     return coords
 
+
 # Copied from transformers.models.vitpose.image_processing_vitpose.scipy_warp_affine
 def scipy_warp_affine(src, M, size):
     """
@@ -277,6 +283,7 @@ def scipy_warp_affine(src, M, size):
     new_src = [affine_transform(channel, M_inv, output_shape=size, order=1) for channel in channels]
     new_src = np.stack(new_src, axis=-1)
     return new_src
+
 
 # Copied from transformers.models.vitpose.image_processing_vitpose.transform_preds
 def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray) -> np.ndarray:
@@ -515,5 +522,6 @@ class VitPoseImageProcessorPil(PilBackend):
                 image_results.append(pose_result)
             results.append(image_results)
         return results
+
 
 __all__ = ["VitPoseImageProcessorPil"]

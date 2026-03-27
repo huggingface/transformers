@@ -52,6 +52,7 @@ class Qwen2VLImageProcessorKwargs(ImagesKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
 
+
 # Copied from transformers.models.qwen2_vl.image_processing_qwen2_vl.smart_resize
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
@@ -250,5 +251,6 @@ class Qwen2VLImageProcessorPil(PilBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
 
 __all__ = ["Qwen2VLImageProcessorPil"]

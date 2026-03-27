@@ -5,7 +5,6 @@
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -22,21 +21,22 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
+from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
+from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
 if is_torch_available():
     import torch
 
-if TYPE_CHECKING:
-    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+
 
 def convert_to_grayscale(image: ImageInput) -> ImageInput:
     """
@@ -66,16 +66,6 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     return image
 
 
-# Copied from transformers.models.efficientloftr.image_processing_efficientloftr.EfficientLoFTRImageProcessorKwargs
-class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: bool
-
-# Copied from transformers.models.efficientloftr.image_processing_efficientloftr.validate_and_format_image_pairs
 def validate_and_format_image_pairs(images: ImageInput):
     error_message = (
         "Input images must be a one of the following :",
@@ -276,5 +266,6 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
         g = int(255 * score)
         b = 0
         return (r, g, b)
+
 
 __all__ = ["EfficientLoFTRImageProcessorPil"]

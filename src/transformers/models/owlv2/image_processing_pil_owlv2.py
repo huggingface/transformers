@@ -28,15 +28,18 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format, pad, to_channel_dimension_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_scipy_available,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_scipy_available, is_torch_available, requires_backends
 from ...utils.import_utils import requires
+
+
+if is_scipy_available():
+    from scipy import ndimage as ndi
+
+
+if TYPE_CHECKING:
+    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
+if is_torch_available():
+    import torch
 
 
 def _upcast(t):
@@ -64,7 +67,6 @@ def box_area(boxes):
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
-# Copied from transformers.models.owlv2.image_processing_owlv2.box_iou
 def box_iou(boxes1, boxes2):
     import torch
 
@@ -81,18 +83,6 @@ def box_iou(boxes1, boxes2):
 
     iou = inter / union
     return iou, union
-
-
-if is_scipy_available():
-    from scipy import ndimage as ndi
-
-
-if TYPE_CHECKING:
-    from .modeling_owlv2 import Owlv2ObjectDetectionOutput
-if is_torch_available():
-    import torch
-if is_torchvision_available():
-    pass
 
 
 def _preprocess_resize_output_shape(image, output_shape):
@@ -359,7 +349,7 @@ class Owlv2ImageProcessorPil(PilBackend):
 
         return results
 
-    def pad(self, image: "np.ndarray", constant_value: float = 0.0) -> "np.ndarray":
+    def pad(self, image: np.ndarray, constant_value: float = 0.0) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
         """

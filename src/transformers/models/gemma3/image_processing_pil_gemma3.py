@@ -221,4 +221,5 @@ class Gemma3ImageProcessorPil(PilBackend):
             data={"pixel_values": processed_images, "num_crops": num_crops}, tensor_type=return_tensors
         )
 
+
 __all__ = ["Gemma3ImageProcessorPil"]

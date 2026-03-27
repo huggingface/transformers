@@ -40,10 +40,12 @@ if TYPE_CHECKING:
 
     from .modeling_superglue import SuperGlueKeypointMatchingOutput
 
+
 def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+
 
 def convert_to_grayscale(image: ImageInput) -> ImageInput:
     """
@@ -109,6 +111,7 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_grayscale: bool
+
 
 @auto_docstring
 class SuperGlueImageProcessorPil(PilBackend):
@@ -291,5 +294,6 @@ class SuperGlueImageProcessorPil(PilBackend):
         g = int(255 * score)
         b = 0
         return (r, g, b)
+
 
 __all__ = ["SuperGlueImageProcessorPil"]
