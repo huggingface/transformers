@@ -4,8 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
-
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -28,6 +26,8 @@ from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
 
+if TYPE_CHECKING:
+    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 if is_torch_available():
     import torch
 
@@ -39,10 +39,6 @@ class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_grayscale: bool
-
-
-if TYPE_CHECKING:
-    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
 def is_grayscale(image: np.ndarray):
@@ -79,6 +75,7 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     return image
 
 
+# Adapted from transformers.models.efficientloftr.image_processing_efficientloftr.validate_and_format_image_pairs
 def validate_and_format_image_pairs(images: ImageInput):
     error_message = (
         "Input images must be a one of the following :",

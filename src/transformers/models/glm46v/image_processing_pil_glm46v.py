@@ -45,6 +45,7 @@ class Glm46VImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
+# Adapted from transformers.models.glm46v.image_processing_glm46v.smart_resize
 def smart_resize(
     num_frames: int,
     height: int,

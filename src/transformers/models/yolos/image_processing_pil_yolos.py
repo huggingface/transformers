@@ -38,6 +38,14 @@ from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_a
 from ...utils.import_utils import requires
 
 
+if is_vision_available():
+    import PIL.Image
+if is_torch_available():
+    import torch
+    from torch import nn
+
+
+# Adapted from transformers.models.yolos.image_processing_yolos.YolosImageProcessorKwargs
 class YolosImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -51,12 +59,6 @@ class YolosImageProcessorKwargs(ImagesKwargs, total=False):
     format: str | AnnotationFormat
     do_convert_annotations: bool
 
-
-if is_vision_available():
-    import PIL.Image
-if is_torch_available():
-    import torch
-    from torch import nn
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

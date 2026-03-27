@@ -36,6 +36,13 @@ from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvis
 from ...utils.import_utils import requires
 
 
+if is_torch_available():
+    pass
+if is_torchvision_available():
+    import torchvision.transforms.v2.functional as tvF
+
+
+# Adapted from transformers.models.segformer.image_processing_segformer.SegformerImageProcessorKwargs
 class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
@@ -45,12 +52,6 @@ class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     do_reduce_labels: bool
-
-
-if is_torch_available():
-    pass
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 @requires(backends=("torch", "torchvision"))

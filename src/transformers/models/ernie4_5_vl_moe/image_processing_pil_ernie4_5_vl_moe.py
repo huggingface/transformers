@@ -29,12 +29,15 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 
 
+logger = logging.get_logger(__name__)
+
+
 class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
+    """
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*):
-        The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
@@ -42,9 +45,6 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     merge_size: int
-
-
-logger = logging.get_logger(__name__)
 
 
 def smart_resize(

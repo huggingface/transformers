@@ -36,6 +36,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
+# Adapted from transformers.models.deepseek_vl.image_processing_deepseek_vl.DeepseekVLImageProcessorKwargs
 class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):

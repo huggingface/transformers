@@ -39,6 +39,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm.SmolVLMImageProcessorKwargs
 class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_image_splitting (`bool`, *optional*, defaults to `True`):
@@ -63,9 +64,11 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm.MAX_IMAGE_SIZE
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm._resize_output_size_rescale_to_max_len
 def _resize_output_size_rescale_to_max_len(
     height: int, width: int, min_len: int | None = 1, max_len: int | None = None
 ) -> tuple[int, int]:
@@ -103,6 +106,7 @@ def _resize_output_size_rescale_to_max_len(
     return height, width
 
 
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm._resize_output_size_scale_below_upper_bound
 def _resize_output_size_scale_below_upper_bound(
     height: int, width: int, max_len: dict[str, int] | None = None
 ) -> tuple[int, int]:

@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_torch_available
 from ...utils.import_utils import requires
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
@@ -11,6 +12,15 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
+
+
+class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):

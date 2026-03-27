@@ -30,6 +30,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
+# Adapted from transformers.models.video_llama_3.image_processing_video_llama_3.VideoLlama3ImageProcessorKwargs
 class VideoLlama3ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_pixels (`int`, *optional*, defaults to `56 * 56`):

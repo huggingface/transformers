@@ -67,6 +67,7 @@ def box_area(boxes):
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
+# Adapted from transformers.models.owlv2.image_processing_owlv2.box_iou
 def box_iou(boxes1, boxes2):
     import torch
 

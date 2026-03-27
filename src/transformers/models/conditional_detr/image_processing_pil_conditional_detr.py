@@ -53,6 +53,16 @@ from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_a
 from ...utils.import_utils import requires
 
 
+if is_vision_available():
+    import PIL.Image
+if is_torch_available():
+    import torch
+    from torch import nn
+
+logger = logging.get_logger(__name__)
+
+
+# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.ConditionalDetrImageProcessorKwargs
 class ConditionalDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -66,14 +76,6 @@ class ConditionalDetrImageProcessorKwargs(ImagesKwargs, total=False):
     format: str | AnnotationFormat
     do_convert_annotations: bool
 
-
-if is_vision_available():
-    import PIL.Image
-if is_torch_available():
-    import torch
-    from torch import nn
-
-logger = logging.get_logger(__name__)
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -263,6 +265,7 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
+# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -287,6 +290,7 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
+# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -305,6 +309,7 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, mask_k
 
 
+# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
@@ -368,6 +373,7 @@ def compute_segments(
     return segmentation, segments
 
 
+# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -391,6 +397,7 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
+# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and

@@ -51,6 +51,11 @@ from ...utils import TensorType, auto_docstring, is_torch_available, requires_ba
 from ...utils.import_utils import requires
 
 
+if is_torch_available():
+    import torch
+
+
+# Adapted from transformers.models.rt_detr.image_processing_rt_detr.RTDetrImageProcessorKwargs
 class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -64,9 +69,6 @@ class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
     format: str | AnnotationFormat
     do_convert_annotations: bool
 
-
-if is_torch_available():
-    import torch
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

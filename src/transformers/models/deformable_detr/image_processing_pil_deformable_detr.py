@@ -52,6 +52,13 @@ from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_a
 from ...utils.import_utils import requires, requires_backends
 
 
+if is_vision_available():
+    import PIL.Image
+if is_torch_available():
+    import torch
+
+
+# Adapted from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessorKwargs
 class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -65,11 +72,6 @@ class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
     format: str | AnnotationFormat
     do_convert_annotations: bool
 
-
-if is_vision_available():
-    import PIL.Image
-if is_torch_available():
-    import torch
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
