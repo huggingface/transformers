@@ -1062,9 +1062,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
-        # Get the device of language model's embed_tokens for proper tensor placement
-        language_model_device = self.get_input_embeddings().weight.device
-
         # Only prepare static cache if model is not distributed across devices
         is_model_distributed = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
         if model_kwargs.get("past_key_values", None) is None and not is_model_distributed:
@@ -1094,9 +1091,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         for i in range(num_image_tokens):
-            # Ensure inputs_embeds is on the language model's device (important for multi devices setting)
-            if inputs_embeds.device != language_model_device:
-                inputs_embeds = inputs_embeds.to(language_model_device)
             # Set is_first_iteration=True to force using inputs_embeds instead of input_ids.
             # Without this, prepare_inputs_for_generation would use input_ids (full prompt) in every
             # iteration, causing the cache to overflow. We need it to use our prepared inputs_embeds
@@ -1104,8 +1098,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, is_first_iteration=True, **model_kwargs
             )
-            if "attention_mask" in model_inputs:
-                model_inputs["attention_mask"] = model_inputs["attention_mask"].to(language_model_device)
 
             outputs = self.model.language_model(
                 **model_inputs,
