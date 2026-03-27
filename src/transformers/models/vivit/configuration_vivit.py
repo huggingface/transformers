@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/vivit-b-16x2-kinetics400")
-@strict(accept_kwargs=True)
+@strict
 class VivitConfig(PreTrainedConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 32):

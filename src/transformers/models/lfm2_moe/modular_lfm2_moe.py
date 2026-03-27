@@ -195,8 +195,8 @@ class Lfm2MoeModel(MixtralModel):
         position_embeddings = self.pos_emb(hidden_states, position_ids=position_ids)
 
         # decoder layers
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_mask = causal_mask if decoder_layer.is_attention_layer else linear_attention
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = causal_mask if self.config.layer_types[i] == "full_attention" else linear_attention
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=layer_mask,

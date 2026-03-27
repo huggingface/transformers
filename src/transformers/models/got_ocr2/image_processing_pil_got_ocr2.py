@@ -31,15 +31,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
+from ...utils.import_utils import requires
 from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class GotOcr2ImageProcessorPil(PilBackend):
     valid_kwargs = GotOcr2ImageProcessorKwargs
@@ -65,7 +62,7 @@ class GotOcr2ImageProcessorPil(PilBackend):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -84,7 +81,7 @@ class GotOcr2ImageProcessorPil(PilBackend):
                 Whether to add a thumbnail image to the list of cropped patches.
             patch_size (`SizeDict`, *optional*):
                 The size of the output patches.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+            resample (`PILImageResampling | int | None`, *optional*):
                 Resampling filter to use when resizing.
         """
         # Ensure image is in CHW format for processing
@@ -134,7 +131,7 @@ class GotOcr2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -14,6 +14,8 @@
 """Image processor class for SegGPT."""
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -26,18 +28,13 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class SegGptImageProcessorPil(PilBackend):
     valid_kwargs = SegGptImageProcessorKwargs
 
@@ -245,11 +242,7 @@ class SegGptImageProcessorPil(PilBackend):
 
         for idx, mask in enumerate(masks):
             if target_sizes is not None:
-                mask = torch.nn.functional.interpolate(
-                    mask.unsqueeze(0),
-                    size=target_sizes[idx],
-                    mode="nearest",
-                )[0]
+                mask = torch.nn.functional.interpolate(mask.unsqueeze(0), size=target_sizes[idx], mode="nearest")[0]
 
             if num_labels is not None:
                 channels, height, width = mask.shape

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 from torch import nn
 
-from transformers import AutoModelForImageTextToText
+from transformers import AutoModel
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -105,12 +105,14 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
+    base_model_prefix = "vlm"
+
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
+        self.vlm = AutoModel.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -162,16 +164,14 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                image_embeds = self.vlm.model.visual(
-                    pixel_values, grid_thw=image_grid_thw, return_dict=True
-                ).pooler_output
+                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True).pooler_output
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        vlm_output = self.vlm.model(
+        vlm_output = self.vlm(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -200,37 +200,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
         )
-
-    def get_input_embeddings(self):
-        return self.vlm.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.vlm.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.vlm.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.vlm.set_output_embeddings(new_embeddings)
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        model_embeds = self.vlm.resize_token_embeddings(
-            new_num_tokens=new_num_tokens,
-            pad_to_multiple_of=pad_to_multiple_of,
-            mean_resizing=mean_resizing,
-        )
-
-        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
-        self.vlm.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-
-        return model_embeds
 
 
 __all__ = ["ColQwen2ForRetrieval", "ColQwen2PreTrainedModel"]

@@ -17,6 +17,8 @@ import itertools
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -29,15 +31,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_scipy_available,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_scipy_available, logging, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_vitpose import (
     VitPoseImageProcessorKwargs,
     box_to_center_and_scale,
@@ -50,12 +45,6 @@ from .image_processing_vitpose import (
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
 if is_scipy_available():
     pass
 
@@ -66,6 +55,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=("torch", "torchvision"))
 class VitPoseImageProcessorPil(PilBackend):
     """PIL backend for VitPose with affine transform."""
 
@@ -115,12 +105,7 @@ class VitPoseImageProcessorPil(PilBackend):
         return self._preprocess(images, **kwargs)
 
     def affine_transform(
-        self,
-        image: np.ndarray,
-        center: tuple[float],
-        scale: tuple[float],
-        rotation: float,
-        size: SizeDict,
+        self, image: np.ndarray, center: tuple[float], scale: tuple[float], rotation: float, size: SizeDict
     ) -> np.ndarray:
         """Apply an affine transformation to an image."""
         size_tuple = (size.width, size.height)
@@ -161,10 +146,7 @@ class VitPoseImageProcessorPil(PilBackend):
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
                     center, scale = box_to_center_and_scale(
-                        box,
-                        image_width=size.width,
-                        image_height=size.height,
-                        normalize_factor=normalize_factor,
+                        box, image_width=size.width, image_height=size.height, normalize_factor=normalize_factor
                     )
                     transformed_image = self.affine_transform(image, center, scale, rotation=0, size=size)
                     transformed_images.append(transformed_image)
@@ -179,13 +161,7 @@ class VitPoseImageProcessorPil(PilBackend):
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def keypoints_from_heatmaps(
-        self,
-        heatmaps: np.ndarray,
-        center: np.ndarray,
-        scale: np.ndarray,
-        kernel: int = 11,
-    ):
+    def keypoints_from_heatmaps(self, heatmaps: np.ndarray, center: np.ndarray, scale: np.ndarray, kernel: int = 11):
         """Get final keypoint predictions from heatmaps and transform them back to the image."""
         batch_size, _, height, width = heatmaps.shape
         coords, scores = get_keypoint_predictions(heatmaps)

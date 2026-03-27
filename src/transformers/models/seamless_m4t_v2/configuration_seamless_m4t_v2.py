@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hf-seamless-m4t-medium")
-@strict(accept_kwargs=True)
+@strict
 class SeamlessM4Tv2Config(PreTrainedConfig):
     r"""
     t2u_vocab_size (`int`, *optional*, defaults to 10082):
@@ -71,7 +71,8 @@ class SeamlessM4Tv2Config(PreTrainedConfig):
         The left clipping value for relative positions.
     right_max_position_embeddings (`int`, *optional*, defaults to 8):
         The right clipping value for relative positions.
-    speech_encoder_chunk_size (`int`, *optional*, defaults to 20000): The size of each attention chunk.
+    speech_encoder_chunk_size (`int`, *optional*, defaults to 20000):
+        The size of each attention chunk.
     speech_encoder_left_chunk_num (`int`, *optional*, defaults to 128):
         Number of chunks on the left up to which lookahead is allowed.
     t2u_bos_token_id (`int`, *optional*, defaults to 0):
@@ -154,7 +155,8 @@ class SeamlessM4Tv2Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "seamless_m4t_v2"
     attribute_map = {"num_hidden_layers": "decoder_layers", "num_attention_heads": "decoder_attention_heads"}

@@ -278,7 +278,7 @@ pipeline(
 
 Transformersは事前学習済みモデルを使用するためのツールキット以上のものであり、それとHugging Face Hubを中心に構築されたプロジェクトのコミュニティです。私たちは、開発者、研究者、学生、教授、エンジニア、そしてその他の誰もが夢のプロジェクトを構築できるようにTransformersを提供したいと考えています。
 
-Transformersの10万スターを記念して、Transformersで構築された100の素晴らしいプロジェクトをリストアップした[awesome-transformers](./awesome-transformers.md)ページで、コミュニティにスポットライトを当てたいと考えました。
+Transformersの10万スターを記念して、Transformersで構築された100の素晴らしいプロジェクトをリストアップした[awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md)ページで、コミュニティにスポットライトを当てたいと考えました。
 
 もしあなたがリストに加えるべきだと思うプロジェクトを所有または使用しているなら、ぜひPRを開いて追加してください！
 

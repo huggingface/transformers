@@ -1,7 +1,7 @@
 import torch
 
 from ...utils import TensorType
-from ...utils.import_utils import requires_backends
+from ...utils.import_utils import requires, requires_backends
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
 from ..superglue.image_processing_superglue import SuperGlueImageProcessor
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
@@ -68,6 +68,7 @@ class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):
         return results
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 class EfficientLoFTRImageProcessorPil(SuperGlueImageProcessorPil):
     def post_process_keypoint_matching(
         self,

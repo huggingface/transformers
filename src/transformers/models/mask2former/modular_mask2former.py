@@ -20,6 +20,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from ..maskformer.image_processing_maskformer import MaskFormerImageProcessor
 from ..maskformer.image_processing_pil_maskformer import MaskFormerImageProcessorPil
 from .image_processing_mask2former import (
@@ -305,6 +306,7 @@ class Mask2FormerImageProcessor(MaskFormerImageProcessor):
         return results
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple[int, int]] | None = None

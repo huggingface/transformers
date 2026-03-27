@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -50,7 +50,7 @@ class SamHQPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -115,11 +115,9 @@ class SamHQVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQMaskDecoderConfig(PreTrainedConfig):
     r"""
-    vit_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     mlp_dim (`int`, *optional*, defaults to 2048):
         Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
     attention_downsample_rate (`int`, *optional*, defaults to 2):
@@ -130,6 +128,8 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
         The number of layers in the IoU head module.
     iou_head_hidden_dim (`int`, *optional*, defaults to 256):
         The dimensionality of the hidden states in the IoU head module.
+    vit_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """
 
     base_config_key = "mask_decoder_config"
@@ -149,7 +149,7 @@ class SamHQMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
-@strict(accept_kwargs=True)
+@strict
 class SamHQConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

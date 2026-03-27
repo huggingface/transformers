@@ -37,20 +37,12 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_scipy_available,
-    is_torch_available,
-    is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import OwlViTImageProcessor
 from ..owlvit.image_processing_pil_owlvit import OwlViTImageProcessorPil
 
-
-if is_torch_available():
-    import torch
-
-
-if is_vision_available():
-    pass
 
 if is_scipy_available():
     from scipy import ndimage as ndi
@@ -320,6 +312,7 @@ class Owlv2ImageProcessor(OwlViTImageProcessor):
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Owlv2ImageProcessorPil(OwlViTImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN
