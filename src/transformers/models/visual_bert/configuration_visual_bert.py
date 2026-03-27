@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uclanlp/visualbert-vqa-coco-pre")
-@strict(accept_kwargs=True)
+@strict
 class VisualBertConfig(PreTrainedConfig):
     r"""
     visual_embedding_dim (`int`, *optional*, defaults to 512):
@@ -68,7 +68,7 @@ class VisualBertConfig(PreTrainedConfig):
     special_visual_initialize: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
 
 

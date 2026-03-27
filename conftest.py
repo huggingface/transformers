@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     patch_torch_compile_force_graph,
 )
 from transformers.utils import enable_tf32
+from transformers.utils.network_logging import register_network_debug_plugin
 
 
 NOT_DEVICE_TESTS = {
@@ -98,6 +99,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
 
     os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+    register_network_debug_plugin(config)
 
 
 def pytest_collection_modifyitems(items):

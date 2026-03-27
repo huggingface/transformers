@@ -104,7 +104,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 - a path to a *directory* containing a image processor file saved using the
                   [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved image processor JSON *file*, e.g.,
+                - a path to a saved image processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model image processor should be cached if the
@@ -477,7 +477,7 @@ class ImageProcessingMixin(PushToHubMixin):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(image_url_or_urls, list):
+        if isinstance(image_url_or_urls, (list, tuple)):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
             return load_image(image_url_or_urls)

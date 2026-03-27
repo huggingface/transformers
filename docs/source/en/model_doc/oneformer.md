@@ -74,9 +74,9 @@ The resource should ideally demonstrate something new instead of duplicating an 
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## OneFormerImageProcessorFast
+## OneFormerImageProcessorPil
 
-[[autodoc]] OneFormerImageProcessorFast
+[[autodoc]] OneFormerImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
     - post_process_instance_segmentation

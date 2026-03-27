@@ -99,9 +99,9 @@ for result in results:
     - preprocess
     - post_process_object_detection
 
-## DeformableDetrImageProcessorFast
+## DeformableDetrImageProcessorPil
 
-[[autodoc]] DeformableDetrImageProcessorFast
+[[autodoc]] DeformableDetrImageProcessorPil
     - preprocess
     - post_process_object_detection
 
