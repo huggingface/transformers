@@ -15,28 +15,18 @@
 
 from functools import lru_cache
 
-import numpy as np
+import torch
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -121,203 +111,69 @@ class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `True`):
         Whether to crop the image into local patches. When `False`, only the global view is produced.
-        Can be overridden by the `crop_to_patches` parameter in the `preprocess` method.
     min_patches (`int`, *optional*, defaults to `2`):
         The minimum number of patches to extract from the image for the local view.
         Only has an effect if `crop_to_patches` is set to `True`.
-        Can be overridden by the `min_patches` parameter in the `preprocess` method.
     max_patches (`int`, *optional*, defaults to `6`):
         The maximum number of patches to extract from the image for the local view.
         Only has an effect if `crop_to_patches` is set to `True`.
-        Can be overridden by the `max_patches` parameter in the `preprocess` method.
     tile_size (`int`, *optional*, defaults to `768`):
         The size of each local tile. Must match the model's query embedding size.
+    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
+        The background color for padding.
     """
 
     crop_to_patches: bool
     min_patches: int
     max_patches: int
     tile_size: int
-    background_color: tuple[int, int, int]
+    background_color: list[int]
 
 
-class DeepseekOcr2ImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a DeepSeek-OCR-2 image processor.
-
-    This processor handles dual-view image processing:
-    - **Global view**: Pads the image to a square of `size` x `size`.
-    - **Local view**: Crops the image into a grid of 768 x 768 tiles (fixed tile size),
-      with the number of tiles determined by the image's aspect ratio.
-
-    When `crop_to_patches=True` and the image is larger than 768px, both views are produced.
-    When `crop_to_patches=False` or the image is small, only the global view is produced at 768x768.
-
-    Args:
-        crop_to_patches (`bool`, *optional*, defaults to `True`):
-            Whether to crop the image into local patches. When `False`, only the global view is produced.
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
-            Size of the global view image. When cropping, the image is padded to this size.
-            When not cropping, this is overridden to `tile_size` x `tile_size`.
-            Can be overridden by the `size` parameter in the `preprocess` method.
-        tile_size (`int`, *optional*, defaults to `768`):
-            The size of each local tile. Must match the model's query embedding size (e.g. 768 for query_768).
-        min_patches (`int`, *optional*, defaults to `2`):
-            The minimum number of patches to extract from the image for the local view.
-            Only has an effect if `crop_to_patches` is set to `True`.
-        max_patches (`int`, *optional*, defaults to `6`):
-            The maximum number of patches to extract from the image for the local view.
-            Only has an effect if `crop_to_patches` is set to `True`.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.LANCZOS`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Mean to use if normalizing the image. Can be overridden by the `image_mean` parameter in the `preprocess`
-            method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Standard deviation to use if normalizing the image. Can be overridden by the `image_std` parameter in
-            the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-    """
-
-    model_input_names = ["pixel_values", "num_local_patches"]
+@auto_docstring
+class DeepseekOcr2ImageProcessor(TorchvisionBackend):
     valid_kwargs = DeepseekOcr2ImageProcessorKwargs
+    resample = PILImageResampling.BICUBIC
+    image_mean = (0.5, 0.5, 0.5)
+    image_std = (0.5, 0.5, 0.5)
+    size = {"height": 1024, "width": 1024}
+    tile_size = 768
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    crop_to_patches = True
+    min_patches = 2
+    max_patches = 6
+    background_color = [127, 127, 127]
+    model_input_names = ["pixel_values", "num_local_patches"]
 
-    def __init__(
-        self,
-        crop_to_patches: bool = True,
-        do_resize: bool = True,
-        size: dict[str, int] | None = None,
-        tile_size: int = 768,
-        min_patches: int = 2,
-        max_patches: int = 6,
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        do_rescale: bool = True,
-        rescale_factor: int | float = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        background_color: tuple[int, int, int] | None = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 1024, "width": 1024}
-        size = get_size_dict(size, default_to_square=True)
-
-        self.crop_to_patches = crop_to_patches
-        self.do_resize = do_resize
-        self.size = size
-        self.tile_size = tile_size
-        self.min_patches = min_patches
-        self.max_patches = max_patches
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
-        self.do_convert_rgb = do_convert_rgb
-        self.background_color = list(background_color) if background_color is not None else [127, 127, 127]
-
-    def crop_image_to_patches(
-        self,
-        images: np.ndarray,
-        min_patches: int,
-        max_patches: int,
-        tile_size: tuple | int | dict | None = None,
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        data_format: ChannelDimension | None = None,
-    ):
-        """
-        Crop the image to patches and return a list of cropped images.
-        The number of patches and their grid arrangement are determined by the original image size,
-        the target tile size and the minimum and maximum number of patches.
-        """
-        if data_format is None:
-            data_format = infer_channel_dimension_format(images)
-        images = to_channel_dimension_format(images, ChannelDimension.FIRST, data_format)
-        tile_size_height, tile_size_width = tile_size["height"], tile_size["width"]
-        original_height, original_width = images.shape[-2:]
-
-        num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (tile_size_height, tile_size_width), min_patches, max_patches
-        )
-
-        target_width = tile_size_width * num_columns
-        target_height = tile_size_height * num_rows
-        num_blocks = num_columns * num_rows
-
-        resized_image = resize(
-            images,
-            size=(target_height, target_width),
-            resample=resample,
-            data_format=ChannelDimension.FIRST,
-            input_data_format=ChannelDimension.FIRST,
-        )
-
-        processed_images = []
-        for i in range(num_blocks):
-            column = i % num_columns
-            row = i // num_columns
-            box = (
-                column * tile_size_width,
-                row * tile_size_height,
-                (column + 1) * tile_size_width,
-                (row + 1) * tile_size_height,
-            )
-            patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
-            patch_image = to_channel_dimension_format(patch_image, data_format, ChannelDimension.FIRST)
-            processed_images.append(patch_image)
-
-        return processed_images, (num_columns, num_rows)
 
     def pad_to_square(
         self,
-        image: np.ndarray,
-        background_color: int | tuple[int, int, int] = 0,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> np.ndarray:
+        images: "torch.Tensor",
+        background_color: int | list[int] = 0,
+    ) -> "torch.Tensor":
         """
-        Pads an image to a square based on the longest edge.
+        Pads images to a square based on the longest edge.
 
         Args:
-            image (`np.ndarray`):
-                The image to pad.
-            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+            images (`torch.Tensor`):
+                The images to pad, shape `(batch, channels, height, width)`.
+            background_color (`int` or `list[int]`, *optional*, defaults to 0):
                 The color to use for the padding.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image.
 
         Returns:
-            `np.ndarray`: The padded image.
+            `torch.Tensor`: The padded images.
         """
-        height, width = get_image_size(image, input_data_format)
-        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+        height, width = images.shape[-2:]
+        num_channels = images.shape[1]
+        batch_size = images.shape[0]
 
         if height == width:
-            image = (
-                to_channel_dimension_format(image, data_format, input_data_format)
-                if data_format is not None
-                else image
-            )
-            return image
+            return images
 
         max_dim = max(height, width)
 
@@ -328,199 +184,175 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
 
-        if input_data_format == ChannelDimension.FIRST:
-            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[i, :, :] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[:, start : start + height, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, :, start : start + width] = image
+        padded_images = torch.zeros(
+            (batch_size, num_channels, max_dim, max_dim), dtype=images.dtype, device=images.device
+        )
+        for i, color in enumerate(background_color):
+            padded_images[:, i, :, :] = color
+        if width > height:
+            start = (max_dim - height) // 2
+            padded_images[:, :, start : start + height, :] = images
         else:
-            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[:, :, i] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[start : start + height, :, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, start : start + width, :] = image
+            start = (max_dim - width) // 2
+            padded_images[:, :, :, start : start + width] = images
 
-        return result
+        return padded_images
 
-    @filter_out_non_signature_kwargs()
-    def preprocess(
+    def crop_image_to_patches(
         self,
-        images: ImageInput,
-        crop_to_patches: bool | None = None,
-        do_resize: bool | None = None,
-        size: dict[str, int] | None = None,
-        min_patches: int | None = None,
-        max_patches: int | None = None,
+        images: "torch.Tensor",
+        min_patches: int,
+        max_patches: int,
+        tile_size: int,
         resample: PILImageResampling | None = None,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        return_tensors: str | TensorType | None = None,
-        do_convert_rgb: bool | None = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: str | ChannelDimension | None = None,
-    ) -> BatchFeature:
+    ) -> tuple["torch.Tensor", int]:
         """
-        Preprocess an image or batch of images for DeepSeek-OCR-2.
-
-        For each image, produces:
-        - A global view padded to `size` x `size` (1024 when cropping, 768 when not)
-        - Local tiles of 768 x 768 (only when `crop_to_patches=True` and image > 768px)
+        Crop batched images to patches based on optimal tiling.
 
         Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-                If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
-                Whether to crop the image into local patches.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the global view image.
-            min_patches (`int`, *optional*, defaults to `self.min_patches`):
-                Minimum number of local patches.
-            max_patches (`int`, *optional*, defaults to `self.max_patches`):
-                Maximum number of local patches.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image.
+            images (`torch.Tensor`):
+                The images to crop, shape `(batch, channels, height, width)`.
+            min_patches (`int`):
+                Minimum number of patches.
+            max_patches (`int`):
+                Maximum number of patches.
+            tile_size (`int`):
+                The size of each tile.
+            resample (`PILImageResampling`, *optional*):
+                Resampling filter for resizing.
+
+        Returns:
+            `tuple[torch.Tensor, int]`: Stacked patches `(batch, num_patches, channels, tile_size, tile_size)`
+            and number of patches per image.
         """
-        crop_to_patches = crop_to_patches if crop_to_patches is not None else self.crop_to_patches
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=True)
-        min_patches = min_patches if min_patches is not None else self.min_patches
-        max_patches = max_patches if max_patches is not None else self.max_patches
-        resample = resample if resample is not None else self.resample
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        original_height, original_width = images.shape[-2:]
 
-        images = self.fetch_images(images)
-        images = make_flat_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (original_height, original_width), (tile_size, tile_size), min_patches, max_patches
         )
 
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+        target_width = tile_size * num_columns
+        target_height = tile_size * num_rows
+        num_blocks = num_columns * num_rows
 
-        all_pixel_values_local = []  # flat list of all local patches
-        all_pixel_values_global = []  # global view per image
-        num_local_patches = []  # number of local patches per image
+        resized = self.resize(
+            images, SizeDict(height=target_height, width=target_width), resample=resample
+        )
 
-        for image in images:
-            image_np = to_numpy_array(image)
-            if input_data_format is None:
-                img_format = infer_channel_dimension_format(image_np)
-            else:
-                img_format = input_data_format
+        patches = []
+        for i in range(num_blocks):
+            col = i % num_columns
+            row = i // num_columns
+            patch = resized[
+                ...,
+                row * tile_size : (row + 1) * tile_size,
+                col * tile_size : (col + 1) * tile_size,
+            ]
+            patches.append(patch)
 
-            if do_rescale and is_scaled_image(image_np):
-                logger.warning_once(
-                    "It looks like you are trying to rescale already rescaled images. If the input"
-                    " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-                )
+        stacked_patches = torch.stack(patches, dim=1)
 
-            original_height, original_width = get_image_size(image_np, channel_dim=img_format)
+        return stacked_patches, num_blocks
 
-            # --- Local patches ---
-            if crop_to_patches and max(original_width, original_height) > self.tile_size:
-                tile_size_dict = {"height": self.tile_size, "width": self.tile_size}
-                local_patches, (num_cols, num_rows) = self.crop_image_to_patches(
-                    image_np,
-                    min_patches=min_patches,
-                    max_patches=max_patches,
-                    tile_size=tile_size_dict,
-                    resample=resample,
-                    data_format=img_format,
-                )
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        crop_to_patches: bool,
+        min_patches: int,
+        max_patches: int,
+        tile_size: int,
+        resample: PILImageResampling | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        # --- Local patches (batched by shape group) ---
+        num_local_patches = {}
+        local_patches_grouped = {}
 
-                for patch_np in local_patches:
-                    patch_fmt = infer_channel_dimension_format(patch_np)
-                    if do_rescale:
-                        patch_np = self.rescale(image=patch_np, scale=rescale_factor, input_data_format=patch_fmt)
-                    if do_normalize:
-                        patch_np = self.normalize(image=patch_np, mean=image_mean, std=image_std, input_data_format=patch_fmt)
-                    patch_np = to_channel_dimension_format(patch_np, data_format, input_channel_dim=patch_fmt)
-                    all_pixel_values_local.append(patch_np)
+        if crop_to_patches:
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
 
-                num_local_patches.append(len(local_patches))
-            else:
-                num_local_patches.append(0)
+            for shape, stacked_images in grouped_images.items():
+                h, w = shape[-2:]
+                if max(h, w) > tile_size:
+                    stacked_patches, n_patches = self.crop_image_to_patches(
+                        stacked_images,
+                        min_patches=min_patches,
+                        max_patches=max_patches,
+                        tile_size=tile_size,
+                        resample=resample,
+                    )
+                    flat_patches = stacked_patches.reshape(-1, *stacked_patches.shape[2:])
+                    flat_patches = self.rescale_and_normalize(
+                        flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                    )
+                    local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
+                    num_local_patches[shape] = [n_patches] * stacked_images.shape[0]
+                else:
+                    local_patches_grouped[shape] = [None] * stacked_images.shape[0]
+                    num_local_patches[shape] = [0] * stacked_images.shape[0]
 
-            # Global view size: crop_to_patches=True uses base size, False uses tile_size
-            global_target_size = size["height"] if crop_to_patches else self.tile_size
+            num_local_patches = reorder_images(num_local_patches, grouped_images_index)
+            ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
+        else:
+            num_local_patches = [0] * len(images)
+            ordered_local = []
 
-            # --- Global view ---
-            scale = global_target_size / max(original_width, original_height)
-            new_width = round(original_width * scale)
-            new_height = round(original_height * scale)
-            global_np = resize(image_np, (new_height, new_width), resample=resample, input_data_format=img_format)
+        flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
 
-            global_fmt = infer_channel_dimension_format(global_np)
-            global_np = self.pad_to_square(global_np, background_color=self.background_color, input_data_format=global_fmt)
+        # --- Global view (batched by shape group) ---
+        global_target_size = size.height if crop_to_patches else tile_size
 
-            if do_rescale:
-                global_np = self.rescale(image=global_np, scale=rescale_factor, input_data_format=global_fmt)
-            if do_normalize:
-                global_np = self.normalize(image=global_np, mean=image_mean, std=image_std, input_data_format=global_fmt)
-            global_np = to_channel_dimension_format(global_np, data_format, input_channel_dim=global_fmt)
-
-            all_pixel_values_global.append(global_np)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_global_grouped = {}
+        for shape, stacked in grouped_images.items():
+            h, w = shape[-2:]
+            scale = global_target_size / max(h, w)
+            new_h = round(h * scale)
+            new_w = round(w * scale)
+            stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), resample=resample)
+            stacked = self.pad_to_square(stacked, background_color=self.background_color)
+            stacked = self.rescale_and_normalize(
+                stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_global_grouped[shape] = stacked
+        all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
 
         data = {
             "pixel_values": all_pixel_values_global,
             "num_local_patches": num_local_patches,
         }
-        if all_pixel_values_local:
-            data["pixel_values_local"] = all_pixel_values_local
+        if flat_local_list:
+            data["pixel_values_local"] = flat_local_list
 
-        encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
-        return encoded_outputs
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """
+        Returns the number of local patches for a given image size.
+        """
+        if images_kwargs is None:
+            images_kwargs = {}
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        tile_size = images_kwargs.get("tile_size", self.tile_size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+
+        if not crop_to_patches or max(height, width) <= tile_size:
+            return 0
+
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (height, width), (tile_size, tile_size), min_patches, max_patches
+        )
+        return num_columns * num_rows
 
 
 __all__ = ["DeepseekOcr2ImageProcessor"]

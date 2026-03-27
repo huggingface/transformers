@@ -15,7 +15,7 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -23,15 +23,8 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from transformers import DeepseekOcr2ImageProcessor
-    from transformers.image_utils import PILImageResampling
 
-    if is_torchvision_available():
-        from transformers import DeepseekOcr2ImageProcessorFast
-
-
-class DeepseekOcr2ImageProcessingTester(unittest.TestCase):
+class DeepseekOcr2ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -48,7 +41,6 @@ class DeepseekOcr2ImageProcessingTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         do_convert_rgb=True,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 512, "width": 512}
         self.parent = parent
         self.batch_size = batch_size
@@ -93,9 +85,6 @@ class DeepseekOcr2ImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = DeepseekOcr2ImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DeepseekOcr2ImageProcessorFast if is_vision_available() and is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = DeepseekOcr2ImageProcessingTester(self)
@@ -105,7 +94,7 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             self.assertTrue(hasattr(image_processor, "do_resize"))
             self.assertTrue(hasattr(image_processor, "size"))
@@ -120,113 +109,110 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
         pass
 
     def test_crop_to_patches(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
-        processed_images, (num_cols, num_rows) = image_processor.crop_image_to_patches(
-            image,
-            min_patches=1,
-            max_patches=6,
-            tile_size={"height": self.image_processor_tester.tile_size, "width": self.image_processor_tester.tile_size},
-        )
-        self.assertGreater(len(processed_images), 0)
-        # Patches are returned in channels-last format (H, W, C) for numpy input
-        self.assertEqual(processed_images[0].shape[0], self.image_processor_tester.tile_size)
-        self.assertEqual(processed_images[0].shape[1], self.image_processor_tester.tile_size)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            tile_size = self.image_processor_tester.tile_size
+            if backend_name == "pil":
+                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
+                processed_images = image_processor.crop_image_to_patches(
+                    image, min_patches=1, max_patches=6, tile_size=tile_size
+                )
+                self.assertGreater(len(processed_images), 0)
+                self.assertEqual(processed_images[0].shape[:2], (tile_size, tile_size))
+            else:
+                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+                stacked_patches, n_patches = image_processor.crop_image_to_patches(
+                    image.unsqueeze(0).float(), min_patches=1, max_patches=6, tile_size=tile_size
+                )
+                self.assertGreater(n_patches, 0)
+                self.assertEqual(stacked_patches.shape[-2:], (tile_size, tile_size))
 
     def test_preprocess_global_only(self):
         """Test preprocessing without crop_to_patches (global view only)."""
-        image_processor = self.image_processing_class(**self.image_processor_dict, crop_to_patches=False)
-        images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=False)
-        result = image_processor(images, return_tensors="pt")
-        self.assertIn("pixel_values", result)
-        self.assertEqual(len(result["num_local_patches"]), len(images))
-        # Without crop_to_patches, all num_local_patches should be 0
-        for n in result["num_local_patches"]:
-            self.assertEqual(n, 0)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=False)
+            images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=False)
+            result = image_processor(images, return_tensors="pt")
+            self.assertIn("pixel_values", result)
+            self.assertEqual(len(result["num_local_patches"]), len(images))
+            for n in result["num_local_patches"]:
+                self.assertEqual(n, 0)
 
     def test_preprocess_with_crop_to_patches(self):
         """Test preprocessing with crop_to_patches enabled."""
-        image_processor = self.image_processing_class(**self.image_processor_dict, crop_to_patches=True)
-        # Use larger images to trigger local patch extraction (must be > tile_size)
-        images = prepare_image_inputs(
-            batch_size=2,
-            num_channels=3,
-            min_resolution=500,
-            max_resolution=700,
-            equal_resolution=True,
-        )
-        result = image_processor(images, return_tensors="pt")
-        self.assertIn("pixel_values", result)
-        # With large images and crop_to_patches, should have local patches
-        has_local = any(n > 0 for n in result["num_local_patches"])
-        self.assertTrue(has_local)
-        if has_local:
-            self.assertIn("pixel_values_local", result)
-
-    @require_vision
-    @require_torch
-    def test_slow_fast_equivalence(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-
-        # Use BICUBIC for slow to match fast (torchvision doesn't support LANCZOS for tensors)
-        slow_dict = {**self.image_processor_dict, "resample": PILImageResampling.BICUBIC}
-        image_processor_slow = self.image_processing_class(**slow_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        # Single large image (has local patches, > tile_size)
-        dummy_images = prepare_image_inputs(
-            batch_size=1, num_channels=3, min_resolution=500, max_resolution=700, equal_resolution=True
-        )
-        encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
-        encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
-
-        self._assert_slow_fast_tensors_equivalence(encoding_slow.pixel_values, encoding_fast.pixel_values)
-        self._assert_slow_fast_tensors_equivalence(
-            encoding_slow.pixel_values_local, encoding_fast.pixel_values_local
-        )
-        self.assertTrue(
-            torch.equal(encoding_slow.num_local_patches, encoding_fast.num_local_patches),
-            "num_local_patches mismatch",
-        )
-
-    @require_vision
-    @require_torch
-    def test_slow_fast_equivalence_batched(self):
-        if not self.test_slow_image_processor or not self.test_fast_image_processor:
-            self.skipTest(reason="Skipping slow/fast equivalence test")
-
-        if self.image_processing_class is None or self.fast_image_processing_class is None:
-            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
-
-        slow_dict = {**self.image_processor_dict, "resample": PILImageResampling.BICUBIC}
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        image_processor_slow = self.image_processing_class(**slow_dict)
-        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
-
-        encoding_slow = image_processor_slow(dummy_images, return_tensors=None)
-        encoding_fast = image_processor_fast(dummy_images, return_tensors=None)
-
-        # Global views: compare per-image (sizes may vary)
-        for i in range(len(encoding_slow.pixel_values)):
-            self._assert_slow_fast_tensors_equivalence(
-                torch.from_numpy(encoding_slow.pixel_values[i]), encoding_fast.pixel_values[i]
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=True)
+            images = prepare_image_inputs(
+                batch_size=2, num_channels=3, min_resolution=500, max_resolution=700, equal_resolution=True
             )
+            result = image_processor(images, return_tensors="pt")
+            self.assertIn("pixel_values", result)
+            has_local = any(n > 0 for n in result["num_local_patches"])
+            self.assertTrue(has_local)
+            if has_local:
+                self.assertIn("pixel_values_local", result)
 
-        # num_local_patches
-        s_nlp = encoding_slow["num_local_patches"]
-        f_nlp = encoding_fast["num_local_patches"]
-        self.assertEqual(list(s_nlp), list(f_nlp), "num_local_patches mismatch")
+    def test_backends_equivalence(self):
+        """Override to also compare pixel_values_local and num_local_patches."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        # Local patches (flat list)
-        s_local = encoding_slow.get("pixel_values_local")
-        f_local = encoding_fast.get("pixel_values_local")
-        if s_local is not None and f_local is not None:
-            self.assertEqual(len(s_local), len(f_local), "local patch count mismatch")
-            for i in range(len(s_local)):
-                self._assert_slow_fast_tensors_equivalence(
-                    torch.from_numpy(s_local[i]), f_local[i]
+        dummy_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            torch.testing.assert_close(
+                encodings[reference_backend].num_local_patches, encodings[backend_name].num_local_patches
+            )
+            if encodings[reference_backend].get("pixel_values_local") is not None:
+                self._assert_tensors_equivalence(
+                    encodings[reference_backend].pixel_values_local,
+                    encodings[backend_name].pixel_values_local,
                 )
+
+    def test_backends_equivalence_batched(self):
+        """Override to also compare pixel_values_local and num_local_patches (variable shape)."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors=None)
+
+        backend_names = list(encodings.keys())
+        reference_backend = "pil"
+        ref_encoding = encodings[reference_backend]
+
+        for backend_name in [b for b in backend_names if b != reference_backend]:
+            other_encoding = encodings[backend_name]
+            # Global views
+            for i in range(len(ref_encoding.pixel_values)):
+                self._assert_tensors_equivalence(
+                    torch.from_numpy(ref_encoding.pixel_values[i]), other_encoding.pixel_values[i]
+                )
+            # num_local_patches
+            self.assertEqual(
+                list(ref_encoding["num_local_patches"]),
+                list(other_encoding["num_local_patches"]),
+            )
+            # Local patches
+            ref_local = ref_encoding.get("pixel_values_local")
+            other_local = other_encoding.get("pixel_values_local")
+            if ref_local is not None and other_local is not None:
+                self.assertEqual(len(ref_local), len(other_local))
+                for i in range(len(ref_local)):
+                    self._assert_tensors_equivalence(
+                        torch.from_numpy(ref_local[i]), other_local[i]
+                    )
