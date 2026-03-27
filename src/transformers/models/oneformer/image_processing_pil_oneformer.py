@@ -14,8 +14,6 @@
 """Image processor class for OneFormer."""
 
 import numpy as np
-import torch
-from torch import nn
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -31,21 +29,11 @@ from ...image_utils import (
     get_image_size,
     get_max_height_width,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, logging, is_torch_available
 from ...utils.import_utils import requires
-from .image_processing_oneformer import (
-    OneFormerImageProcessorKwargs,
-    compute_segments,
-    convert_segmentation_to_rle,
-    load_metadata,
-    prepare_metadata,
-    remove_low_and_no_objects,
-)
-
 
 logger = logging.get_logger(__name__)
-
 
 def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
     """
@@ -59,11 +47,181 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
     """
     from ...image_utils import ChannelDimension
 
+if is_torch_available():
+    import torch
+    from torch import nn
+
     input_height, input_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:input_height, :input_width] = 1
     return mask
 
+# Copied from transformers.models.oneformer.image_processing_oneformer.OneFormerImageProcessorKwargs
+class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
+        Path to a local directory or HuggingFace Hub repository containing model metadata.
+    class_info_file (`str`, *optional*):
+        Path to the JSON file within the repository that contains class metadata.
+    num_text (`int`, *optional*):
+        Number of text queries for the text encoder, used as task-guiding prompts.
+    num_labels (`int`, *optional*):
+        Number of semantic classes for segmentation, determining the output layer's size.
+    ignore_index (`int`, *optional*):
+        Label to ignore in segmentation maps, often used for padding.
+    do_reduce_labels (`bool`, *optional*, defaults to `False`):
+        Whether to decrement all label values by 1, mapping the background class to `ignore_index`.
+    """
+
+    repo_path: str | None
+    class_info_file: str | None
+    num_text: int | None
+    num_labels: int | None
+    ignore_index: int | None
+    do_reduce_labels: bool
+
+# Copied from transformers.models.oneformer.image_processing_oneformer.compute_segments
+def compute_segments(
+    mask_probs,
+    pred_scores,
+    pred_labels,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+    label_ids_to_fuse: set[int] | None = None,
+    target_size: tuple[int, int] | None = None,
+):
+    height = mask_probs.shape[1] if target_size is None else target_size[0]
+    width = mask_probs.shape[2] if target_size is None else target_size[1]
+
+    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
+    segments: list[dict] = []
+
+    if target_size is not None:
+        mask_probs = tvF.resize(
+            mask_probs.unsqueeze(0),
+            size=target_size,
+            interpolation=tvF.InterpolationMode.BILINEAR,
+        )[0]
+
+    current_segment_id = 0
+
+    mask_probs *= pred_scores.view(-1, 1, 1)
+    mask_labels = mask_probs.argmax(0)  # [height, width]
+
+    stuff_memory_list: dict[str, int] = {}
+    for k in range(pred_labels.shape[0]):
+        pred_class = pred_labels[k].item()
+        should_fuse = pred_class in label_ids_to_fuse
+
+        mask_exists, mask_k = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
+
+        if mask_exists:
+            if pred_class in stuff_memory_list:
+                current_segment_id = stuff_memory_list[pred_class]
+            else:
+                current_segment_id += 1
+
+            segmentation[mask_k] = current_segment_id
+            segment_score = round(pred_scores[k].item(), 6)
+            segments.append(
+                {
+                    "id": current_segment_id,
+                    "label_id": pred_class,
+                    "was_fused": should_fuse,
+                    "score": segment_score,
+                }
+            )
+            if should_fuse:
+                stuff_memory_list[pred_class] = current_segment_id
+
+    return segmentation, segments
+
+# Copied from transformers.models.oneformer.image_processing_oneformer.convert_segmentation_to_rle
+def convert_segmentation_to_rle(segmentation):
+    """
+    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
+
+    Args:
+        segmentation (`torch.Tensor` or `numpy.array`):
+            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
+    Returns:
+        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
+    """
+    segment_ids = torch.unique(segmentation)
+
+    run_length_encodings = []
+    for idx in segment_ids:
+        mask = torch.where(segmentation == idx, 1, 0)
+        rle = binary_mask_to_rle(mask)
+        run_length_encodings.append(rle)
+
+    return run_length_encodings
+
+# Copied from transformers.models.oneformer.image_processing_oneformer.load_metadata
+def load_metadata(repo_id, class_info_file):
+    fname = os.path.join("" if repo_id is None else repo_id, class_info_file)
+
+    if not os.path.exists(fname) or not os.path.isfile(fname):
+        if repo_id is None:
+            raise ValueError(f"Could not file {fname} locally. repo_id must be defined if loading from the hub")
+        if hf_hub_download is None:
+            raise ImportError(
+                "huggingface_hub is required to download metadata files. Install it with `pip install huggingface_hub`"
+            )
+        # We try downloading from a dataset by default for backward compatibility
+        try:
+            fname = hf_hub_download(repo_id, class_info_file, repo_type="dataset")
+        except RepositoryNotFoundError:
+            fname = hf_hub_download(repo_id, class_info_file)
+
+    with open(fname, "r") as f:
+        class_info = json.load(f)
+
+    return class_info
+
+# Copied from transformers.models.oneformer.image_processing_oneformer.prepare_metadata
+def prepare_metadata(class_info):
+    metadata = {}
+    class_names = []
+    thing_ids = []
+    for key, info in class_info.items():
+        metadata[key] = info["name"]
+        class_names.append(info["name"])
+        if info["isthing"]:
+            thing_ids.append(int(key))
+    metadata["thing_ids"] = thing_ids
+    metadata["class_names"] = class_names
+    return metadata
+
+# Copied from transformers.models.oneformer.image_processing_oneformer.remove_low_and_no_objects
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+
+    Args:
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+    Returns:
+        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
 
 @auto_docstring
 @requires(backends=("torch",))
@@ -781,6 +939,5 @@ class OneFormerImageProcessorPil(PilBackend):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
-
 
 __all__ = ["OneFormerImageProcessorPil"]

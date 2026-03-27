@@ -29,14 +29,11 @@ from ...image_utils import (
     get_image_size,
     make_nested_list_of_images,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_tvp import TvpImageProcessorKwargs
-
 
 if is_torchvision_available():
     pass
-
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
@@ -55,6 +52,22 @@ def get_resize_output_image_size(
     size = (int(new_height), int(new_width))
 
     return size
+
+
+# Copied from transformers.models.tvp.image_processing_tvp.TvpImageProcessorKwargs
+class TvpImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
+        Whether to flip the channel order of the image from RGB to BGR.
+    constant_values (`float` or `List[float]`, *optional*, defaults to `self.constant_values`):
+        Value used to fill the padding area when `pad_mode` is `'constant'`.
+    pad_mode (`str`, *optional*, defaults to `self.pad_mode`):
+        Padding mode to use — `'constant'`, `'edge'`, `'reflect'`, or `'symmetric'`.
+    """
+
+    do_flip_channel_order: bool
+    constant_values: float | list[float] | None
+    pad_mode: str | None
 
 
 @auto_docstring
@@ -244,6 +257,5 @@ class TvpImageProcessorPil(PilBackend):
             processed_videos = torch.stack(processed_videos, dim=0)
 
         return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
-
 
 __all__ = ["TvpImageProcessorPil"]

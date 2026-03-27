@@ -30,9 +30,20 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_llava_next import LlavaNextImageProcessorKwargs
+
+
+# Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessorKwargs
+class LlavaNextImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    """
+
+    image_grid_pinpoints: list[list[int]]
 
 
 @auto_docstring
@@ -223,6 +234,5 @@ class LlavaNextImageProcessorPil(PilBackend):
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )
-
 
 __all__ = ["LlavaNextImageProcessorPil"]

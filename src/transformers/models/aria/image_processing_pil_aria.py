@@ -24,9 +24,27 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_aria import AriaImageProcessorKwargs
+
+
+# Copied from transformers.models.aria.image_processing_aria.AriaImageProcessorKwargs
+class AriaImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    max_image_size (`int`, *optional*, defaults to `self.max_image_size`):
+        Maximum image size. Must be either 490 or 980.
+    min_image_size (`int`, *optional*, defaults to `self.min_image_size`):
+        Minimum image size. Images smaller than this in any dimension will be scaled up.
+    split_resolutions (`list[list[int]]`, *optional*, defaults to `self.split_resolutions`):
+        A list of possible resolutions as (height, width) pairs for splitting high-resolution images into patches.
+    split_image (`bool`, *optional*, defaults to `self.split_image`):
+        Whether to split the image into patches using the best matching resolution from `split_resolutions`.
+    """
+
+    max_image_size: int
+    min_image_size: int
+    split_resolutions: list[list[int]]
+    split_image: bool
 
 
 @auto_docstring
@@ -207,6 +225,5 @@ class AriaImageProcessorPil(PilBackend):
         resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
         num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
         return num_patches
-
 
 __all__ = ["AriaImageProcessorPil"]

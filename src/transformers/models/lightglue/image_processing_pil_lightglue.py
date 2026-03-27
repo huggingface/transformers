@@ -26,23 +26,19 @@ from PIL import Image, ImageDraw
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
-from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
-
 
 if TYPE_CHECKING:
     from .modeling_lightglue import LightGlueKeypointMatchingOutput
 if is_torch_available():
     import torch
 
-
 def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
-
 
 def convert_to_grayscale(image: ImageInput) -> ImageInput:
     """
@@ -71,8 +67,47 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     image = image.convert("L")
     return image
 
-
 @requires(backends=("torch",))
+
+
+# Copied from transformers.models.lightglue.image_processing_lightglue.LightGlueImageProcessorKwargs
+class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
+
+# Copied from transformers.models.lightglue.image_processing_lightglue.validate_and_format_image_pairs
+def validate_and_format_image_pairs(images: ImageInput):
+    error_message = (
+        "Input images must be a one of the following :",
+        " - A pair of PIL images.",
+        " - A pair of 3D arrays.",
+        " - A list of pairs of PIL images.",
+        " - A list of pairs of 3D arrays.",
+    )
+
+    def _is_valid_image(image):
+        """images is a PIL Image or a 3D array."""
+        return is_pil_image(image) or (
+            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+        )
+
+    if isinstance(images, list):
+        if len(images) == 2 and all((_is_valid_image(image)) for image in images):
+            return images
+        if all(
+            isinstance(image_pair, list)
+            and len(image_pair) == 2
+            and all(_is_valid_image(image) for image in image_pair)
+            for image_pair in images
+        ):
+            return [image for image_pair in images for image in image_pair]
+    raise ValueError(error_message)
+
+
 class LightGlueImageProcessorPil(PilBackend):
     valid_kwargs = LightGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -253,6 +288,5 @@ class LightGlueImageProcessorPil(PilBackend):
         g = int(255 * score)
         b = 0
         return (r, g, b)
-
 
 __all__ = ["LightGlueImageProcessorPil"]

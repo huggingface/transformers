@@ -20,16 +20,25 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from .image_processing_glpn import GLPNImageProcessorKwargs
-
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.glpn.image_processing_glpn.GLPNImageProcessorKwargs
+class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to 32):
+        When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
+        multiple of `size_divisor`.
+    """
+
+    size_divisor: int
 
 
 @auto_docstring
@@ -125,6 +134,5 @@ class GLPNImageProcessorPil(PilBackend):
                 depth = depth.squeeze(0).squeeze(0)
             results.append({"predicted_depth": depth})
         return results
-
 
 __all__ = ["GLPNImageProcessorPil"]

@@ -34,20 +34,17 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_vilt import ViltImageProcessorKwargs
-
+from ...processing_utils import ImagesKwargs
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset
 MAX_LONGER_EDGE = 1333
 MAX_SHORTER_EDGE = 800
-
 
 def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
     return [max(values_i) for values_i in zip(*values)]
-
 
 def make_pixel_mask(
     image: np.ndarray, output_size: tuple[int, int], input_data_format: str | ChannelDimension | None = None
@@ -65,7 +62,6 @@ def make_pixel_mask(
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:input_height, :input_width] = 1
     return mask
-
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
@@ -96,6 +92,17 @@ def get_resize_output_image_size(
     new_width = new_width // size_divisor * size_divisor
 
     return new_height, new_width
+
+
+# Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessorKwargs
+class ViltImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
+        is set to `True`.
+    """
+
+    size_divisor: int
 
 
 @auto_docstring
@@ -229,6 +236,5 @@ class ViltImageProcessorPil(PilBackend):
             data = {"pixel_values": processed_images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
 
 __all__ = ["ViltImageProcessorPil"]

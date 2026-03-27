@@ -25,9 +25,18 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_convnext import ConvNextImageProcessorKwargs
+
+
+# Copied from transformers.models.convnext.image_processing_convnext.ConvNextImageProcessorKwargs
+class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+        Percentage of the image to crop. Only has an effect if size < 384.
+    """
+
+    crop_pct: float
 
 
 @auto_docstring
@@ -122,6 +131,5 @@ class ConvNextImageProcessorPil(PilBackend):
             processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["ConvNextImageProcessorPil"]

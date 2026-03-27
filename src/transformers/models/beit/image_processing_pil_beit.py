@@ -25,10 +25,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-from .image_processing_beit import BeitImageProcessorKwargs
+
+
+# Copied from transformers.models.beit.image_processing_beit.BeitImageProcessorKwargs
+class BeitImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -193,6 +204,5 @@ class BeitImageProcessorPil(PilBackend):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
-
 
 __all__ = ["BeitImageProcessorPil"]

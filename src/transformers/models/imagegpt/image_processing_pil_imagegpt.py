@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
+from typing import Union
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -21,19 +23,15 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
 )
 
-
 if is_torch_available():
     import torch
-
-from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
-
 
 def squared_euclidean_distance(a, b):
     b = b.T
@@ -43,11 +41,25 @@ def squared_euclidean_distance(a, b):
     d = a2[:, None] - 2 * ab + b2[None, :]
     return d
 
-
 def color_quantize(x, clusters):
     x = x.reshape(-1, 3)
     d = squared_euclidean_distance(x, clusters)
     return np.argmin(d, axis=1)
+
+
+# Copied from transformers.models.imagegpt.image_processing_imagegpt.ImageGPTImageProcessorKwargs
+class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*, defaults to `self.clusters`):
+        The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
+        in `preprocess`.
+    do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
+        Controls whether to apply color quantization to convert continuous pixel values to discrete cluster indices.
+        When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
+    """
+
+    clusters: Union[np.ndarray, list[list[int]], "torch.Tensor"] | None
+    do_color_quantize: bool
 
 
 @auto_docstring
@@ -135,6 +147,5 @@ class ImageGPTImageProcessorPil(PilBackend):
             output["clusters"] = output["clusters"].tolist()
 
         return output
-
 
 __all__ = ["ImageGPTImageProcessorPil"]

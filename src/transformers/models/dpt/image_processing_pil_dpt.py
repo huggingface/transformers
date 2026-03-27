@@ -22,24 +22,82 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
+    ChannelDimension,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
-
+from collections.abc import Iterable
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessorKwargs
+class DPTImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    ensure_multiple_of (`int`, *optional*, defaults to 1):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
+        by `ensure_multiple_of` in `preprocess`.
+    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
+        be overridden by `keep_aspect_ratio` in `preprocess`.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    ensure_multiple_of: int
+    size_divisor: int
+    keep_aspect_ratio: bool
+    do_reduce_labels: bool
+
+# Copied from transformers.models.dpt.image_processing_dpt.get_resize_output_image_size
+def get_resize_output_image_size(
+    input_image: "torch.Tensor",
+    output_size: int | Iterable[int],
+    keep_aspect_ratio: bool,
+    multiple: int,
+) -> SizeDict:
+    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
+        x = round(val / multiple) * multiple
+
+        if max_val is not None and x > max_val:
+            x = math.floor(val / multiple) * multiple
+
+        if x < min_val:
+            x = math.ceil(val / multiple) * multiple
+
+        return x
+
+    input_height, input_width = input_image.shape[-2:]
+    output_height, output_width = output_size
+
+    # determine new height and width
+    scale_height = output_height / input_height
+    scale_width = output_width / input_width
+
+    if keep_aspect_ratio:
+        # scale as little as possible
+        if abs(1 - scale_width) < abs(1 - scale_height):
+            # fit width
+            scale_height = scale_width
+        else:
+            # fit height
+            scale_width = scale_height
+
+    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
+
+    return SizeDict(height=new_height, width=new_width)
 
 
 @auto_docstring
@@ -247,6 +305,5 @@ class DPTImageProcessorPil(PilBackend):
                 ).squeeze()
             results.append({"predicted_depth": depth})
         return results
-
 
 __all__ = ["DPTImageProcessorPil"]

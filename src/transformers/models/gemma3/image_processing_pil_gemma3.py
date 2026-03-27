@@ -28,12 +28,30 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
+
+
+# Copied from transformers.models.gemma3.image_processing_gemma3.Gemma3ImageProcessorKwargs
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_pan_and_scan (`bool`, *optional*):
+        Whether to apply `pan_and_scan` to images.
+    pan_and_scan_min_crop_size (`int`, *optional*):
+        Minimum size of each crop in pan and scan.
+    pan_and_scan_max_num_crops (`int`, *optional*):
+        Maximum number of crops per image in pan and scan.
+    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
+        Minimum aspect ratio to activate pan and scan.
+    """
+
+    do_pan_and_scan: bool
+    pan_and_scan_min_crop_size: int
+    pan_and_scan_max_num_crops: int
+    pan_and_scan_min_ratio_to_activate: float
 
 
 @auto_docstring
@@ -202,6 +220,5 @@ class Gemma3ImageProcessorPil(PilBackend):
         return BatchFeature(
             data={"pixel_values": processed_images, "num_crops": num_crops}, tensor_type=return_tensors
         )
-
 
 __all__ = ["Gemma3ImageProcessorPil"]

@@ -26,15 +26,8 @@ from ...image_utils import (
     SizeDict,
     make_nested_list_of_images,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_idefics2 import (
-    Idefics2ImageProcessorKwargs,
-    convert_to_rgb,
-    get_max_height_width,
-    get_resize_output_image_size,
-)
-
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
     """Make pixel mask: 1=valid, 0=padding. Images are CHW."""
@@ -42,6 +35,70 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:h, :w] = 1
     return mask
+
+
+# Copied from transformers.models.idefics2.image_processing_idefics2.Idefics2ImageProcessorKwargs
+class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
+        Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
+    """
+
+    do_image_splitting: bool
+
+# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
+def convert_to_rgb(image: ImageInput) -> ImageInput:
+    """
+    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
+    as is.
+    """
+    if not is_vision_available() or not isinstance(image, Image.Image):
+        return image
+
+    if image.mode == "RGB":
+        return image
+
+    image_rgba = image.convert("RGBA")
+    background = Image.new("RGBA", image_rgba.size, (255, 255, 255))
+    alpha_composite = Image.alpha_composite(background, image_rgba)
+    alpha_composite = alpha_composite.convert("RGB")
+    return alpha_composite
+
+# Copied from transformers.models.idefics2.image_processing_idefics2.get_max_height_width
+def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+    image_sizes = []
+    for images in images_list:
+        for image in images:
+            image_sizes.append(image.shape[-2:])
+
+    max_height = max(size[0] for size in image_sizes)
+    max_width = max(size[1] for size in image_sizes)
+    return (max_height, max_width)
+
+# Copied from transformers.models.idefics2.image_processing_idefics2.get_resize_output_image_size
+def get_resize_output_image_size(image, size: SizeDict) -> tuple[int, int]:
+    """
+    Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
+    Images are always channels-first (CHW).
+    """
+    height, width = image.shape[-2:]
+
+    min_len = size.shortest_edge
+    max_len = size.longest_edge
+    aspect_ratio = width / height
+
+    if width >= height and width > max_len:
+        width = max_len
+        height = int(width / aspect_ratio)
+    elif height > width and height > max_len:
+        height = max_len
+        width = int(height * aspect_ratio)
+    height = max(height, min_len)
+    width = max(width, min_len)
+    return height, width
 
 
 @auto_docstring
@@ -205,6 +262,5 @@ class Idefics2ImageProcessorPil(PilBackend):
             data = {"pixel_values": images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
 
 __all__ = ["Idefics2ImageProcessorPil"]

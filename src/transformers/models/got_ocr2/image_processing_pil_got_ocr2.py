@@ -27,12 +27,70 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
 )
-from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
+from functools import lru_cache
+
+
+# Copied from transformers.models.got_ocr2.image_processing_got_ocr2.GotOcr2ImageProcessorKwargs
+class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to `self.min_patches`):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to `self.max_patches`):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+
+# Copied from transformers.models.got_ocr2.image_processing_got_ocr2.get_optimal_tiled_canvas
+@lru_cache(maxsize=100)
+def get_optimal_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+) -> tuple[int, int]:
+    """
+    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
+    original image aspect ratio.
+    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
+    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
+    excessive tiling.
+    """
+    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+
+    original_height, original_width = original_image_size
+    target_tile_height, target_tile_width = target_tile_size
+    aspect_ratio = original_width / original_height
+    area = original_width * original_height
+
+    # find the grid with the best aspect ratio
+    best_ratio_diff = float("inf")
+    best_grid = (1, 1)
+    for grid in possible_tile_arrangements:
+        grid_aspect_ratio = grid[0] / grid[1]
+        ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
+        if ratio_diff < best_ratio_diff:
+            best_ratio_diff = ratio_diff
+            best_grid = grid
+        elif ratio_diff == best_ratio_diff:
+            # if the aspect ratio difference is the same, we favor the grid with more patches
+            # until the area covered by the patches is more than twice the original image area
+            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
+                best_grid = grid
+
+    return best_grid
 
 
 @auto_docstring
@@ -209,6 +267,5 @@ class GotOcr2ImageProcessorPil(PilBackend):
                 num_patches += num_columns * num_rows
 
         return num_patches
-
 
 __all__ = ["GotOcr2ImageProcessorPil"]

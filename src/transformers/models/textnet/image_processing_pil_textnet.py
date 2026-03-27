@@ -27,9 +27,18 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_textnet import TextNetImageProcessorKwargs
+
+
+# Copied from transformers.models.textnet.image_processing_textnet.TextNetImageProcessorKwargs
+class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        Ensures height and width are rounded to a multiple of this value after resizing.
+    """
+
+    size_divisor: int
 
 
 @auto_docstring
@@ -120,6 +129,5 @@ class TextNetImageProcessorPil(PilBackend):
                 image = self.normalize(image, image_mean, image_std)
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["TextNetImageProcessorPil"]

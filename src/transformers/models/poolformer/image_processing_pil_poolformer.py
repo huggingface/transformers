@@ -25,9 +25,18 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_poolformer import PoolFormerImageProcessorKwargs
+
+
+# Copied from transformers.models.poolformer.image_processing_poolformer.PoolFormerImageProcessorKwargs
+class PoolFormerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+        Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
+    """
+
+    crop_pct: float
 
 
 @auto_docstring
@@ -119,6 +128,5 @@ class PoolFormerImageProcessorPil(PilBackend):
             processed_images = self.pad(processed_images, pad_size=pad_size)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["PoolFormerImageProcessorPil"]

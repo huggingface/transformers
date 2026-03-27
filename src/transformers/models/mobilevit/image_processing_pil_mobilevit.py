@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-
 if TYPE_CHECKING:
     pass
 
@@ -32,13 +31,26 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from .image_processing_mobilevit import MobileVitImageProcessorKwargs
-
 
 logger = logging.get_logger(__name__)
+
+
+# Copied from transformers.models.mobilevit.image_processing_mobilevit.MobileVitImageProcessorKwargs
+class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
+        Whether to flip the color channels from RGB to BGR or vice versa.
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_flip_channel_order: bool
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -193,6 +205,5 @@ class MobileViTImageProcessorPil(PilBackend):
             semantic_segmentation = logits.argmax(dim=1)
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
         return semantic_segmentation
-
 
 __all__ = ["MobileViTImageProcessorPil"]

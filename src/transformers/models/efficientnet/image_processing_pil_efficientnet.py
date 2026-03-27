@@ -23,9 +23,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
+
+
+# Copied from transformers.models.efficientnet.image_processing_efficientnet.EfficientNetImageProcessorKwargs
+class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
+        Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
+    include_top (`bool`, *optional*, defaults to `self.include_top`):
+        Normalize the image again with the standard deviation only for image classification if set to True.
+    """
+
+    rescale_offset: bool
+    include_top: bool
 
 
 @auto_docstring
@@ -97,6 +109,5 @@ class EfficientNetImageProcessorPil(PilBackend):
                 image = self.normalize(image, 0, image_std)
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["EfficientNetImageProcessorPil"]

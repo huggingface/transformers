@@ -31,16 +31,12 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
-
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
-
-from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
-
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
     """Constrain a value to be a multiple of another value."""
@@ -53,7 +49,6 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = math.ceil(val / multiple) * multiple
 
     return x
-
 
 def _get_resize_output_image_size(
     input_image: np.ndarray, output_size: tuple[int, int], keep_aspect_ratio: bool, multiple: int
@@ -79,6 +74,25 @@ def _get_resize_output_image_size(
     new_width = _constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return (new_height, new_width)
+
+
+# Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything.PromptDepthAnythingImageProcessorKwargs
+class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    keep_aspect_ratio (`bool`, *optional*):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+    ensure_multiple_of (`int`, *optional*):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
+    prompt_scale_to_meter (`float`, *optional*):
+        Scale factor to convert the prompt depth to meters.
+    size_divisor (`int`, *optional*):
+        If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+    size_divisor: int
+    prompt_scale_to_meter: float
 
 
 @auto_docstring
@@ -311,6 +325,5 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
             results.append({"predicted_depth": depth})
 
         return results
-
 
 __all__ = ["PromptDepthAnythingImageProcessorPil"]

@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -31,19 +30,30 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
-from .image_processing_segformer import SegformerImageProcessorKwargs
-
 
 if is_torch_available():
     pass
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
-
 @requires(backends=("torch", "torchvision"))
+
+
+# Copied from transformers.models.segformer.image_processing_segformer.SegformerImageProcessorKwargs
+class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
+
+
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""
 
@@ -208,6 +218,5 @@ class SegformerImageProcessorPil(PilBackend):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
-
 
 __all__ = ["SegformerImageProcessorPil"]

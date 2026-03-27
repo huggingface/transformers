@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
+from typing import Union
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -20,12 +22,60 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
+    ChannelDimension,
     PILImageResampling,
     SizeDict,
+    get_image_size,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
-from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs, get_resize_output_image_size
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available
+
+
+# Copied from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
+class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size by which to make sure both the height and width can be divided.
+    """
+
+    size_divisor: int
+
+# Copied from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
+def get_resize_output_image_size(
+    input_image: Union[np.ndarray, "torch.Tensor"],
+    shorter: int = 800,
+    longer: int = 1333,
+    size_divisor: int = 32,
+) -> tuple[int, int]:
+    """Get output image size after resizing with size_divisor."""
+    if is_torch_available():
+        import torch
+
+    if is_torch_available() and isinstance(input_image, torch.Tensor):
+        input_height, input_width = input_image.shape[-2:]
+    else:
+        input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
+
+    min_size, max_size = shorter, longer
+    scale = min_size / min(input_height, input_width)
+
+    if input_height < input_width:
+        new_height = min_size
+        new_width = scale * input_width
+    else:
+        new_height = scale * input_height
+        new_width = min_size
+
+    if max(new_height, new_width) > max_size:
+        scale = max_size / max(new_height, new_width)
+        new_height = scale * new_height
+        new_width = scale * new_width
+
+    new_height, new_width = int(new_height + 0.5), int(new_width + 0.5)
+    new_height = new_height // size_divisor * size_divisor
+    new_width = new_width // size_divisor * size_divisor
+
+    return new_height, new_width
 
 
 @auto_docstring
@@ -120,6 +170,5 @@ class BridgeTowerImageProcessorPil(PilBackend):
         data["pixel_values"] = processed_images
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
 
 __all__ = ["BridgeTowerImageProcessorPil"]

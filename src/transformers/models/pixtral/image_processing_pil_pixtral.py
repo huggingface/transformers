@@ -25,9 +25,58 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
+
+
+# Copied from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessorKwargs
+class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+        Size of the patches in the model, used to calculate the output image size.
+    """
+
+    patch_size: dict[str, int] | int
+
+# Copied from transformers.models.pixtral.image_processing_pixtral.get_resize_output_image_size
+def get_resize_output_image_size(
+    input_image: ImageInput,
+    size: int | tuple[int, int] | list[int] | tuple[int],
+    patch_size: int | tuple[int, int] | list[int] | tuple[int],
+    input_data_format: str | ChannelDimension | None = None,
+) -> tuple:
+    """
+    Find the target (height, width) dimension of the output image after resizing given the input image and the desired
+    size.
+
+    Args:
+        input_image (`ImageInput`):
+            The image to resize.
+        size (`int` or `tuple[int, int]`):
+            Max image size an input image can be. Must be a dictionary with the key "longest_edge".
+        patch_size (`int` or `tuple[int, int]`):
+            The patch_size as `(height, width)` to use for resizing the image. If patch_size is an integer, `(patch_size, patch_size)`
+            will be used
+        input_data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If unset, will use the inferred format from the input.
+
+    Returns:
+        `tuple`: The target (height, width) dimension of the output image after resizing.
+    """
+    max_height, max_width = size if isinstance(size, (tuple, list)) else (size, size)
+    patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
+    height, width = get_image_size(input_image, input_data_format)
+
+    ratio = max(height / max_height, width / max_width)
+
+    if ratio > 1:
+        # Original implementation uses `round` which utilises bankers rounding, which can lead to surprising results
+        # Here we use floor to ensure the image is always smaller than the given "longest_edge"
+        height = int(math.floor(height / ratio))
+        width = int(math.floor(width / ratio))
+
+    num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
+    return num_height_tokens * patch_height, num_width_tokens * patch_width
 
 
 @auto_docstring
@@ -149,6 +198,5 @@ class PixtralImageProcessorPil(PilBackend):
         return BatchFeature(
             data={"pixel_values": padded_images, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
-
 
 __all__ = ["PixtralImageProcessorPil"]

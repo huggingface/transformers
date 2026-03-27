@@ -25,9 +25,21 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_donut import DonutImageProcessorKwargs
+
+
+# Copied from transformers.models.donut.image_processing_donut.DonutImageProcessorKwargs
+class DonutImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
+        Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    """
+
+    do_thumbnail: bool
+    do_align_long_axis: bool
 
 
 @auto_docstring
@@ -195,6 +207,5 @@ class DonutImageProcessorPil(PilBackend):
             processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["DonutImageProcessorPil"]

@@ -24,9 +24,18 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
+
+
+# Copied from transformers.models.swin2sr.image_processing_swin2sr.Swin2SRImageProcessorKwargs
+class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size to make the height and width divisible by when padding.
+    """
+
+    size_divisor: int
 
 
 @auto_docstring
@@ -102,6 +111,5 @@ class Swin2SRImageProcessorPil(PilBackend):
                 image = self.pad(image, pad_size=pad_size, size_divisor=size_divisor)
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["Swin2SRImageProcessorPil"]

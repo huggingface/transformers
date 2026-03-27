@@ -26,13 +26,21 @@ from ...image_utils import (
     ImageInput,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
-from .image_processing_vitmatte import VitMatteImageProcessorKwargs
-
 
 if is_torch_available():
     pass
+
+
+# Copied from transformers.models.vitmatte.image_processing_vitmatte.VitMatteImageProcessorKwargs
+class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The width and height of the image will be padded to be divisible by this number.
+    """
+
+    size_divisor: int
 
 
 @auto_docstring
@@ -145,6 +153,5 @@ class VitMatteImageProcessorPil(PilBackend):
             processed_images.append(image)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
-
 
 __all__ = ["VitMatteImageProcessorPil"]

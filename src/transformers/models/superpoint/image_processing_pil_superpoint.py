@@ -20,24 +20,20 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-from .image_processing_superpoint import SuperPointImageProcessorKwargs
-
 
 if TYPE_CHECKING:
     import torch
 
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
-
 def is_grayscale(image: np.ndarray) -> bool:
     """Checks if an image is grayscale (all RGB channels are identical)."""
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
-
 
 def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     """
@@ -57,6 +53,16 @@ def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
     gray_image = np.stack([gray_image] * 3, axis=0)
     return gray_image
+
+
+# Copied from transformers.models.superpoint.image_processing_superpoint.SuperPointImageProcessorKwargs
+class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 @auto_docstring
@@ -152,6 +158,5 @@ class SuperPointImageProcessorPil(PilBackend):
             results.append({"keypoints": keypoints, "scores": scores, "descriptors": descriptors})
 
         return results
-
 
 __all__ = ["SuperPointImageProcessorPil"]

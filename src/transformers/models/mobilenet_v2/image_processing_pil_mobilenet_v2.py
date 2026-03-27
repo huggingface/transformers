@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-
 if TYPE_CHECKING:
     pass
 
@@ -31,10 +30,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
+
+
+# Copied from transformers.models.mobilenet_v2.image_processing_mobilenet_v2.MobileNetV2ImageProcessorKwargs
+class MobileNetV2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -187,6 +197,5 @@ class MobileNetV2ImageProcessorPil(PilBackend):
             semantic_segmentation = logits.argmax(dim=1)
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
         return semantic_segmentation
-
 
 __all__ = ["MobileNetV2ImageProcessorPil"]
