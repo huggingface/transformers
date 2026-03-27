@@ -110,7 +110,7 @@ class CircleCIJob:
                 self.docker_image[0]["image"] = f"{self.docker_image[0]['image']}:dev"
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
-            self.install_steps = ["uv pip install ."]
+            self.install_steps = ["uv pip install '.[docs]'"]
         # Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded`
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         # Install pytest-random-order plugin for test randomization
@@ -244,7 +244,7 @@ generate_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv pip install ."],
+    install_steps=["uv pip install '.[docs]'"],
     marker="generate",
     parallelism=6,
 )

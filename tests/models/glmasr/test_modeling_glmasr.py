@@ -18,7 +18,6 @@ import unittest
 from pathlib import Path
 
 import pytest
-from doc_builder.testing import DocIntegrationTest
 
 from transformers import (
     AutoProcessor,
@@ -303,6 +302,12 @@ class GlmAsrForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
 
-@require_torch
-class GlmAsrDocIntegrationTest(DocIntegrationTest):
-    doc_path = Path(__file__).resolve().parents[3] / "docs" / "source" / "en" / "model_doc" / "glmasr.md"
+try:
+    from doc_builder.testing import DocIntegrationTest
+
+    @require_torch
+    class GlmAsrDocIntegrationTest(DocIntegrationTest):
+        doc_path = Path(__file__).resolve().parents[3] / "docs" / "source" / "en" / "model_doc" / "glmasr.md"
+
+except ImportError:
+    pass
