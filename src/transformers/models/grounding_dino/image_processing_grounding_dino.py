@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 from torchvision.io import read_image
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -57,9 +58,6 @@ from ...utils import TensorType, auto_docstring
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
-
-
-from torchvision.transforms.v2 import functional as tvF
 
 
 class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):

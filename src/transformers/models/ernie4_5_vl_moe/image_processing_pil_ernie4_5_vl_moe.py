@@ -31,7 +31,7 @@ from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)

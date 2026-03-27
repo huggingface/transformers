@@ -27,15 +27,15 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 from .image_processing_lightglue import LightGlueImageProcessorKwargs, validate_and_format_image_pairs
 
 
 if TYPE_CHECKING:
-    import torch
-
     from .modeling_lightglue import LightGlueKeypointMatchingOutput
+if is_torch_available():
+    import torch
 
 
 def is_grayscale(image: np.ndarray):
@@ -72,7 +72,7 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     return image
 
 
-@auto_docstring
+@requires(backends=("torch",))
 class LightGlueImageProcessorPil(PilBackend):
     valid_kwargs = LightGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

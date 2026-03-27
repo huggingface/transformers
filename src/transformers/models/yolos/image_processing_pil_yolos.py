@@ -34,13 +34,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_vision_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_yolos import YolosImageProcessorKwargs
 

@@ -40,13 +40,7 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
 from .image_processing_mask2former import (
     Mask2FormerImageProcessorKwargs,
