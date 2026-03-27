@@ -18,6 +18,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
 
+
 if is_torch_available():
     import torch
 
