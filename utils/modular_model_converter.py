@@ -49,16 +49,36 @@ AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨�
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 """
 
+ENABLE_MODULE_SOURCE_CACHE = True
+_MODULE_SOURCE_CACHE = {}
 
-def get_module_source_from_name(module_name: str) -> str:
-    # Extract the source code from the module name
+
+def clear_module_source_cache():
+    _MODULE_SOURCE_CACHE.clear()
+
+
+def get_module_source_and_tree_from_name(module_name: str) -> tuple[str, cst.Module]:
     spec = importlib.util.find_spec(module_name)
     if spec is None or spec.origin is None:
         raise ValueError(f"Cannot open file associated with {module_name} module.")
 
-    with open(spec.origin, "r", encoding="utf-8") as file:
+    file_path = spec.origin
+    cache_key = (module_name, file_path)
+    mtime_ns = os.stat(file_path).st_mtime_ns
+    cached = _MODULE_SOURCE_CACHE.get(cache_key)
+    if ENABLE_MODULE_SOURCE_CACHE and cached is not None and cached[0] == mtime_ns:
+        return cached[1], cached[2]
+
+    with open(file_path, "r", encoding="utf-8") as file:
         source_code = file.read()
-    return source_code
+    tree = cst.parse_module(source_code)
+    if ENABLE_MODULE_SOURCE_CACHE:
+        _MODULE_SOURCE_CACHE[cache_key] = (mtime_ns, source_code, tree)
+    return source_code, tree
+
+
+def get_module_source_from_name(module_name: str) -> str:
+    return get_module_source_and_tree_from_name(module_name)[0]
 
 
 def preserve_case_replace(text, patterns: dict, default_name: str):
@@ -1414,12 +1434,11 @@ class ModularFileMapper(ModuleMapper):
                         if not import_module.startswith("transformers"):
                             import_module = "transformers." + import_module
                         try:
-                            source_code = get_module_source_from_name(import_module)
+                            _, tree = get_module_source_and_tree_from_name(import_module)
                         except ModuleNotFoundError as e:
                             raise ModuleNotFoundError(
                                 f"Failed to visit import from for: {self.python_module.code_for_node(node)}. Tried to import {import_module} but failed."
                             ) from e
-                        tree = cst.parse_module(source_code)
                         self.model_specific_modules[import_module] = tree
                     imported_object = self.python_module.code_for_node(imported_.name)
                     self.model_specific_imported_objects[imported_object] = import_module
