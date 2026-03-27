@@ -176,6 +176,20 @@ jobs:
                   path: ~/transformers/installed.txt
             - run: make check-repository-consistency
 
+    check_imports:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-consistency
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        parallelism: 1
+        steps:
+            - checkout
+            - run: apt-get update && apt-get install -y make
+            - run: uv pip install -e ".[quality]"
+            - run: make check-imports
+
     check_modular:
         working_directory: ~/transformers
         docker:
@@ -202,6 +216,7 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_imports
             - check_modular
             - fetch_tests
 
@@ -213,6 +228,7 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_imports
             - check_modular
             - fetch_tests:
                 # [reference] https://circleci.com/docs/contexts/
@@ -225,5 +241,6 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_imports
             - check_modular
             - fetch_all_tests

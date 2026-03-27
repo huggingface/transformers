@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-modular check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality check-imports check-modular check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
 
 
 # Runs all linting/formatting scripts, most notably ruff
@@ -29,14 +29,17 @@ check-code-quality:
 		init_isort,\
 		auto_mappings
 
+# Runs import tests under various backend combinations (split out for parallel CI).
+check-imports:
+	@python utils/checkers.py imports
+
 # Runs modular file conversion check (split out for parallel CI).
 check-modular:
 	@python utils/checkers.py modular_conversion
 
-# Runs a full repository consistency check (without modular conversion).
+# Runs a full repository consistency check (without imports and modular conversion).
 check-repository-consistency:
 	@python utils/checkers.py \
-		imports,\
 		copies,\
 		doc_toc,\
 		docstrings,\
