@@ -64,9 +64,9 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    def test_300m_model_integration(self):
+    def test_ctc_300m_v2_model_integration(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer-py
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_ctc-py
         """
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_single.json"
         with open(RESULTS_PATH, "r") as f:
@@ -89,6 +89,27 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
         predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
-    # @slow
-    # def test_300m_model_integration_batched(self):
-    #     TODO
+    @slow
+    def test_ctc_300m_v2_model_integration_batched(self):
+        """
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer_ctc_batch-py
+        NOTE: only compare transcripts because of differences in batch padding
+        """
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_batch.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
+
+        samples = self._load_datasamples(3)
+        model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
+        model.eval()
+        model.to(torch_device)
+
+        inputs = self.processor(samples, return_tensors="pt", sampling_rate=self.processor.feature_extractor.sampling_rate, padding=True)
+        inputs.to(torch_device, dtype=self.dtype)
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        predicted_ids = torch.argmax(logits, dim=-1)
+
+        predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
+        self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
