@@ -11,32 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Transformers CLI."""
 
-from huggingface_hub import check_cli_update, typer_factory
-
-from transformers.cli.add_new_model_like import add_new_model_like
+import unittest
 from transformers.cli.advisor import advisor
-from transformers.cli.chat import Chat
-from transformers.cli.download import download
-from transformers.cli.serve import Serve
-from transformers.cli.system import env, version
 
-
-app = typer_factory(help="Transformers CLI")
-app.command()(advisor)
-app.command()(add_new_model_like)
-app.command(name="chat")(Chat)
-app.command()(download)
-app.command()(env)
-app.command(name="serve")(Serve)
-app.command()(version)
-
-
-def main():
-    check_cli_update("transformers")
-    app()
-
+class TransformersCLIAdvisorTest(unittest.TestCase):
+    def test_advisor_basic(self):
+        # Test with a small well-known model
+        try:
+            advisor("hf-internal-testing/tiny-random-bert")
+        except Exception as e:
+            self.fail(f"Advisor failed with error: {e}")
 
 if __name__ == "__main__":
-    main()
+    unittest.main()
