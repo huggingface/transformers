@@ -126,7 +126,7 @@ class BeitImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

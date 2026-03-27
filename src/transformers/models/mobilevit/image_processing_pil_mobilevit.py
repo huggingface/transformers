@@ -85,7 +85,7 @@ class MobileViTImageProcessorPil(PilBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -145,7 +145,7 @@ class MobileViTImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

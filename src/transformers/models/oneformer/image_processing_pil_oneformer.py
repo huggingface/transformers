@@ -150,7 +150,7 @@ class OneFormerImageProcessorPil(PilBackend):
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -143,7 +143,7 @@ class MaskFormerImageProcessorPil(PilBackend):
         image: np.ndarray,
         size: SizeDict,
         size_divisor: int = 0,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | int | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -309,7 +309,7 @@ class MaskFormerImageProcessorPil(PilBackend):
         size: SizeDict | None,
         pad_size: SizeDict | None,
         size_divisor: int | None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool | None,
         rescale_factor: float | None,
         do_normalize: bool | None,

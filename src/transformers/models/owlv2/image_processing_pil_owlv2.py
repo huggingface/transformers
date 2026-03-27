@@ -391,7 +391,7 @@ class Owlv2ImageProcessorPil(PilBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,

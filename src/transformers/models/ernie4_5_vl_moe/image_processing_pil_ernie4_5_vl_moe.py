@@ -82,7 +82,7 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

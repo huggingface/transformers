@@ -87,7 +87,7 @@ class DPTImageProcessorPil(PilBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -132,7 +132,7 @@ class DPTImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         ensure_multiple_of: int = 1,
         keep_aspect_ratio: bool = False,
         **kwargs,
@@ -173,7 +173,7 @@ class DPTImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

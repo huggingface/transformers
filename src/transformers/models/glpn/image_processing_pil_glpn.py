@@ -62,7 +62,7 @@ class GLPNImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         size_divisor: int = 32,
         **kwargs,
     ) -> np.ndarray:
@@ -77,7 +77,7 @@ class GLPNImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

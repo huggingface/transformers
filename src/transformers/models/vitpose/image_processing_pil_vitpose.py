@@ -93,7 +93,7 @@ class VitPoseImageProcessorPil(PilBackend):
         boxes: list[list[list[float]]] | np.ndarray | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """Handle extra inputs beyond images."""
@@ -124,7 +124,7 @@ class VitPoseImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

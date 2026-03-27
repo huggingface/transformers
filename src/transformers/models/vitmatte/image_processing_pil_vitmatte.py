@@ -102,7 +102,7 @@ class VitMatteImageProcessorPil(PilBackend):
         trimaps: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         """

@@ -124,7 +124,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | int | None = None,
     ) -> np.ndarray:
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
@@ -180,7 +180,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         prompt_depth: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         return_tensors: str | TensorType | None = None,
         prompt_scale_to_meter: float | None = None,
         **kwargs,
@@ -239,7 +239,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

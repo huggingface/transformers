@@ -139,7 +139,7 @@ class SegformerImageProcessorPil(PilBackend):
         self,
         images: list["np.ndarray"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,

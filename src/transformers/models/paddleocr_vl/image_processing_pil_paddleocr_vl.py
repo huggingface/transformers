@@ -101,7 +101,7 @@ class PaddleOCRVLImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

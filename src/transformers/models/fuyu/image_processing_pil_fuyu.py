@@ -63,7 +63,7 @@ class FuyuImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | int | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -98,7 +98,7 @@ class FuyuImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | int | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
