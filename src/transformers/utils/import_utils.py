@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
@@ -971,6 +972,16 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
         return version.parse(flash_attn_version) >= version.parse(library_version)
     except packaging.version.InvalidVersion:
         return False
+
+
+@lru_cache
+def is_flash_attn_greater_or_equal_2_10() -> bool:
+    warnings.warn(
+        "`is_flash_attn_greater_or_equal_2_10` is deprecated and will be removed in v5.8. "
+        "Please use `is_flash_attn_greater_or_equal(library_version='2.1.0')` instead if needed.",
+        FutureWarning,
+    )
+    return is_flash_attn_greater_or_equal("2.1.0")
 
 
 @lru_cache

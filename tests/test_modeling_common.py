@@ -3612,6 +3612,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
+                "EvollaModel",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
@@ -3623,6 +3624,9 @@ class ModelTesterMixin:
                 "kosmos-2",
                 "mllama",
                 "lighton_ocr",
+                "parakeet_encoder",
+                "parakeet_ctc",
+                "pi0",
                 "pixtral",
                 "sam",
                 "sam_hq",
