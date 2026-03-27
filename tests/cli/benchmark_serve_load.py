@@ -81,7 +81,9 @@ async def send_request(
     stream: bool = True,
 ) -> dict:
     """Send a single request and collect timing metrics."""
-    gen_cfg = {"max_new_tokens": max_new_tokens, "do_sample": False}
+    # eos_token_id=-1 forces exact max_new_tokens generation (no early stopping)
+    # for consistent benchmarking
+    gen_cfg = {"max_new_tokens": max_new_tokens, "do_sample": False, "eos_token_id": -1}
 
     if endpoint == "responses":
         url = f"{base_url}/v1/responses"
@@ -110,7 +112,7 @@ async def send_request(
     error = None
 
     try:
-        async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=300)) as resp:
+        async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=600)) as resp:
             if resp.status != 200:
                 error = f"HTTP {resp.status}: {await resp.text()}"
                 return _make_result(t_start, error=error)
@@ -237,11 +239,14 @@ async def run_concurrency_test(
 
 def compute_metrics(results: list[dict], duration: float) -> dict:
     """Compute aggregate metrics from individual request results."""
+    from collections import Counter
+
     successful = [r for r in results if r["error"] is None]
     failed = [r for r in results if r["error"] is not None]
+    error_summary = Counter(r["error"] for r in failed)
 
     if not successful:
-        return {"error": "all requests failed", "failures": len(failed)}
+        return {"error": "all requests failed", "failures": len(failed), "error_summary": error_summary}
 
     total_output_tokens = sum(r["output_tokens"] for r in successful)
 
@@ -280,6 +285,7 @@ def compute_metrics(results: list[dict], duration: float) -> dict:
         "ttft": percentiles(ttfts),
         "tpot": percentiles(tpots),
         "itl": percentiles(all_itl),
+        "error_summary": error_summary,
     }
 
 
@@ -304,6 +310,9 @@ def print_metrics(metrics: dict, label: str):
         return
 
     print(f"  Requests:    {metrics['successful']} ok / {metrics['failed']} failed / {metrics['total_requests']} total")
+    if metrics.get("error_summary"):
+        for err, count in metrics["error_summary"].most_common(5):
+            print(f"    - {count}x: {err}")
     print(f"  Duration:    {metrics['duration']:.1f}s")
     print(f"  Throughput:  {metrics['throughput_req_per_sec']:.2f} req/s, {metrics['throughput_tok_per_sec']:.1f} tok/s")
     print(f"  Tokens:      {metrics['total_output_tokens']} total output")
@@ -402,7 +411,8 @@ async def async_main(args):
     print(f"Max new tokens per request: {args.max_new_tokens}")
     print(f"Endpoint: /v1/{args.endpoint} ({'streaming' if args.stream else 'non-streaming'})")
 
-    # Warmup — small batch to warm CUDA graphs and JIT kernels
+    # Warmup — ramp up to full batch size so CUDA graphs are compiled for
+    # the batch shapes the scheduler will use under load (~100+ active requests).
     warmup_size = min(16, num_requests)
     warmup_prompts = prompts[:warmup_size]
     print(f"Warming up ({args.warmup}x {warmup_size} requests)...")

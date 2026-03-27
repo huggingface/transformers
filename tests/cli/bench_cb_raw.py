@@ -38,23 +38,30 @@ def bench_ns_get_result(mgr, prompts, max_new_tokens):
     total = finished = 0
     while finished < N:
         r = mgr.get_result(timeout=1)
-        if r and r.is_finished():
+        if r is not None and r.is_finished():
             total += len(r.generated_tokens)
             finished += 1
     return total, time.perf_counter() - t0
 
 
-async def bench_ns_future(mgr, prompts, max_new_tokens):
-    """Non-stream + future: one asyncio.Future per request, resolved by dispatcher."""
+async def bench_ns_handler(mgr, prompts, max_new_tokens):
+    """Non-stream + handler: register_result_handler per request, resolve future on finish."""
+    loop = asyncio.get_running_loop()
     t0 = time.perf_counter()
     futures = []
     for i, ids in enumerate(prompts):
-        rid = f"nsf_{time.perf_counter_ns()}_{i}"
-        future = mgr.register_async_future(rid)
+        rid = f"nsh_{time.perf_counter_ns()}_{i}"
+        future = loop.create_future()
+
+        def _on_result(output, fut=future):
+            if not fut.done() and output.is_finished():
+                fut.set_result(len(output.generated_tokens))
+
+        mgr.register_result_handler(rid, _on_result)
         mgr.add_request(ids, request_id=rid, max_new_tokens=max_new_tokens, streaming=False)
         futures.append(future)
     results = await asyncio.gather(*futures)
-    return sum(len(r.generated_tokens) for r in results), time.perf_counter() - t0
+    return sum(results), time.perf_counter() - t0
 
 
 # ---------------------------------------------------------------------------
@@ -76,22 +83,24 @@ def bench_s_get_result(mgr, prompts, max_new_tokens):
     return total, time.perf_counter() - t0
 
 
-async def bench_s_async_iter(mgr, prompts, max_new_tokens):
-    """Stream + async_request_id_iter: per-request async queue via dispatcher."""
+async def bench_s_handler(mgr, prompts, max_new_tokens):
+    """Stream + handler: register_result_handler per request, await future on finish."""
+    loop = asyncio.get_running_loop()
     t0 = time.perf_counter()
-    rids = []
+    futures = []
     for i, ids in enumerate(prompts):
-        rid = f"sai_{time.perf_counter_ns()}_{i}"
+        rid = f"sh_{time.perf_counter_ns()}_{i}"
+        future = loop.create_future()
+
+        def _on_output(output, fut=future):
+            if not fut.done() and output.is_finished():
+                fut.set_result(len(output.generated_tokens))
+
+        mgr.register_result_handler(rid, _on_output)
         mgr.add_request(ids, request_id=rid, max_new_tokens=max_new_tokens, streaming=True)
-        rids.append(rid)
+        futures.append(future)
 
-    async def consume(rid):
-        async for output in mgr.async_request_id_iter(rid):
-            if output.is_finished():
-                return len(output.generated_tokens)
-        return 0
-
-    results = await asyncio.gather(*[consume(rid) for rid in rids])
+    results = await asyncio.gather(*futures)
     return sum(results), time.perf_counter() - t0
 
 
@@ -101,9 +110,9 @@ async def bench_s_async_iter(mgr, prompts, max_new_tokens):
 
 METHODS = {
     "ns_get_result": ("Non-stream + get_result", lambda mgr, p, m: bench_ns_get_result(mgr, p, m)),
-    "ns_future":     ("Non-stream + future",     lambda mgr, p, m: asyncio.run(bench_ns_future(mgr, p, m))),
+    "ns_handler":    ("Non-stream + handler",     lambda mgr, p, m: asyncio.run(bench_ns_handler(mgr, p, m))),
     "s_get_result":  ("Stream + get_result",      lambda mgr, p, m: bench_s_get_result(mgr, p, m)),
-    "s_async_iter":  ("Stream + async_iter",       lambda mgr, p, m: asyncio.run(bench_s_async_iter(mgr, p, m))),
+    "s_handler":     ("Stream + handler",          lambda mgr, p, m: asyncio.run(bench_s_handler(mgr, p, m))),
 }
 
 
@@ -147,22 +156,23 @@ def main():
     for N in args.batch:
         prompts = all_prompts[:N]
 
-        with model.continuous_batching_context_manager(
-            generation_config=gen_config, continuous_batching_config=cb_config, block=True, timeout=5,
-        ) as mgr:
-            # Warmup for this batch size
-            warmup_prompts = prompts[:min(200, N)]
-            for _ in range(args.warmup):
-                bench_ns_get_result(mgr, warmup_prompts, args.max_new_tokens)
-
-            row = f"{N:>6}"
-            for method_key in args.methods:
-                _, fn = METHODS[method_key]
+        row = f"{N:>6}"
+        for method_key in args.methods:
+            _, fn = METHODS[method_key]
+            # Fresh CB context per method — each gets its own CUDA graph cache
+            with model.continuous_batching_context_manager(
+                generation_config=gen_config, continuous_batching_config=cb_config, block=True, timeout=5,
+            ) as mgr:
+                # Warmup with the same method being tested
+                warmup_prompts = prompts[:min(200, N)]
+                for _ in range(args.warmup):
+                    fn(mgr, warmup_prompts, args.max_new_tokens)
+                # Measured runs
                 best = 0
                 for _ in range(args.runs):
                     tokens, dt = fn(mgr, prompts, args.max_new_tokens)
                     best = max(best, tokens / dt if dt > 0 else 0)
-                row += f" | {best:>{col_w - 4}.0f} t/s"
+            row += f" | {best:>{col_w - 4}.0f} t/s"
             print(row, flush=True)
 
     # Quality check
@@ -171,9 +181,14 @@ def main():
         generation_config=gen_config, continuous_batching_config=cb_config, block=True, timeout=5,
     ) as mgr:
         async def check():
+            loop = asyncio.get_running_loop()
             for i in range(3):
                 rid = f"qc_{i}"
-                future = mgr.register_async_future(rid)
+                future = loop.create_future()
+                def _on_qc(output, fut=future):
+                    if not fut.done():
+                        fut.set_result(output)
+                mgr.register_result_handler(rid, _on_qc)
                 mgr.add_request(all_prompts[i], request_id=rid, max_new_tokens=args.max_new_tokens, streaming=False)
                 r = await future
                 text = tokenizer.decode(r.generated_tokens, skip_special_tokens=True)[:80]

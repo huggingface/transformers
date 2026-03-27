@@ -598,7 +598,6 @@ class CBGenerateManager(BaseGenerateManager):
             input_ids,
             request_id=request_id,
             max_new_tokens=gen_config.max_new_tokens,
-            min_new_tokens=gen_config.min_new_tokens,
             streaming=True,
             eos_token_id=gen_config.eos_token_id,
         )
@@ -637,7 +636,6 @@ class CBGenerateManager(BaseGenerateManager):
             input_ids,
             request_id=request_id,
             max_new_tokens=gen_config.max_new_tokens,
-            min_new_tokens=gen_config.min_new_tokens,
             streaming=False,
             eos_token_id=gen_config.eos_token_id,
         )

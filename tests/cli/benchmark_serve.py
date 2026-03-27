@@ -104,7 +104,7 @@ def streaming_chat_completion(
     do_sample: bool = False,
 ) -> dict:
     """Send a streaming chat completion request. Returns {total, ttft, completion_tokens, text}."""
-    gen_cfg = {"max_new_tokens": max_tokens, "min_new_tokens": max_tokens, "do_sample": do_sample}
+    gen_cfg = {"max_new_tokens": max_tokens, "do_sample": do_sample, "eos_token_id": -1}
     if do_sample:
         gen_cfg["temperature"] = 0.7
 
@@ -165,7 +165,7 @@ def streaming_response(
     do_sample: bool = False,
 ) -> dict:
     """Send a streaming responses API request. Returns {total, ttft, completion_tokens, text}."""
-    gen_cfg = {"max_new_tokens": max_tokens, "min_new_tokens": max_tokens, "do_sample": do_sample}
+    gen_cfg = {"max_new_tokens": max_tokens, "do_sample": do_sample, "eos_token_id": -1}
     if do_sample:
         gen_cfg["temperature"] = 0.7
 
@@ -530,7 +530,7 @@ def main():
                 # streaming warmup can hang waiting for SSE chunks during compilation)
                 if args.compile:
                     warmup_prompt = make_prompt(tokenizer, max(args.pp + [args.tg_prefill]))
-                    gen_cfg = {"max_new_tokens": max(args.tg), "do_sample": False}
+                    gen_cfg = {"max_new_tokens": max(args.tg), "do_sample": False, "eos_token_id": -1}
                     payload = {"messages": [{"role": "user", "content": warmup_prompt}], "stream": False,
                                "seed": args.seed, "generation_config": json.dumps(gen_cfg)}
                     print("  compile warmup (non-streaming, may take ~30s)...")
