@@ -318,17 +318,12 @@ def eager_attention_forward(
 class OwlViTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: OwlViTVisionConfig | OwlViTTextConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
         self.is_causal = False
@@ -344,12 +339,17 @@ class OwlViTAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        """Input shape: Batch x Time x Channel"""
 
-        query_states = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -357,16 +357,16 @@ class OwlViTAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            queries,
+            keys,
+            values,
             attention_mask,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -739,9 +739,8 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         )
 
 
-# See all OwlViT models at https://huggingface.co/models?filter=owlvit
-
-
+# contrastive loss function, adapted from
+# https://sachinruk.github.io/blog/2021-03-07-owlvit.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 

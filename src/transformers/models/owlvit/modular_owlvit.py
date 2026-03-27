@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch OWL-ViT model (modular; see `modeling_owlvit.py`, auto-generated)."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,40 +23,30 @@ from ... import initialization as init
 from ...loss.loss_for_object_detection import box_iou, generalized_box_iou
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
     auto_docstring,
     is_vision_available,
-    logging,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
     CLIPMLP,
+    CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
     CLIPTextEmbeddings,
     CLIPVisionEmbeddings,
-    eager_attention_forward,
+    contrastive_loss,
 )
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
-
-
-logger = logging.get_logger(__name__)
-
-
-# See all OwlViT models at https://huggingface.co/models?filter=owlvit
-
-
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
 def owlvit_loss(similarity: torch.Tensor) -> torch.Tensor:
@@ -242,61 +231,8 @@ class OwlViTTextEmbeddings(CLIPTextEmbeddings):
         return embeddings
 
 
-class OwlViTAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(*hidden_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
+class OwlViTAttention(CLIPAttention):
+    pass
 
 
 class OwlViTMLP(CLIPMLP):
