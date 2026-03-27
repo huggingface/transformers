@@ -4533,10 +4533,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Otherwise, just move it to device
             else:
                 _load_parameter_into_model(self, key, value)
-        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
+        # We need to move back non-persistent buffers that are still on meta device
+        # (they are not part of loaded weights so they were never moved by the weight-loading path).
+        #
+        # Two cases:
+        #  1. Buffer already on a real (non-meta) device  →  leave it alone; it was correctly
+        #     initialized in __init__ and must NOT be clobbered.  Using torch.empty_like here
+        #     was the root cause of issue #44534 (random junk overwrites initialized values).
+        #  2. Buffer still on meta  →  move it to the target device.  Use torch.zeros_like so
+        #     the value is at least deterministic zeros; _init_weights (called by
+        #     _initialize_missing_keys below) can then restore the correct non-zero value if
+        #     the model author implements that logic there.
         for key, buffer in self.named_non_persistent_buffers():
+            if buffer.device.type != "meta":
+                # Case 1: already on a real device with its correct initialized value; skip.
+                continue
+            # Case 2: still on meta — move to the target device with zeros (not garbage).
             buffer_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(buffer, device=buffer_device)
+            value = torch.zeros_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:

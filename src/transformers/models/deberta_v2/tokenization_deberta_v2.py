@@ -138,6 +138,32 @@ class DebertaV2Tokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(list_pretokenizers)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
+
+        # Build the CLS/SEP post-processor before calling super().__init__() so that
+        # the base class installs it via the `post_processor` kwarg (line 420-421 of
+        # tokenization_utils_tokenizers.py) and sets `_should_update_post_processor=False`.
+        # If we set it *after* super().__init__(), then from_pretrained() → _post_init()
+        # → update_post_processor() would silently overwrite it with a no-op template
+        # (because add_bos_token / add_eos_token are both False for DeBERTa).  That was
+        # the root cause of the add_special_tokens=True regression in v5.
+        vocab_dict = self._tokenizer.get_vocab()
+        cls_token_id = vocab_dict.get(str(cls_token), 0)
+        sep_token_id = vocab_dict.get(str(sep_token), 0)
+        post_processor = processors.TemplateProcessing(
+            single=f"{str(cls_token)}:0 $A:0 {str(sep_token)}:0",
+            pair=f"{str(cls_token)}:0 $A:0 {str(sep_token)}:0 $B:1 {str(sep_token)}:1",
+            special_tokens=[
+                (str(cls_token), cls_token_id),
+                (str(sep_token), sep_token_id),
+            ],
+        )
+
+        # When loading via from_pretrained(), convert_to_native_format() may have
+        # already injected a `post_processor` extracted from tokenizer.json into
+        # `kwargs`.  Pop it so we don't get "multiple values for keyword argument".
+        # We always want the DeBERTa CLS/SEP TemplateProcessing to take precedence.
+        kwargs.pop("post_processor", None)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -150,19 +176,8 @@ class DebertaV2Tokenizer(TokenizersBackend):
             do_lower_case=do_lower_case,
             split_by_punct=split_by_punct,
             add_prefix_space=add_prefix_space,
+            post_processor=post_processor,
             **kwargs,
-        )
-
-        cls_token_id = self.cls_token_id if self.cls_token_id is not None else 0
-        sep_token_id = self.sep_token_id if self.sep_token_id is not None else 0
-
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0",
-            pair=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0 $B:1 {str(self.sep_token)}:1",
-            special_tokens=[
-                (str(self.cls_token), cls_token_id),
-                (str(self.sep_token), sep_token_id),
-            ],
         )
 
 

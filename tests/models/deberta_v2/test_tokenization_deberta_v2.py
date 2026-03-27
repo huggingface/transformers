@@ -118,6 +118,57 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokens, tokens_target)
 
+    def test_add_special_tokens_regression_issue_44568(self):
+        """
+        Regression test for GitHub issue #44568.
+
+        Bug: After a save/load round-trip (which simulates from_pretrained()), the
+        post_processor was being overwritten by update_post_processor() inside _post_init().
+        Because DebertaV2Tokenizer does not use add_bos_token/add_eos_token, that call
+        produced a no-op TemplateProcessing, silently stripping [CLS]/[SEP] from outputs.
+
+        Fix: The TemplateProcessing post_processor is now built *before* super().__init__()
+        and passed as a kwarg so the base class installs it and marks
+        _should_update_post_processor=False, preventing any subsequent clobber.
+        """
+        import tempfile
+
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab, vocab_scores, merges = extractor.extract()
+        tokenizer = DebertaV2Tokenizer(vocab=vocab_scores, unk_token="<unk>")
+
+        # --- Direct instantiation ---
+        encoding = tokenizer("Hello world", add_special_tokens=True)
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens[0], "[CLS]", "Direct init: first token should be [CLS]")
+        self.assertEqual(tokens[-1], "[SEP]", "Direct init: last token should be [SEP]")
+
+        # --- Save / load round-trip (mimics from_pretrained) ---
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            reloaded = DebertaV2Tokenizer.from_pretrained(tmp_dir)
+
+        encoding_rt = reloaded("Hello world", add_special_tokens=True)
+        tokens_rt = reloaded.convert_ids_to_tokens(encoding_rt["input_ids"])
+        self.assertEqual(
+            tokens_rt[0],
+            "[CLS]",
+            "After save/load: first token should be [CLS] (regression: issue #44568)",
+        )
+        self.assertEqual(
+            tokens_rt[-1],
+            "[SEP]",
+            "After save/load: last token should be [SEP] (regression: issue #44568)",
+        )
+
+        # --- Pair encoding after round-trip ---
+        encoding_pair = reloaded("Hello", "World", add_special_tokens=True)
+        tokens_pair = reloaded.convert_ids_to_tokens(encoding_pair["input_ids"])
+        self.assertEqual(tokens_pair[0], "[CLS]")
+        sep_indices = [i for i, t in enumerate(tokens_pair) if t == "[SEP]"]
+        self.assertEqual(len(sep_indices), 2, "Pair encoding should have two [SEP] tokens")
+        self.assertEqual(sep_indices[-1], len(tokens_pair) - 1, "Last token should be [SEP]")
+
     def test_post_processor_adds_special_tokens(self):
         extractor = SentencePieceExtractor(SAMPLE_VOCAB)
         vocab, vocab_scores, merges = extractor.extract()
