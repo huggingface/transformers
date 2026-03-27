@@ -169,7 +169,7 @@ jobs:
           fi
         
       - name: Tailscale # In order to be able to SSH when a test fails
-        uses: huggingface/tailscale-action@main
+        uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a # main
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ env.SLACKCHANNEL }}
