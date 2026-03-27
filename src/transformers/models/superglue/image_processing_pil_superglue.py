@@ -16,13 +16,12 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+from PIL import Image, ImageDraw
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import ImagesKwargs, Unpack
-from PIL import Image, ImageDraw
-
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from .image_processing_superglue import validate_and_format_image_pairs

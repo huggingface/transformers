@@ -1,7 +1,7 @@
 import torch
 
 from ...utils import TensorType
-from ...utils.import_utils import requires, requires_backends
+from ...utils.import_utils import requires
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
 from ..superglue.image_processing_superglue import SuperGlueImageProcessor
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
@@ -68,14 +68,14 @@ class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):
         return results
 
 
-@requires(backends=("torch",))
 class EfficientLoFTRImageProcessorPil(SuperGlueImageProcessorPil):
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "EfficientLoFTRKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -92,7 +92,8 @@ class EfficientLoFTRImageProcessorPil(SuperGlueImageProcessorPil):
             `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        requires_backends(self, ["torch"])
+        import torch
+
         if outputs.matches.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):

@@ -115,12 +115,13 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "EfficientLoFTRKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -137,7 +138,8 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
             `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        requires_backends(self, ["torch"])
+        import torch
+
         if outputs.matches.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
@@ -176,7 +178,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
         return results
 
     def visualize_keypoint_matching(
-        self, images: ImageInput, keypoint_matching_output: list[dict[str, torch.Tensor]]
+        self, images: ImageInput, keypoint_matching_output: list[dict[str, "torch.Tensor"]]
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
