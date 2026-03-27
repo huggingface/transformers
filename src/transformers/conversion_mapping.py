@@ -106,6 +106,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "colqwen2": [
             WeightRenaming(source_patterns=r"vlm.model", target_patterns="vlm"),
+            WeightRenaming(source_patterns=r"vlm(?!\.(language_model|visual))", target_patterns="vlm.language_model"),
         ],
         "gemma3n_text": [
             WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
