@@ -66,7 +66,7 @@ else:
     with open(f"{root_path}/auto_mappings.json", "r") as f:
         all_mappings = json.load(f)
 
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, str] = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"]
+    IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(**all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"])
     IMAGE_PROCESSOR_MAPPING_NAMES.update(
         {
             "aimv2": {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"},

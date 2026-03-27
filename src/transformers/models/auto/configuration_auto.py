@@ -35,8 +35,8 @@ root_path = Path(__file__).resolve().parents[0]
 with open(f"{root_path}/auto_mappings.json", "r") as f:
     all_mappings = json.load(f)
 
-CONFIG_MAPPING_NAMES: OrderedDict[str, str] = all_mappings["CONFIG_MAPPING_NAMES"]
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME: OrderedDict[str, str] = all_mappings["SPECIAL_MODEL_TYPE_TO_MODULE_NAME"]
+CONFIG_MAPPING_NAMES = OrderedDict(**all_mappings["CONFIG_MAPPING_NAMES"])
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(**all_mappings["SPECIAL_MODEL_TYPE_TO_MODULE_NAME"])
 
 # This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
