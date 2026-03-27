@@ -1,0 +1,48 @@
+Create `/fsx/ita_zaporozhets/transformers/src/transformers/models/sarvam/modular_sarvam.py` for the `sarvam` model.
+
+Top matched model for class inheritance:
+- `deepseek_v3`: 6 matched classes (54.5%), matched classes [MoEGate, SarvamMLAAttention, SarvamMLADecoderLayer, SarvamMLAMLP, SarvamMLAMoE, SarvamMLARMSNorm]
+
+For the matched classes listed above, inherit from `deepseek_v3` and only override what differs. See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+
+For classes marked "copy as-is", reproduce them exactly from `modeling_sarvam.py` without inheriting from `deepseek_v3`. Also copy any module-level helper functions they depend on.
+The copied and inherited classes must remain mutually compatible: method signatures, parameter names, and return types must match what each side expects when they call into one another.
+
+Available classes in `deepseek_v3` (use EXACTLY these names — do not invent new ones):
+  - `DeepseekV3Attention`
+  - `DeepseekV3DecoderLayer`
+  - `DeepseekV3ForCausalLM`
+  - `DeepseekV3ForSequenceClassification`
+  - `DeepseekV3ForTokenClassification`
+  - `DeepseekV3MLP`
+  - `DeepseekV3MoE`
+  - `DeepseekV3Model`
+  - `DeepseekV3NaiveMoe`
+  - `DeepseekV3PreTrainedModel`
+  - `DeepseekV3RMSNorm`
+  - `DeepseekV3RotaryEmbedding`
+  - `DeepseekV3TopkRouter`
+
+CRITICAL — single prefix rule:
+The modular converter determines the new-model prefix by computing the longest common suffix between each (new_class, base_class) pair, then stripping that suffix from the new class name. If different pairs yield different prefixes, the converter will fail with a KeyError.
+
+Analysis of your source classes against `deepseek_v3` base classes reveals CONFLICTING prefixes:
+  - `SarvamMLAAttention` → extracted prefix `SarvamMLA`
+  - `SarvamMLAYarnRotaryEmbedding` → extracted prefix `SarvamMLAYarn`
+
+This means some new class names share a longer common suffix with their base counterpart than others, causing different prefix extractions across pairs.
+
+Use **`Sarvam`** as the prefix for ALL class names in the modular file (e.g. `SarvamRMSNorm`, `SarvamMLP`, `SarvamModel`, `SarvamAttention`). Do NOT add extra qualifiers (like `MLA`, `MoE`, etc.) to the prefix. Use the plain `Sarvam` prefix throughout, even if the source file used compound names.
+
+Matched classes:
+- `SarvamMLARMSNorm` → inherit from `deepseek_v3`
+- `SarvamMLARotaryEmbedding` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAYarnRotaryEmbedding` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAMLP` → inherit from `deepseek_v3`
+- `MoEGate` → inherit from `deepseek_v3`
+- `SarvamMLAMoE` → inherit from `deepseek_v3`
+- `SarvamMLAAttention` → inherit from `deepseek_v3`
+- `SarvamMLADecoderLayer` → inherit from `deepseek_v3`
+- `SarvamMLAPreTrainedModel` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAModel` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
+- `SarvamMLAForCausalLM` → copy as-is from `modeling_sarvam.py` (no match in `deepseek_v3`)
