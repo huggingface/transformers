@@ -9,7 +9,6 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 import numpy as np
-import requests
 import torch
 import torchvision.transforms
 
@@ -474,7 +473,10 @@ def load_video(
         bytes_obj = buffer.getvalue()
         file_obj = BytesIO(bytes_obj)
     elif video.startswith("http://") or video.startswith("https://"):
-        file_obj = BytesIO(requests.get(video).content)
+        import urllib.request
+
+        with urllib.request.urlopen(video) as response:
+            file_obj = BytesIO(response.read())
     elif os.path.isfile(video):
         file_obj = video
     else:
