@@ -28,11 +28,9 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class Qwen2VLImageProcessorPil(PilBackend):
     do_resize = True

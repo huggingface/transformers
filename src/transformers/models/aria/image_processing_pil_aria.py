@@ -26,11 +26,9 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_aria import AriaImageProcessorKwargs
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class AriaImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "pixel_mask", "num_crops"]

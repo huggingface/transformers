@@ -32,11 +32,9 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from ...utils.import_utils import requires
 from .image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs, get_optimal_tiled_canvas
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class GotOcr2ImageProcessorPil(PilBackend):
     valid_kwargs = GotOcr2ImageProcessorKwargs

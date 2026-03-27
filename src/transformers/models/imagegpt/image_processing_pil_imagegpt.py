@@ -27,7 +27,6 @@ from ...utils import (
     auto_docstring,
     is_torch_available,
 )
-from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -51,7 +50,6 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class ImageGPTImageProcessorPil(PilBackend):
     model_input_names = ["input_ids"]

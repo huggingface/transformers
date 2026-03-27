@@ -263,7 +263,6 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class ConditionalDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

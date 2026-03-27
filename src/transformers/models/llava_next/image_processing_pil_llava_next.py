@@ -32,11 +32,9 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class LlavaNextImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes"]

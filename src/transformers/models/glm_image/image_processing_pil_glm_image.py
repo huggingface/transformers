@@ -27,11 +27,9 @@ from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class GlmImageImageProcessorPil(PilBackend):
     do_resize = True

@@ -30,7 +30,6 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_mllama import (
     MllamaImageProcessorKwargs,
     _validate_mllama_preprocess_arguments,
@@ -168,7 +167,6 @@ def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], 
     return aspect_ratios_ids
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class MllamaImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

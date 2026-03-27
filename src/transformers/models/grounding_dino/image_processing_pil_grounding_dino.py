@@ -290,7 +290,6 @@ def _scale_boxes(boxes, target_sizes):
     return boxes
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class GroundingDinoImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

@@ -34,11 +34,9 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class LlavaOnevisionImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]

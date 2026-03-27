@@ -31,7 +31,6 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
-from ...utils.import_utils import requires
 from .image_processing_tvp import TvpImageProcessorKwargs
 
 
@@ -59,7 +58,6 @@ def get_resize_output_image_size(
 
 
 @auto_docstring
-@requires(backends=("vision",))
 class TvpImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN

@@ -26,7 +26,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
-from ...utils.import_utils import requires
 from .image_processing_glm4v import smart_resize
 
 
@@ -48,7 +47,6 @@ class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class Glm4vImageProcessorPil(PilBackend):
     do_resize = True

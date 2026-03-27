@@ -27,11 +27,9 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_donut import DonutImageProcessorKwargs
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class DonutImageProcessorPil(PilBackend):
     """PIL backend for Donut with align_long_axis, thumbnail, and pad_image."""

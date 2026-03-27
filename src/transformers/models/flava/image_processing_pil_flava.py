@@ -32,7 +32,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from ...utils.import_utils import requires
 from .image_processing_flava import (
     FLAVA_CODEBOOK_MEAN,
     FLAVA_CODEBOOK_STD,
@@ -44,7 +43,6 @@ from .image_processing_flava import (
 )
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class FlavaImageProcessorPil(PilBackend):
     valid_kwargs = FlavaImageProcessorKwargs

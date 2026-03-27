@@ -23,7 +23,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from ...utils.import_utils import requires
 from .image_processing_siglip2 import (
     Siglip2ImageProcessorKwargs,
     get_image_size_for_max_num_patches,
@@ -58,7 +57,6 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
     return array, mask
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class Siglip2ImageProcessorPil(PilBackend):
     valid_kwargs = Siglip2ImageProcessorKwargs

@@ -25,11 +25,9 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs, get_resize_output_image_size
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class BridgeTowerImageProcessorPil(PilBackend):
     """PIL backend for BridgeTower with custom resize and center_crop."""

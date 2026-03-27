@@ -28,7 +28,6 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_idefics2 import (
     Idefics2ImageProcessorKwargs,
     convert_to_rgb,
@@ -45,7 +44,6 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class Idefics2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

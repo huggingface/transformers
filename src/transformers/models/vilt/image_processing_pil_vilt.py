@@ -34,7 +34,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from ...utils.import_utils import requires
 from .image_processing_vilt import ViltImageProcessorKwargs
 
 
@@ -99,7 +98,6 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class ViltImageProcessorPil(PilBackend):
     valid_kwargs = ViltImageProcessorKwargs

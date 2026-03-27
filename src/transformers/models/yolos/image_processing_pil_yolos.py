@@ -280,7 +280,6 @@ def get_size_with_aspect_ratio_yolos(
     return (oh, ow)
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class YolosImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

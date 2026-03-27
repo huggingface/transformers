@@ -29,7 +29,6 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 from .image_processing_ovis2 import (
     Ovis2ImageProcessorKwargs,
     get_min_tile_covering_grid,
@@ -37,7 +36,6 @@ from .image_processing_ovis2 import (
 )
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class Ovis2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
