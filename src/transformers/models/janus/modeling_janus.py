@@ -1308,7 +1308,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         language_model_device = self.get_input_embeddings().weight.device
 
         # Only prepare static cache if model is not distributed across devices
-        # (static cache doesn't work well with device_map="auto")
         is_model_distributed = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
         if model_kwargs.get("past_key_values", None) is None and not is_model_distributed:
             # Prepare cache if not provided.
@@ -1337,7 +1336,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         for i in range(num_image_tokens):
-            # Ensure inputs_embeds is on the language model's device (important for device_map="auto")
+            # Ensure inputs_embeds is on the language model's device (important for multi devices setting)
             if inputs_embeds.device != language_model_device:
                 inputs_embeds = inputs_embeds.to(language_model_device)
             # Set is_first_iteration=True to force using inputs_embeds instead of input_ids.
