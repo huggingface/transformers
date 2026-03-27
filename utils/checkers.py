@@ -29,6 +29,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -196,45 +197,49 @@ def run_deps_table_checker(fix=False, line_callback=None):
     return 0, output
 
 
-def _restore_env(line_callback=None):
-    """Reinstall the quality extras to restore the environment."""
-    return _run_cmd(["uv", "pip", "install", "-e", ".[quality]", "-q"], line_callback=line_callback)
-
-
+# Each scenario: (label, extra packages to install alongside transformers)
 _IMPORT_SCENARIOS = [
-    ("Import failed with all backends", None),
-    ("Import failed with torch only (no PIL)", ["Pillow", "torchvision"]),
-    ("Import failed with PIL only (no torch)", ["torch", "torchvision", "torchaudio"]),
-    ("Import failed with torch+PIL but no torchvision", ["torchvision"]),
+    ("all backends (torch + PIL + torchvision)", ["torch", "Pillow", "torchvision"]),
+    ("torch only (no PIL, no torchvision)", ["torch"]),
+    ("PIL only (no torch, no torchvision)", ["Pillow"]),
+    ("torch + PIL, no torchvision", ["torch", "Pillow"]),
 ]
 
 
 def run_imports_checker(fix=False, line_callback=None):
-    """Check that public imports work under various backend combinations."""
-    all_output: list[str] = []
-    for label, uninstall in _IMPORT_SCENARIOS:
-        output_parts: list[str] = []
+    """Check that public imports work under various backend combinations.
 
-        if uninstall:
-            rc, out = _run_cmd(["uv", "pip", "uninstall", *uninstall, "-q"], line_callback=line_callback)
-            output_parts.append(out)
+    Each scenario runs in an isolated temporary venv so the caller's
+    environment is never modified.
+    """
+    all_output: list[str] = []
+
+    for label, extras in _IMPORT_SCENARIOS:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            venv_dir = os.path.join(tmpdir, ".venv")
+
+            # Create venv
+            rc, out = _run_cmd(["uv", "venv", venv_dir, "--python", sys.executable, "-q"], line_callback=line_callback)
+            all_output.append(out)
             if rc != 0:
-                # Restore before returning
-                _, out_restore = _restore_env(line_callback=line_callback)
-                output_parts.append(out_restore)
-                all_output.append("".join(output_parts) + f"Failed to uninstall {', '.join(uninstall)}\n")
+                all_output.append(f"Failed to create venv for scenario: {label}\n")
                 return rc, "".join(all_output)
 
-        rc, out = _run_cmd([sys.executable, "-c", "from transformers import *"], line_callback=line_callback)
-        output_parts.append(out)
+            # Install transformers (editable) + the scenario-specific packages
+            install_cmd = ["uv", "pip", "install", "-e", str(REPO_ROOT), *extras, "-q", "--python", venv_dir]
+            rc, out = _run_cmd(install_cmd, line_callback=line_callback)
+            all_output.append(out)
+            if rc != 0:
+                all_output.append(f"Failed to install packages for scenario: {label}\n")
+                return rc, "".join(all_output)
 
-        if uninstall:
-            _, out_restore = _restore_env(line_callback=line_callback)
-            output_parts.append(out_restore)
-
-        all_output.append("".join(output_parts))
-        if rc != 0:
-            return rc, "".join(all_output) + f"🚨 {label}. Fix unprotected imports!! 🚨\n"
+            # Run the import test inside the venv
+            venv_python = os.path.join(venv_dir, "bin", "python")
+            rc, out = _run_cmd([venv_python, "-c", "from transformers import *"], line_callback=line_callback)
+            all_output.append(out)
+            if rc != 0:
+                all_output.append(f"🚨 Import failed with {label}. Fix unprotected imports!! 🚨\n")
+                return rc, "".join(all_output)
 
     return 0, "".join(all_output)
 
