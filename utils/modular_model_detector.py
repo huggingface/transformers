@@ -102,6 +102,7 @@ import ast
 import logging
 import os
 import re
+import threading
 from datetime import datetime
 from functools import cache, cmp_to_key
 from pathlib import Path
@@ -318,6 +319,7 @@ class CodeSimilarityAnalyzer:
             else torch.float32
         )
         self.dataset: Dataset | None = None
+        self._gpu_lock = threading.Lock()
 
     # ---------- HUB IO ----------
 
@@ -429,22 +431,26 @@ class CodeSimilarityAnalyzer:
         Returns:
             `np.ndarray`: Normalized embeddings as a float32 numpy array.
         """
-        encoded = self.tokenizer(texts, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="pt")
-        encoded = {key: value.to(self.device) for key, value in encoded.items()}
-        with (
-            torch.autocast(device_type=self.device.type, dtype=self.dtype)
-            if self.device.type == "cuda"
-            else torch.no_grad()
-        ):
-            output = self.model(**encoded)
-            hidden = output.last_hidden_state
-            # Last token pooling: take the hidden state of the last non-padding token.
-            attention_mask = encoded["attention_mask"]
-            last_token_idx = attention_mask.sum(dim=1) - 1  # (batch,)
-            batch_size = hidden.shape[0]
-            embeddings = hidden[torch.arange(batch_size, device=hidden.device), last_token_idx]
-        embeddings = torch.nn.functional.normalize(embeddings.float(), p=2, dim=1)
-        return embeddings.cpu().numpy().astype("float32")
+        with self._gpu_lock:
+            encoded = self.tokenizer(texts, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="pt")
+            encoded = {key: value.to(self.device) for key, value in encoded.items()}
+            with (
+                torch.autocast(device_type=self.device.type, dtype=self.dtype)
+                if self.device.type == "cuda"
+                else torch.no_grad()
+            ):
+                output = self.model(**encoded)
+                hidden = output.last_hidden_state
+                # Last token pooling: take the hidden state of the last non-padding token.
+                attention_mask = encoded["attention_mask"]
+                last_token_idx = attention_mask.sum(dim=1) - 1  # (batch,)
+                batch_size = hidden.shape[0]
+                embeddings = hidden[torch.arange(batch_size, device=hidden.device), last_token_idx]
+            embeddings = torch.nn.functional.normalize(embeddings.float(), p=2, dim=1)
+            result = embeddings.detach().cpu().numpy().astype("float32")
+            if self.device.type == "cuda":
+                torch.cuda.empty_cache()
+        return result
 
     def encode(self, texts: list[str]) -> np.ndarray:
         """
@@ -514,16 +520,22 @@ class CodeSimilarityAnalyzer:
         self_name: str,
         k: int,
         dates: dict[str, str] | None = None,
+        ignore_models: set[str] | None = None,
     ) -> list[tuple[str, float]]:
         assert self.dataset is not None
         buffer_size = min(k + 200, len(self.dataset))
         scores_arr, examples = self.dataset.get_nearest_examples("embedding", query_embedding_row, k=buffer_size)
         output = []
+        if ignore_models is None:
+            ignore_models = set()
         for score, identifier in zip(scores_arr, examples["identifier"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
             # Skip if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
+                continue
+            # Skip if in ignore list
+            if _normalize(parent_model) in ignore_models:
                 continue
             output.append((identifier, float(score)))
         # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
@@ -545,6 +557,7 @@ class CodeSimilarityAnalyzer:
         self_model_normalized: str,
         self_name: str,
         k: int,
+        ignore_models: set[str] | None = None,
     ) -> list[tuple[str, float]]:
         """
         Find top-k most similar definitions using Jaccard similarity on token sets.
@@ -554,17 +567,22 @@ class CodeSimilarityAnalyzer:
             self_model_normalized (`str`): Normalized name of the query model to exclude.
             self_name (`str`): Name of the query definition to exclude.
             k (`int`): Number of top results to return.
+            ignore_models (`set[str]` or `None`, *optional*): Set of normalized model IDs to exclude.
 
         Returns:
             `list[tuple[str, float]]`: List of (identifier, score) tuples.
         """
         assert self.dataset is not None
+        if ignore_models is None:
+            ignore_models = set()
         scores = []
         for identifier, token_list in zip(self.dataset["identifier"], self.dataset["tokens"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
             # Skip only if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
+                continue
+            if _normalize(parent_model) in ignore_models:
                 continue
             tokens = set(token_list)
             if not tokens or not query_tokens:
@@ -603,6 +621,7 @@ class CodeSimilarityAnalyzer:
         allow_hub_fallback: bool = True,
         use_jaccard=False,
         dates: dict[str, str] | None = None,
+        ignore_models: set[str] | None = None,
     ) -> dict[str, dict[str, list]]:
         """
         Analyze a modeling file and find similar code definitions in the index.
@@ -612,11 +631,14 @@ class CodeSimilarityAnalyzer:
             top_k_per_item (`int`, *optional*, defaults to 5): Number of top matches to return per definition.
             allow_hub_fallback (`bool`, *optional*, defaults to `True`): Whether to download index from Hub if not found locally.
             dates (`dict[str, str]` or `None`, *optional*): Mapping of model_id to release date for tie-breaking.
+            ignore_models (`set[str]` or `None`, *optional*): Set of normalized model IDs to exclude from results.
 
         Returns:
             `dict[str, dict[str, list]]`: Dictionary mapping definition names to their similarity results.
                 Each result contains 'embedding', 'jaccard', and 'intersection' keys.
         """
+        if ignore_models is None:
+            ignore_models = set()
         if allow_hub_fallback:
             self.ensure_local_index()
 
@@ -649,6 +671,7 @@ class CodeSimilarityAnalyzer:
                 query_name,
                 top_k_per_item,
                 dates,
+                ignore_models,
             )
 
             # Expand results with parent models from modular inheritance.
@@ -690,7 +713,7 @@ class CodeSimilarityAnalyzer:
             entry = {"kind": kind, "embedding": embedding_top}
             if use_jaccard:
                 jaccard_top = self._topk_jaccard(
-                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item
+                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item, ignore_models
                 )
                 jaccard_set = {identifier for identifier, _ in jaccard_top}
                 intersection = set(embedding_set & jaccard_set)
@@ -917,13 +940,14 @@ def _compare_models(
 
 def compute_model_class_match_summary(
     results: dict[str, dict],
-) -> tuple[int, list[dict[str, float | int | str]]]:
+) -> tuple[int, list[dict[str, float | int | str | list[str]]]]:
     """
     Build the "Model class match summary" from raw ``analyze_file`` results.
 
     Returns:
         `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
-        `model_id`, `num_matched`, `pct`, `mean_score`, in the same order as printed by the CLI
+        `model_id`, `num_matched`, `pct`, `mean_score`, `matched_classes`,
+        in the same order as printed by the CLI
         (models with most matched classes, ancestry-aware, then by mean score).
     """
     grouped: dict[str, list[tuple[str, dict]]] = {"class": [], "function": []}
@@ -983,17 +1007,19 @@ def compute_model_class_match_summary(
         filtered_items,
         key=cmp_to_key(lambda a, b: _compare_models(a, b, inheritance_map, model_class_scores)),
     )
-    ordered_summary: list[dict[str, float | int | str]] = []
+    ordered_summary: list[dict[str, float | int | str | list[str]]] = []
     for model_id, matched in sorted_models:
         pct = 100.0 * len(matched) / total_classes
         scores_for_model = model_class_scores.get(model_id, {})
         mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
+        matched_classes = sorted(matched)
         ordered_summary.append(
             {
                 "model_id": model_id,
                 "num_matched": len(matched),
                 "pct": round(pct, 1),
                 "mean_score": round(mean_score, 4),
+                "matched_classes": matched_classes,
             }
         )
     return total_classes, ordered_summary
@@ -1012,7 +1038,27 @@ def main():
     parser.add_argument(
         "--hub-dataset", type=str, default=HUB_DATASET_DEFAULT, help="Hub dataset repo id to pull/push the index."
     )
-    parser.add_argument("--use_jaccard", type=bool, default=False, help="Whether or not to use jaccard index")
+    parser.add_argument(
+        "--use_jaccard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether or not to use jaccard index",
+    )
+    parser.add_argument(
+        "--generate-prompt",
+        metavar="OUTPUT_FILE",
+        nargs="?",
+           const="__AUTO__",
+        default=None,
+        help="Generate an AI agent prompt to create the modular file. "
+               "Pass a file path to save it, or omit the value to save to <model>_MODULAR_PROMPT.",
+    )
+    parser.add_argument(
+        "--ignore-models",
+        type=str,
+        default=None,
+        help="Comma-separated list of model IDs to exclude from results (e.g., 'bert,gpt2,llama').",
+    )
     args = parser.parse_args()
 
     analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset)
@@ -1035,8 +1081,13 @@ def main():
     if os.sep not in modeling_file:
         modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
 
+    # Parse ignore models from comma-separated list
+    ignore_models_set = set()
+    if args.ignore_models:
+        ignore_models_set = {_normalize(model.strip()) for model in args.ignore_models.split(",") if model.strip()}
+
     results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates
+        Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
     )
     modeling_filename = Path(modeling_file).name
     release_key = modeling_filename.split("modeling_")[-1][:-3]
@@ -1238,11 +1289,201 @@ def main():
                 num_matched = int(item["num_matched"])
                 pct = float(item["pct"])
                 mean_score = float(item["mean_score"])
+                matched_classes = ", ".join(str(name) for name in item.get("matched_classes", []))
                 logging.info(
                     f"  {model_id:25s}: {num_matched:2d}/{total_classes} classes ({pct:5.1f}%), "
-                    f"mean score {mean_score:.4f}"
+                    f"mean score {mean_score:.4f}, matched classes [{matched_classes}]"
                 )
             logging.info("")
+
+            if args.generate_prompt:
+                prompt = generate_modular_prompt(
+                    modeling_file=Path(modeling_file),
+                    ordered_summary=ordered_summary,
+                    results=results,
+                    models_root=analyzer.models_root,
+                )
+                if args.generate_prompt == "__AUTO__":
+                    model_name = Path(modeling_file).stem.replace("modeling_", "")
+                    output_path = Path(modeling_file).with_name(f"{model_name}_MODULAR_PROMPT")
+                    output_path.write_text(prompt, encoding="utf-8")
+                    logging.info("Wrote prompt to %s", output_path)
+                else:
+                    Path(args.generate_prompt).write_text(prompt, encoding="utf-8")
+                    logging.info("Wrote prompt to %s", args.generate_prompt)
+
+
+def generate_modular_prompt(
+    modeling_file: Path,
+    ordered_summary: list[dict],
+    results: dict[str, dict],
+    models_root: Path,
+) -> str:
+    """
+    Generate a prompt for an AI agent to create the modular file for a model.
+
+    Args:
+        modeling_file: Path to the modeling file being analyzed.
+        ordered_summary: Output of ``compute_model_class_match_summary`` (list of dicts).
+        results: Raw ``analyze_file`` results dict.
+        models_root: Root directory of models (``src/transformers/models``).
+
+    Returns:
+        A string prompt ready to be fed to an AI agent.
+    """
+    model_name = modeling_file.stem.replace("modeling_", "")
+    modular_output_path = modeling_file.parent / f"modular_{model_name}.py"
+    top_base = ordered_summary[0]["model_id"] if ordered_summary else None
+    top_summary = ordered_summary[0] if ordered_summary else {}
+    top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
+    top_pct = float(top_summary.get("pct", 0.0)) if top_summary else 0.0
+    top_matched_classes = [str(c) for c in top_summary.get("matched_classes", [])] if top_summary else []
+    top_matched_class_set = set(top_matched_classes)
+
+    # Compute the "safe" simple prefix: CamelCase of the model name.
+    safe_prefix = "".join(part.capitalize() for part in model_name.split("_"))
+
+    # Replicate the modular converter's common_partial_suffix logic so we can predict
+    # which prefix the converter will extract for each (new_class, base_class) pair.
+    def _common_partial_suffix(str1: str, str2: str) -> str:
+        common = ""
+        for i in range(1, min(len(str1), len(str2)) + 1):
+            if str1[-i] == str2[-i]:
+                common = str1[-i] + common
+            else:
+                break
+        # Full-string suffix is not considered a common suffix
+        if common == str1 or common == str2:
+            common = ""
+        return common
+
+    # Read base model class names so we can simulate prefix extraction.
+    # The converter extracts the new-model prefix via:
+    #   suffix = common_partial_suffix(new_class, base_class)
+    #   extracted_prefix = new_class.replace(suffix, "")   [only when suffix starts with uppercase]
+    # If different (new_class, base_class) pairs yield different extracted_prefixes,
+    # the converter will use the most common one and may fail with a KeyError when renaming.
+    source_class_names = [k for k, v in results.items() if v.get("kind", "function") == "class"]
+    base_class_names: list[str] = []
+    if top_base is not None:
+        base_modeling = models_root / top_base / f"modeling_{top_base}.py"
+        if base_modeling.exists():
+            import ast as _ast
+            try:
+                tree = _ast.parse(base_modeling.read_text(encoding="utf-8"))
+                base_class_names = [
+                    node.name for node in _ast.walk(tree) if isinstance(node, _ast.ClassDef)
+                ]
+            except SyntaxError:
+                pass
+
+    # For each source class starting with safe_prefix, find which base class gives the longest
+    # common suffix, then compute the extracted prefix as the converter would.
+    extracted_prefix_per_class: dict[str, str] = {}
+    for cname in source_class_names:
+        if not cname.startswith(safe_prefix):
+            continue
+        best_suffix = ""
+        for bcls in base_class_names:
+            s = _common_partial_suffix(cname, bcls)
+            if len(s) > len(best_suffix) and s and s[0].isupper():
+                best_suffix = s
+        if best_suffix:
+            extracted_prefix_per_class[cname] = cname.replace(best_suffix, "")
+
+    # Detect conflicts: if the converter would extract different prefixes from different pairs.
+    unique_extracted = set(extracted_prefix_per_class.values())
+    conflicting_examples: list[tuple[str, str]] = []  # (class_name, extracted_prefix)
+    if len(unique_extracted) > 1:
+        # Group by extracted prefix and pick one representative per distinct prefix
+        seen: set[str] = set()
+        for cname, epfx in sorted(extracted_prefix_per_class.items()):
+            if epfx not in seen:
+                conflicting_examples.append((cname, epfx))
+                seen.add(epfx)
+
+    # Build a list of available base class names for the prompt so the LLM uses the correct
+    # casing and doesn't hallucinate non-existent class names.
+    base_class_list_str = ""
+    if base_class_names:
+        base_class_list_str = "\n".join(f"  - `{n}`" for n in sorted(base_class_names))
+
+    # List all classes with their best score against the top base model.
+    # For classes explicitly matched to the top model, always instruct inheritance.
+    class_lines: list[str] = []
+    for query_name, data in results.items():
+        if data.get("kind", "function") != "class":
+            continue
+        if query_name in top_matched_class_set and top_base is not None:
+            class_lines.append(f"- `{query_name}` → inherit from `{top_base}`")
+            continue
+
+        best_score_for_top_base = float("-inf")
+        for identifier, score in data.get("embedding", []):
+            try:
+                relative_path, _ = identifier.split(":", 1)
+            except ValueError:
+                continue
+            mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
+            if mid == top_base and score > best_score_for_top_base:
+                best_score_for_top_base = score
+        if best_score_for_top_base > float("-inf"):
+            class_lines.append(f"- `{query_name}` → inherit from `{top_base}` (score {best_score_for_top_base:.4f})")
+        else:
+            class_lines.append(f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no match in `{top_base}`)")
+
+    class_list = "\n".join(class_lines) if class_lines else "(no classes found)"
+
+    # Build the prefix-consistency warning section when needed.
+    prefix_warning = ""
+    if conflicting_examples:
+        ex_lines = "\n".join(
+            f"  - `{cname}` → extracted prefix `{epfx}`" for cname, epfx in conflicting_examples
+        )
+        # The "correct" prefix to use is the simple safe_prefix (model name in CamelCase).
+        prefix_warning = f"""
+CRITICAL — single prefix rule:
+The modular converter determines the new-model prefix by computing the longest common suffix \
+between each (new_class, base_class) pair, then stripping that suffix from the new class name. \
+If different pairs yield different prefixes, the converter will fail with a KeyError.
+
+Analysis of your source classes against `{top_base}` base classes reveals CONFLICTING prefixes:
+{ex_lines}
+
+This means some new class names share a longer common suffix with their base counterpart than \
+others, causing different prefix extractions across pairs.
+
+Use **`{safe_prefix}`** as the prefix for ALL class names in the modular file \
+(e.g. `{safe_prefix}RMSNorm`, `{safe_prefix}MLP`, `{safe_prefix}Model`, `{safe_prefix}Attention`). \
+Do NOT add extra qualifiers (like `MLA`, `MoE`, etc.) to the prefix. \
+Use the plain `{safe_prefix}` prefix throughout, even if the source file used compound names.
+"""
+
+    base_classes_section = ""
+    if base_class_list_str:
+        base_classes_section = f"""
+Available classes in `{top_base}` (use EXACTLY these names — do not invent new ones):
+{base_class_list_str}
+"""
+
+    prompt = f"""\
+Create `{modular_output_path}` for the `{model_name}` model.
+
+Top matched model for class inheritance:
+- `{top_base}`: {top_num_matched} matched classes ({top_pct:.1f}%), matched classes [{", ".join(top_matched_classes)}]
+
+For the matched classes listed above, inherit from `{top_base}` and only override what differs. \
+See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+
+For classes marked "copy as-is", reproduce them exactly from `{modeling_file.name}` without inheriting \
+from `{top_base}`. Also copy any module-level helper functions they depend on.
+The copied and inherited classes must remain mutually compatible: method signatures, parameter names, \
+and return types must match what each side expects when they call into one another.
+{base_classes_section}{prefix_warning}
+Matched classes:
+{class_list}
+"""
+    return prompt
 
 
 if __name__ == "__main__":
