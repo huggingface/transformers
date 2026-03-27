@@ -56,9 +56,9 @@ def advisor(model_name_or_path: str):
         print("Estimated parameters: Unknown (Config structure complex)")
 
     # VRAM Estimation
-    vram_fp16 = params_b * 2 # 2 bytes per param
+    vram_fp16 = params_b * 2  # 2 bytes per param
     vram_int8 = params_b * 1
-    vram_int4 = params_b * 0.7 # including overhead
+    vram_int4 = params_b * 0.7  # including overhead
 
     print("\nEstimated VRAM Requirements:")
     print(f"  - FP16/BF16: ~{vram_fp16:.2f} GB")

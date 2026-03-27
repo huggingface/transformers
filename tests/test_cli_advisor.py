@@ -25,5 +25,6 @@ class TransformersCLIAdvisorTest(unittest.TestCase):
         except Exception as e:
             self.fail(f"Advisor failed with error: {e}")
 
+
 if __name__ == "__main__":
     unittest.main()
