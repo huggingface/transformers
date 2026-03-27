@@ -32,7 +32,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, is_torch_available, is_torchvision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
@@ -64,7 +64,7 @@ class SegformerImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[SegformerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    # @auto_docstring
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

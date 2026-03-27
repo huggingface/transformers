@@ -20,16 +20,13 @@
 
 import math
 
+import torch
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
 from ...utils.import_utils import requires
-
-
-if is_torch_available():
-    import torch
 
 
 class GlmImageImagesKwargs(ImagesKwargs, total=False):
