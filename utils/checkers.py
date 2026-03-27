@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
 from pathlib import Path
 
@@ -349,6 +350,7 @@ def main():
     is_tty = sys.stdout.isatty() and not is_ci
 
     failures = []
+    total_t0 = time.monotonic()
     for name in names:
         label = CHECKERS[name][0]
         cmd_str = get_checker_command(name, fix=args.fix)
@@ -357,9 +359,11 @@ def main():
             window = SlidingWindow(label, max_lines=10)
             if cmd_str:
                 window.add_line(f"$ {cmd_str}")
+            t0 = time.monotonic()
             rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
+            elapsed = time.monotonic() - t0
             window.finish(success=(rc == 0))
-            print()
+            print(f"  ({elapsed:.1f}s)")
             if rc != 0:
                 failures.append(name)
                 if not args.keep_going:
@@ -368,23 +372,27 @@ def main():
             print(f"{label}")
             if cmd_str:
                 print(f"$ {cmd_str}")
+            t0 = time.monotonic()
             rc, output = run_checker(name, fix=args.fix)
+            elapsed = time.monotonic() - t0
             tail = output.splitlines()[-10:]
             if tail:
                 print("\n".join(tail))
             status = "OK" if rc == 0 else "FAILED"
-            print(status)
+            print(f"{status} ({elapsed:.1f}s)")
             print()
             if rc != 0:
                 failures.append(name)
                 if not args.keep_going:
                     sys.exit(1)
 
+    total_elapsed = time.monotonic() - total_t0
+
     if failures:
-        print(f"\n{len(failures)} failed: {', '.join(failures)}")
+        print(f"\n{len(failures)} failed: {', '.join(failures)} (total: {total_elapsed:.1f}s)")
         sys.exit(1)
 
-    print(f"\nAll {len(names)} checks passed.")
+    print(f"\nAll {len(names)} checks passed. (total: {total_elapsed:.1f}s)")
 
 
 if __name__ == "__main__":
