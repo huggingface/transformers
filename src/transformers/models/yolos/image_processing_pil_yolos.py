@@ -41,6 +41,7 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_yolos import YolosImageProcessorKwargs
 
 
@@ -279,6 +280,7 @@ def get_size_with_aspect_ratio_yolos(
     return (oh, ow)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class YolosImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
@@ -693,6 +695,7 @@ class YolosImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None
     ):

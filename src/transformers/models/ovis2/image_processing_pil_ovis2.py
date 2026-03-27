@@ -28,7 +28,8 @@ from ...image_utils import (
     infer_channel_dimension_format,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_ovis2 import (
     Ovis2ImageProcessorKwargs,
     get_min_tile_covering_grid,
@@ -36,10 +37,7 @@ from .image_processing_ovis2 import (
 )
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Ovis2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
@@ -72,7 +70,7 @@ class Ovis2ImageProcessorPil(PilBackend):
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
         patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -131,7 +129,7 @@ class Ovis2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

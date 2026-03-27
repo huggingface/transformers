@@ -32,6 +32,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils.import_utils import requires
 from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs, smart_resize
 
 
@@ -39,6 +40,7 @@ if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class PaddleOCRVLImageProcessorPil(PilBackend):
     do_resize = True

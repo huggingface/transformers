@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.4.0.dev0"
+__version__ = "5.5.0.dev0"
 
 import importlib
 import sys
@@ -330,7 +330,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_backends"] = ["PilBackend", "TorchvisionBackend"]
+    _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -345,6 +345,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure.setdefault("image_processing_backends", [])
+    _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects

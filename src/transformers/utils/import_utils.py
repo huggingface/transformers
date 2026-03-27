@@ -644,6 +644,8 @@ def is_libcst_available() -> bool:
 
 @lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
     return is_available and version.parse(accelerate_version) >= version.parse(min_version)
 
@@ -672,7 +674,7 @@ def is_pygments_available() -> bool:
 
 @lru_cache
 def is_torchvision_available() -> bool:
-    return _is_package_available("torchvision")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("torchvision")[0]
 
 
 @lru_cache
@@ -1126,12 +1128,17 @@ def is_tokenizers_available() -> bool:
 
 @lru_cache
 def is_vision_available() -> bool:
-    return _is_package_available("PIL")[0]
+    try:
+        import PIL.Image  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 @lru_cache
 def is_pytesseract_available() -> bool:
-    return _is_package_available("pytesseract")[0]
+    return _is_package_available("pytesseract")[0] and is_vision_available()
 
 
 @lru_cache
@@ -1166,7 +1173,7 @@ def is_soundfile_available() -> bool:
 
 @lru_cache
 def is_timm_available() -> bool:
-    return _is_package_available("timm")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
 
 
 @lru_cache
@@ -1191,11 +1198,13 @@ def is_numba_available() -> bool:
 
 @lru_cache
 def is_torchaudio_available() -> bool:
-    return _is_package_available("torchaudio")[0]
+    return is_torch_available() and _is_package_available("torchaudio")[0]
 
 
 @lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
 
@@ -1287,7 +1296,7 @@ def is_matplotlib_available() -> bool:
 
 @lru_cache
 def is_mistral_common_available() -> bool:
-    return _is_package_available("mistral_common")[0]
+    return is_vision_available() and _is_package_available("mistral_common")[0]
 
 
 @lru_cache
@@ -2495,8 +2504,9 @@ def requires(*, backends=()):
     - The '@requires' string is used to dynamically import objects
     """
 
-    if not isinstance(backends, tuple):
-        raise TypeError("Backends should be a tuple.")
+    if not isinstance(backends, (tuple, list)):
+        raise TypeError("Backends should be a tuple or list.")
+    backends = tuple(backends)
 
     applied_backends = []
     for backend in backends:
@@ -2517,19 +2527,14 @@ def requires(*, backends=()):
 
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
-    lambda name, content: name.startswith("tokenization_") and name.endswith("_fast"): ("tokenizers",),
-    lambda name, content: name.startswith("image_processing_") and name.endswith("_fast"): (
+    lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
+    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
         "vision",
         "torch",
         "torchvision",
     ),
-    lambda name, content: name.startswith("image_processing_") and "TorchvisionBackend" in content: (
-        "vision",
-        "torch",
-        "torchvision",
-    ),
-    lambda name, content: name.startswith("image_processing_"): ("vision",),
-    lambda name, content: name.startswith("video_processing_"): ("vision", "torch", "torchvision"),
+    lambda name, content: "image_processing_" in name: ("vision",),
+    lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
 }
 
 
@@ -2686,20 +2691,25 @@ def create_import_structure_from_path(module_path):
                     continue
 
                 # Skipping line enables putting whatever we want between the
-                # export() call and the actual class/method definition.
+                # requires() call and the actual class/method definition.
                 # This is what enables having # Copied from statements, docs, etc.
                 skip_line = False
 
                 if "@requires" in previous_line:
                     skip_line = False
 
-                    # Backends are defined on the same line as export
+                    # Backends are defined on the same line as requires
                     if "backends" in previous_line:
-                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        try:
+                            backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        except IndexError:
+                            raise ValueError(
+                                f"Couldn't parse backends for @requires decorator in file {module_name}:{previous_line}"
+                            )
                         backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
 
-                    # Backends are defined in the lines following export, for example such as:
-                    # @export(
+                    # Backends are defined in the lines following requires, for example such as:
+                    # @requires(
                     #     backends=(
                     #             "sentencepiece",
                     #             "torch",
@@ -2708,7 +2718,7 @@ def create_import_structure_from_path(module_path):
                     #
                     # or
                     #
-                    # @export(
+                    # @requires(
                     #     backends=(
                     #             "sentencepiece",
                     #     )
@@ -2729,7 +2739,7 @@ def create_import_structure_from_path(module_path):
                                 break
                         backends = tuple(backends)
 
-                    # No backends are registered for export
+                    # No backends are registered for requires
                     else:
                         backends = ()
 

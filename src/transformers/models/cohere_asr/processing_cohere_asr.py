@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 LANGUAGES = {"ar", "de", "el", "en", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt", "vi", "zh"}
@@ -44,6 +47,7 @@ class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class CohereAsrProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)

@@ -27,6 +27,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -59,6 +60,7 @@ def is_image_or_image_url(elem):
 
 
 @auto_docstring
+@requires(backends=("torchvision", "torch"))
 class PixtralProcessor(ProcessorMixin):
     def __init__(
         self,

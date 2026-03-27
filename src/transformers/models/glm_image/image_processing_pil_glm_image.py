@@ -26,14 +26,12 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class GlmImageImageProcessorPil(PilBackend):
     do_resize = True
@@ -96,7 +94,7 @@ class GlmImageImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
