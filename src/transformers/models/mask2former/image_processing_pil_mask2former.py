@@ -44,7 +44,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
@@ -60,8 +59,6 @@ from .image_processing_mask2former import (
 if is_torch_available():
     import torch
     from torch import nn
-if is_torchvision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -172,7 +169,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 Size of the image's `(height, width)` dimensions after resizing.
             size_divisor (`int`, *optional*, defaults to 0):
                 If `size_divisor` is given, the output image size will be divisible by the number.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+            resample (`PILImageResampling | int | None`, *optional*):
                 Resampling filter to use if resizing the image.
         """
 

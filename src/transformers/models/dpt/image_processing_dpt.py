@@ -24,6 +24,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Union
 
 import torch
+import torch.nn.functional as F
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_base import BatchFeature
@@ -37,18 +38,13 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
-
-
-if is_torch_available():
-    import torch.nn.functional as F
+from torchvision.transforms.v2 import functional as tvF
 
 
 class DPTImageProcessorKwargs(ImagesKwargs, total=False):

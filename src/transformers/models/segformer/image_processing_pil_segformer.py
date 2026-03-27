@@ -32,14 +32,13 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
 from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 if is_torch_available():
-    import torch
-    import torch.nn.functional as F
+    pass
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
@@ -65,7 +64,7 @@ class SegformerImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[SegformerImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @auto_docstring
+    # @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
@@ -139,7 +138,7 @@ class SegformerImageProcessorPil(PilBackend):
         self,
         images: list["np.ndarray"],
         do_reduce_labels: bool,
-        resample: PILImageResampling | int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -164,6 +163,7 @@ class SegformerImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
@@ -180,8 +180,8 @@ class SegformerImageProcessorPil(PilBackend):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post_process_semantic_segmentation")
+        import torch
+        import torch.nn.functional as F
 
         logits = outputs.logits
 

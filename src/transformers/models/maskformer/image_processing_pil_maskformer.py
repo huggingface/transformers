@@ -155,7 +155,7 @@ class MaskFormerImageProcessorPil(PilBackend):
                 Size of the image's `(height, width)` dimensions after resizing.
             size_divisor (`int`, *optional*, defaults to 0):
                 If `size_divisor` is given, the output image size will be divisible by the number.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+            resample (`PILImageResampling | int | None`, *optional*):
                 Resampling filter to use if resizing the image.
         """
 

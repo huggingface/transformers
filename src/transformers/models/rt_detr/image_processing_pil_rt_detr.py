@@ -55,7 +55,7 @@ from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    pass
+    import torchvision.transforms.v2.functional as tvF
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -392,7 +392,7 @@ class RTDetrImageProcessorPil(PilBackend):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

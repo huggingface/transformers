@@ -15,6 +15,10 @@
 
 from typing import Union
 
+import torch
+import torch.nn.functional as F
+from torchvision.transforms.v2 import functional as tvF
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -27,9 +31,9 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, is_torch_available, auto_docstring
-import torch
-import torch.nn.functional as F
+from ...utils import TensorType, auto_docstring, is_torch_available
+
+
 class BeitImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):

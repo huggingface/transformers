@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    pass
+    import torchvision.transforms.v2.functional as tvF
 
 
 def _preprocess_resize_output_shape(image, output_shape):
@@ -206,7 +206,8 @@ class Owlv2ImageProcessorPil(PilBackend):
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
         """
-        requires_backends(self, "torch")
+        import torch
+
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 
@@ -258,7 +259,8 @@ class Owlv2ImageProcessorPil(PilBackend):
             in the batch as predicted by the model. All labels are set to None as
             `Owlv2ForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
-        requires_backends(self, "torch")
+        import torch
+
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):
@@ -391,7 +393,7 @@ class Owlv2ImageProcessorPil(PilBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,

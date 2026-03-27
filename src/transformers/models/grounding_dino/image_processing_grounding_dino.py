@@ -52,15 +52,14 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
 
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 
 class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):

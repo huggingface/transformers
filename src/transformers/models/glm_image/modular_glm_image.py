@@ -16,6 +16,7 @@ import math
 from collections.abc import Callable
 from typing import Any
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -29,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
@@ -52,9 +53,6 @@ from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 

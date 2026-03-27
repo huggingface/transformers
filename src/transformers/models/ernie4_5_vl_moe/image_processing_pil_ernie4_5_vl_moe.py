@@ -31,7 +31,7 @@ from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    pass
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -82,7 +82,7 @@ class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

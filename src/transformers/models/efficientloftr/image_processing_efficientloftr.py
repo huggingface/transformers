@@ -6,6 +6,7 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 import torch
+from PIL import Image, ImageDraw
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
@@ -22,12 +23,8 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils import TensorType, auto_docstring
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
-
-
-if is_vision_available():
-    from PIL import Image, ImageDraw
 
 
 class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):

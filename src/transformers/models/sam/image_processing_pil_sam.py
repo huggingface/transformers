@@ -143,7 +143,7 @@ class SamImageProcessorPil(PilBackend):
                 Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
                 edge of the image will be resized to the specified size, while the other edge will be resized to
                 maintain the aspect ratio.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+            resample (`PILImageResampling | int | None`, *optional*):
                 Resampling filter to use when resizing the image.
 
         Returns:

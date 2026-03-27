@@ -6,8 +6,6 @@
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -15,13 +13,13 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs, validate_and_format_image_pairs
 from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
-if TYPE_CHECKING:
+if is_torch_available():
     import torch
 
 

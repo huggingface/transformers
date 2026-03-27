@@ -39,8 +39,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_available,
-    is_torchvision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
@@ -323,11 +321,8 @@ class AriaProjector(nn.Module):
         return out
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
 class AriaImageProcessorKwargs(ImagesKwargs, total=False):
