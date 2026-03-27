@@ -143,7 +143,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=32
+            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -414,6 +414,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # CLIPSegForImageSegmentation requires special treatment

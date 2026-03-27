@@ -583,7 +583,6 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 @auto_docstring
 class Aimv2Model(Aimv2PreTrainedModel):
     config: Aimv2Config
-    _no_split_modules = ["Aimv2TextEmbeddings", "Aimv2EncoderLayer", "Aimv2VisionEmbeddings"]
     _supports_flash_attn = True
 
     def __init__(self, config: Aimv2Config):

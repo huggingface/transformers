@@ -63,7 +63,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 # Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clvp, image_loss->speech_loss
 def clvp_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    speech_loss = contrastive_loss(similarity.t())
+    speech_loss = contrastive_loss(similarity.T)
     return (caption_loss + speech_loss) / 2.0
 
 

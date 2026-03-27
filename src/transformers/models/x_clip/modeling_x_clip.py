@@ -52,7 +52,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 # Copied from transformers.models.clip.modeling_clip.clip_loss with clip->x_clip
 def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
+    image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
 
 
@@ -327,7 +327,7 @@ class XCLIPMLP(nn.Module):
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->XCLIP
 class XCLIPEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: XCLIPConfig):
+    def __init__(self, config: XCLIPVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = XCLIPAttention(config)
@@ -340,7 +340,7 @@ class XCLIPEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
+    ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -468,13 +468,11 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPVisionEmbeddings):
-            factor = self.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPAttention):
-            factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
@@ -482,13 +480,11 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             init.normal_(module.v_proj.weight, std=in_proj_std)
             init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, XCLIPMLP):
-            factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             init.normal_(module.fc1.weight, std=fc_std)
             init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, XCLIPModel):
-            factor = self.config.initializer_factor
             init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * factor,
@@ -499,13 +495,13 @@ class XCLIPPreTrainedModel(PreTrainedModel):
             )
             init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
         elif isinstance(module, XCLIPMultiframeIntegrationTransformer):
-            init.normal_(module.position_embedding, std=self.config.initializer_factor)
+            init.normal_(module.position_embedding, std=factor)
 
         if isinstance(module, nn.LayerNorm):
             init.zeros_(module.bias)
             init.ones_(module.weight)
         if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_factor)
+            init.normal_(module.weight, mean=0.0, std=factor)
             if module.bias is not None:
                 init.zeros_(module.bias)
 
@@ -531,21 +527,7 @@ class XCLIPEncoder(nn.Module):
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-        """
+    ) -> BaseModelOutput:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -595,7 +577,6 @@ class XCLIPTextTransformer(XCLIPPreTrainedModel):
             past_key_values=None,
         )
 
-        kwargs.pop("is_causal", None)
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,

@@ -434,6 +434,10 @@ def _test_eager_matches_sdpa_inference(
                 outputs_eager = outputs_eager["language_model_outputs"]
                 outputs_sdpa = outputs_sdpa["language_model_outputs"]
                 key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
+            elif "decoder_output" in outputs_eager and "clipseg" in model_class.__name__.lower():
+                outputs_eager = outputs_eager["decoder_output"]
+                outputs_sdpa = outputs_sdpa["decoder_output"]
+                key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
             else:
                 key = "hidden_states"
 
@@ -1750,7 +1754,10 @@ class ModelTesterMixin:
         """Helper function to recursively set a config attr to a given value"""
         for k in config.sub_configs:
             if (
-                self._is_composite and attribute_name == "output_attentions" and k == "vision_config"
+                self._is_composite
+                and attribute_name == "output_attentions"
+                and k == "vision_config"
+                and "Timm" in getattr(config, k).__class__.__name__
             ):  # skip because it's not needed and causes errors e.g with Timm
                 continue
             if getattr(config, k) is not None:
