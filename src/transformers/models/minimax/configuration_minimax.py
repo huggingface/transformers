@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-Text-01-hf")
-@strict(accept_kwargs=True)
+@strict
 class MiniMaxConfig(PreTrainedConfig):
     r"""
     block_size (`int`, *optional*, defaults to 256):
@@ -103,12 +103,12 @@ class MiniMaxConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     layer_types: list[str] | None = None
     block_size: int = 256
-    full_attn_alpha_factor: int = 1
-    full_attn_beta_factor: int = 1
-    linear_attn_alpha_factor: int = 1
-    linear_attn_beta_factor: int = 1
-    mlp_alpha_factor: int = 1
-    mlp_beta_factor: int = 1
+    full_attn_alpha_factor: int | float = 1
+    full_attn_beta_factor: int | float = 1
+    linear_attn_alpha_factor: int | float = 1
+    linear_attn_beta_factor: int | float = 1
+    mlp_alpha_factor: int | float = 1
+    mlp_beta_factor: int | float = 1
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

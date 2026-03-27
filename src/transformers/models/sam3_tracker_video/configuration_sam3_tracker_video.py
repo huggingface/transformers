@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerVideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -52,7 +52,7 @@ class Sam3TrackerVideoPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerVideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -90,7 +90,7 @@ class Sam3TrackerVideoMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerVideoPromptEncoderConfig`], *optional*):
@@ -140,7 +140,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[72, 72]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the Rope positional encoding.
+        The dropout rate for the Rope positional encoding.
     memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
         Dimensionality of the memory encoder hidden states.
     memory_encoder_output_channels (`int`, *optional*, defaults to 64):
@@ -211,7 +211,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     prompt_encoder_config: dict | PreTrainedConfig | None = None
     mask_decoder_config: dict | PreTrainedConfig | None = None
-    initializer_range: int = 0.02
+    initializer_range: float = 0.02
     num_maskmem: int = 7
     sigmoid_scale_for_mem_enc: float = 20.0
     sigmoid_bias_for_mem_enc: float = -10.0

@@ -105,8 +105,6 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: ColQwen2Config):
         super().__init__(config)
         self.config = config

@@ -443,7 +443,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
         **kwargs,
     ):
         sequence_length = hidden_states.shape[1]
@@ -1369,7 +1368,7 @@ class ReformerAttention(nn.Module):
         orig_sequence_length=None,
         output_attentions=False,
         buckets=None,
-        cache_position=None,
+        **kwargs,
     ):
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1382,7 +1381,6 @@ class ReformerAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
             buckets=buckets,
-            cache_position=cache_position,
         )
 
         # add buckets if necessary

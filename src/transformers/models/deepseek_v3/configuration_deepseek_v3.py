@@ -23,16 +23,17 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="bzantium/tiny-deepseek-v3")
-@strict(accept_kwargs=True)
+@strict
 class DeepseekV3Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 8):
         Number of groups for routed experts.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    rope_interleave (`bool`, *optional*, defaults to `True`):
+        Whether to interleave the rotary position embeddings.
+
     Example:
 
     ```python
@@ -78,7 +79,7 @@ class DeepseekV3Config(PreTrainedConfig):
     n_routed_experts: int = 256
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
-    q_lora_rank: int = 1536
+    q_lora_rank: int | None = 1536
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 128

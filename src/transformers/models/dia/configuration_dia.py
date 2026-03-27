@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaEncoderConfig(PreTrainedConfig):
     model_type = "dia_encoder"
 
@@ -43,7 +43,7 @@ class DiaEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaDecoderConfig(PreTrainedConfig):
     r"""
     cross_num_attention_heads (`int`, *optional*, defaults to 16):
@@ -78,12 +78,12 @@ class DiaDecoderConfig(PreTrainedConfig):
     use_cache: bool = True
     is_encoder_decoder: bool = True
     pad_token_id: int | None = 1025
-    eos_token_id: int | None = 1024
+    eos_token_id: int | list[int] | None = 1024
     bos_token_id: int | None = 1026
 
 
 @auto_docstring(checkpoint="nari-labs/Dia-1.6B")
-@strict(accept_kwargs=True)
+@strict
 class DiaConfig(PreTrainedConfig):
     r"""
     delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):

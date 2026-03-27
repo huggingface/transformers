@@ -30,6 +30,8 @@
       title: Legacy model contribution
     - local: auto_docstring
       title: Documenting a model
+    - local: model_output_tracing
+      title: Tracing model intermediate outputs
     title: Models
   - isExpanded: false
     sections:
@@ -87,6 +89,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: paged_attention
+      title: Paged attention
     - sections:
       - local: kernel_doc/overview
         title: Kernels
@@ -122,6 +126,8 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
+    - local: chat_response_parsing
+      title: Response parsing
     title: Chat with models
   - isExpanded: false
     sections:
@@ -161,6 +167,8 @@
     - local: hpo_train
       title: Hyperparameter search
     title: Customization
+  - local: peft
+    title: Parameter-efficient fine-tuning
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -193,8 +201,6 @@
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
-  - local: peft
-    title: PEFT
   title: Training
 - isExpanded: false
   sections:
@@ -632,6 +638,8 @@
         title: Jamba
       - local: model_doc/jetmoe
         title: JetMoe
+      - local: model_doc/jina_embeddings_v3
+        title: jina_embeddings_v3
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -966,6 +974,10 @@
         title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
+      - local: model_doc/uvdoc
+        title: UVDoc
+      - local: model_doc/videomt
+        title: VidEoMT
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
@@ -990,6 +1002,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/cohere_asr
+        title: Cohere ASR
       - local: model_doc/csm
         title: CSM
       - local: model_doc/dac
@@ -1274,8 +1288,14 @@
         title: PP-DocLayoutV3
       - local: model_doc/pp_ocrv5_mobile_det
         title: PP-OCRv5_mobile_det
+      - local: model_doc/pp_ocrv5_mobile_rec
+        title: PP-OCRv5_mobile_rec
       - local: model_doc/pp_ocrv5_server_det
         title: PP-OCRv5_server_det
+      - local: model_doc/pp_ocrv5_server_rec
+        title: PP-OCRv5_server_rec
+      - local: model_doc/pp_chart2table
+        title: PPChart2Table
       - local: model_doc/pp_lcnet
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3
@@ -1304,6 +1324,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/slanext
+        title: SLANeXt
       - local: model_doc/smollm3
         title: SmolLM3
       - local: model_doc/smolvlm

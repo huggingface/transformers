@@ -20,7 +20,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(checkpoint="andreasmadsen/efficient_mlm_m0.40")
 # Copied from transformers.models.roberta.configuration_roberta.RobertaConfig with FacebookAI/roberta-base->andreasmadsen/efficient_mlm_m0.40,RoBERTa->RoBERTa-PreLayerNorm,Roberta->RobertaPreLayerNorm,roberta->roberta-prelayernorm
 class RobertaPreLayerNormConfig(PreTrainedConfig):
@@ -56,7 +56,7 @@ class RobertaPreLayerNormConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     use_cache: bool = True
     classifier_dropout: float | int | None = None
     is_decoder: bool = False

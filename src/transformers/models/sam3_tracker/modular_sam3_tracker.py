@@ -44,7 +44,7 @@ from ..sam2.processing_sam2 import Sam2Processor
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerPromptEncoderConfig(Sam2PromptEncoderConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -66,13 +66,13 @@ class Sam3TrackerProcessor(Sam2Processor):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerConfig(Sam2Config):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerPromptEncoderConfig`], *optional*):
@@ -189,11 +189,7 @@ class Sam3TrackerMaskDecoder(Sam2MaskDecoder):
 
 
 class Sam3TrackerModel(Sam2Model):
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
+    _base_model_prefix = "tracker_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",

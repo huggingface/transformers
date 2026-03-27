@@ -28,7 +28,7 @@ from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="bosonai/higgs-audio-v2-generation-3B-base")
-@strict(accept_kwargs=True)
+@strict
 class HiggsAudioV2Config(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 128013):
@@ -86,7 +86,7 @@ class HiggsAudioV2Config(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 128001
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 128009
+    eos_token_id: int | list[int] | None = 128009
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/xglm-564M")
-@strict(accept_kwargs=True)
+@strict
 class XGLMConfig(PreTrainedConfig):
     r"""
     Example:
@@ -64,7 +64,7 @@ class XGLMConfig(PreTrainedConfig):
     decoder_start_token_id: int = 2
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_cross_attention: bool = False
     tie_word_embeddings: bool = True
 
