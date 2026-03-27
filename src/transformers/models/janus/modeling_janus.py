@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1204,16 +1203,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         # 1. Handle generation config and model kwargs
-        generation_config = kwargs.pop("generation_config", self.generation_config)
-        generation_config = copy.deepcopy(generation_config)
-
-        # Ensure generation_config has defaults from model's config (e.g., num_return_sequences, max_length)
-        global_defaults = self.generation_config._get_default_generation_params()
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
-        generation_config.update(**global_defaults, defaults_only=True)
+        # Pop generation_mode first since it's specific to Janus
+        generation_mode = kwargs.pop("generation_mode", "text")
+        generation_config, model_kwargs = self._prepare_generation_config(
+            kwargs.pop("generation_config", None), **kwargs
+        )
 
         # Default to "text" generation if mode isn't provided
-        generation_mode = kwargs.pop("generation_mode", "text")
         if generation_mode == "text":
             # Set guidance_scale=None to prevent running UnbatchedCFG processor.
             return super().generate(
@@ -1221,10 +1217,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 attention_mask=attention_mask,
                 generation_config=generation_config,
                 guidance_scale=None,
-                **kwargs,
+                **model_kwargs,
             )
-
-        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
         # Validate generation mode
         if generation_config.get_generation_mode() not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
