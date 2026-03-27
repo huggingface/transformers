@@ -35,8 +35,7 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 
 from transformers.utils.hub import cached_file
 
-from .convert_slow_tokenizer import bytes_to_unicode
-from .convert_slow_tokenizer import SpmConverter
+from .convert_slow_tokenizer import SpmConverter, bytes_to_unicode
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
@@ -737,7 +736,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         pre_tokenizer = getattr(self.backend_tokenizer, "pre_tokenizer", None)
         decoder = getattr(self.backend_tokenizer, "decoder", None)
         normalizer = getattr(self.backend_tokenizer, "normalizer", None)
-        
+
         def _contains_bytelevel(component: Any) -> bool:
             if component is None:
                 return False
