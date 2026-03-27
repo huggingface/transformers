@@ -154,9 +154,7 @@ class ModelManager:
             return BitsAndBytesConfig(load_in_8bit=True)
         return None
 
-    def _load_processor(
-        self, model_id_and_revision: str
-    ) -> "ProcessorMixin | PreTrainedTokenizerFast":
+    def _load_processor(self, model_id_and_revision: str) -> "ProcessorMixin | PreTrainedTokenizerFast":
         """Load a processor, trying AutoProcessor first then AutoTokenizer.
 
         Args:
@@ -175,7 +173,9 @@ class ModelManager:
             except OSError:
                 raise OSError(f"Failed to load processor for {model_id} with AutoProcessor and AutoTokenizer.")
 
-    def _load_model(self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None) -> "PreTrainedModel":
+    def _load_model(
+        self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None
+    ) -> "PreTrainedModel":
         """Load a model.
 
         Args:

@@ -675,7 +675,7 @@ class TestChatCompletion(unittest.TestCase):
                 if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
 
         cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
@@ -1049,8 +1049,9 @@ class TestResponseValidation(unittest.TestCase):
 class TestResponseGenerationConfig(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.response import ResponseHandler
+        from transformers.cli.serving.utils import GenerationState
 
-        from transformers.cli.serving.utils import GenerationState; return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_max_output_tokens(self):
         from transformers import GenerationConfig
@@ -1158,7 +1159,7 @@ class TestResponsesIntegration(unittest.TestCase):
                 if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
 
         cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
@@ -1418,7 +1419,7 @@ class TestLoadModel(unittest.TestCase):
                 if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
         cls.base_url = f"http://localhost:{cls.PORT}"
 
@@ -1711,7 +1712,7 @@ class TestVLM(unittest.TestCase):
                 if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
         cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
 
@@ -1785,7 +1786,7 @@ class TestTranscription(unittest.TestCase):
                 if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
         cls.base_url = f"http://localhost:{cls.PORT}"
 
@@ -1901,7 +1902,7 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
                 if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
 
         cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
@@ -2024,7 +2025,7 @@ class TestContinuousBatchingResponses(unittest.TestCase):
                 if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
                     break
             except Exception:
-                pass
+                continue
             time.sleep(2)
 
         cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")

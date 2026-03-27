@@ -257,7 +257,9 @@ class ChatCompletionHandler(BaseHandler):
         tool_format: dict | None = None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
-        content, input_len, generated_ids = await gen_manager.generate_non_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        content, input_len, generated_ids = await gen_manager.generate_non_streaming(
+            model, processor, inputs, gen_config, request_id=request_id
+        )
 
         hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
         completion_tokens = len(generated_ids)

@@ -100,7 +100,10 @@ def wait_for_server(base_url: str, timeout: int = 120) -> bool:
 
 
 def streaming_chat_completion(
-    base_url: str, messages: list, max_tokens: int, seed: int,
+    base_url: str,
+    messages: list,
+    max_tokens: int,
+    seed: int,
     do_sample: bool = False,
 ) -> dict:
     """Send a streaming chat completion request. Returns {total, ttft, completion_tokens, text}."""
@@ -126,7 +129,7 @@ def streaming_chat_completion(
     for line in resp.iter_lines(decode_unicode=True):
         if not line or not line.startswith("data: "):
             continue
-        data_str = line[len("data: "):]
+        data_str = line[len("data: ") :]
         if data_str.strip() == "[DONE]":
             break
         try:
@@ -161,7 +164,10 @@ def streaming_chat_completion(
 
 
 def streaming_response(
-    base_url: str, messages: list, max_tokens: int, seed: int,
+    base_url: str,
+    messages: list,
+    max_tokens: int,
+    seed: int,
     do_sample: bool = False,
 ) -> dict:
     """Send a streaming responses API request. Returns {total, ttft, completion_tokens, text}."""
@@ -190,7 +196,7 @@ def streaming_response(
         if not line or not line.startswith("data: "):
             continue
         try:
-            chunk = json.loads(line[len("data: "):])
+            chunk = json.loads(line[len("data: ") :])
         except json.JSONDecodeError:
             continue
 
@@ -218,13 +224,15 @@ def streaming_response(
 
 
 def streaming_request(
-    base_url: str, messages: list, max_tokens: int, seed: int,
+    base_url: str,
+    messages: list,
+    max_tokens: int,
+    seed: int,
     do_sample: bool = False,
     endpoint: str = "chat",
 ) -> dict:
     """Dispatch to chat completions or responses API based on endpoint."""
-    kw = {"base_url": base_url, "messages": messages, "max_tokens": max_tokens,
-          "seed": seed, "do_sample": do_sample}
+    kw = {"base_url": base_url, "messages": messages, "max_tokens": max_tokens, "seed": seed, "do_sample": do_sample}
     if endpoint == "responses":
         return streaming_response(**kw)
     return streaming_chat_completion(**kw)
@@ -236,8 +244,14 @@ def streaming_request(
 
 
 def bench_pp(
-    base_url: str, tokenizer, pp: int, warmup: int, iterations: int, seed: int,
-    do_sample: bool = False, endpoint: str = "chat",
+    base_url: str,
+    tokenizer,
+    pp: int,
+    warmup: int,
+    iterations: int,
+    seed: int,
+    do_sample: bool = False,
+    endpoint: str = "chat",
 ) -> dict:
     """Prefill benchmark: large prompt, max_tokens=1. Measures TTFT ≈ pure prefill time."""
     prompt = make_prompt(tokenizer, pp)
@@ -260,8 +274,15 @@ def bench_pp(
 
 
 def bench_tg(
-    base_url: str, tokenizer, tg: int, warmup: int, iterations: int, seed: int,
-    tg_prefill: int = 512, do_sample: bool = False, endpoint: str = "chat",
+    base_url: str,
+    tokenizer,
+    tg: int,
+    warmup: int,
+    iterations: int,
+    seed: int,
+    tg_prefill: int = 512,
+    do_sample: bool = False,
+    endpoint: str = "chat",
 ) -> dict:
     """Decode benchmark: generate `tg` tokens after a `tg_prefill`-token prompt."""
     prompt = make_prompt(tokenizer, tg_prefill)
@@ -321,11 +342,13 @@ def truncate_preview(text: str, width: int = _PREVIEW_WIDTH) -> str:
         return ""
     line = text.replace("\n", " ").strip()
     if len(line) > width:
-        return line[:width - 1] + "\u2026"
+        return line[: width - 1] + "\u2026"
     return line
 
 
-def print_table(rows: list[dict], title: str = "", reference_texts: dict | None = None, is_reference: bool = False) -> None:
+def print_table(
+    rows: list[dict], title: str = "", reference_texts: dict | None = None, is_reference: bool = False
+) -> None:
     """Print results in a bordered table.
 
     Args:
@@ -402,8 +425,12 @@ def print_table(rows: list[dict], title: str = "", reference_texts: dict | None 
 
 
 def start_server(
-    model: str, port: int, processor: str | None = None, attn_implementation: str | None = None,
-    compile: bool = False, continuous_batching: bool = False,
+    model: str,
+    port: int,
+    processor: str | None = None,
+    attn_implementation: str | None = None,
+    compile: bool = False,
+    continuous_batching: bool = False,
 ):
     """Start a transformers serve instance. Returns the Serve object."""
     from transformers.cli.serve_refactored import Serve
@@ -450,29 +477,55 @@ def main():
   python benchmark_serve.py --url http://localhost:8000 --processor Qwen/Qwen2.5-7B-Instruct
 """,
     )
-    parser.add_argument("--model", type=str, action="append", dest="models",
-                        help="Model spec (repeatable). For GGUF: 'gguf_id --processor tokenizer_id'")
-    parser.add_argument("--processor", type=str, default=None,
-                        help="Processor/tokenizer ID for --url mode (default: derived from model)")
+    parser.add_argument(
+        "--model",
+        type=str,
+        action="append",
+        dest="models",
+        help="Model spec (repeatable). For GGUF: 'gguf_id --processor tokenizer_id'",
+    )
+    parser.add_argument(
+        "--processor",
+        type=str,
+        default=None,
+        help="Processor/tokenizer ID for --url mode (default: derived from model)",
+    )
     parser.add_argument("--port", type=int, default=8642, help="Server port")
-    parser.add_argument("--url", type=str, default=None,
-                        help="Connect to existing server (skip start/stop)")
+    parser.add_argument("--url", type=str, default=None, help="Connect to existing server (skip start/stop)")
     parser.add_argument("--warmup", type=int, default=1, help="Warmup iterations (minimum 1)")
     parser.add_argument("--iterations", type=int, default=3, help="Measurement iterations")
     parser.add_argument("--pp", type=int, nargs="+", default=[256, 1024], help="Prefill token counts")
     parser.add_argument("--tg", type=int, nargs="+", default=[128, 512], help="Decode token counts")
-    parser.add_argument("--tg-prefill", type=int, default=_TG_PREFILL_DEFAULT,
-                        help="Prefill size for decode tests (default: 512)")
-    parser.add_argument("--attn-impl", type=str, nargs="+", default=["sdpa", "eager", "flash_attention_2"],
-                        help="Attention implementations to benchmark (default: sdpa eager flash_attention_2)")
-    parser.add_argument("--compile", action="store_true",
-                        help="Enable static cache + torch.compile on the server for faster decode")
-    parser.add_argument("--continuous-batching", action="store_true",
-                        help="Enable continuous batching with paged attention")
-    parser.add_argument("--mode", type=str, choices=["bench", "chat"], default="bench",
-                        help="bench: greedy (temp=0). chat: sampling (do_sample=True, temp=0.7)")
-    parser.add_argument("--endpoint", type=str, choices=["chat", "responses"], default="responses",
-                        help="API endpoint to benchmark (default: responses = /v1/responses)")
+    parser.add_argument(
+        "--tg-prefill", type=int, default=_TG_PREFILL_DEFAULT, help="Prefill size for decode tests (default: 512)"
+    )
+    parser.add_argument(
+        "--attn-impl",
+        type=str,
+        nargs="+",
+        default=["sdpa", "eager", "flash_attention_2"],
+        help="Attention implementations to benchmark (default: sdpa eager flash_attention_2)",
+    )
+    parser.add_argument(
+        "--compile", action="store_true", help="Enable static cache + torch.compile on the server for faster decode"
+    )
+    parser.add_argument(
+        "--continuous-batching", action="store_true", help="Enable continuous batching with paged attention"
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["bench", "chat"],
+        default="bench",
+        help="bench: greedy (temp=0). chat: sampling (do_sample=True, temp=0.7)",
+    )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        choices=["chat", "responses"],
+        default="responses",
+        help="API endpoint to benchmark (default: responses = /v1/responses)",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Torch seed")
     args = parser.parse_args()
 
@@ -493,10 +546,33 @@ def main():
         rows = []
         for pp in args.pp:
             print(f"  pp{pp}")
-            rows.append(bench_pp(base_url, tokenizer, pp, args.warmup, args.iterations, args.seed, do_sample=do_sample, endpoint=endpoint))
+            rows.append(
+                bench_pp(
+                    base_url,
+                    tokenizer,
+                    pp,
+                    args.warmup,
+                    args.iterations,
+                    args.seed,
+                    do_sample=do_sample,
+                    endpoint=endpoint,
+                )
+            )
         for tg in args.tg:
             print(f"  tg{tg}")
-            rows.append(bench_tg(base_url, tokenizer, tg, args.warmup, args.iterations, args.seed, tg_prefill=args.tg_prefill, do_sample=do_sample, endpoint=endpoint))
+            rows.append(
+                bench_tg(
+                    base_url,
+                    tokenizer,
+                    tg,
+                    args.warmup,
+                    args.iterations,
+                    args.seed,
+                    tg_prefill=args.tg_prefill,
+                    do_sample=do_sample,
+                    endpoint=endpoint,
+                )
+            )
         print_table(rows)
 
     else:
@@ -512,8 +588,14 @@ def main():
             for attn_impl in args.attn_impl:
                 print(f"\nStarting server for {spec['model']} (attn={attn_impl})...")
                 try:
-                    server = start_server(spec["model"], args.port, spec["processor"], attn_implementation=attn_impl,
-                                          compile=args.compile, continuous_batching=args.continuous_batching)
+                    server = start_server(
+                        spec["model"],
+                        args.port,
+                        spec["processor"],
+                        attn_implementation=attn_impl,
+                        compile=args.compile,
+                        continuous_batching=args.continuous_batching,
+                    )
                 except Exception as e:
                     print(f"  ERROR: Failed to start server with attn={attn_impl}: {e}. Skipping.")
                     continue
@@ -531,35 +613,68 @@ def main():
                 if args.compile:
                     warmup_prompt = make_prompt(tokenizer, max(args.pp + [args.tg_prefill]))
                     gen_cfg = {"max_new_tokens": max(args.tg), "do_sample": False, "eos_token_id": -1}
-                    payload = {"messages": [{"role": "user", "content": warmup_prompt}], "stream": False,
-                               "seed": args.seed, "generation_config": json.dumps(gen_cfg)}
+                    payload = {
+                        "messages": [{"role": "user", "content": warmup_prompt}],
+                        "stream": False,
+                        "seed": args.seed,
+                        "generation_config": json.dumps(gen_cfg),
+                    }
                     print("  compile warmup (non-streaming, may take ~30s)...")
                     requests.post(f"{base_url}/v1/chat/completions", json=payload, timeout=120)
                 else:
-                    streaming_request(base_url, [{"role": "user", "content": "hi"}], max_tokens=5, seed=args.seed, endpoint=endpoint)
+                    streaming_request(
+                        base_url, [{"role": "user", "content": "hi"}], max_tokens=5, seed=args.seed, endpoint=endpoint
+                    )
 
                 rows = []
                 for pp in args.pp:
                     print(f"  pp{pp}")
-                    rows.append(bench_pp(base_url, tokenizer, pp, args.warmup, args.iterations, args.seed, do_sample=do_sample, endpoint=endpoint))
+                    rows.append(
+                        bench_pp(
+                            base_url,
+                            tokenizer,
+                            pp,
+                            args.warmup,
+                            args.iterations,
+                            args.seed,
+                            do_sample=do_sample,
+                            endpoint=endpoint,
+                        )
+                    )
                 for tg in args.tg:
                     print(f"  tg{tg}")
-                    rows.append(bench_tg(base_url, tokenizer, tg, args.warmup, args.iterations, args.seed, tg_prefill=args.tg_prefill, do_sample=do_sample, endpoint=endpoint))
+                    rows.append(
+                        bench_tg(
+                            base_url,
+                            tokenizer,
+                            tg,
+                            args.warmup,
+                            args.iterations,
+                            args.seed,
+                            tg_prefill=args.tg_prefill,
+                            do_sample=do_sample,
+                            endpoint=endpoint,
+                        )
+                    )
 
                 server.kill_server()
 
                 # Build reference from first attn impl in greedy mode
                 if not do_sample and reference_texts is None:
-                    reference_texts = {
-                        row["test"]: row["text"] for row in rows if row.get("text")
-                    }
+                    reference_texts = {row["test"]: row["text"] for row in rows if row.get("text")}
                     # Pass reference_texts so the first impl shows "REF" in the ref column
-                    print_table(rows, title=f"{spec['model']} | attn={attn_impl} ({mode_str})",
-                                reference_texts=reference_texts if len(args.attn_impl) > 1 else None,
-                                is_reference=True)
+                    print_table(
+                        rows,
+                        title=f"{spec['model']} | attn={attn_impl} ({mode_str})",
+                        reference_texts=reference_texts if len(args.attn_impl) > 1 else None,
+                        is_reference=True,
+                    )
                 else:
-                    print_table(rows, title=f"{spec['model']} | attn={attn_impl} ({mode_str})",
-                                reference_texts=reference_texts if not do_sample else None)
+                    print_table(
+                        rows,
+                        title=f"{spec['model']} | attn={attn_impl} ({mode_str})",
+                        reference_texts=reference_texts if not do_sample else None,
+                    )
 
             # Summary: check for mismatches across attn impls (bench mode only)
             if not do_sample and reference_texts and len(args.attn_impl) > 1:

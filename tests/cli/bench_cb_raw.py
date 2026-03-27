@@ -24,7 +24,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatching
 def make_prompts(tokenizer, n, target_len=256):
     filler = "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. " * 100
     ids = tokenizer.encode(filler, add_special_tokens=False)
-    return [ids[:max(10, int(target_len * (0.8 + 0.4 * (i % 5) / 4)))] for i in range(n)]
+    return [ids[: max(10, int(target_len * (0.8 + 0.4 * (i % 5) / 4)))] for i in range(n)]
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +112,9 @@ async def bench_s_handler(mgr, prompts, max_new_tokens):
 
 METHODS = {
     "ns_get_result": ("Non-stream + get_result", lambda mgr, p, m: bench_ns_get_result(mgr, p, m)),
-    "ns_handler":    ("Non-stream + handler",     lambda mgr, p, m: asyncio.run(bench_ns_handler(mgr, p, m))),
-    "s_get_result":  ("Stream + get_result",      lambda mgr, p, m: bench_s_get_result(mgr, p, m)),
-    "s_handler":     ("Stream + handler",          lambda mgr, p, m: asyncio.run(bench_s_handler(mgr, p, m))),
+    "ns_handler": ("Non-stream + handler", lambda mgr, p, m: asyncio.run(bench_ns_handler(mgr, p, m))),
+    "s_get_result": ("Stream + get_result", lambda mgr, p, m: bench_s_get_result(mgr, p, m)),
+    "s_handler": ("Stream + handler", lambda mgr, p, m: asyncio.run(bench_s_handler(mgr, p, m))),
 }
 
 
@@ -126,8 +126,7 @@ def main():
     parser.add_argument("--prompt-tokens", type=int, default=256)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--runs", type=int, default=3)
-    parser.add_argument("--methods", type=str, nargs="+",
-                        default=list(METHODS.keys()), choices=list(METHODS.keys()))
+    parser.add_argument("--methods", type=str, nargs="+", default=list(METHODS.keys()), choices=list(METHODS.keys()))
     args = parser.parse_args()
 
     print(f"Model: {args.model}")
@@ -135,9 +134,15 @@ def main():
     print(f"Warmup: {args.warmup} | Runs: {args.runs} | Methods: {args.methods}")
     sys.stdout.flush()
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model, dtype=torch.bfloat16, attn_implementation="flash_attention_3",
-    ).cuda().eval()
+    model = (
+        AutoModelForCausalLM.from_pretrained(
+            args.model,
+            dtype=torch.bfloat16,
+            attn_implementation="flash_attention_3",
+        )
+        .cuda()
+        .eval()
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     all_prompts = make_prompts(tokenizer, max(args.batch), args.prompt_tokens)
 
@@ -163,10 +168,13 @@ def main():
             _, fn = METHODS[method_key]
             # Fresh CB context per method — each gets its own CUDA graph cache
             with model.continuous_batching_context_manager(
-                generation_config=gen_config, continuous_batching_config=cb_config, block=True, timeout=5,
+                generation_config=gen_config,
+                continuous_batching_config=cb_config,
+                block=True,
+                timeout=5,
             ) as mgr:
                 # Warmup with the same method being tested
-                warmup_prompts = prompts[:min(200, N)]
+                warmup_prompts = prompts[: min(200, N)]
                 for _ in range(args.warmup):
                     fn(mgr, warmup_prompts, args.max_new_tokens)
                 # Measured runs
@@ -180,21 +188,28 @@ def main():
     # Quality check
     print("\n--- Quality check ---")
     with model.continuous_batching_context_manager(
-        generation_config=gen_config, continuous_batching_config=cb_config, block=True, timeout=5,
+        generation_config=gen_config,
+        continuous_batching_config=cb_config,
+        block=True,
+        timeout=5,
     ) as mgr:
+
         async def check():
             loop = asyncio.get_running_loop()
             for i in range(3):
                 rid = f"qc_{i}"
                 future = loop.create_future()
+
                 def _on_qc(output, fut=future):
                     if not fut.done():
                         fut.set_result(output)
+
                 mgr.register_result_handler(rid, _on_qc)
                 mgr.add_request(all_prompts[i], request_id=rid, max_new_tokens=args.max_new_tokens, streaming=False)
                 r = await future
                 text = tokenizer.decode(r.generated_tokens, skip_special_tokens=True)[:80]
                 print(f"  {r.request_id}: {len(r.generated_tokens)} tokens | {text}")
+
         asyncio.run(check())
 
 

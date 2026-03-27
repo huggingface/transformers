@@ -454,7 +454,9 @@ class ResponseHandler(BaseHandler):
         tool_format: dict | None = None,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
-        full_text, input_len, generated_ids = await gen_manager.generate_non_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        full_text, input_len, generated_ids = await gen_manager.generate_non_streaming(
+            model, processor, inputs, gen_config, request_id=request_id
+        )
 
         created_at = time.time()
         resp_id = f"resp_{request_id}"

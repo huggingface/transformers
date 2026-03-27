@@ -143,7 +143,7 @@ async def send_request(
                     line = line.decode("utf-8").strip()
                     if not line or not line.startswith("data: "):
                         continue
-                    data_str = line[len("data: "):]
+                    data_str = line[len("data: ") :]
                     if data_str.strip() == "[DONE]":
                         break
                     try:
@@ -225,11 +225,13 @@ async def run_concurrency_test(
     connector = aiohttp.TCPConnector(limit=0)
     timeout = aiohttp.ClientTimeout(total=600)
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-        tasks = [send_request(session, base_url, p, max_new_tokens, seed, endpoint, model=model, stream=stream) for p in prompts]
+        tasks = [
+            send_request(session, base_url, p, max_new_tokens, seed, endpoint, model=model, stream=stream)
+            for p in prompts
+        ]
         results = await asyncio.gather(*tasks)
 
     return list(results)
-
 
 
 # ---------------------------------------------------------------------------
@@ -309,12 +311,16 @@ def print_metrics(metrics: dict, label: str):
         print(f"  ERROR: {metrics['error']}")
         return
 
-    print(f"  Requests:    {metrics['successful']} ok / {metrics['failed']} failed / {metrics['total_requests']} total")
+    print(
+        f"  Requests:    {metrics['successful']} ok / {metrics['failed']} failed / {metrics['total_requests']} total"
+    )
     if metrics.get("error_summary"):
         for err, count in metrics["error_summary"].most_common(5):
             print(f"    - {count}x: {err}")
     print(f"  Duration:    {metrics['duration']:.1f}s")
-    print(f"  Throughput:  {metrics['throughput_req_per_sec']:.2f} req/s, {metrics['throughput_tok_per_sec']:.1f} tok/s")
+    print(
+        f"  Throughput:  {metrics['throughput_req_per_sec']:.2f} req/s, {metrics['throughput_tok_per_sec']:.1f} tok/s"
+    )
     print(f"  Tokens:      {metrics['total_output_tokens']} total output")
     print()
 
@@ -324,15 +330,17 @@ def print_metrics(metrics: dict, label: str):
         p = metrics.get(name, {})
         if not p:
             continue
-        rows.append([
-            name.upper().replace("_", " "),
-            format_ms(p.get("mean")),
-            format_ms(p.get("median")),
-            format_ms(p.get("p90")),
-            format_ms(p.get("p99")),
-            format_ms(p.get("min")),
-            format_ms(p.get("max")),
-        ])
+        rows.append(
+            [
+                name.upper().replace("_", " "),
+                format_ms(p.get("mean")),
+                format_ms(p.get("median")),
+                format_ms(p.get("p90")),
+                format_ms(p.get("p99")),
+                format_ms(p.get("min")),
+                format_ms(p.get("max")),
+            ]
+        )
 
     if rows:
         widths = [max(len(h), *(len(r[i]) for r in rows)) for i, h in enumerate(headers)]
@@ -359,13 +367,18 @@ def wait_for_server(base_url: str, timeout: int = 120) -> bool:
             if requests.get(f"{base_url}/health", timeout=2).status_code == 200:
                 return True
         except Exception:
-            pass  # noqa: S110
+            continue
         time.sleep(1)
     return False
 
 
-def start_server(model: str, port: int, compile: bool = False, continuous_batching: bool = False,
-                  attn_implementation: str | None = None):
+def start_server(
+    model: str,
+    port: int,
+    compile: bool = False,
+    continuous_batching: bool = False,
+    attn_implementation: str | None = None,
+):
     from transformers.cli.serve_refactored import Serve
 
     kwargs = {"force_model": model, "port": port, "non_blocking": True, "log_level": "warning"}
@@ -393,8 +406,13 @@ async def async_main(args):
 
     if not args.url:
         print(f"Starting server for {args.model}...")
-        server = start_server(args.model, args.port, compile=args.compile, continuous_batching=args.continuous_batching,
-                              attn_implementation=args.attn_impl)
+        server = start_server(
+            args.model,
+            args.port,
+            compile=args.compile,
+            continuous_batching=args.continuous_batching,
+            attn_implementation=args.attn_impl,
+        )
         if not wait_for_server(base_url):
             print("ERROR: Server did not start")
             if server:
@@ -407,7 +425,7 @@ async def async_main(args):
 
     num_requests = max(args.max_concurrency)
     prompts = make_prompts(tokenizer, num_requests, args.prompt_tokens, variance=args.prompt_variance)
-    print(f"Generated {num_requests} prompts (~{args.prompt_tokens} tokens each, ±{int(args.prompt_variance*100)}%)")
+    print(f"Generated {num_requests} prompts (~{args.prompt_tokens} tokens each, ±{int(args.prompt_variance * 100)}%)")
     print(f"Max new tokens per request: {args.max_new_tokens}")
     print(f"Endpoint: /v1/{args.endpoint} ({'streaming' if args.stream else 'non-streaming'})")
 
@@ -418,7 +436,13 @@ async def async_main(args):
     print(f"Warming up ({args.warmup}x {warmup_size} requests)...")
     for _ in range(args.warmup):
         await run_concurrency_test(
-            base_url, warmup_prompts, args.max_new_tokens, args.seed, args.endpoint, model=args.model, stream=args.stream,
+            base_url,
+            warmup_prompts,
+            args.max_new_tokens,
+            args.seed,
+            args.endpoint,
+            model=args.model,
+            stream=args.stream,
         )
     print("Warmup done.")
 
@@ -429,7 +453,13 @@ async def async_main(args):
         print(f"\nRunning: {label}")
         t0 = time.perf_counter()
         results = await run_concurrency_test(
-            base_url, test_prompts, args.max_new_tokens, args.seed, args.endpoint, model=args.model, stream=args.stream,
+            base_url,
+            test_prompts,
+            args.max_new_tokens,
+            args.seed,
+            args.endpoint,
+            model=args.model,
+            stream=args.stream,
         )
         duration = time.perf_counter() - t0
         metrics = compute_metrics(results, duration)
@@ -450,19 +480,29 @@ def main():
     parser.add_argument("--port", type=int, default=8642)
     parser.add_argument("--compile", action="store_true", help="Enable --compile on the server")
     parser.add_argument("--continuous-batching", action="store_true", help="Enable continuous batching on the server")
-    parser.add_argument("--attn-impl", type=str, default=None, help="Attention implementation (e.g. flash_attention_3)")
+    parser.add_argument(
+        "--attn-impl", type=str, default=None, help="Attention implementation (e.g. flash_attention_3)"
+    )
     parser.add_argument("--endpoint", type=str, choices=["chat", "responses"], default="responses")
     parser.add_argument("--no-stream", action="store_true", help="Use non-streaming requests")
 
     # Load parameters
-    parser.add_argument("--max-concurrency", type=int, nargs="+", default=[1, 2, 4],
-                        help="Number of concurrent requests to send (default: 1 2 4)")
+    parser.add_argument(
+        "--max-concurrency",
+        type=int,
+        nargs="+",
+        default=[1, 2, 4],
+        help="Number of concurrent requests to send (default: 1 2 4)",
+    )
 
     # Prompt parameters
     parser.add_argument("--prompt-tokens", type=int, default=256, help="Target prompt length in tokens (default: 256)")
-    parser.add_argument("--prompt-variance", type=float, default=0.2,
-                        help="Prompt length variance as fraction (default: 0.2 = ±20%%)")
-    parser.add_argument("--max-new-tokens", type=int, default=128, help="Max tokens to generate per request (default: 128)")
+    parser.add_argument(
+        "--prompt-variance", type=float, default=0.2, help="Prompt length variance as fraction (default: 0.2 = ±20%%)"
+    )
+    parser.add_argument(
+        "--max-new-tokens", type=int, default=128, help="Max tokens to generate per request (default: 128)"
+    )
 
     parser.add_argument("--warmup", type=int, default=2, help="Warmup requests (default: 2)")
     parser.add_argument("--seed", type=int, default=42)

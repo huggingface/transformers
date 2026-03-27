@@ -94,7 +94,13 @@ class TranscriptionHandler:
             return self._streaming(gen_manager, audio_model, tokenizer, audio_inputs)
         return await self._non_streaming(gen_manager, audio_model, audio_processor, audio_inputs)
 
-    async def _non_streaming(self, gen_manager: GenerateManager, audio_model: "PreTrainedModel", audio_processor: "ProcessorMixin", audio_inputs: dict) -> JSONResponse:
+    async def _non_streaming(
+        self,
+        gen_manager: GenerateManager,
+        audio_model: "PreTrainedModel",
+        audio_processor: "ProcessorMixin",
+        audio_inputs: dict,
+    ) -> JSONResponse:
         # Audio models have different inputs (input_features) and decode (batch_decode)
         # than text models, so we use async_submit() directly instead of
         # generate_non_streaming(). TODO: add generate_audio_non_streaming() when
@@ -105,7 +111,13 @@ class TranscriptionHandler:
         text = audio_processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return JSONResponse(Transcription(text=text).model_dump(exclude_none=True))
 
-    def _streaming(self, gen_manager: GenerateManager, audio_model: "PreTrainedModel", tokenizer: "ProcessorMixin", audio_inputs: dict) -> StreamingResponse:
+    def _streaming(
+        self,
+        gen_manager: GenerateManager,
+        audio_model: "PreTrainedModel",
+        tokenizer: "ProcessorMixin",
+        audio_inputs: dict,
+    ) -> StreamingResponse:
         # Same as _non_streaming — uses submit() directly because audio inputs
         # differ from text. TODO: add generate_audio_streaming() when more audio
         # modalities are supported.

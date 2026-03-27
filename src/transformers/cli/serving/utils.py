@@ -69,8 +69,6 @@ class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
 
 
-
-
 # Model-specific tokens that mark the start/end of a tool call block.
 # TODO: extract these from the chat template at runtime instead of hardcoding.
 # Qwen/Hermes use <tool_call>/<tool_call>, Mistral uses [TOOL_CALLS], etc.
@@ -320,7 +318,13 @@ class DirectStreamer:
     ``DecodeStream`` (O(1) per token) and pushed as text to an asyncio.Queue.
     """
 
-    def __init__(self, tokenizer: "tokenizers.Tokenizer", loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, skip_special_tokens: bool = True):
+    def __init__(
+        self,
+        tokenizer: "tokenizers.Tokenizer",
+        loop: asyncio.AbstractEventLoop,
+        queue: asyncio.Queue,
+        skip_special_tokens: bool = True,
+    ):
         """
         Args:
             tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
@@ -371,7 +375,14 @@ class CBStreamer:
     pushes text to the asyncio.Queue. ``end()`` signals the stream is complete.
     """
 
-    def __init__(self, cb_manager: "ContinuousBatchingManager", request_id: str, tokenizer: "tokenizers.Tokenizer", loop: asyncio.AbstractEventLoop, queue: asyncio.Queue):
+    def __init__(
+        self,
+        cb_manager: "ContinuousBatchingManager",
+        request_id: str,
+        tokenizer: "tokenizers.Tokenizer",
+        loop: asyncio.AbstractEventLoop,
+        queue: asyncio.Queue,
+    ):
         """
         Args:
             cb_manager (`ContinuousBatchingManager`): The CB manager instance.
@@ -473,7 +484,14 @@ class BaseGenerateManager(ABC):
     """
 
     @abstractmethod
-    def generate_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+    def generate_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+        request_id: str | None = None,
+    ):
         """Start streaming generation.
 
         Args:
@@ -490,7 +508,14 @@ class BaseGenerateManager(ABC):
         """
 
     @abstractmethod
-    def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+    def generate_non_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+        request_id: str | None = None,
+    ):
         """Run generation to completion.
 
         Args:
@@ -515,7 +540,14 @@ class GenerateManager(BaseGenerateManager):
     def __init__(self):
         self._thread = InferenceThread()
 
-    def generate_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+    def generate_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+        request_id: str | None = None,
+    ):
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
@@ -532,7 +564,14 @@ class GenerateManager(BaseGenerateManager):
         self.submit(_run)
         return queue, streamer
 
-    async def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+    async def generate_non_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+        request_id: str | None = None,
+    ):
         sequences = await self.async_submit(
             model.generate, **inputs, generation_config=gen_config, tokenizer=processor
         )
@@ -589,7 +628,14 @@ class CBGenerateManager(BaseGenerateManager):
         self._cb.logit_processor = LogitsProcessorList()
         self._cb.start()
 
-    def generate_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+    def generate_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+        request_id: str | None = None,
+    ):
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
@@ -617,7 +663,14 @@ class CBGenerateManager(BaseGenerateManager):
         self._cb.register_result_handler(request_id, _on_output)
         return text_queue, streamer
 
-    async def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
+    async def generate_non_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        gen_config: "GenerationConfig",
+        request_id: str | None = None,
+    ):
         """Non-streaming CB generation, fully async (no per-request thread).
 
         Registers a handler that resolves an asyncio.Future when the result arrives.
@@ -650,7 +703,6 @@ class CBGenerateManager(BaseGenerateManager):
         generated_ids = result.generated_tokens
         text = processor.decode(generated_ids, skip_special_tokens=True)
         return text, input_len, generated_ids
-
 
     @property
     def scheduler(self):
