@@ -3,7 +3,7 @@
 #     "inspect-ai",
 #     "inspect-evals",
 #     "huggingface-hub",
-#     "transformers[serving] @ git+https://github.com/NathanHB/transformers.git@fix-continuous-batching-json-response",
+#     "transformers[serving] @ git+https://github.com/huggingface/transformers.git@main",
 #     "openai>=2.26.0",
 #     "torchvision",
 # ]
