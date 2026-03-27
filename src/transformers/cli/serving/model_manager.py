@@ -19,8 +19,8 @@ import asyncio
 import gc
 import json
 import threading
+from collections.abc import Callable
 from functools import lru_cache
-from typing import Callable
 from typing import TYPE_CHECKING
 
 from huggingface_hub import scan_cache_dir

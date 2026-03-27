@@ -223,8 +223,8 @@ def streaming_request(
     endpoint: str = "chat",
 ) -> dict:
     """Dispatch to chat completions or responses API based on endpoint."""
-    kw = dict(base_url=base_url, messages=messages, max_tokens=max_tokens,
-              seed=seed, do_sample=do_sample)
+    kw = {"base_url": base_url, "messages": messages, "max_tokens": max_tokens,
+          "seed": seed, "do_sample": do_sample}
     if endpoint == "responses":
         return streaming_response(**kw)
     return streaming_chat_completion(**kw)

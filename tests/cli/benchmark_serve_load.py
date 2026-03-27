@@ -359,7 +359,7 @@ def wait_for_server(base_url: str, timeout: int = 120) -> bool:
             if requests.get(f"{base_url}/health", timeout=2).status_code == 200:
                 return True
         except Exception:
-            pass
+            pass  # noqa: S110
         time.sleep(1)
     return False
 

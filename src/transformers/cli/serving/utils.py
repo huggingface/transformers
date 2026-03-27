@@ -24,8 +24,8 @@ import re
 import tempfile
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from concurrent.futures import Future
-from typing import Callable
 from io import BytesIO
 from queue import Queue
 from typing import TYPE_CHECKING

@@ -220,8 +220,9 @@ class TestGenerativeModelList(unittest.TestCase):
 class TestBuildGenerationConfig(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
+        from transformers.cli.serving.utils import GenerationState
 
-        from transformers.cli.serving.utils import GenerationState; return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_max_tokens(self):
         from transformers import GenerationConfig
@@ -297,8 +298,9 @@ class TestBuildGenerationConfig(unittest.TestCase):
 class TestValidation(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
+        from transformers.cli.serving.utils import GenerationState
 
-        from transformers.cli.serving.utils import GenerationState; return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_valid_request_passes(self):
         handler = self._make_handler()
@@ -390,8 +392,9 @@ class TestTimedModel(unittest.TestCase):
 class TestChunkSSE(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.chat_completion import ChatCompletionHandler
+        from transformers.cli.serving.utils import GenerationState
 
-        from transformers.cli.serving.utils import GenerationState; return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_build_chunk_sse_content(self):
         handler = self._make_handler()
@@ -975,8 +978,9 @@ class TestChatCompletion(unittest.TestCase):
 class TestResponseInputConversion(unittest.TestCase):
     def _make_handler(self):
         from transformers.cli.serving.response import ResponseHandler
+        from transformers.cli.serving.utils import GenerationState
 
-        from transformers.cli.serving.utils import GenerationState; return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_string_input(self):
         handler = self._make_handler()

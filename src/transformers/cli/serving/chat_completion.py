@@ -18,7 +18,6 @@ Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
 """
 
 import asyncio
-import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
