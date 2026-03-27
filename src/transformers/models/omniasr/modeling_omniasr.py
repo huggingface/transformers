@@ -15,7 +15,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import numpy as np
 import torch
@@ -30,9 +30,11 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...cache_utils import Cache
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
+    CausalLMOutputWithPast,
     Wav2Vec2BaseModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1268,7 +1270,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
-        outputs = self.model(
+        outputs = self.encoder(
             input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -1327,36 +1329,273 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.vocab_size = config.vocab_size
+        self.language_token_id = config.language_token_id
+        self.language_mapping = config.language_mapping
+
         self.encoder = AutoModel.from_config(config.encoder_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
-        # NOTE not using AutoModelForCausalLM because mismatch between embed_token and lm_head in original?
-        # see: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L215
-        # self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.language_model = AutoModel.from_config(config.text_config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.vocab_size - config.num_special_tokens, bias=False)
-
-        # Original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L205
         self.multi_modal_projector = nn.Linear(
             config.encoder_config.hidden_size * config.encoder_stacking,
             config.text_config.hidden_size,
             bias=True,
         )
 
-        # Original: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L232-L251
-        self.lang_embeddings = nn.Embedding(config.num_lang_embeddings, config.text_config.hidden_size)
+        self.lang_embeddings = nn.Embedding(config.num_language_embeddings, config.text_config.hidden_size)
 
-        # self.lm_head = nn.Linear(config.text_config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
     def get_audio_features(self, input_features: torch.FloatTensor):
-        # TODO use encoder and multimodal projector to get audio features
-        # similar to this from original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1003
-        
-        # below does something in similar style as Voxtral
         audio_outputs = self.encoder(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
+
+    def _build_context_embeds(
+        self,
+        input_values: torch.Tensor,
+        language: List[str],
+    ) -> torch.FloatTensor:
+        """Build the context inputs_embeds: audio | lid_marker | lang_id | bos.
+
+        This is used both for training (forward) and generation (generate).
+        """
+        batch_size = input_values.size(0)
+        device = input_values.device
+
+        audio_embeds = self.get_audio_features(input_values)
+        dtype = audio_embeds.dtype
+
+        # Prepare token IDs
+        language_id_token_batch = torch.full((batch_size, 1), self.language_token_id, dtype=torch.long, device=device)
+        bos_batch = torch.full((batch_size, 1), self.config.bos_token_id, dtype=torch.long, device=device)
+        language_id_batch = torch.zeros(batch_size, dtype=torch.long, device=device)
+        for i, lang in enumerate(language):
+            lang_lower = lang.lower()
+            if lang_lower in self.language_mapping:
+                language_id_batch[i] = self.language_mapping[lang_lower]
+            else:
+                raise ValueError(
+                    f"Language {lang} not found in language_mapping keys: {list(self.language_mapping.keys())}"
+                )
+
+        # Language embedding dropout during training
+        if self.training and self.config.language_embedding_probability > 0.0:
+            dropout_mask = torch.rand(batch_size, device=device) < (1 - self.config.language_embedding_probability)
+            language_id_batch[dropout_mask] = 0
+
+        # Embed each segment
+        text_embed_fn = self.get_input_embeddings()
+        lid_marker_embeds = text_embed_fn(language_id_token_batch).to(dtype)
+        bos_embeds = text_embed_fn(bos_batch).to(dtype)
+        lang_id_embeds = self.lang_embeddings(language_id_batch.unsqueeze(-1)).to(dtype)
+
+        # Concatenate: audio | lid_marker | lang_id | bos
+        inputs_embeds = torch.cat([audio_embeds, lid_marker_embeds, lang_id_embeds, bos_embeds], dim=1)
+        return inputs_embeds
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor] = None,
+        language: Optional[List[str]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple, CausalLMOutputWithPast]:
+        r"""
+        Original: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/model.py#L141
+        Input syntax: audio | lid_marker | lang_id | bos | [target_text | eos]
+        """
+
+        # if labels is not None and labels.max() >= self.config.vocab_size:
+        #     raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+        # batch_size = input_values.size(0)
+        # device = input_values.device
+
+        # audio_embeds = self.get_audio_features(input_values)
+
+        # # TODO preparing token ID batches should be in processor
+        # # original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L691
+        # # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/syntax.py#L55
+        # language_id_token_batch = torch.ones(batch_size, 1, dtype=torch.int64, device=device) * self.language_token_id
+        # bos_batch = torch.ones(batch_size, 1, dtype=torch.int64, device=device) * self.bos_token_id
+        # eos_batch = torch.ones(batch_size, 1, dtype=torch.int64, device=device) * self.eos_token_id
+        # language_id_batch = torch.zeros(batch_size, dtype=torch.int64, device=device)
+        # for i, lang in enumerate(language):
+        #     lang_lower = lang.lower()
+        #     if lang_lower in self.language_mapping:
+        #         language_id_batch[i] = self.language_mapping[lang_lower]
+        #     else:
+        #         raise ValueError(f"Language {lang} not found in language_mapping keys: {list(self.language_mapping.keys())}")
+
+        # # NOTE original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L685
+        # dropout_mask = None
+        # if self.training and self.config.language_embedding_probability > 0.0:
+        #     dropout_mask = torch.rand(batch_size, device=audio_embeds.device)
+        #     dropout_mask = dropout_mask < (1 - self.config.language_embedding_probability)
+        #     language_id_batch[dropout_mask] = 0
+
+        # Original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L202
+        # - 6 inputs at this point: 
+        # """
+        # 1. audio
+        # 2. Language id token (namley 9812)
+        # 3. Language ID (namely english)
+        # 4. BOS token
+        # 5. Mask to indicate with samples to apply model to? https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L706-L710
+        # 6. EOS token
+        # """
+
+
+        # lid_marker_input, lang_id_input = create_lang_inputs(
+        #     batch=batch,
+        #     lid_marker=self.special_tokens.lid_marker,
+        #     lang_mapping=self.lang_mapping,
+        #     lang_column_name=self.language_column_name,
+        #     dropout_mask=dropout_mask,
+        #     device=device,
+        # )
+
+        # # LLM decoder
+        # lm_outputs = self.language_model(
+        #     inputs_embeds=inputs_embeds,
+        #     attention_mask=attention_mask,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        # )
+        # lm_hidden_states = lm_outputs[0]
+        # logits = self.lm_head(lm_hidden_states)
+
+        # loss = None
+        # if labels is not None:
+        #     raise NotImplementedError("TODO")
+
+        # return CausalLMOutput(
+        #     loss=loss, logits=logits, hidden_states=lm_outputs.hidden_states, attentions=lm_outputs.attentions
+        # )
+
+
+        if inputs_embeds is None:
+            # First call: build context from audio + language
+            if input_values is None:
+                raise ValueError("Either input_values or inputs_embeds must be provided")
+            inputs_embeds = self._build_context_embeds(input_values, language)
+
+            if labels is not None:
+                # Training: append target_text + eos embeddings for teacher forcing
+                batch_size = input_values.size(0)
+                device = input_values.device
+                dtype = inputs_embeds.dtype
+                text_embed_fn = self.get_input_embeddings()
+                eos_batch = torch.full((batch_size, 1), self.config.eos_token_id, dtype=torch.long, device=device)
+                target_embeds = text_embed_fn(labels).to(dtype)
+                eos_embeds = text_embed_fn(eos_batch).to(dtype)
+                inputs_embeds = torch.cat([inputs_embeds, target_embeds, eos_embeds], dim=1)
+
+        # Build attention mask if not provided
+        if attention_mask is None and past_key_values is None:
+            batch_size = inputs_embeds.size(0)
+            seq_len = inputs_embeds.size(1)
+            attention_mask = torch.ones(batch_size, seq_len, dtype=torch.long, device=inputs_embeds.device)
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            **kwargs,
+        )
+
+        logits = outputs.logits
+        loss = None
+        if labels is not None:
+            # Context length = audio_seq_len + 3 (lid_marker + lang_id + bos)
+            context_seq_len = inputs_embeds.size(1) - labels.size(1) - 1  # subtract target + eos
+            target_len = labels.size(1) + 1  # +1 for EOS
+            target_logits = logits[:, context_seq_len - 1 : context_seq_len - 1 + target_len, :]
+
+            batch_size = labels.size(0)
+            device = labels.device
+            eos_batch = torch.full((batch_size, 1), self.config.eos_token_id, dtype=torch.long, device=device)
+            targets = torch.cat([labels, eos_batch], dim=1)
+
+            loss = nn.functional.cross_entropy(
+                input=target_logits.reshape(-1, target_logits.size(-1)),
+                target=targets.reshape(-1),
+                ignore_index=self.config.pad_token_id,
+                reduction="mean",
+            )
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(self, *args, **kwargs):
+        # Only pass input_values and language on the first iteration;
+        # on subsequent cached steps the audio context is already in the KV cache.
+        input_values = kwargs.pop("input_values", None)
+        language = kwargs.pop("language", None)
+
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+
+        is_first_iteration = kwargs.get("is_first_iteration", False)
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["input_values"] = input_values
+            model_inputs["language"] = language
+
+        return model_inputs
+
+    def generate(self, input_values=None, language=None, **kwargs):
+        """Generate token sequences from audio input.
+
+        Builds the initial context embeddings (audio | lid_marker | lang_id | bos)
+        and delegates to GenerationMixin.generate() for autoregressive decoding.
+        """
+        if input_values is not None and language is not None:
+            inputs_embeds = self._build_context_embeds(input_values, language)
+            # Build attention mask for the context
+            batch_size, seq_len = inputs_embeds.shape[:2]
+            attention_mask = torch.ones(batch_size, seq_len, dtype=torch.long, device=inputs_embeds.device)
+            return super().generate(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        return super().generate(input_values=input_values, language=language, **kwargs)
+
+
+
 
 
 __all__ = [

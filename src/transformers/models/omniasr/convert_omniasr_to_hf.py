@@ -76,32 +76,18 @@ ctc_convert_list = [
 ]
 
 llm_convert_list = [
-    ("final_proj", "lm_head"),
+    ("final_proj", "language_model.lm_head"),
     ("encoder_proj", "multi_modal_projector"),
     # LLaMA decoder - order matters! More specific patterns first
-    ("llama_decoder.layers", "language_model.layers"),
+    ("llama_decoder.layers", "language_model.model.layers"),
     ("self_attn.output_proj", "self_attn.o_proj"),
     ("ffn.gate_proj", "mlp.gate_proj"),
     ("ffn.inner_proj", "mlp.up_proj"),
     ("ffn.output_proj", "mlp.down_proj"),
     ("self_attn_layer_norm", "input_layernorm"),
     ("ffn_layer_norm", "post_attention_layernorm"),
-    ("llama_decoder.layer_norm", "language_model.norm"),
-    ("text_frontend", "language_model.embed_tokens"),
-
-    # -- when using AutoModelForCausalLM
-    # ("final_proj", "language_model.lm_head"),
-    # ("encoder_proj", "multi_modal_projector"),
-    # # LLaMA decoder - order matters! More specific patterns first
-    # ("llama_decoder.layers", "language_model.model.layers"),
-    # ("self_attn.output_proj", "self_attn.o_proj"),
-    # ("ffn.gate_proj", "mlp.gate_proj"),
-    # ("ffn.inner_proj", "mlp.up_proj"),
-    # ("ffn.output_proj", "mlp.down_proj"),
-    # ("self_attn_layer_norm", "input_layernorm"),
-    # ("ffn_layer_norm", "post_attention_layernorm"),
-    # ("llama_decoder.layer_norm", "language_model.model.norm"),
-    # ("text_frontend", "language_model.model.embed_tokens"),
+    ("llama_decoder.layer_norm", "language_model.model.norm"),
+    ("text_frontend", "language_model.model.embed_tokens"),
 ]
 
 
@@ -153,6 +139,23 @@ def _convert_model(
                         print("Converting key:", new_key, " to ", new_key.replace(old_layer_name, new_layer_name))
                     new_key = new_key.replace(old_layer_name, new_layer_name)
             state_dict[new_key] = state_dict.pop(k)
+
+    # Pad lm_head weight if needed: the original final_proj has vocab_size outputs
+    # but LlamaForCausalLM creates lm_head with vocab_size + num_special_tokens.
+    # Zero-pad the extra rows so the special tokens don't produce meaningful logits.
+    lm_head_key = None
+    for k in state_dict:
+        if "lm_head.weight" in k:
+            lm_head_key = k
+            break
+    if lm_head_key is not None and lm_head_key in hf_model.state_dict():
+        src_shape = state_dict[lm_head_key].shape
+        tgt_shape = hf_model.state_dict()[lm_head_key].shape
+        if src_shape[0] < tgt_shape[0]:
+            pad_rows = tgt_shape[0] - src_shape[0]
+            padding = torch.zeros(pad_rows, src_shape[1], dtype=state_dict[lm_head_key].dtype, device=state_dict[lm_head_key].device)
+            state_dict[lm_head_key] = torch.cat([state_dict[lm_head_key], padding], dim=0)
+            logger.info(f"Padded {lm_head_key} from {list(src_shape)} to {list(state_dict[lm_head_key].shape)}")
 
     # Check for missing or extra keys
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
@@ -226,7 +229,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         original_config.use_masking = False
         original_config.max_temporal_mask_prob = 0.0
         original_config.max_spatial_mask_prob = 0.0
-        original_config.target_vocab_size = original_tokenizer.vocab_info.size 
+        original_config.target_vocab_size = original_tokenizer.vocab_info.size
 
         if "LLM" in model_card:
             # load additional configuration for LLM, beam search, streaming
@@ -237,7 +240,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             llama_config = LLaMAConfig(
                 model_dim=4096,
                 max_seq_len=8192,
-                vocab_size=original_config.target_vocab_size,
+                vocab_size=original_tokenizer.vocab_info.size,
                 pad_idx=1,
                 num_layers=12,
                 num_attn_heads=8,
@@ -414,20 +417,26 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
         # TODO: adding special tokens?
         # see https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L212-L218
-
-        # TODO original_model.lang_mapping might be useful to extract?
+        # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L28
 
         config = OmniASRLLMConfig(
             encoder_config=encoder_config,
             text_config=llama_config,
             encoder_stacking=original_config_llm.encoder_stacking,
-            num_lang_embeddings=len(original_model.lang_embeddings.weight),
+            # num_lang_embeddings=len(original_model.lang_embeddings.weight),   # TODO remove
             bos_token_id=original_config_llm.bos_idx,
             pad_token_id=original_config_llm.pad_idx,
             eos_token_id=original_config_llm.eos_idx,
             unk_token_id=original_config_llm.unk_idx,
             # TODO better handlnig?
             num_special_tokens=original_config_llm.n_special_tokens,
+            language_mapping=original_model.lang_mapping,
+            language_embedding_probability=original_config_llm.lang_embeddings_p,
+            # TODO : bug from their side? https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L360
+            # they overwtite the ASR config which sets vocab size to 9812 instead to that of tokenizer (10288)
+            # and vocab size used from ASr model: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L261
+            language_token_id=9218,
+            # language_token_id=original_tokenizer.vocab_info.size  # NOTE should be this? otherwise overwiting actual 9218 -> original_tokenizer._model.index_to_token(9218) = 'ր'
         )
         hf_model = OmniASRForConditionalGeneration(config)
     elif "W2V" in model_card:
