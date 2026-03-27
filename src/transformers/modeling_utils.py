@@ -3689,6 +3689,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         revision: str = "main",
         use_safetensors: bool | None = None,
         weights_only: bool = True,
+        load_best_fit: bool = False,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -3909,7 +3910,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         proxies = kwargs.pop("proxies", None)
         tqdm_class = kwargs.pop("tqdm_class", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
-        from_pipeline = kwargs.pop("_from_pipeline", None)
+        load_best_fit = kwargs.pop("load_best_fit", False)
+
+        # Osman's Innovation: Hardware-Aware Auto-Loading
+        if load_best_fit:
+            from .utils.hardware import get_best_loading_strategy
+            strategy = get_best_loading_strategy(config, pretrained_model_name_or_path)
+            for key, value in strategy.items():
+                if key not in kwargs: # Use if not explicitly overridden
+                    kwargs[key] = value
+            logger.info(f"Osman Model Advisor: Automatically applied loading strategy: {strategy}")
+        _from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         dtype = kwargs.pop("dtype", None)
         torch_dtype = kwargs.pop("torch_dtype", None)  # kept for BC
@@ -3993,8 +4004,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
-        if from_pipeline is not None:
-            user_agent["using_pipeline"] = from_pipeline
+        if _from_pipeline is not None:
+            user_agent["using_pipeline"] = _from_pipeline
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PreTrainedConfig):
@@ -4004,7 +4015,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return_unused_kwargs=True,
                 gguf_file=gguf_file,
                 _from_auto=from_auto_class,
-                _from_pipeline=from_pipeline,
+                _from_pipeline=_from_pipeline,
                 **download_kwargs,
                 **kwargs,
             )
@@ -4138,7 +4149,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             model.adjust_generation_fn(
                 generation_config,
                 from_auto_class,
-                from_pipeline,
+                _from_pipeline,
                 pretrained_model_name_or_path,
                 **download_kwargs,
                 trust_remote_code=trust_remote_code,

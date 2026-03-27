@@ -67,17 +67,14 @@ def advisor(model_name_or_path: str):
 
     # 3. Recommendations
     print("\n--- Optimization Strategy ---")
-    if not has_cuda:
-        print("Advice: Use CPU offloading and GGUF format if possible (llama.cpp integration).")
-    elif vram_gb > vram_fp16 + 2:
-        print("Advice: You have enough VRAM for Full Precision (FP16/BF16).")
-        print("Command: `model = AutoModel.from_pretrained(..., torch_dtype=torch.bfloat16, device_map='auto')`")
-    elif vram_gb > vram_int4 + 1.5:
-        print("Advice: Use 4-bit quantization (BitsAndBytes or AWQ).")
-        print("Recommendation: `load_in_4bit=True` (bitsandbytes) or use an AWQ-quantized version.")
-        print("Command: `model = AutoModel.from_pretrained(..., load_in_4bit=True, device_map='auto')`")
-    else:
-        print("Advice: VRAM is tight. Use Extreme Quantization (HQQ/GGUF) or Sequential CPU Offload.")
-        print("Recommendation: Use `accelerate` with `device_map='disk'` or `offload_folder`.")
+    from transformers.utils.hardware import get_best_loading_strategy
+    strategy = get_best_loading_strategy(config, model_name_or_path)
 
+    print(f"Osman Advisor Recommended Strategy: {strategy}")
+    if "load_in_4bit" in strategy:
+        print("Advice: Use 4-bit quantization (BitsAndBytes) as VRAM is sufficient for compressed loading but tight for FP16.")
+    elif strategy.get("torch_dtype") == torch.float16:
+        print("Advice: You have plenty of VRAM. Using full precision (FP16).")
+
+    print("\nPro-Tip: Use `load_best_fit=True` in `from_pretrained` to automate this!")
     print("\n------------------------------\n")
