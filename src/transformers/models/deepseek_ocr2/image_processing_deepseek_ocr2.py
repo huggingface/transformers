@@ -138,6 +138,7 @@ class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     min_patches: int
     max_patches: int
     tile_size: int
+    background_color: tuple[int, int, int]
 
 
 class DeepseekOcr2ImageProcessor(BaseImageProcessor):
@@ -210,6 +211,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
         image_mean: float | list[float] | None = None,
         image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
+        background_color: tuple[int, int, int] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -229,6 +231,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
         self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
         self.do_convert_rgb = do_convert_rgb
+        self.background_color = list(background_color) if background_color is not None else [127, 127, 127]
 
     def crop_image_to_patches(
         self,
@@ -493,12 +496,12 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
 
             # --- Global view ---
             scale = global_target_size / max(original_width, original_height)
-            new_width = int(original_width * scale)
-            new_height = int(original_height * scale)
+            new_width = round(original_width * scale)
+            new_height = round(original_height * scale)
             global_np = resize(image_np, (new_height, new_width), resample=resample, input_data_format=img_format)
 
             global_fmt = infer_channel_dimension_format(global_np)
-            global_np = self.pad_to_square(global_np, background_color=(127, 127, 127), input_data_format=global_fmt)
+            global_np = self.pad_to_square(global_np, background_color=self.background_color, input_data_format=global_fmt)
 
             if do_rescale:
                 global_np = self.rescale(image=global_np, scale=rescale_factor, input_data_format=global_fmt)

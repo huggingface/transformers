@@ -52,7 +52,7 @@ class DeepseekOcr2ImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
-        self.background_color = (127, 127, 127)
+        self.background_color = kwargs.get("background_color", [127, 127, 127])
 
     @auto_docstring
     def preprocess(self, images, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]) -> BatchFeature:
@@ -243,8 +243,8 @@ class DeepseekOcr2ImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked in grouped_images.items():
             h, w = shape[-2:]
             scale = global_target_size / max(h, w)
-            new_h = int(h * scale)
-            new_w = int(w * scale)
+            new_h = round(h * scale)
+            new_w = round(w * scale)
             stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), interpolation=interpolation)
             stacked = self.pad_to_square(stacked, background_color=self.background_color)
             stacked = self.rescale_and_normalize(
