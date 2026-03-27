@@ -663,9 +663,11 @@ class ContinuousBatchingManager:
                     self.output_queue.put(output)
 
         for loop, items in deliveries.items():
+
             def _deliver_batch(batch_items=items):
                 for cb, res in batch_items:
                     cb(res)
+
             loop.call_soon_threadsafe(_deliver_batch)
 
     @traced
@@ -681,7 +683,6 @@ class ContinuousBatchingManager:
     def is_running(self) -> bool:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
-
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def stop(self, block: bool = True, timeout: float | None = None, keep_for_next_session: bool = False) -> None:
@@ -855,7 +856,6 @@ class ContinuousBatchingManager:
                 if result.is_finished():
                     return
 
-
     def register_result_handler(self, request_id: str, callback: callable) -> None:
         """Register a callback for result delivery (streaming or non-streaming).
 
@@ -915,6 +915,7 @@ class ContinuousBatchingManager:
             model_device=self.model.device,
             model_dtype=self.model.dtype,
             scheduler=scheduler(paged_attention_cache),
+            deliver_outputs=self._deliver_outputs,
         )
         return batch_processor
 
@@ -930,28 +931,6 @@ class ContinuousBatchingManager:
             else:
                 batch_processor = self._create_batch_processor()
 
-            # Start the generation loop
-            scheduler = SCHEDULER_MAPPING.get(self.continuous_batching_config.scheduler, None)
-            if scheduler is None:
-                logger.warning(
-                    f"Scheduler '{self.continuous_batching_config.scheduler}' not found. Defaulting to FIFO."
-                )
-                scheduler = FIFOScheduler
-
-            t1 = perf_counter()
-            batch_processor = ContinuousBatchProcessor(
-                cache=paged_attention_cache,
-                config=self.model.config,
-                generation_config=self.generation_config,
-                continuous_batching_config=self.continuous_batching_config,
-                input_queue=self.input_queue,
-                output_queue=self.output_queue,
-                stop_event=self.stop_event,
-                model_device=self.model.device,
-                model_dtype=self.model.dtype,
-                scheduler=scheduler(paged_attention_cache),
-                deliver_outputs=self._deliver_outputs,
-            )
             self.batch_processor = batch_processor
             self.current_batch = 0
 
