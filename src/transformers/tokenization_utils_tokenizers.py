@@ -35,6 +35,7 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 
 from transformers.utils.hub import cached_file
 
+from .convert_slow_tokenizer import bytes_to_unicode
 from .convert_slow_tokenizer import SpmConverter
 from .integrations.ggml import convert_gguf_tokenizer
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -51,6 +52,7 @@ from .utils import PaddingStrategy, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)
+BYTE_TO_UNICODE = bytes_to_unicode()
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 TOKENIZER_FILE = "tokenizer.json"
@@ -724,10 +726,48 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return self._tokenizer.id_to_token(int(index))
 
     def _add_tokens(self, new_tokens: list[str | AddedToken], special_tokens=False) -> int:
+        if not special_tokens:
+            new_tokens = self._maybe_encode_added_tokens_for_bytelevel(new_tokens)
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
         return self._tokenizer.add_tokens(new_tokens)
+
+    def _maybe_encode_added_tokens_for_bytelevel(self, new_tokens: list[str | AddedToken]) -> list[str | AddedToken]:
+        pre_tokenizer = getattr(self.backend_tokenizer, "pre_tokenizer", None)
+        decoder = getattr(self.backend_tokenizer, "decoder", None)
+        normalizer = getattr(self.backend_tokenizer, "normalizer", None)
+
+        # Some ByteLevel tokenizers (e.g. GPT-2 family) have ByteLevel pre-tokenizer/decoder
+        # but no normalizer. In this setup, raw unicode added tokens can decode incorrectly
+        # (e.g. U+010D -> '\r'). Encoding added token contents through the ByteLevel alphabet
+        # preserves roundtrip behavior.
+        if (
+            normalizer is None
+            and pre_tokenizer is not None
+            and pre_tokenizer.__class__.__name__ == "ByteLevel"
+            and decoder is not None
+            and decoder.__class__.__name__ == "ByteLevel"
+        ):
+            encoded_tokens: list[str | AddedToken] = []
+            for token in new_tokens:
+                if isinstance(token, AddedToken):
+                    encoded_content = "".join(BYTE_TO_UNICODE[b] for b in token.content.encode("utf-8"))
+                    encoded_tokens.append(
+                        AddedToken(
+                            encoded_content,
+                            single_word=token.single_word,
+                            lstrip=token.lstrip,
+                            rstrip=token.rstrip,
+                            normalized=token.normalized,
+                            special=token.special,
+                        )
+                    )
+                else:
+                    encoded_tokens.append("".join(BYTE_TO_UNICODE[b] for b in token.encode("utf-8")))
+            return encoded_tokens
+
+        return new_tokens
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """

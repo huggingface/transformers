@@ -84,6 +84,17 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tiktoken_fast_tokenizer.decode(rust_tokenizer.encode(sequence)),
         )
 
+    def test_added_tokens_unicode_roundtrip_with_bytelevel(self):
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        new_tokens = ["Začnimo", "kuća", "međa"]
+        tokenizer.add_tokens(new_tokens)
+
+        for word in new_tokens:
+            with self.subTest(word=word):
+                ids = tokenizer.encode(word, add_special_tokens=False)
+                decoded = tokenizer.decode(ids, skip_special_tokens=False)
+                self.assertEqual(decoded, word)
+
 
 @require_tokenizers
 class OPTTokenizationTest(unittest.TestCase):
