@@ -128,6 +128,8 @@ class VideoProcessingTestMixin:
             self.assertEqual(video_processor_second.to_dict(), video_processor_first.to_dict())
 
     def test_video_processor_from_dict_with_kwargs(self):
+        if self.fast_video_processing_class is None:
+            self.skipTest("No fast video processor class defined")
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
         self.assertEqual(video_processor.size, {"shortest_edge": 20})
         self.assertEqual(video_processor.crop_size, {"height": 18, "width": 18})
