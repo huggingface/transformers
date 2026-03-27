@@ -614,23 +614,28 @@ class CBGenerateManager(BaseGenerateManager):
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
 
-        self._cb.register_streaming_callback(request_id, _on_output)
+        self._cb.register_result_handler(request_id, _on_output)
         return text_queue, streamer
 
     async def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
         """Non-streaming CB generation, fully async (no per-request thread).
 
-        Uses ``register_async_future`` — the dispatcher resolves a single
-        asyncio.Future when the result arrives. No per-request queue, no polling
-        loop — scales to thousands of concurrent requests with minimal event loop
-        overhead.
+        Registers a handler that resolves an asyncio.Future when the result arrives.
+        No per-request queue, no polling — just one ``await`` per request.
         """
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
 
         # Register future BEFORE add_request to avoid race with fast completion
         request_id = request_id or f"cb_{id(inputs)}"
-        future = self._cb.register_async_future(request_id)
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+
+        def _on_result(result):
+            if not future.done():
+                future.set_result(result)
+
+        self._cb.register_result_handler(request_id, _on_result)
 
         self._cb.add_request(
             input_ids,
