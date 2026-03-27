@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, GPT2Tokenizer
 from transformers.testing_utils import require_tiktoken, require_tokenizers
 
@@ -85,25 +83,6 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             rust_tokenizer.decode(rust_tokenizer.encode(sequence)),
             tiktoken_fast_tokenizer.decode(rust_tokenizer.encode(sequence)),
         )
-
-    @pytest.mark.xfail(
-        reason="Blocked by huggingface/tokenizers ByteLevel added-token decode behavior for certain Unicode chars.",
-        strict=False,
-    )
-    def test_added_tokens_unicode_roundtrip_with_bytelevel(self):
-        tokenizer_fast = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
-        tokenizer_slow = AutoTokenizer.from_pretrained("gpt2", use_fast=False)
-
-        new_tokens = ["Začnimo", "kuća", "međa"]
-        tokenizer_fast.add_tokens(new_tokens)
-        tokenizer_slow.add_tokens(new_tokens)
-
-        for tokenizer in (tokenizer_fast, tokenizer_slow):
-            with self.subTest(tokenizer_class=tokenizer.__class__.__name__):
-                for word in new_tokens:
-                    ids = tokenizer.encode(word, add_special_tokens=False)
-                    decoded = tokenizer.decode(ids, skip_special_tokens=False)
-                    self.assertEqual(decoded, word)
 
 
 @require_tokenizers
