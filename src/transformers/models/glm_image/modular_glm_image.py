@@ -32,6 +32,7 @@ from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
@@ -1273,6 +1274,7 @@ class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
     }
 
 
+@requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.

@@ -63,7 +63,7 @@ class BeitImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[BeitImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    # @auto_docstring
+    @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

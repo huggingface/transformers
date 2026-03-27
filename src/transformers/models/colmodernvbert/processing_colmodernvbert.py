@@ -23,7 +23,12 @@ from itertools import accumulate
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
-import torch
+
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image

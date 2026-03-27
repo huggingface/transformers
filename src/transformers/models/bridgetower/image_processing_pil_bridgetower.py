@@ -26,12 +26,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
-from ...utils.import_utils import requires
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring
 
 
 # Copied from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
@@ -44,18 +39,15 @@ class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
     size_divisor: int
 
 
-# Copied from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
+# adapted from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
 def get_resize_output_image_size(
-    input_image: np.ndarray | torch.Tensor,
+    input_image: np.ndarray,
     shorter: int = 800,
     longer: int = 1333,
     size_divisor: int = 32,
 ) -> tuple[int, int]:
     """Get output image size after resizing with size_divisor."""
-    if isinstance(input_image, torch.Tensor):
-        input_height, input_width = input_image.shape[-2:]
-    else:
-        input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
+    input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
 
     min_size, max_size = shorter, longer
     scale = min_size / min(input_height, input_width)
@@ -80,7 +72,6 @@ def get_resize_output_image_size(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class BridgeTowerImageProcessorPil(PilBackend):
     """PIL backend for BridgeTower with custom resize and center_crop."""
 

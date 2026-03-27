@@ -19,7 +19,12 @@
 # limitations under the License.
 
 import numpy as np
-import torch
+
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature

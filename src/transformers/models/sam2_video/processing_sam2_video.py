@@ -21,7 +21,12 @@ from copy import deepcopy
 from typing import Union
 
 import numpy as np
-import torch
+
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
