@@ -855,7 +855,7 @@ class ModelFileMapper(ModuleMapper):
     def visit_and_merge_dependencies(
         cls, module: cst.Module, classes, functions, assignments, object_mapping, start_lines
     ) -> "ModelFileMapper":
-        wrapper = MetadataWrapper(module)
+        wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
         mapper = cls(module)
         wrapper.visit(mapper)
         # Merge dependencies
@@ -1159,7 +1159,7 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     Note: we need to use `isinstance` on scope assignments, m.matches apparently does not work here yet!
     """
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-    wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
+    wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body), unsafe_skip_copy=True)
     scopes = set(wrapper.resolve(ScopeProvider).values())
     unused_imports = set()
     import_ref_count = defaultdict(lambda: 0)
@@ -1902,7 +1902,7 @@ def convert_modular_file(modular_file: str, source_library: str | None = "transf
         if source_library != "transformers":
             module = module.visit(AbsoluteImportTransformer(relative_path, source_library))
 
-        wrapper = MetadataWrapper(module)
+        wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
         cst_transformers = ModularFileMapper(module, model_name, source_library)
         wrapper.visit(cst_transformers)
         for file, module in create_modules(
