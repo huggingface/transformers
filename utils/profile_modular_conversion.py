@@ -11,6 +11,7 @@ Examples:
         src/transformers/models/conditional_detr/modular_conditional_detr.py \
         src/transformers/models/deepseek_vl/modular_deepseek_vl.py \
         --repeat 3 \
+        --compare-old-import-analysis \
         --compare-old-branch \
         --verify-equal \
         --snakeviz
@@ -60,24 +61,44 @@ def module_cache_context(enabled: bool):
         mmc.ENABLE_MODULE_SOURCE_CACHE = original
 
 
-def run_conversion(modular_files: list[str], wrapper_cls, cache_enabled: bool) -> dict[str, dict[str, str]]:
-    with metadata_wrapper_context(wrapper_cls), module_cache_context(cache_enabled):
+@contextmanager
+def fast_import_analysis_context(enabled: bool):
+    original = mmc.ENABLE_FAST_IMPORT_ANALYSIS
+    mmc.ENABLE_FAST_IMPORT_ANALYSIS = enabled
+    try:
+        yield
+    finally:
+        mmc.ENABLE_FAST_IMPORT_ANALYSIS = original
+
+
+def run_conversion(
+    modular_files: list[str], wrapper_cls, cache_enabled: bool, fast_import_analysis_enabled: bool
+) -> dict[str, dict[str, str]]:
+    with (
+        metadata_wrapper_context(wrapper_cls),
+        module_cache_context(cache_enabled),
+        fast_import_analysis_context(fast_import_analysis_enabled),
+    ):
         return {modular_file: mmc.convert_modular_file(modular_file) for modular_file in modular_files}
 
 
-def benchmark_conversion(modular_files: list[str], wrapper_cls, cache_enabled: bool, repeat: int) -> list[float]:
+def benchmark_conversion(
+    modular_files: list[str], wrapper_cls, cache_enabled: bool, fast_import_analysis_enabled: bool, repeat: int
+) -> list[float]:
     durations = []
     for _ in range(repeat):
         start = time.perf_counter()
-        run_conversion(modular_files, wrapper_cls, cache_enabled)
+        run_conversion(modular_files, wrapper_cls, cache_enabled, fast_import_analysis_enabled)
         durations.append(time.perf_counter() - start)
     return durations
 
 
-def profile_conversion(modular_files: list[str], wrapper_cls, cache_enabled: bool, output_path: Path) -> None:
+def profile_conversion(
+    modular_files: list[str], wrapper_cls, cache_enabled: bool, fast_import_analysis_enabled: bool, output_path: Path
+) -> None:
     profile = cProfile.Profile()
     profile.enable()
-    run_conversion(modular_files, wrapper_cls, cache_enabled)
+    run_conversion(modular_files, wrapper_cls, cache_enabled, fast_import_analysis_enabled)
     profile.disable()
     profile.dump_stats(str(output_path))
 
@@ -169,6 +190,11 @@ def main() -> int:
         help="Compare against current wrapper behavior with module source caching disabled.",
     )
     parser.add_argument(
+        "--compare-old-import-analysis",
+        action="store_true",
+        help="Compare against the current branch with the previous get_needed_imports analysis.",
+    )
+    parser.add_argument(
         "--verify-equal",
         action="store_true",
         help="Verify that current output and all requested comparison modes are byte-identical.",
@@ -188,30 +214,34 @@ def main() -> int:
     output_root = make_output_root(args.output_dir, modular_files)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    modes = [("current", LibCSTMetadataWrapper, True)]
+    modes = [("current", LibCSTMetadataWrapper, True, True)]
     if args.compare_old_branch:
-        modes.append(("old_branch", OldBehaviorMetadataWrapper, False))
+        modes.append(("old_branch", OldBehaviorMetadataWrapper, False, False))
     if args.compare_old_wrapper:
-        modes.append(("old_wrapper", OldBehaviorMetadataWrapper, True))
+        modes.append(("old_wrapper", OldBehaviorMetadataWrapper, True, True))
     if args.compare_no_cache:
-        modes.append(("no_cache", LibCSTMetadataWrapper, False))
+        modes.append(("no_cache", LibCSTMetadataWrapper, False, True))
+    if args.compare_old_import_analysis:
+        modes.append(("old_import_analysis", LibCSTMetadataWrapper, True, False))
 
     print(f"files={len(modular_files)}")
-    for label, wrapper_cls, cache_enabled in modes:
-        durations = benchmark_conversion(modular_files, wrapper_cls, cache_enabled, args.repeat)
+    for label, wrapper_cls, cache_enabled, fast_import_analysis_enabled in modes:
+        durations = benchmark_conversion(
+            modular_files, wrapper_cls, cache_enabled, fast_import_analysis_enabled, args.repeat
+        )
         print(summarize(label, durations))
 
     if args.verify_equal and len(modes) > 1:
-        current = run_conversion(modular_files, LibCSTMetadataWrapper, True)
-        for label, wrapper_cls, cache_enabled in modes[1:]:
-            other = run_conversion(modular_files, wrapper_cls, cache_enabled)
+        current = run_conversion(modular_files, LibCSTMetadataWrapper, True, True)
+        for label, wrapper_cls, cache_enabled, fast_import_analysis_enabled in modes[1:]:
+            other = run_conversion(modular_files, wrapper_cls, cache_enabled, fast_import_analysis_enabled)
             same = current.keys() == other.keys() and all(current[key] == other[key] for key in current)
             print(f"{label}_byte_identical={same}")
             if not same:
                 return 1
 
     profile_path = output_root / "current.prof"
-    profile_conversion(modular_files, LibCSTMetadataWrapper, True, profile_path)
+    profile_conversion(modular_files, LibCSTMetadataWrapper, True, True, profile_path)
     print(f"profile={profile_path}")
 
     if args.snakeviz:
