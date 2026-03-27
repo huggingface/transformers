@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+    pass
 
 
 def _preprocess_resize_output_shape(image, output_shape):

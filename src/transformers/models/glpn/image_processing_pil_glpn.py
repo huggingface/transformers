@@ -27,8 +27,6 @@ from .image_processing_glpn import GLPNImageProcessorKwargs
 
 
 if TYPE_CHECKING:
-    from torchvision.transforms.v2 import functional as tvF
-
     from ...modeling_outputs import DepthEstimatorOutput
 
 logger = logging.get_logger(__name__)

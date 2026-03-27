@@ -13,14 +13,13 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 
 if TYPE_CHECKING:
-    import torch
-    from torchvision.transforms.v2 import functional as tvF
+    pass
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature

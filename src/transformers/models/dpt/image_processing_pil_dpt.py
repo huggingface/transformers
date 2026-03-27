@@ -14,7 +14,7 @@
 """Image processor class for DPT."""
 
 import math
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -36,8 +36,6 @@ from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_ima
 
 
 if TYPE_CHECKING:
-    import torch
-    from torchvision.transforms.v2 import functional as tvF
 
     from ...modeling_outputs import DepthEstimatorOutput
 

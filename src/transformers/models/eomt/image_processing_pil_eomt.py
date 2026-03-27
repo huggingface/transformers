@@ -14,14 +14,9 @@
 """Image processor class for EoMT."""
 
 import math
-from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-
-
-if TYPE_CHECKING:
-    from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature

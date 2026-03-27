@@ -35,7 +35,7 @@ from .image_processing_tvp import TvpImageProcessorKwargs
 
 
 if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+    pass
 
 
 def get_resize_output_image_size(

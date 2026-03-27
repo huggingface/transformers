@@ -36,7 +36,6 @@ from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs, smar
 
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring

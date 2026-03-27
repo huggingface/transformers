@@ -23,10 +23,6 @@ if is_vision_available():
     from PIL import Image, ImageDraw
 if is_torch_available():
     import torch
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
 def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True

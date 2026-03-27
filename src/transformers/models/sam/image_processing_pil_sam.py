@@ -17,12 +17,11 @@ import math
 from collections.abc import Iterable
 from copy import deepcopy
 from itertools import product
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict

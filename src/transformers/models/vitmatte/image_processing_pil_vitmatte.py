@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for ViTMatte."""
 
-from typing import Union
 
 import numpy as np
 
@@ -34,7 +33,7 @@ from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
 if is_torch_available():
-    import torch
+    pass
 
 
 @auto_docstring

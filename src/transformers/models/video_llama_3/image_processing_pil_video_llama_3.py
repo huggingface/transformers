@@ -30,7 +30,6 @@ from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs, sma
 
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 @auto_docstring

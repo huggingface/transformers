@@ -19,7 +19,6 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict

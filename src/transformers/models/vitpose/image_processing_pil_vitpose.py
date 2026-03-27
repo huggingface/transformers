@@ -14,7 +14,7 @@
 """Image processor class for VitPose."""
 
 import itertools
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -47,8 +47,6 @@ if is_scipy_available():
     pass
 
 if TYPE_CHECKING:
-    import torch
-    from torchvision.transforms.v2 import functional as tvF
 
     from .modeling_vitpose import VitPoseEstimatorOutput
 

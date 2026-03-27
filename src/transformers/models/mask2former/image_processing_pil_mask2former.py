@@ -61,7 +61,7 @@ if is_torch_available():
     import torch
     from torch import nn
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+    pass
 
 
 logger = logging.get_logger(__name__)

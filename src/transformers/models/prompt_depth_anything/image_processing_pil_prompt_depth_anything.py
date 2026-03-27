@@ -14,7 +14,7 @@
 """Image processor class for PromptDepthAnything."""
 
 import math
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -37,8 +37,6 @@ from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
-    import torch
-    from torchvision.transforms.v2 import functional as tvF
 
     from ...modeling_outputs import DepthEstimatorOutput
 

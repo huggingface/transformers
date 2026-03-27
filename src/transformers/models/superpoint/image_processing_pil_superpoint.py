@@ -28,7 +28,6 @@ from .image_processing_superpoint import SuperPointImageProcessorKwargs
 
 if TYPE_CHECKING:
     import torch
-    from torchvision.transforms.v2 import functional as tvF
 
     from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 

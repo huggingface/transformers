@@ -28,7 +28,6 @@ from .image_processing_superglue import validate_and_format_image_pairs
 
 if TYPE_CHECKING:
     import torch
-    from torchvision.transforms.v2 import functional as tvF
 
     from .modeling_superglue import SuperGlueKeypointMatchingOutput
 

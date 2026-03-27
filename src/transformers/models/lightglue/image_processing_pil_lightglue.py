@@ -47,7 +47,6 @@ if is_vision_available():
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 def is_grayscale(image: np.ndarray):
