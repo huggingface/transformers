@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for ZoeDepth."""
 
+import math
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
@@ -31,18 +33,16 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
 from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
-from collections.abc import Iterable
-
-import torch
-from torch import nn
-
+if is_torch_available():
+    import torch
+    from torch import nn
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF

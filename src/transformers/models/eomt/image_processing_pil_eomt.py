@@ -75,6 +75,29 @@ def convert_segmentation_map_to_binary_masks(
 
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
+# Copied from transformers.models.eomt.image_processing_eomt.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    # Get the mask associated with the k class
+    mask_k = mask_labels == k
+    mask_k_area = mask_k.sum()
+
+    # Compute the area of all the stuff in query k
+    original_mask = mask_probs[k] >= mask_threshold
+    original_area = original_mask.sum()
+
+    final_mask = mask_k & original_mask
+    final_mask_area = final_mask.sum()
+
+    mask_exists = mask_k_area > 0 and original_area > 0 and final_mask_area > 0
+
+    if mask_exists:
+        area_ratio = mask_k_area / original_area
+        if not area_ratio.item() > overlap_mask_area_threshold:
+            mask_exists = False
+
+    return mask_exists, final_mask
+
+
 # Copied from transformers.models.eomt.image_processing_eomt.EomtImageProcessorKwargs
 class EomtImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
@@ -252,7 +275,7 @@ class EomtImageProcessorPil(PilBackend):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: list[torch.Tensor] | None = None,
+        segmentation_maps: "list[torch.Tensor] | None" = None,
         instance_id_to_semantic_id: dict[int, int] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
@@ -392,11 +415,11 @@ class EomtImageProcessorPil(PilBackend):
 
     def merge_image_patches(
         self,
-        segmentation_logits: torch.Tensor,
+        segmentation_logits: "torch.Tensor",
         patch_offsets: list[tuple[int, int, int]],
         target_sizes: list[tuple[int, int]],
         size: dict[str, int],
-    ) -> list[torch.Tensor]:
+    ) -> "list[torch.Tensor]":
         """
         Reconstructs full-size semantic segmentation logits from patch predictions.
 
@@ -445,8 +468,8 @@ class EomtImageProcessorPil(PilBackend):
         return reconstructed_logits
 
     def unpad_image(
-        self, segmentation_logits: torch.Tensor, target_sizes: list[tuple[int, int]], size: dict[str, int]
-    ) -> list[torch.Tensor]:
+        self, segmentation_logits: "torch.Tensor", target_sizes: list[tuple[int, int]], size: dict[str, int]
+    ) -> "list[torch.Tensor]":
         """Restores panoptic segmentation logits to their original image resolutions."""
 
         resized_logits = []

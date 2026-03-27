@@ -13,10 +13,16 @@
 # limitations under the License.
 """Image processor class for Pix2Struct."""
 
+import io
 import math
+import textwrap
 
 import numpy as np
-from PIL import Image
+from huggingface_hub import hf_hub_download
+from PIL import Image, ImageDraw, ImageFont
+
+
+DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -121,27 +127,30 @@ def render_text(
     return img
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
-# Disable as it causes issues with torch.compile
-@torch.compiler.disable
-def torch_extract_patches(image_tensor, patch_height, patch_width):
-    """
-    Extract patches from image tensor. Returns tensor of shape (batch, rows, columns, patch_height*patch_width*channels).
+if is_torch_available():
+    import torch
 
-    Args:
-        image_tensor (`torch.Tensor`):
-            Image tensor of shape (batch, channels, height, width).
-        patch_height (`int`):
-            Height of patches to extract.
-        patch_width (`int`):
-            Width of patches to extract.
-    """
-    batch_size, channels, height, width = image_tensor.shape
-    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
-    patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
-    patches = patches.permute(0, 4, 2, 3, 1).reshape(
-        batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
-    )
-    return patches
+    # Disable as it causes issues with torch.compile
+    @torch.compiler.disable
+    def torch_extract_patches(image_tensor, patch_height, patch_width):
+        """
+        Extract patches from image tensor. Returns tensor of shape (batch, rows, columns, patch_height*patch_width*channels).
+
+        Args:
+            image_tensor (`torch.Tensor`):
+                Image tensor of shape (batch, channels, height, width).
+            patch_height (`int`):
+                Height of patches to extract.
+            patch_width (`int`):
+                Width of patches to extract.
+        """
+        batch_size, channels, height, width = image_tensor.shape
+        patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+        patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
+        patches = patches.permute(0, 4, 2, 3, 1).reshape(
+            batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
+        )
+        return patches
 
 @auto_docstring
 @requires(backends=("torch",))
