@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import transformers
 from transformers import (
@@ -31,6 +32,7 @@ from transformers import (
     ViTImageProcessorPil,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
+from transformers.utils.import_utils import BACKENDS_MAPPING
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -282,6 +284,18 @@ class AutoImageProcessorTest(unittest.TestCase):
 
             image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
             self.assertIsInstance(image_processor, ViTImageProcessorPil)
+
+    @require_vision
+    def test_auto_backend_falls_back_to_pil_when_torchvision_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "Gemma3ImageProcessor"}, open(processor_tmpfile, "w"))
+
+            torchvision_error = BACKENDS_MAPPING["torchvision"][1]
+            with patch.dict(BACKENDS_MAPPING, {"torchvision": (lambda: False, torchvision_error)}):
+                image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
+
+        self.assertEqual(type(image_processor).__name__, "Gemma3ImageProcessorPil")
 
     @require_torchvision
     def test_backend_kwarg_torchvision(self):
