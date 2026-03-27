@@ -317,7 +317,7 @@ non_model_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv pip install .[serving]"],
+    install_steps=["uv pip install --reinstall .[serving]"],
     marker="not generate",
     parallelism=6,
 )
