@@ -110,7 +110,7 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            deliver_outputs: Callback that receives a list of ``GenerationOutput`` after each step.
+            deliver_outputs: Callback that receives a single ``GenerationOutput``.
         """
         self.cache = cache
         self.config = config
@@ -336,7 +336,6 @@ class ContinuousBatchProcessor:
         """Update request states based on generated tokens."""
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
-        pending_outputs = []
         for future_state in requests_in_batch:
             state = future_state.state
             # Early return if the request is finished
@@ -367,7 +366,7 @@ class ContinuousBatchProcessor:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
-                    pending_outputs.append(state.to_generation_output())
+                    self._deliver_outputs(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING:
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
@@ -397,10 +396,6 @@ class ContinuousBatchProcessor:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
                 self.cache.copy_cache(copy_source, copy_destination)
-
-        # Deliver outputs after all GPU work is done to minimize GIL contention
-        if pending_outputs:
-            self._deliver_outputs(pending_outputs)
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -645,30 +640,15 @@ class ContinuousBatchingManager:
         with self._result_handlers_lock:
             self._result_handlers.pop(request_id, None)
 
-    def _deliver_outputs(self, outputs: list[GenerationOutput]) -> None:
-        """Route outputs directly from the generation thread to registered handlers.
-
-        Called by ``update_batch`` at the end of each generation step. Results with
-        registered handlers are batched per event loop and delivered via a single
-        ``call_soon_threadsafe``. Unhandled results fall back to the output_queue.
-        """
-        deliveries: dict[asyncio.AbstractEventLoop, list[tuple[callable, object]]] = {}
+    def _deliver_outputs(self, output: GenerationOutput) -> None:
+        """Route a single output to its registered handler or the output_queue."""
         with self._result_handlers_lock:
-            for output in outputs:
-                entry = self._result_handlers.get(output.request_id)
-                if entry is not None:
-                    callback, loop = entry
-                    deliveries.setdefault(loop, []).append((callback, output))
-                else:
-                    self.output_queue.put(output)
-
-        for loop, items in deliveries.items():
-
-            def _deliver_batch(batch_items=items):
-                for cb, res in batch_items:
-                    cb(res)
-
-            loop.call_soon_threadsafe(_deliver_batch)
+            entry = self._result_handlers.get(output.request_id)
+        if entry is not None:
+            callback, loop = entry
+            loop.call_soon_threadsafe(callback, output)
+        else:
+            self.output_queue.put(output)
 
     @traced
     def start(self) -> None:
