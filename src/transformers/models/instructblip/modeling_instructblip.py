@@ -998,7 +998,7 @@ class InstructBlipModel(InstructBlipPreTrainedModel):
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple
@@ -1257,7 +1257,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple
