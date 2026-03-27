@@ -36,6 +36,7 @@ from ...utils import (
     is_torchvision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from ..owlv2.image_processing_owlv2 import box_iou
 
 
@@ -152,6 +153,7 @@ def _scale_boxes(boxes, target_sizes):
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Owlv2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN
@@ -178,6 +180,7 @@ class Owlv2ImageProcessorPil(PilBackend):
 
         super().__init__(**kwargs)
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs: "Owlv2ObjectDetectionOutput",
@@ -232,6 +235,7 @@ class Owlv2ImageProcessorPil(PilBackend):
 
         return results
 
+    @requires(backends=("vision", "torch"))
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO

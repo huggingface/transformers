@@ -25,6 +25,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging, requires_backends
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
@@ -178,6 +179,7 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
     def post_process_keypoint_matching(
         self,
