@@ -2986,6 +2986,33 @@ class TestTensorSharing(TestCasePlus):
 
 
 @require_torch
+class TestSysModulesMissing(unittest.TestCase):
+    """Regression test for #45003: KeyError when module absent from sys.modules."""
+
+    def test_can_set_attn_impl_missing_module(self):
+        from transformers.models.bert.modeling_bert import BertModel
+
+        key = BertModel.__module__
+        saved = sys.modules.pop(key, None)
+        try:
+            self.assertFalse(BertModel._can_set_attn_implementation())
+        finally:
+            if saved is not None:
+                sys.modules[key] = saved
+
+    def test_can_set_experts_impl_missing_module(self):
+        from transformers.models.bert.modeling_bert import BertModel
+
+        key = BertModel.__module__
+        saved = sys.modules.pop(key, None)
+        try:
+            self.assertFalse(BertModel._can_set_experts_implementation())
+        finally:
+            if saved is not None:
+                sys.modules[key] = saved
+
+
+@require_torch
 class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
     This test checks that a model can be saved and loaded that uses the torch extra state API.
