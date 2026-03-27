@@ -197,6 +197,20 @@ jobs:
                     python -c "from transformers import *" || (echo '🚨 import failed with torch+PIL but no torchvision. Fix unprotected imports!! 🚨'; exit 1)
                     uv pip install -e ".[quality]" -q
 
+    check_modular:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-consistency
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        parallelism: 1
+        steps:
+            - checkout
+            - run: apt-get update && apt-get install -y make
+            - run: uv pip install -e ".[quality]"
+            - run: make check-modular
+
 
 workflows:
     version: 2
@@ -209,6 +223,7 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_modular
             - fetch_tests
 
     setup_and_quality_2:
@@ -219,6 +234,7 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_modular
             - fetch_tests:
                 # [reference] https://circleci.com/docs/contexts/
                 context:
@@ -230,4 +246,5 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_modular
             - fetch_all_tests
