@@ -4118,7 +4118,6 @@ class _LazyDocClass:
         return self._val
 
 
-
 def _apply_lazy_doc(cls, doc_generator):
     """
     Store a lazy docstring generator on *cls*.
