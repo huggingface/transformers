@@ -96,7 +96,7 @@ class ContinuousBatchProcessor:
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
-        deliver_outputs: callable,
+        deliver_output: callable,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -110,7 +110,7 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            deliver_outputs: Callback that receives a single ``GenerationOutput``.
+            deliver_output: Callback that receives a single ``GenerationOutput``.
         """
         self.cache = cache
         self.config = config
@@ -121,7 +121,7 @@ class ContinuousBatchProcessor:
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
-        self._deliver_outputs = deliver_outputs
+        self._deliver_output = deliver_output
 
         # Generation-related attributes
         self.do_sample = getattr(generation_config, "do_sample", True)
@@ -366,7 +366,7 @@ class ContinuousBatchProcessor:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
-                    self._deliver_outputs(state.to_generation_output())
+                    self._deliver_output(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING:
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
@@ -640,7 +640,7 @@ class ContinuousBatchingManager:
         with self._result_handlers_lock:
             self._result_handlers.pop(request_id, None)
 
-    def _deliver_outputs(self, output: GenerationOutput) -> None:
+    def _deliver_output(self, output: GenerationOutput) -> None:
         """Route a single output to its registered handler or the output_queue."""
         with self._result_handlers_lock:
             entry = self._result_handlers.get(output.request_id)
@@ -897,7 +897,7 @@ class ContinuousBatchingManager:
             model_device=self.model.device,
             model_dtype=self.model.dtype,
             scheduler=scheduler(paged_attention_cache),
-            deliver_outputs=self._deliver_outputs,
+            deliver_output=self._deliver_output,
         )
         return batch_processor
 
