@@ -20,13 +20,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Helsinki-NLP/opus-mt-en-de")
-@strict(accept_kwargs=True)
+@strict
 class MarianConfig(PreTrainedConfig):
     r"""
-    share_encoder_decoder_embeddings (`bool`, *optional*, defaults to `True`):
-        Whether to tie and share embeddings of encoder and decoder
     decoder_vocab_size (`int`, *optional*):
         Vocab size of the decoder layer's embedding.
+    share_encoder_decoder_embeddings (`bool`, *optional*, defaults to `True`):
+        Whether to tie and share embeddings of encoder and decoder
 
     Examples:
 
@@ -73,9 +73,9 @@ class MarianConfig(PreTrainedConfig):
     decoder_start_token_id: int = 58100
     scale_embedding: bool = False
     pad_token_id: int | None = 58100
-    eos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 0
     bos_token_id: int | None = None
-    forced_eos_token_id: int | None = 0
+    forced_eos_token_id: int | list[int] | None = 0
     share_encoder_decoder_embeddings: bool = True
     is_decoder: bool = False
     tie_word_embeddings: bool = True

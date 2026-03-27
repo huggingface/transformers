@@ -26,7 +26,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -50,7 +50,7 @@ class EdgeTamVideoPromptEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
     r"""
     mlp_dim (`int`, *optional*, defaults to 2048):
@@ -88,7 +88,7 @@ class EdgeTamVideoMaskDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="yonigozlan/EdgeTAM-hf")
-@strict(accept_kwargs=True)
+@strict
 class EdgeTamVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `EdgeTamVideoPromptEncoderConfig`], *optional*):
@@ -297,7 +297,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
             self.vision_config["model_type"] = self.vision_config.get("model_type", "sam2_vision_model")
             self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["sam2_vision_model"](**self.vision_config)
+            self.vision_config = CONFIG_MAPPING["sam2_vision_model"]()
 
         if isinstance(self.prompt_encoder_config, dict):
             self.prompt_encoder_config = EdgeTamVideoPromptEncoderConfig(**self.prompt_encoder_config)

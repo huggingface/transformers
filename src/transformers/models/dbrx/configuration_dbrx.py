@@ -20,7 +20,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="This config is used to instantiate attention layers.",
     checkpoint="transformers-community/dbrx-instruct",
@@ -42,14 +42,15 @@ class DbrxAttentionConfig(PreTrainedConfig):
     kv_n_heads: int = 1
 
 
-@strict(accept_kwargs=True)
+@strict
 @auto_docstring(
     custom_intro="This config is used to instantiate feedforward layers.",
     checkpoint="transformers-community/dbrx-instruct",
 )
 class DbrxFFNConfig(PreTrainedConfig):
     r"""
-    ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
+    ffn_act_fn (`dict`, *optional*, defaults to `None`):
+        A dict specifying activation function for the FFN.
         The dict should have a key 'name' with the value being the name of the activation function along with
         any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
     ffn_hidden_size (`int`, *optional*, defaults to 3584):
@@ -99,7 +100,7 @@ class DbrxFFNConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="transformers-community/dbrx-instruct")
-@strict(accept_kwargs=True)
+@strict
 class DbrxConfig(PreTrainedConfig):
     r"""
     max_seq_len (`int`, *optional*, defaults to 2048):

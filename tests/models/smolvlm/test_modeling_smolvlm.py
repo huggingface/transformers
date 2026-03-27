@@ -135,7 +135,7 @@ class SmolVLMVisionText2TextModelTester:
             [
                 self.batch_size,
                 self.num_images,
-                3,  # SmolVLMImageProcessor always generates RGB pixel values
+                3,  # SmolVLMImageProcessorPil always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]

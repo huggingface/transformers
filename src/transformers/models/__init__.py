@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .cohere2_vision import *
+    from .cohere_asr import *
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
@@ -203,6 +204,7 @@ if TYPE_CHECKING:
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jina_embeddings_v3 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -320,6 +322,7 @@ if TYPE_CHECKING:
     from .plbart import *
     from .poolformer import *
     from .pop2piano import *
+    from .pp_chart2table import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
     from .pp_lcnet import *
@@ -375,6 +378,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
     from .solar_open import *
@@ -412,11 +416,13 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .uvdoc import *
     from .vaultgemma import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
+    from .videomt import *
     from .videoprism import *
     from .vilt import *
     from .vipllava import *

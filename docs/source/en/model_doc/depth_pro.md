@@ -46,7 +46,7 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> import requests
 >>> from PIL import Image
 >>> import torch
->>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation
+>>> from transformers import DepthProImageProcessor, DepthProForDepthEstimation
 from accelerate import Accelerator
 
 >>> device = Accelerator().device
@@ -54,7 +54,7 @@ from accelerate import Accelerator
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = DepthProImageProcessorFast.from_pretrained("apple/DepthPro-hf")
+>>> image_processor = DepthProImageProcessor.from_pretrained("apple/DepthPro-hf")
 >>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf").to(device)
 
 >>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
@@ -176,11 +176,6 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_depth_estimation
 
-## DepthProImageProcessorFast
-
-[[autodoc]] DepthProImageProcessorFast
-    - preprocess
-    - post_process_depth_estimation
 
 ## DepthProModel
 
