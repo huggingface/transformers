@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/videoprism-base-f16r288")
-@strict(accept_kwargs=True)
+@strict
 class VideoPrismVisionConfig(VivitConfig):
     r"""
     num_frames (`int`, *optional*, defaults to 16):
@@ -76,6 +76,7 @@ class VideoPrismVisionConfig(VivitConfig):
 
 
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
+@strict
 class VideoPrismTextConfig(SiglipTextConfig):
     r"""
     apply_l2_norm (`bool`, *optional*, defaults to `True`):
@@ -114,6 +115,7 @@ class VideoPrismTextConfig(SiglipTextConfig):
     documentation from [`PretrainedConfig`] for more information.
     """,
 )
+@strict
 class VideoPrismConfig(SiglipConfig):
     r"""
     Example:
