@@ -530,7 +530,7 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         high_res_size: SizeDict,

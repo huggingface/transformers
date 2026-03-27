@@ -60,7 +60,7 @@ from ...utils.import_utils import requires
 if is_torch_available():
     import torch
 if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+    pass
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 

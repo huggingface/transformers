@@ -31,7 +31,7 @@ from ...utils import TensorType, auto_docstring, requires_backends
 
 
 if TYPE_CHECKING:
-    import torch
+    pass
 
 try:
     import pytesseract

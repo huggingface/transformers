@@ -34,7 +34,7 @@ from ...utils import TensorType, auto_docstring
 
 
 if TYPE_CHECKING:
-    import torch
+    pass
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:

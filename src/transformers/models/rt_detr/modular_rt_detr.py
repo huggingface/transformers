@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
