@@ -413,7 +413,7 @@ async def async_main(args):
 
     # Warmup — ramp up to full batch size so CUDA graphs are compiled for
     # the batch shapes the scheduler will use under load (~100+ active requests).
-    warmup_size = min(16, num_requests)
+    warmup_size = min(200, num_requests)
     warmup_prompts = prompts[:warmup_size]
     print(f"Warming up ({args.warmup}x {warmup_size} requests)...")
     for _ in range(args.warmup):
