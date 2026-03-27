@@ -17,7 +17,7 @@ import os
 import torch
 from torch import nn
 
-from transformers.models.auto import AutoConfig, AutoModelForCausalLM
+from transformers.models.auto import AutoModelForCausalLM
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.utils import logging
 
@@ -41,7 +41,6 @@ def compress(
 
     # 1. Load Model and Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    config = AutoConfig.from_pretrained(model_id)
 
     # We use a smaller model if needed for testing, but let's assume valid model_id
     print(f"Loading model into {device} for sensitivity analysis...")
