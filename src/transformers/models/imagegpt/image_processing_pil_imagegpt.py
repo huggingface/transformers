@@ -51,7 +51,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class ImageGPTImageProcessorPil(PilBackend):
     model_input_names = ["input_ids"]

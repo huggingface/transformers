@@ -29,7 +29,7 @@ from ...utils.import_utils import requires
 from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class EfficientNetImageProcessorPil(PilBackend):
     """PIL backend for EfficientNet with rescale offset and include_top."""

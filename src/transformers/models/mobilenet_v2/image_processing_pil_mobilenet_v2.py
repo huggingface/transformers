@@ -36,7 +36,7 @@ from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class MobileNetV2ImageProcessorPil(PilBackend):
     """PIL backend for MobileNetV2 with reduce_label support."""
 

@@ -168,7 +168,7 @@ def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], 
     return aspect_ratios_ids
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class MllamaImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

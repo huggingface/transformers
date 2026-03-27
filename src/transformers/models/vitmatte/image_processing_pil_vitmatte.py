@@ -38,7 +38,7 @@ if is_torch_available():
     import torch
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class VitMatteImageProcessorPil(PilBackend):
     do_rescale = True

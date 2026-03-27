@@ -38,7 +38,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     do_resize = True

@@ -58,7 +58,7 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
     return array, mask
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Siglip2ImageProcessorPil(PilBackend):
     valid_kwargs = Siglip2ImageProcessorKwargs

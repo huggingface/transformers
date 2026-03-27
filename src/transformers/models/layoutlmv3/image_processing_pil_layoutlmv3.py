@@ -31,7 +31,7 @@ from ...utils.import_utils import requires
 from .image_processing_layoutlmv3 import LayoutLMv3ImageProcessorKwargs, apply_tesseract
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class LayoutLMv3ImageProcessorPil(PilBackend):
     valid_kwargs = LayoutLMv3ImageProcessorKwargs

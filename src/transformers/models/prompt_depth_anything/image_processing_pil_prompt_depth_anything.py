@@ -85,7 +85,7 @@ def _get_resize_output_image_size(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class PromptDepthAnythingImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "prompt_depth"]
 

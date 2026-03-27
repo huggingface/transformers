@@ -31,7 +31,7 @@ from ...utils.import_utils import requires
 from .image_processing_poolformer import PoolFormerImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class PoolFormerImageProcessorPil(PilBackend):
     """PIL backend for PoolFormer with custom resize (crop_pct)."""

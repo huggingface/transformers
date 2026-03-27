@@ -28,7 +28,7 @@ from .image_processing_kosmos2_5 import Kosmos2_5ImageProcessorKwargs, torch_ext
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class Kosmos2_5ImageProcessorPil(PilBackend):
     do_normalize = True
     do_convert_rgb = True

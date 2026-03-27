@@ -21,7 +21,7 @@ from ...utils.import_utils import requires
 from .image_processing_idefics import IDEFICS_STANDARD_MEAN, IDEFICS_STANDARD_STD, IdeficsImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class IdeficsImageProcessorPil(PilBackend):
     valid_kwargs = IdeficsImageProcessorKwargs

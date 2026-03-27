@@ -31,7 +31,7 @@ from ...utils.import_utils import requires
 from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class PixtralImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

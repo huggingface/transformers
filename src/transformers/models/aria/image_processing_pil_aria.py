@@ -30,7 +30,7 @@ from ...utils.import_utils import requires
 from .image_processing_aria import AriaImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class AriaImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "pixel_mask", "num_crops"]

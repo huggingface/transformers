@@ -38,7 +38,7 @@ from ...utils.import_utils import requires
 from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class DeepseekVLImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

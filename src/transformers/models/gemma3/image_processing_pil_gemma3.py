@@ -37,7 +37,7 @@ from ...utils.import_utils import requires
 from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Gemma3ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

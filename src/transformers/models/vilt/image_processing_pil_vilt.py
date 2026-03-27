@@ -99,7 +99,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class ViltImageProcessorPil(PilBackend):
     valid_kwargs = ViltImageProcessorKwargs

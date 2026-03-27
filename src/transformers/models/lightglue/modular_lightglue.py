@@ -179,7 +179,7 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
     def post_process_keypoint_matching(
         self,

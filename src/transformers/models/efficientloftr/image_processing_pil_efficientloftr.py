@@ -61,7 +61,7 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     return image
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class EfficientLoFTRImageProcessorPil(PilBackend):
     valid_kwargs = EfficientLoFTRImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

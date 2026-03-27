@@ -82,7 +82,7 @@ def convert_segmentation_map_to_binary_masks(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class EomtImageProcessorPil(PilBackend):
     valid_kwargs = EomtImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

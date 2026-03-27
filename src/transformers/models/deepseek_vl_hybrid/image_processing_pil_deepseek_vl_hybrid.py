@@ -43,7 +43,7 @@ if is_torch_available():
     import torch
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class DeepseekVLHybridImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

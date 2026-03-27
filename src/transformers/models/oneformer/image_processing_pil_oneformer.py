@@ -67,7 +67,7 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class OneFormerImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

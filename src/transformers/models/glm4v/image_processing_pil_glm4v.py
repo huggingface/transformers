@@ -48,7 +48,7 @@ class Glm4vImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Glm4vImageProcessorPil(PilBackend):
     do_resize = True

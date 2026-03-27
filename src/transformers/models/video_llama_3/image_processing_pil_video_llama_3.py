@@ -34,7 +34,7 @@ if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class VideoLlama3ImageProcessorPil(PilBackend):
     do_resize = True

@@ -31,7 +31,7 @@ from ...utils.import_utils import requires
 from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class GlmImageImageProcessorPil(PilBackend):
     do_resize = True

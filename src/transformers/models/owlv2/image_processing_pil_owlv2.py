@@ -153,7 +153,7 @@ def _scale_boxes(boxes, target_sizes):
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class Owlv2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN

@@ -34,7 +34,7 @@ from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class SegGptImageProcessorPil(PilBackend):
     valid_kwargs = SegGptImageProcessorKwargs
 

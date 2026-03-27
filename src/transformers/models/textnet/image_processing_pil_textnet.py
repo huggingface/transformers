@@ -33,7 +33,7 @@ from ...utils.import_utils import requires
 from .image_processing_textnet import TextNetImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class TextNetImageProcessorPil(PilBackend):
     """PIL backend for TextNet with size_divisor resize."""

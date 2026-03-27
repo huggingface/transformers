@@ -31,7 +31,7 @@ from ...utils.import_utils import requires
 from .image_processing_convnext import ConvNextImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class ConvNextImageProcessorPil(PilBackend):
     """PIL backend for ConvNeXT with custom resize."""

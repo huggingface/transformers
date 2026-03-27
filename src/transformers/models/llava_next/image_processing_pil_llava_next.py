@@ -36,7 +36,7 @@ from ...utils.import_utils import requires
 from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class LlavaNextImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes"]

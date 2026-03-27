@@ -44,7 +44,7 @@ from .image_processing_flava import (
 )
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class FlavaImageProcessorPil(PilBackend):
     valid_kwargs = FlavaImageProcessorKwargs

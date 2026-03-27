@@ -42,7 +42,7 @@ from ...utils.import_utils import requires
 from .image_processing_janus import JanusImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class JanusImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

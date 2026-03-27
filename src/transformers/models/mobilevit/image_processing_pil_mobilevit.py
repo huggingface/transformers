@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class MobileViTImageProcessorPil(PilBackend):
     """PIL backend for MobileViT with flip_channel_order and reduce_label support."""
 

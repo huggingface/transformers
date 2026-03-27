@@ -30,7 +30,7 @@ from .image_processing_pix2struct import Pix2StructImageProcessorKwargs, render_
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class Pix2StructImageProcessorPil(PilBackend):
     rescale_factor = None
     do_normalize = True

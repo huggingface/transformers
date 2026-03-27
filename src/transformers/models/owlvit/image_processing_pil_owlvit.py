@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 @auto_docstring
 class OwlViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

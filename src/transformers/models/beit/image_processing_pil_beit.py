@@ -35,7 +35,7 @@ from .image_processing_beit import BeitImageProcessorKwargs
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class BeitImageProcessorPil(PilBackend):
     """PIL backend for BEiT with reduce_label support."""
 

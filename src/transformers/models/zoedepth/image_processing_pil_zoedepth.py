@@ -48,7 +48,7 @@ if is_torchvision_available():
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision", "torch"))
 class ZoeDepthImageProcessorPil(PilBackend):
     valid_kwargs = ZoeDepthImageProcessorKwargs
     do_pad = True

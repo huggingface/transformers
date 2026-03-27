@@ -30,7 +30,7 @@ from ...utils.import_utils import requires
 from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Swin2SRImageProcessorPil(PilBackend):
     """PIL backend for Swin2SR with custom pad."""

@@ -45,7 +45,7 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Idefics2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR

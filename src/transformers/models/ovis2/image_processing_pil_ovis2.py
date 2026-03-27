@@ -37,7 +37,7 @@ from .image_processing_ovis2 import (
 )
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("vision",))
 @auto_docstring
 class Ovis2ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
