@@ -36,11 +36,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
-
-if is_vision_available():
-    import PIL
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -134,11 +130,14 @@ class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
         The maximum number of patches to extract from the image for the local view.
         Only has an effect if `crop_to_patches` is set to `True`.
         Can be overridden by the `max_patches` parameter in the `preprocess` method.
+    tile_size (`int`, *optional*, defaults to `768`):
+        The size of each local tile. Must match the model's query embedding size.
     """
 
     crop_to_patches: bool
     min_patches: int
     max_patches: int
+    tile_size: int
 
 
 class DeepseekOcr2ImageProcessor(BaseImageProcessor):
@@ -193,7 +192,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values", "pixel_values_local"]
+    model_input_names = ["pixel_values", "num_local_patches"]
     valid_kwargs = DeepseekOcr2ImageProcessorKwargs
 
     def __init__(
@@ -237,6 +236,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
         min_patches: int,
         max_patches: int,
         tile_size: tuple | int | dict | None = None,
+        resample: PILImageResampling = PILImageResampling.LANCZOS,
         data_format: ChannelDimension | None = None,
     ):
         """
@@ -258,9 +258,10 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
         target_height = tile_size_height * num_rows
         num_blocks = num_columns * num_rows
 
-        resized_image = self.resize(
+        resized_image = resize(
             images,
-            {"height": target_height, "width": target_width},
+            size=(target_height, target_width),
+            resample=resample,
             data_format=ChannelDimension.FIRST,
             input_data_format=ChannelDimension.FIRST,
         )
@@ -281,7 +282,6 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
 
         return processed_images, (num_columns, num_rows)
 
-    # Same as deepseek_vl's pad_to_square
     def pad_to_square(
         self,
         image: np.ndarray,
@@ -347,46 +347,6 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
                 result[:, start : start + width, :] = image
 
         return result
-
-    def resize(
-        self,
-        image: np.ndarray,
-        size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.LANCZOS,
-        data_format: str | ChannelDimension | None = None,
-        input_data_format: str | ChannelDimension | None = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
-                `PILImageResampling` filter to use when resizing the image.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image.
-
-        Returns:
-            `np.ndarray`: The resized image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -511,6 +471,7 @@ class DeepseekOcr2ImageProcessor(BaseImageProcessor):
                     min_patches=min_patches,
                     max_patches=max_patches,
                     tile_size=tile_size_dict,
+                    resample=resample,
                     data_format=img_format,
                 )
 
