@@ -751,11 +751,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # without a ByteLevel normalizer. In this setup, raw unicode added tokens can decode incorrectly
         # (e.g. U+010D -> '\r'). Encoding added token contents through the ByteLevel alphabet
         # preserves roundtrip behavior.
-        if (
-            _contains_bytelevel(pre_tokenizer)
-            and _contains_bytelevel(decoder)
-            and not _contains_bytelevel(normalizer)
-        ):
+        if _contains_bytelevel(pre_tokenizer) and _contains_bytelevel(decoder) and not _contains_bytelevel(normalizer):
             encoded_tokens: list[str | AddedToken] = []
             for token in new_tokens:
                 if isinstance(token, AddedToken):
