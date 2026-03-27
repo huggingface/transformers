@@ -14,14 +14,31 @@
 """Image processor class for Fuyu."""
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
+
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_utils import ImageInput, PILImageResampling, SizeDict, get_image_size
+from ...image_utils import (
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+    is_valid_image,
+    make_list_of_images,
+)
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, requires_backends, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
 from ...utils.import_utils import requires
+
+
+if TYPE_CHECKING:
+    import torch
+
+if is_torch_available():
+    import torch
+
 
 # Copied from transformers.models.fuyu.image_processing_fuyu.FuyuBatchFeature
 class FuyuBatchFeature(BatchFeature):
@@ -199,7 +216,7 @@ class FuyuImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: PILImageResampling | int | None = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -234,7 +251,7 @@ class FuyuImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -443,9 +460,6 @@ class FuyuImageProcessorPil(PilBackend):
         """
         requires_backends(self, ["torch"])
         import torch
-
-if is_torch_available():
-    import torch
 
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):

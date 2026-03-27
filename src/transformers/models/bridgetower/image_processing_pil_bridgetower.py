@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
-from typing import Union
 
 import numpy as np
 
@@ -29,6 +28,11 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 # Copied from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
@@ -42,16 +46,13 @@ class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
 
 # Copied from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
 def get_resize_output_image_size(
-    input_image: Union[np.ndarray, "torch.Tensor"],
+    input_image: np.ndarray | torch.Tensor,
     shorter: int = 800,
     longer: int = 1333,
     size_divisor: int = 32,
 ) -> tuple[int, int]:
     """Get output image size after resizing with size_divisor."""
-    if is_torch_available():
-        import torch
-
-    if is_torch_available() and isinstance(input_image, torch.Tensor):
+    if isinstance(input_image, torch.Tensor):
         input_height, input_width = input_image.shape[-2:]
     else:
         input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
@@ -79,6 +80,7 @@ def get_resize_output_image_size(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch"))
 class BridgeTowerImageProcessorPil(PilBackend):
     """PIL backend for BridgeTower with custom resize and center_crop."""
 
@@ -105,7 +107,7 @@ class BridgeTowerImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         size_divisor: int = 32,
         **kwargs,
     ) -> np.ndarray:
@@ -130,7 +132,7 @@ class BridgeTowerImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for Flava."""
 
+import math
+import random
 from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any
@@ -33,7 +35,12 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
+    is_torch_available,
 )
+
+
+if is_torch_available():
+    import torch
 
 
 # Copied from transformers.models.flava.image_processing_flava.FLAVA_CODEBOOK_MEAN
@@ -304,7 +311,7 @@ class FlavaImageProcessorPil(PilBackend):
         codebook_crop_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
         codebook_image_mean: float | list[float] | None = None,
         codebook_image_std: float | list[float] | None = None,
-        codebook_resample: "PILImageResampling | int | None" = None,
+        codebook_resample: "PILImageResampling | None" = None,
         data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
@@ -344,7 +351,7 @@ class FlavaImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -377,7 +384,7 @@ class FlavaImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -397,7 +404,7 @@ class FlavaImageProcessorPil(PilBackend):
         return_codebook_pixels: bool | None,
         codebook_do_resize: bool | None,
         codebook_size: SizeDict | None,
-        codebook_resample: "PILImageResampling | int | None",
+        codebook_resample: "PILImageResampling | None",
         codebook_do_center_crop: bool | None,
         codebook_crop_size: SizeDict | None,
         codebook_do_rescale: bool | None,

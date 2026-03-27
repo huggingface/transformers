@@ -145,7 +145,7 @@ class Siglip2ImageProcessorPil(PilBackend):
         do_resize: bool,
         patch_size: int,
         max_num_patches: int,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

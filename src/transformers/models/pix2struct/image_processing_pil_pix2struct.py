@@ -21,9 +21,6 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw, ImageFont
 
-
-DEFAULT_FONT_PATH = "ybelkada/fonts"
-
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format, to_pil_image
@@ -35,6 +32,9 @@ from ...utils.import_utils import requires
 
 if is_torch_available():
     import torch
+
+
+DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessorKwargs
 class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):

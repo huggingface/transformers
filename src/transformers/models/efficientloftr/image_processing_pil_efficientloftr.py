@@ -12,7 +12,16 @@ from PIL import Image, ImageDraw
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
+from ...image_utils import (
+    ImageInput,
+    ImageType,
+    PILImageResampling,
+    SizeDict,
+    get_image_type,
+    is_pil_image,
+    is_valid_image,
+    to_numpy_array,
+)
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
@@ -124,7 +133,7 @@ class EfficientLoFTRImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         return_tensors: str | TensorType | None,

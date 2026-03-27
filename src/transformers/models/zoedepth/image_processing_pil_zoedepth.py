@@ -206,7 +206,7 @@ class ZoeDepthImageProcessorPil(PilBackend):
         size: SizeDict,
         keep_aspect_ratio: bool | None,
         ensure_multiple_of: int | None,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float | None,

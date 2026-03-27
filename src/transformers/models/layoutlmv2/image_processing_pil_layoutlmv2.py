@@ -13,11 +13,13 @@
 # limitations under the License.
 """Image processor class for LayoutLMv2."""
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import flip_channel_order
+from ...image_transforms import flip_channel_order, to_pil_image
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -26,6 +28,15 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
+
+
+if TYPE_CHECKING:
+    import torch
+
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
 
 
 # Copied from transformers.models.layoutlmv2.image_processing_layoutlmv2.LayoutLMv2ImageProcessorKwargs
@@ -47,9 +58,19 @@ class LayoutLMv2ImageProcessorKwargs(ImagesKwargs, total=False):
     ocr_lang: str | None
     tesseract_config: str | None
 
+# Copied from transformers.models.layoutlmv2.image_processing_layoutlmv2.normalize_box
+def normalize_box(box, width, height):
+    return [
+        int(1000 * (box[0] / width)),
+        int(1000 * (box[1] / height)),
+        int(1000 * (box[2] / width)),
+        int(1000 * (box[3] / height)),
+    ]
+
+
 # Copied from transformers.models.layoutlmv2.image_processing_layoutlmv2.apply_tesseract
 def apply_tesseract(
-    image: "np.ndarray | torch.Tensor",
+    image: np.ndarray,
     lang: str | None,
     tesseract_config: str | None = None,
     input_data_format: str | ChannelDimension | None = None,
@@ -118,7 +139,7 @@ class LayoutLMv2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         return_tensors: str | TensorType | None,
         apply_ocr: bool = True,
         ocr_lang: str | None = None,

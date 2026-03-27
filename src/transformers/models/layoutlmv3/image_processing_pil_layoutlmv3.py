@@ -13,11 +13,13 @@
 # limitations under the License.
 """Image processor class for LayoutLMv3."""
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import ChannelDimension
+from ...image_transforms import to_pil_image
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -28,6 +30,15 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
+
+
+if TYPE_CHECKING:
+    import torch
+
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
 
 
 # Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.LayoutLMv3ImageProcessorKwargs
@@ -48,6 +59,16 @@ class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
     apply_ocr: bool
     ocr_lang: str | None
     tesseract_config: str | None
+
+# Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.normalize_box
+def normalize_box(box, width, height):
+    return [
+        int(1000 * (box[0] / width)),
+        int(1000 * (box[1] / height)),
+        int(1000 * (box[2] / width)),
+        int(1000 * (box[3] / height)),
+    ]
+
 
 # Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.apply_tesseract
 def apply_tesseract(
@@ -123,7 +144,7 @@ class LayoutLMv3ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

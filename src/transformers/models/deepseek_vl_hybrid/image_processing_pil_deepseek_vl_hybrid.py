@@ -170,13 +170,13 @@ class DeepseekVLHybridImageProcessorPil(PilBackend):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | int | None",
-        high_res_resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
+        high_res_resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

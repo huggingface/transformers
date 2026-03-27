@@ -13,6 +13,8 @@
 # limitations under the License.
 """PIL Image processor class for GLM-4.1V."""
 
+import math
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -127,7 +129,7 @@ class Glm4vImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

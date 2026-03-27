@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
+import math
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -37,6 +39,27 @@ class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     patch_size: dict[str, int] | int
+
+# Copied from transformers.models.pixtral.image_processing_pixtral._num_image_tokens
+def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
+    """
+    Calculate the number of image tokens given the image size and patch size.
+
+    Args:
+        image_size (`tuple[int, int]`):
+            The size of the image as `(height, width)`.
+        patch_size (`tuple[int, int]`):
+            The patch size as `(height, width)`.
+
+    Returns:
+        `int`: The number of image tokens.
+    """
+    height, width = image_size
+    patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
+    num_width_tokens = (width - 1) // patch_width + 1
+    num_height_tokens = (height - 1) // patch_height + 1
+    return num_height_tokens, num_width_tokens
+
 
 # Copied from transformers.models.pixtral.image_processing_pixtral.get_resize_output_image_size
 def get_resize_output_image_size(
@@ -107,7 +130,7 @@ class PixtralImageProcessorPil(PilBackend):
         image: np.ndarray,
         size: SizeDict,
         patch_size: SizeDict,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -159,7 +182,7 @@ class PixtralImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

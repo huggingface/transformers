@@ -63,7 +63,7 @@ class DPTImageProcessorKwargs(ImagesKwargs, total=False):
 
 # Copied from transformers.models.dpt.image_processing_dpt.get_resize_output_image_size
 def get_resize_output_image_size(
-    input_image: "torch.Tensor",
+    input_image: np.ndarray,
     output_size: int | Iterable[int],
     keep_aspect_ratio: bool,
     multiple: int,
@@ -188,7 +188,7 @@ class DPTImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         ensure_multiple_of: int = 1,
         keep_aspect_ratio: bool = False,
         **kwargs,
@@ -229,7 +229,7 @@ class DPTImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

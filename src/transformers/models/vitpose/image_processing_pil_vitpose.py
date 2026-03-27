@@ -14,6 +14,7 @@
 """Image processor class for VitPose."""
 
 import itertools
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -34,7 +35,9 @@ from ...utils.import_utils import requires
 
 
 if is_scipy_available():
-    pass
+    from scipy.ndimage import affine_transform, gaussian_filter
+
+inv = np.linalg.inv
 
 if TYPE_CHECKING:
     from .modeling_vitpose import VitPoseEstimatorOutput
@@ -393,7 +396,7 @@ class VitPoseImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

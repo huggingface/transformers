@@ -17,7 +17,7 @@ import math
 from collections.abc import Iterable
 from copy import deepcopy
 from itertools import product
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -39,6 +39,13 @@ from ...utils.import_utils import requires
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
+
+if TYPE_CHECKING:
+    import torch
+
 
 def get_resize_output_image_size(
     input_image: np.ndarray,
@@ -138,7 +145,7 @@ class SamImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: PILImageResampling | int | None = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -220,7 +227,7 @@ class SamImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -417,6 +424,9 @@ class SamImageProcessorPil(PilBackend):
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for post_process_masks")
+        import torch
+        import torch.nn.functional as F
+
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
@@ -713,8 +723,8 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
     if not is_torch_available():
         raise ImportError("PyTorch is required for post_process_for_mask_generation")
 
-if is_torch_available():
     import torch
+    from torchvision.ops.boxes import batched_nms
 
     keep_by_nms = batched_nms(
         boxes=mask_boxes.float(),

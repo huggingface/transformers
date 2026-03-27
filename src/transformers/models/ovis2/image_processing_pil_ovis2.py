@@ -56,6 +56,45 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
     max_patches: int
     use_covering_area_grid: bool
 
+# Copied from transformers.models.ovis2.image_processing_ovis2.get_all_supported_aspect_ratios
+@lru_cache(maxsize=10)
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
+    """Computes all allowed aspect ratios for a given minimum and maximum number of input tiles."""
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles and width * height >= min_image_tiles:
+                aspect_ratios.append((width, height))
+    return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+
+
+# Copied from transformers.models.ovis2.image_processing_ovis2.compute_patch_covering_area
+def compute_patch_covering_area(left: int, upper: int, right: int, lower: int, side: int) -> float:
+    w = right - left
+    h = lower - upper
+    w, h = max(w, h), min(w, h)
+    if w > side:
+        h = h / w * side
+        w = side
+    return w * h
+
+
+# Copied from transformers.models.ovis2.image_processing_ovis2.split_image_into_grid
+def split_image_into_grid(h: int, w: int, grid: tuple[int, int]) -> list[tuple[int, int, int, int]]:
+    row_height = h // grid[0]
+    col_width = w // grid[1]
+    return [
+        (
+            col * col_width,
+            row * row_height,
+            w if col == grid[1] - 1 else (col + 1) * col_width,
+            h if row == grid[0] - 1 else (row + 1) * row_height,
+        )
+        for row in range(grid[0])
+        for col in range(grid[1])
+    ]
+
+
 # Copied from transformers.models.ovis2.image_processing_ovis2.get_min_tile_covering_grid
 @lru_cache(maxsize=100)
 def get_min_tile_covering_grid(
@@ -144,7 +183,7 @@ class Ovis2ImageProcessorPil(PilBackend):
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
         patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -203,7 +242,7 @@ class Ovis2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

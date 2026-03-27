@@ -81,7 +81,7 @@ class AriaImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         target_resolution: tuple,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
     ) -> np.ndarray:
         """Resize an image to a target resolution while maintaining aspect ratio."""
         new_height, new_width = get_patch_output_size(
@@ -106,7 +106,7 @@ class AriaImageProcessorPil(PilBackend):
         image: np.ndarray,
         grid_pinpoints: list[list[int]],
         patch_size: int,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
     ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -147,7 +147,7 @@ class AriaImageProcessorPil(PilBackend):
         min_image_size: int = 336,
         split_resolutions: list[list[int]] | None = None,
         split_image: bool = False,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         **kwargs,
     ) -> BatchFeature:
         if max_image_size not in [490, 980]:

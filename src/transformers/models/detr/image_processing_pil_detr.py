@@ -24,6 +24,7 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
+    get_size_with_aspect_ratio,
     pad,
     resize,
     safe_squeeze,
@@ -255,6 +256,50 @@ class DetrImageProcessorKwargs(ImagesKwargs, total=False):
     format: str | AnnotationFormat
     do_convert_annotations: bool
 
+# Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
+def binary_mask_to_rle(mask):
+    """
+    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
+
+    Args:
+        mask (`torch.Tensor` or `numpy.array`):
+            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
+            segment_id or class_id.
+    Returns:
+        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
+        format.
+    """
+    from ...utils import is_torch_tensor
+
+    if is_torch_tensor(mask):
+        mask = mask.numpy()
+
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return list(runs)
+
+
+# Copied from transformers.models.detr.image_processing_detr.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    # Get the mask associated with the k class
+    mask_k = mask_labels == k
+    mask_k_area = mask_k.sum()
+
+    # Compute the area of all the stuff in query k
+    original_area = (mask_probs[k] >= mask_threshold).sum()
+    mask_exists = mask_k_area > 0 and original_area > 0
+
+    # Eliminate disconnected tiny segments
+    if mask_exists:
+        area_ratio = mask_k_area / original_area
+        if not area_ratio.item() > overlap_mask_area_threshold:
+            mask_exists = False
+
+    return mask_exists, mask_k
+
+
 # Copied from transformers.models.detr.image_processing_detr.compute_segments
 def compute_segments(
     mask_probs,
@@ -265,6 +310,9 @@ def compute_segments(
     label_ids_to_fuse: set[int] | None = None,
     target_size: tuple[int, int] | None = None,
 ):
+    import torch
+    from torch import nn
+
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
@@ -326,6 +374,8 @@ def convert_segmentation_to_rle(segmentation):
     Returns:
         `list[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
     """
+    import torch
+
     segment_ids = torch.unique(segmentation)
 
     run_length_encodings = []
@@ -661,7 +711,7 @@ class DetrImageProcessorPil(PilBackend):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -13,6 +13,7 @@
 # limitations under the License.
 """PIL Image processor class for Qwen2-VL."""
 
+import math
 from collections.abc import Iterable
 
 import numpy as np
@@ -143,7 +144,7 @@ class Qwen2VLImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -13,9 +13,11 @@
 # limitations under the License.
 """PIL Image processor class for Mllama."""
 
+import math
 from functools import lru_cache
 
 import numpy as np
+from PIL import Image
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -31,7 +33,7 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_vision_available
 
 
 def split_to_tiles_np(image: np.ndarray, num_tiles_height: int, num_tiles_width: int) -> np.ndarray:
@@ -166,6 +168,14 @@ class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     max_image_tiles: int
+
+# Copied from transformers.models.mllama.image_processing_mllama._validate_size
+def _validate_size(size: SizeDict) -> None:
+    if not (size.height and size.width):
+        raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
+    if size.height != size.width:
+        raise ValueError(f"Argument `size` must have the same height and width, got {size}")
+
 
 # Copied from transformers.models.mllama.image_processing_mllama._validate_mllama_preprocess_arguments
 def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):

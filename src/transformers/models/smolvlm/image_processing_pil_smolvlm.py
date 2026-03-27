@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -36,6 +37,10 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
@@ -230,7 +235,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         max_image_size: dict[str, int],
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """Split an image into patches (mirrors TorchvisionBackend.split_images). Images are always CHW."""
         num_channels, height, width = image.shape
@@ -265,7 +270,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         vision_encoder_max_size: int,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """Resize images to be multiples of vision_encoder_max_size. Images are always CHW."""
         height, width = image.shape[-2:]
@@ -319,7 +324,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

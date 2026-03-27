@@ -136,7 +136,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        resample: PILImageResampling | int | None = None,
+        resample: PILImageResampling | None = None,
     ) -> np.ndarray:
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
@@ -251,7 +251,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: PILImageResampling | int | None,
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

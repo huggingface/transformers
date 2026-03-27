@@ -54,6 +54,42 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     min_patches: int
     max_patches: int
 
+# Copied from transformers.models.got_ocr2.image_processing_got_ocr2.get_all_supported_aspect_ratios
+@lru_cache(maxsize=10)
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
+    """
+    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
+
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the minimum and maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        min_image_tiles (`int`):
+            The minimum number of tiles allowed.
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(1, 4)
+        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
+
+    """
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles and width * height >= min_image_tiles:
+                aspect_ratios.append((width, height))
+
+    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+
+    return aspect_ratios
+
+
 # Copied from transformers.models.got_ocr2.image_processing_got_ocr2.get_optimal_tiled_canvas
 @lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
@@ -119,7 +155,7 @@ class GotOcr2ImageProcessorPil(PilBackend):
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """
         Crop the image to patches and return a list of cropped images.
@@ -188,7 +224,7 @@ class GotOcr2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

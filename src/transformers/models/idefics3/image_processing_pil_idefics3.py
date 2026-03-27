@@ -14,6 +14,7 @@
 """PIL Image processor class for Idefics3."""
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -30,6 +31,10 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
@@ -127,8 +132,7 @@ def _resize_output_size_scale_below_upper_bound(
     width = max(width, 1)
     return height, width
 
-# Copied from transformers.models.idefics3.image_processing_idefics3.get_max_height_width
-def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
+def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -141,8 +145,7 @@ def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> 
     max_width = max(size[1] for size in image_sizes)
     return (max_height, max_width)
 
-# Copied from transformers.models.idefics3.image_processing_idefics3.get_num_channels
-def get_num_channels(images_list: list[list["torch.Tensor|np.ndarray"]]) -> int:
+def get_num_channels(images_list: list[list[np.ndarray]]) -> int:
     """
     Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
     """
@@ -152,15 +155,14 @@ def get_num_channels(images_list: list[list["torch.Tensor|np.ndarray"]]) -> int:
 
     raise ValueError("No images found in the batch.")
 
-# Copied from transformers.models.idefics3.image_processing_idefics3.get_resize_output_image_size
 def get_resize_output_image_size(
-    image: "torch.Tensor",
+    image: np.ndarray,
     resolution_max_side: int,
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
     Args:
-        image (`torch.Tensor`):
+        image (`np.ndarray`):
             Image to resize.
         resolution_max_side (`int`):
             The longest edge of the image will be resized to this value. The shortest edge will be resized to keep the
@@ -224,7 +226,7 @@ class Idefics3ImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         max_image_size: dict[str, int],
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """Split an image into patches (mirrors TorchvisionBackend.split_images). Images are always CHW."""
         num_channels, height, width = image.shape
@@ -259,7 +261,7 @@ class Idefics3ImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         vision_encoder_max_size: int,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """Resize images to be multiples of vision_encoder_max_size. Images are always CHW."""
         height, width = image.shape[-2:]
@@ -313,7 +315,7 @@ class Idefics3ImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
