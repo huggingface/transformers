@@ -85,7 +85,8 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_added_tokens_unicode_roundtrip_with_bytelevel(self):
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        """Regression (#45051): added vocabulary with Unicode must encode/decode cleanly for ByteLevel without a normalizer."""
+        tokenizer = AutoTokenizer.from_pretrained(self.from_pretrained_id[0])
         new_tokens = ["Začnimo", "kuća", "međa"]
         tokenizer.add_tokens(new_tokens)
 

@@ -725,11 +725,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return self._tokenizer.id_to_token(int(index))
 
     def _add_tokens(self, new_tokens: list[str | AddedToken], special_tokens=False) -> int:
-        if not special_tokens:
-            new_tokens = self._maybe_encode_added_tokens_for_bytelevel(new_tokens)
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
-
+        new_tokens = self._maybe_encode_added_tokens_for_bytelevel(new_tokens)
         return self._tokenizer.add_tokens(new_tokens)
 
     def _maybe_encode_added_tokens_for_bytelevel(self, new_tokens: list[str | AddedToken]) -> list[str | AddedToken]:
