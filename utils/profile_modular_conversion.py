@@ -9,8 +9,9 @@ Examples:
 
     python utils/profile_modular_conversion.py \
         src/transformers/models/conditional_detr/modular_conditional_detr.py \
+        src/transformers/models/deepseek_vl/modular_deepseek_vl.py \
         --repeat 3 \
-        --compare-old-wrapper \
+        --compare-old-branch \
         --verify-equal \
         --snakeviz
 """
@@ -47,24 +48,36 @@ def metadata_wrapper_context(wrapper_cls):
         mmc.MetadataWrapper = original
 
 
-def run_conversion(modular_file: str, wrapper_cls) -> dict[str, str]:
-    with metadata_wrapper_context(wrapper_cls):
-        return mmc.convert_modular_file(modular_file)
+@contextmanager
+def module_cache_context(enabled: bool):
+    original = mmc.ENABLE_MODULE_SOURCE_CACHE
+    mmc.ENABLE_MODULE_SOURCE_CACHE = enabled
+    mmc.clear_module_source_cache()
+    try:
+        yield
+    finally:
+        mmc.clear_module_source_cache()
+        mmc.ENABLE_MODULE_SOURCE_CACHE = original
 
 
-def benchmark_conversion(modular_file: str, wrapper_cls, repeat: int) -> list[float]:
+def run_conversion(modular_files: list[str], wrapper_cls, cache_enabled: bool) -> dict[str, dict[str, str]]:
+    with metadata_wrapper_context(wrapper_cls), module_cache_context(cache_enabled):
+        return {modular_file: mmc.convert_modular_file(modular_file) for modular_file in modular_files}
+
+
+def benchmark_conversion(modular_files: list[str], wrapper_cls, cache_enabled: bool, repeat: int) -> list[float]:
     durations = []
     for _ in range(repeat):
         start = time.perf_counter()
-        run_conversion(modular_file, wrapper_cls)
+        run_conversion(modular_files, wrapper_cls, cache_enabled)
         durations.append(time.perf_counter() - start)
     return durations
 
 
-def profile_conversion(modular_file: str, wrapper_cls, output_path: Path) -> None:
+def profile_conversion(modular_files: list[str], wrapper_cls, cache_enabled: bool, output_path: Path) -> None:
     profile = cProfile.Profile()
     profile.enable()
-    run_conversion(modular_file, wrapper_cls)
+    run_conversion(modular_files, wrapper_cls, cache_enabled)
     profile.disable()
     profile.dump_stats(str(output_path))
 
@@ -113,12 +126,15 @@ def write_snakeviz_bundle(profile_path: Path, bundle_dir: Path, profile_name: st
     return html_path
 
 
-def make_output_root(output_dir: str | None, modular_file: str) -> Path:
+def make_output_root(output_dir: str | None, modular_files: list[str]) -> Path:
     if output_dir is not None:
         return Path(output_dir)
 
-    match = re.search(r"modular_(.*)(?=\.py$)", modular_file)
-    name = match.group(1) if match is not None else Path(modular_file).stem
+    if len(modular_files) == 1:
+        match = re.search(r"modular_(.*)(?=\.py$)", modular_files[0])
+        name = match.group(1) if match is not None else Path(modular_files[0]).stem
+    else:
+        name = f"batch_{len(modular_files)}_modular_files"
     return Path("/tmp/codex-profiles") / f"{name}_modular_profile"
 
 
@@ -135,17 +151,27 @@ def summarize(label: str, durations: list[float]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark and profile modular conversion.")
-    parser.add_argument("modular_file", help="Path to a modular_*.py file.")
+    parser.add_argument("modular_files", nargs="+", help="One or more paths to modular_*.py files.")
     parser.add_argument("--repeat", type=int, default=3, help="Number of timing runs per mode.")
+    parser.add_argument(
+        "--compare-old-branch",
+        action="store_true",
+        help="Compare against simulated pre-change branch behavior (old wrapper + no module cache).",
+    )
     parser.add_argument(
         "--compare-old-wrapper",
         action="store_true",
-        help="Compare against simulated pre-change MetadataWrapper behavior.",
+        help="Compare against only the pre-change MetadataWrapper behavior.",
+    )
+    parser.add_argument(
+        "--compare-no-cache",
+        action="store_true",
+        help="Compare against current wrapper behavior with module source caching disabled.",
     )
     parser.add_argument(
         "--verify-equal",
         action="store_true",
-        help="Verify that current and old-wrapper outputs are byte-identical.",
+        help="Verify that current output and all requested comparison modes are byte-identical.",
     )
     parser.add_argument(
         "--snakeviz",
@@ -158,32 +184,39 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    modular_file = args.modular_file
-    output_root = make_output_root(args.output_dir, modular_file)
+    modular_files = args.modular_files
+    output_root = make_output_root(args.output_dir, modular_files)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    modes = [("current", LibCSTMetadataWrapper)]
+    modes = [("current", LibCSTMetadataWrapper, True)]
+    if args.compare_old_branch:
+        modes.append(("old_branch", OldBehaviorMetadataWrapper, False))
     if args.compare_old_wrapper:
-        modes.append(("old_wrapper", OldBehaviorMetadataWrapper))
+        modes.append(("old_wrapper", OldBehaviorMetadataWrapper, True))
+    if args.compare_no_cache:
+        modes.append(("no_cache", LibCSTMetadataWrapper, False))
 
-    for label, wrapper_cls in modes:
-        durations = benchmark_conversion(modular_file, wrapper_cls, args.repeat)
+    print(f"files={len(modular_files)}")
+    for label, wrapper_cls, cache_enabled in modes:
+        durations = benchmark_conversion(modular_files, wrapper_cls, cache_enabled, args.repeat)
         print(summarize(label, durations))
 
-    if args.compare_old_wrapper and args.verify_equal:
-        current = run_conversion(modular_file, LibCSTMetadataWrapper)
-        old = run_conversion(modular_file, OldBehaviorMetadataWrapper)
-        same = current.keys() == old.keys() and all(current[key] == old[key] for key in current)
-        print(f"byte_identical={same}")
-        if not same:
-            return 1
+    if args.verify_equal and len(modes) > 1:
+        current = run_conversion(modular_files, LibCSTMetadataWrapper, True)
+        for label, wrapper_cls, cache_enabled in modes[1:]:
+            other = run_conversion(modular_files, wrapper_cls, cache_enabled)
+            same = current.keys() == other.keys() and all(current[key] == other[key] for key in current)
+            print(f"{label}_byte_identical={same}")
+            if not same:
+                return 1
 
     profile_path = output_root / "current.prof"
-    profile_conversion(modular_file, LibCSTMetadataWrapper, profile_path)
+    profile_conversion(modular_files, LibCSTMetadataWrapper, True, profile_path)
     print(f"profile={profile_path}")
 
     if args.snakeviz:
-        html_path = write_snakeviz_bundle(profile_path, output_root / "snakeviz", modular_file)
+        profile_name = modular_files[0] if len(modular_files) == 1 else f"batch:{len(modular_files)} modular files"
+        html_path = write_snakeviz_bundle(profile_path, output_root / "snakeviz", profile_name)
         print(f"snakeviz={html_path}")
 
     return 0
