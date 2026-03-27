@@ -197,6 +197,7 @@ class AltRobertaEncoder(CLIPEncoder):
         super().__init__(config)
         self.layers = nn.ModuleList([AltRobertaLayer(config) for _ in range(config.num_hidden_layers)])
 
+
 class AltRobertaPooler(RobertaPooler):
     pass
 

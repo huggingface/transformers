@@ -41,8 +41,6 @@ from ..clip.modeling_clip import (
     CLIPTextModel,
     CLIPVisionEmbeddings,
     CLIPVisionModel,
-    _get_vector_norm,
-    image_text_contrastive_loss,
 )
 
 

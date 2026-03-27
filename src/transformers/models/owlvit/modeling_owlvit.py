@@ -55,8 +55,8 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->owlvit
-def owlvit_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.image_text_contrastive_loss
+def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
@@ -977,7 +977,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = owlvit_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         text_embeds = text_embeds_norm
 

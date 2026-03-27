@@ -663,7 +663,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-def metaclip_2_loss(similarity: torch.Tensor) -> torch.Tensor:
+def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
@@ -853,13 +853,13 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.get_image_features(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
 
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.get_text_features(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -867,10 +867,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         )
 
         image_embeds = vision_outputs.pooler_output
-        image_embeds = self.visual_projection(image_embeds)
-
         text_embeds = text_outputs.pooler_output
-        text_embeds = self.text_projection(text_embeds)
 
         # normalized features
         image_embeds = image_embeds / _get_vector_norm(image_embeds)
@@ -884,7 +881,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = metaclip_2_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         return MetaClip2Output(
             loss=loss,
