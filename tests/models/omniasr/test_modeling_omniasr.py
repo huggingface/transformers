@@ -66,7 +66,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
     @slow
     def test_300m_model_integration(self):
         """
-        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650#file-reproducer-py
         """
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_single.json"
         with open(RESULTS_PATH, "r") as f:
@@ -75,7 +75,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(1)
-        model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
+        model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
         model.eval()
         model.to(torch_device)
 
