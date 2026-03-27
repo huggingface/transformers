@@ -5,6 +5,8 @@
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -12,10 +14,9 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import ImagesKwargs, Unpack
-from typing import TYPE_CHECKING
-
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
+
 
 if is_torch_available():
     import torch

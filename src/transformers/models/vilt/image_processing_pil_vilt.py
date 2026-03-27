@@ -30,11 +30,12 @@ from ...image_utils import (
     get_image_size,
     get_max_height_width,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
 )
-from ...processing_utils import ImagesKwargs
+
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset
 MAX_LONGER_EDGE = 1333

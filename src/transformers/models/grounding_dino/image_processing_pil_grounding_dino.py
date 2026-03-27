@@ -40,11 +40,11 @@ from ...image_transforms import (
     safe_squeeze,
 )
 from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
     ImageInput,
     PILImageResampling,
     SizeDict,
@@ -56,6 +56,7 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
 from ...utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput

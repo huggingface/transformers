@@ -22,10 +22,10 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
+    ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
 )

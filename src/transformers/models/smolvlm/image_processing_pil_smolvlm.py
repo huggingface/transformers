@@ -37,6 +37,7 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
+
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
     """Make pixel mask: 1=valid, 0=padding. Images are CHW."""
     h, w = image.shape[-2:]

@@ -17,6 +17,7 @@ import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
+from ...image_transforms import ChannelDimension
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -27,7 +28,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, requires_backends
-from ...image_transforms import ChannelDimension
 
 
 # Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.LayoutLMv3ImageProcessorKwargs

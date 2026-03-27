@@ -34,6 +34,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
 
+
 if is_torch_available():
     pass
 if is_torchvision_available():

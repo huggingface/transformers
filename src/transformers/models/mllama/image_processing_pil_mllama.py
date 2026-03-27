@@ -13,6 +13,8 @@
 # limitations under the License.
 """PIL Image processor class for Mllama."""
 
+from functools import lru_cache
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -20,9 +22,9 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import PaddingMode, get_image_size
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
-    ChannelDimension,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
@@ -30,7 +32,7 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from functools import lru_cache
+
 
 def split_to_tiles_np(image: np.ndarray, num_tiles_height: int, num_tiles_width: int) -> np.ndarray:
     """Split an image into tiles (numpy version)."""

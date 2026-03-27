@@ -23,12 +23,12 @@ from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, requires_backends, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
 from ...utils.import_utils import requires
+
 
 if is_torch_available():
     import torch
-    from torch import nn
 
 # Copied from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessorKwargs
 class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):

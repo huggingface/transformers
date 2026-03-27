@@ -23,9 +23,9 @@ from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import PaddingMode, get_size_with_aspect_ratio
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
-    ChannelDimension,
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
@@ -34,8 +34,9 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, logging, requires_backends, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
+
 
 if is_torch_available():
     import torch

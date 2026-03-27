@@ -27,6 +27,7 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 
+
 logger = logging.get_logger(__name__)
 
 

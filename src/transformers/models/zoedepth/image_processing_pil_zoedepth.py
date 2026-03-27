@@ -22,9 +22,9 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import PaddingMode
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
-    ChannelDimension,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
@@ -34,12 +34,15 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
 from ...utils.import_utils import requires
 
+
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
+from collections.abc import Iterable
+
 import torch
 from torch import nn
-from collections.abc import Iterable
+
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF

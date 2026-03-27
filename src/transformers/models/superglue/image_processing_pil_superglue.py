@@ -25,6 +25,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
+
 if TYPE_CHECKING:
     import torch
 

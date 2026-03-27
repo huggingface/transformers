@@ -34,11 +34,11 @@ from ...image_transforms import (
     safe_squeeze,
 )
 from ...image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
     ImageInput,
     PILImageResampling,
     get_image_size,
@@ -55,6 +55,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.import_utils import requires
+
 
 if is_torch_available():
     import torch

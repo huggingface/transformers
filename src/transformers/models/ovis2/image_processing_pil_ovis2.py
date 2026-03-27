@@ -13,6 +13,8 @@
 # limitations under the License.
 """PIL Image processor class for OVIS2."""
 
+from functools import lru_cache
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -29,7 +31,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from functools import lru_cache
 
 
 # Copied from transformers.models.ovis2.image_processing_ovis2.Ovis2ImageProcessorKwargs

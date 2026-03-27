@@ -32,6 +32,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_scipy_available, logging
 from ...utils.import_utils import requires
 
+
 if is_scipy_available():
     pass
 

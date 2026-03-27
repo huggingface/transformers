@@ -14,6 +14,7 @@
 """Image processor class for DPT."""
 
 import math
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -22,9 +23,9 @@ from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import pad as np_pad
 from ...image_utils import (
-    ChannelDimension,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     SizeDict,
@@ -32,7 +33,7 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from collections.abc import Iterable
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput

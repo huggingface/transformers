@@ -36,6 +36,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
 from ...utils.import_utils import requires
 
+
 if is_vision_available():
     import PIL
 
@@ -711,11 +712,9 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
     """
     if not is_torch_available():
         raise ImportError("PyTorch is required for post_process_for_mask_generation")
-    from torchvision.ops.boxes import batched_nms
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     keep_by_nms = batched_nms(
         boxes=mask_boxes.float(),

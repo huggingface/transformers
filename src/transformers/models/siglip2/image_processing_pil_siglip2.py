@@ -24,6 +24,7 @@ from ...utils import (
     auto_docstring,
 )
 
+
 def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     """
     Convert 3D array image of shape (num_channels, image_height, image_width) into 2D array of patches of shape

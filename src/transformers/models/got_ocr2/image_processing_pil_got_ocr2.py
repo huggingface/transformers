@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for Got-OCR-2."""
 
+from functools import lru_cache
+
 import numpy as np
 
 from ...image_processing_backends import PilBackend
@@ -32,7 +34,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
 )
-from functools import lru_cache
 
 
 # Copied from transformers.models.got_ocr2.image_processing_got_ocr2.GotOcr2ImageProcessorKwargs

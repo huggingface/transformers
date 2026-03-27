@@ -30,6 +30,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
+
 if TYPE_CHECKING:
     from .modeling_lightglue import LightGlueKeypointMatchingOutput
 if is_torch_available():

@@ -16,6 +16,7 @@
 import math
 
 import numpy as np
+
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import PaddingMode, get_size_with_aspect_ratio
@@ -33,9 +34,9 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
+
 if is_torch_available():
     import torch
-    from torch import nn
 
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(

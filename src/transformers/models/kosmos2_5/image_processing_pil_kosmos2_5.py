@@ -16,16 +16,17 @@
 import math
 
 import numpy as np
+
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import ChannelDimension, ImageInput, SizeDict, get_image_size
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, requires_backends, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
 from ...utils.import_utils import requires
+
 
 if is_torch_available():
     import torch
-    from torch import nn
 
 # Copied from transformers.models.kosmos2_5.image_processing_kosmos2_5.Kosmos2_5ImageProcessorKwargs
 class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):

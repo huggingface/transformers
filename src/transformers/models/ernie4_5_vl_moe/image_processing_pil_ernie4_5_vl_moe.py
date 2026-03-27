@@ -26,6 +26,7 @@ from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILIma
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
 
+
 if is_torch_available():
     import torch
 if is_torchvision_available():

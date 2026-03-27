@@ -30,8 +30,9 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, logging, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
+
 
 logger = logging.get_logger(__name__)
 
@@ -45,7 +46,6 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
         output_size (`Tuple[int, int]`):
             Output size of the mask.
     """
-    from ...image_utils import ChannelDimension
 
 if is_torch_available():
     import torch

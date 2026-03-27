@@ -37,6 +37,7 @@ from ...image_utils import (
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 
+
 if is_torch_available():
     import torch
 
