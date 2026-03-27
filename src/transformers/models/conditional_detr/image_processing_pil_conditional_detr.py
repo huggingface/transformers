@@ -62,7 +62,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Adapted from transformers.models.conditional_detr.image_processing_conditional_detr.ConditionalDetrImageProcessorKwargs
 class ConditionalDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):

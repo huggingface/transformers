@@ -58,7 +58,6 @@ if is_torch_available():
     import torch
 
 
-# Adapted from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessorKwargs
 class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):

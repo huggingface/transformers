@@ -55,7 +55,6 @@ if is_torch_available():
     import torch
 
 
-# Adapted from transformers.models.rt_detr.image_processing_rt_detr.RTDetrImageProcessorKwargs
 class RTDetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):

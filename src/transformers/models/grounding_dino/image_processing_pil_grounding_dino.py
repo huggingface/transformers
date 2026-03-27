@@ -68,7 +68,6 @@ if is_torch_available():
     import torch
 
 
-# Adapted from transformers.models.grounding_dino.image_processing_grounding_dino.GroundingDinoImageProcessorKwargs
 class GroundingDinoImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):

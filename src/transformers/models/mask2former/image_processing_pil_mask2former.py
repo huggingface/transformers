@@ -51,7 +51,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Adapted from transformers.models.mask2former.image_processing_mask2former.Mask2FormerImageProcessorKwargs
 class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     ignore_index (`int`, *optional*):

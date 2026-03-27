@@ -42,7 +42,6 @@ if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
-# Adapted from transformers.models.segformer.image_processing_segformer.SegformerImageProcessorKwargs
 class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
