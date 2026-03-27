@@ -35,8 +35,14 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..bert.modeling_bert import eager_attention_forward
-from ..clip.modeling_clip import CLIPMLP, CLIPEncoder, CLIPEncoderLayer, CLIPTextEmbeddings, CLIPVisionEmbeddings
+from ..clip.modeling_clip import (
+    CLIPMLP,
+    CLIPEncoder,
+    CLIPEncoderLayer,
+    CLIPTextEmbeddings,
+    CLIPVisionEmbeddings,
+    eager_attention_forward,
+)
 from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 
 
