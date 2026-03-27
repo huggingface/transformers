@@ -677,7 +677,7 @@ class ConditionalDetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
@@ -738,7 +738,7 @@ class ConditionalDetrImageProcessorPil(PilBackend):
 
         return results
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
@@ -787,7 +787,7 @@ class ConditionalDetrImageProcessorPil(PilBackend):
 
         return semantic_segmentation
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_instance_segmentation(
         self,
         outputs,
@@ -876,7 +876,7 @@ class ConditionalDetrImageProcessorPil(PilBackend):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_panoptic_segmentation(
         self,
         outputs,

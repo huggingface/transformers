@@ -13,10 +13,13 @@
 # limitations under the License.
 """Image processor class for BEiT."""
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import torch
-import torch.nn.functional as F
-from torchvision.transforms.v2 import functional as tvF
+
+
+if TYPE_CHECKING:
+    from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -29,13 +32,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from .image_processing_beit import BeitImageProcessorKwargs
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class BeitImageProcessorPil(PilBackend):
     """PIL backend for BEiT with reduce_label support."""
 
@@ -56,7 +58,7 @@ class BeitImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[BeitImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @auto_docstring
+    # @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
@@ -152,6 +154,7 @@ class BeitImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps.
@@ -168,8 +171,8 @@ class BeitImageProcessorPil(PilBackend):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post_process_semantic_segmentation")
+        import torch
+        import torch.nn.functional as F
 
         logits = outputs.logits
 

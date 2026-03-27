@@ -660,7 +660,7 @@ class DeformableDetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):

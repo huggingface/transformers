@@ -15,13 +15,11 @@
 
 from typing import TYPE_CHECKING
 
-import torch
-
 from ...image_processing_backends import PilBackend
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
 
@@ -33,7 +31,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision", "torch"))
 @auto_docstring
 class OwlViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
@@ -59,7 +56,7 @@ class OwlViTImageProcessorPil(PilBackend):
 
         super().__init__(**kwargs)
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self,
         outputs: "OwlViTObjectDetectionOutput",
@@ -85,7 +82,8 @@ class OwlViTImageProcessorPil(PilBackend):
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
         """
-        requires_backends(self, "torch")
+        import torch
+
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 
@@ -114,7 +112,7 @@ class OwlViTImageProcessorPil(PilBackend):
 
         return results
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
@@ -137,7 +135,8 @@ class OwlViTImageProcessorPil(PilBackend):
             in the batch as predicted by the model. All labels are set to None as
             `OwlViTForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
-        requires_backends(self, "torch")
+        import torch
+
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
         if target_sizes is not None and len(logits) != len(target_sizes):

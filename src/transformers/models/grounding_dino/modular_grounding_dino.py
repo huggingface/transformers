@@ -133,7 +133,7 @@ class GroundingDinoImageProcessor(DetrImageProcessor):
 
 
 class GroundingDinoImageProcessorPil(DetrImageProcessorPil):
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",

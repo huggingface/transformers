@@ -13,11 +13,14 @@
 # limitations under the License.
 """Image processor class for MobileViT."""
 
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
-import torch
-from torchvision.transforms.v2 import functional as tvF
+
+
+if TYPE_CHECKING:
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -31,7 +34,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
 from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
@@ -40,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class MobileViTImageProcessorPil(PilBackend):
     """PIL backend for MobileViT with flip_channel_order and reduce_label support."""
 
@@ -168,9 +170,11 @@ class MobileViTImageProcessorPil(PilBackend):
             processed_images.append(image)
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps."""
-        requires_backends(self, "torch")
+        import torch
+
         logits = outputs.logits
         if target_sizes is not None:
             if len(logits) != len(target_sizes):

@@ -44,7 +44,7 @@ if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""
 

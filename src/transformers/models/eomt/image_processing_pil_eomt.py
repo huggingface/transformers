@@ -14,10 +14,14 @@
 """Image processor class for EoMT."""
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as tvF
+
+
+if TYPE_CHECKING:
+    from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -82,7 +86,7 @@ def convert_segmentation_map_to_binary_masks(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class EomtImageProcessorPil(PilBackend):
     valid_kwargs = EomtImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

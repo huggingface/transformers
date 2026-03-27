@@ -68,7 +68,7 @@ class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):
         return results
 
 
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class EfficientLoFTRImageProcessorPil(SuperGlueImageProcessorPil):
     def post_process_keypoint_matching(
         self,

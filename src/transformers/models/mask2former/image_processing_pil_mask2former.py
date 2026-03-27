@@ -103,7 +103,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels
 
 
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class Mask2FormerImageProcessorPil(PilBackend):
     valid_kwargs = Mask2FormerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

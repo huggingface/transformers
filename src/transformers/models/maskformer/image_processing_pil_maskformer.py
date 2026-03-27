@@ -87,7 +87,7 @@ def convert_segmentation_map_to_binary_masks(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class MaskFormerImageProcessorPil(PilBackend):
     valid_kwargs = MaskFormerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

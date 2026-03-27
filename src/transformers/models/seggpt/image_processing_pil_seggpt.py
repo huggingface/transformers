@@ -13,9 +13,13 @@
 # limitations under the License.
 """Image processor class for SegGPT."""
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import torch
-from torchvision.transforms.v2 import functional as tvF
+
+
+if TYPE_CHECKING:
+    from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -28,13 +32,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from .image_processing_seggpt import SegGptImageProcessorKwargs, build_palette
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class SegGptImageProcessorPil(PilBackend):
     valid_kwargs = SegGptImageProcessorKwargs
 
@@ -198,6 +201,7 @@ class SegGptImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple[int, int]] | None = None, num_labels: int | None = None
     ):
@@ -220,7 +224,7 @@ class SegGptImageProcessorPil(PilBackend):
             `(height, width)`. Each entry corresponds to a semantic class id.
         """
 
-        requires_backends(self, ["torch"])
+        import torch
 
         masks = outputs.pred_masks
         masks = masks[:, :, masks.shape[2] // 2 :, :]

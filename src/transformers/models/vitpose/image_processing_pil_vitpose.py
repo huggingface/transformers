@@ -17,8 +17,6 @@ import itertools
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
-import torch
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -31,7 +29,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_scipy_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, is_scipy_available, logging
 from ...utils.import_utils import requires
 from .image_processing_vitpose import (
     VitPoseImageProcessorKwargs,
@@ -49,13 +47,15 @@ if is_scipy_available():
     pass
 
 if TYPE_CHECKING:
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
+
     from .modeling_vitpose import VitPoseEstimatorOutput
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("torch", "torchvision"))
 class VitPoseImageProcessorPil(PilBackend):
     """PIL backend for VitPose with affine transform."""
 
@@ -170,6 +170,7 @@ class VitPoseImageProcessorPil(PilBackend):
             preds[i] = transform_preds(preds[i], center=center[i], scale=scale[i], output_size=[height, width])
         return preds, scores
 
+    @requires(backends=("torch",))
     def post_process_pose_estimation(
         self,
         outputs: "VitPoseEstimatorOutput",
@@ -198,7 +199,8 @@ class VitPoseImageProcessorPil(PilBackend):
             `list[list[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, "torch")
+        import torch
+
         batch_size, num_keypoints, _, _ = outputs.heatmaps.shape
         if target_sizes is not None and batch_size != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")

@@ -32,15 +32,15 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
-    from ...modeling_outputs import DepthEstimatorOutput
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
 
-import torch
-from torchvision.transforms.v2 import functional as tvF
+    from ...modeling_outputs import DepthEstimatorOutput
 
 from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
@@ -85,7 +85,6 @@ def _get_resize_output_image_size(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class PromptDepthAnythingImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "prompt_depth"]
 
@@ -276,6 +275,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_depth_estimation(
         self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None | None = None
     ) -> list[dict[str, TensorType]]:
@@ -294,7 +294,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
             `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
+        import torch
 
         predicted_depth = outputs.predicted_depth
 

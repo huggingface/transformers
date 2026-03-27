@@ -115,7 +115,7 @@ def prepare_coco_detection_annotation_pil(
     return new_target
 
 
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class RTDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -493,7 +493,7 @@ class RTDetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self,
         outputs,

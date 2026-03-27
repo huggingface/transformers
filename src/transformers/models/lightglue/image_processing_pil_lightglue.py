@@ -84,7 +84,7 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     return image
 
 
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class LightGlueImageProcessorPil(PilBackend):
     valid_kwargs = LightGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

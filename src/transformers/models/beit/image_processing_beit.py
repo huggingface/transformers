@@ -27,7 +27,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
+from ...utils import TensorType, is_torch_available, is_torchvision_available
 
 
 if is_torch_available():
@@ -49,7 +49,7 @@ class BeitImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-@auto_docstring
+# @auto_docstring
 class BeitImageProcessor(TorchvisionBackend):
     """PIL backend for BEiT with reduce_label support."""
 
@@ -70,7 +70,7 @@ class BeitImageProcessor(TorchvisionBackend):
     def __init__(self, **kwargs: Unpack[BeitImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @auto_docstring
+    # @auto_docstring
     def preprocess(
         self,
         images: ImageInput,

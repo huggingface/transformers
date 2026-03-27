@@ -27,14 +27,14 @@ from .image_processing_superglue import validate_and_format_image_pairs
 
 
 if TYPE_CHECKING:
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
+
     from .modeling_superglue import SuperGlueKeypointMatchingOutput
 
 if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
-
-import torch
-from torchvision.transforms.v2 import functional as tvF
 
 
 def is_grayscale(image: np.ndarray):
@@ -81,7 +81,6 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class SuperGlueImageProcessorPil(PilBackend):
     valid_kwargs = SuperGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -137,12 +136,13 @@ class SuperGlueImageProcessorPil(PilBackend):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -159,6 +159,8 @@ class SuperGlueImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
+        import torch
+
         if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
@@ -206,7 +208,7 @@ class SuperGlueImageProcessorPil(PilBackend):
         return results
 
     def visualize_keypoint_matching(
-        self, images: ImageInput, keypoint_matching_output: list[dict[str, torch.Tensor]]
+        self, images: ImageInput, keypoint_matching_output: list[dict[str, "torch.Tensor"]]
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.

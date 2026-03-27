@@ -63,7 +63,7 @@ def get_resize_output_image_size(
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class SamImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

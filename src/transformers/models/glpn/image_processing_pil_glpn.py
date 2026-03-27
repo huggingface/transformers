@@ -16,26 +16,25 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
 from .image_processing_glpn import GLPNImageProcessorKwargs
 
 
 if TYPE_CHECKING:
+    from torchvision.transforms.v2 import functional as tvF
+
     from ...modeling_outputs import DepthEstimatorOutput
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class GLPNImageProcessorPil(PilBackend):
     """PIL backend for GLPN with size_divisor resize."""
 
@@ -104,6 +103,7 @@ class GLPNImageProcessorPil(PilBackend):
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_depth_estimation(
         self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
     ) -> list[dict[str, TensorType]]:
@@ -111,7 +111,8 @@ class GLPNImageProcessorPil(PilBackend):
         Convert raw model outputs to final depth predictions.
         Only supports PyTorch.
         """
-        requires_backends(self, "torch")
+        import torch.nn.functional as F
+
         predicted_depth = outputs.predicted_depth
         if target_sizes is not None and len(predicted_depth) != len(target_sizes):
             raise ValueError(
@@ -122,7 +123,7 @@ class GLPNImageProcessorPil(PilBackend):
         for depth, target_size in zip(predicted_depth, target_sizes):
             if target_size is not None:
                 depth = depth[None, None, ...]
-                depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
+                depth = F.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
                 depth = depth.squeeze(0).squeeze(0)
             results.append({"predicted_depth": depth})
         return results

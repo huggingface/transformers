@@ -312,7 +312,7 @@ class Owlv2ImageProcessor(OwlViTImageProcessor):
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class Owlv2ImageProcessorPil(OwlViTImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN

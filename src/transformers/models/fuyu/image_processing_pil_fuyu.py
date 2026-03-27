@@ -29,7 +29,7 @@ from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
+@requires(backends=("torch",))
 class FuyuImageProcessorPil(PilBackend):
     do_resize = True
     size = {"height": 1080, "width": 1920}

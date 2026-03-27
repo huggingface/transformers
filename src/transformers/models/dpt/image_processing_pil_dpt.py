@@ -30,23 +30,22 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
 from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
 
 
 if TYPE_CHECKING:
-    from ...modeling_outputs import DepthEstimatorOutput
+    import torch
+    from torchvision.transforms.v2 import functional as tvF
 
-import torch
-from torchvision.transforms.v2 import functional as tvF
+    from ...modeling_outputs import DepthEstimatorOutput
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@requires(backends=("vision", "torch"))
 class DPTImageProcessorPil(PilBackend):
     """PIL backend for DPT with custom resize and pad."""
 
@@ -205,9 +204,11 @@ class DPTImageProcessorPil(PilBackend):
             processed_images.append(image)
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps."""
-        requires_backends(self, "torch")
+        import torch
+
         logits = outputs.logits
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -228,11 +229,13 @@ class DPTImageProcessorPil(PilBackend):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
         return semantic_segmentation
 
+    @requires(backends=("torch",))
     def post_process_depth_estimation(
         self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
     ) -> list[dict[str, TensorType]]:
         """Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions."""
-        requires_backends(self, "torch")
+        import torch
+
         predicted_depth = outputs.predicted_depth
         if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
             raise ValueError(
