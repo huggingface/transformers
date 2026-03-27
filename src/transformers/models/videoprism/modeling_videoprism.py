@@ -785,6 +785,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
     main_input_name = "input_ids"
+    _no_split_modules = ["VideoPrismTextEmbeddings", "VideoPrismLayer"]
 
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__(config)
