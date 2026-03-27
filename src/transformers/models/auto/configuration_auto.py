@@ -17,6 +17,7 @@ import importlib
 import json
 import os
 import re
+import transformers
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
 from pathlib import Path
@@ -32,7 +33,7 @@ logger = logging.get_logger(__name__)
 _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
 root_path = Path(__file__).resolve().parents[0]
-print(os.listdir(root_path))
+print("It installed in editable mode, should have?!", transformers.__version__)
 with open(f"{root_path}/auto_mappings.json", "r") as f:
     all_mappings = json.load(f)
 
