@@ -26,14 +26,23 @@
       title: Sharing
     - local: serialization
       title: Exporting to production
-    - local: modular_transformers
-      title: Contributing a new model to Transformers
-    - local: add_new_model
-      title: Legacy model contribution
-    - local: auto_docstring
-      title: Documenting a model
-    - local: model_output_tracing
-      title: Tracing model intermediate outputs
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribute to Transformers
+      - local: modular_transformers
+        title: Contributing a new model to Transformers
+      - local: model_output_tracing
+        title: Tracing model intermediate outputs
+      - local: auto_docstring
+        title: Documenting a model
+      - local: testing
+        title: Transformers model tests
+      - local: pr_checks
+        title: Pull request checks
+      - local: add_new_model
+        title: Legacy model contribution
+      title: Contribute
     title: Models
   - isExpanded: false
     sections:
@@ -420,17 +429,6 @@
   - local: troubleshooting
     title: Troubleshoot
   title: Resources
-- isExpanded: false
-  sections:
-  - local: contributing
-    title: Contribute to Transformers
-  - local: testing
-    title: Transformers model tests
-  - local: modeling_rules
-    title: Model structure rules
-  - local: pr_checks
-    title: Pull request checks
-  title: Contribute
 - isExpanded: false
   sections:
   - sections:
