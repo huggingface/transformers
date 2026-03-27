@@ -32,7 +32,6 @@ from transformers import (
     ViTImageProcessorPil,
 )
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
-from transformers.utils.import_utils import BACKENDS_MAPPING
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -291,8 +290,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
             json.dump({"image_processor_type": "Gemma3ImageProcessor"}, open(processor_tmpfile, "w"))
 
-            torchvision_error = BACKENDS_MAPPING["torchvision"][1]
-            with patch.dict(BACKENDS_MAPPING, {"torchvision": (lambda: False, torchvision_error)}):
+            with patch("transformers.models.auto.image_processing_auto.is_torchvision_available", return_value=False):
                 image_processor = AutoImageProcessor.from_pretrained(tmpdirname)
 
         self.assertEqual(type(image_processor).__name__, "Gemma3ImageProcessorPil")
