@@ -713,15 +713,13 @@ class AutoTokenizer:
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            # new model, but we ignore it unless the model type is the same
-            if TokenizersBackend is not None:
-                try:
-                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                except Exception as e:
-                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+            tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+            if tokenizer_class is not None:
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                pretrained_model_name_or_path, *inputs, **kwargs
+            raise ValueError(
+                f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
+                f"The tokenizer likely needs to be converted or re-saved."
             )
 
         if "_commit_hash" in tokenizer_config:
