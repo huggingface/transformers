@@ -767,6 +767,7 @@ class ContinuousBatchingManager:
         max_new_tokens = self.generation_config.max_new_tokens if max_new_tokens is None else max_new_tokens
         eos_token_id = self.generation_config.eos_token_id if eos_token_id is None else eos_token_id
 
+        # NOTE: do we want to handle a case when the user wants token ids returned instead of decoded text?
         state = RequestState(
             request_id=request_id,
             initial_tokens=list(input_ids),
@@ -777,6 +778,7 @@ class ContinuousBatchingManager:
             streaming=streaming,
         )
 
+        # Use block=True with timeout to handle backpressure if queue is full
         self.input_queue.put(state, block=True, timeout=10)
         self._has_new_requests.set()
         return request_id
@@ -931,6 +933,7 @@ class ContinuousBatchingManager:
             else:
                 batch_processor = self._create_batch_processor()
 
+            # Start the generation loop
             self.batch_processor = batch_processor
             self.current_batch = 0
 
