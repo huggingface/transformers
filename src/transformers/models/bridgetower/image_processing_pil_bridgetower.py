@@ -29,7 +29,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
+# Adapted from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
 class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     size_divisor (`int`, *optional*, defaults to `self.size_divisor`):

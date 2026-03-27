@@ -43,24 +43,24 @@ if is_torch_available():
     import torch
 
 
-# Copied from transformers.models.flava.image_processing_flava.FLAVA_CODEBOOK_MEAN
+# Adapted from transformers.models.flava.image_processing_flava.FLAVA_CODEBOOK_MEAN
 FLAVA_CODEBOOK_MEAN = [0.0, 0.0, 0.0]
 
-# Copied from transformers.models.flava.image_processing_flava.FLAVA_CODEBOOK_STD
+# Adapted from transformers.models.flava.image_processing_flava.FLAVA_CODEBOOK_STD
 FLAVA_CODEBOOK_STD = [1.0, 1.0, 1.0]
 
-# Copied from transformers.models.flava.image_processing_flava.FLAVA_IMAGE_MEAN
+# Adapted from transformers.models.flava.image_processing_flava.FLAVA_IMAGE_MEAN
 # These values are taken from CLIP
 FLAVA_IMAGE_MEAN = OPENAI_CLIP_MEAN
 
-# Copied from transformers.models.flava.image_processing_flava.FLAVA_IMAGE_STD
+# Adapted from transformers.models.flava.image_processing_flava.FLAVA_IMAGE_STD
 FLAVA_IMAGE_STD = OPENAI_CLIP_STD
 
-# Copied from transformers.models.flava.image_processing_flava.LOGIT_LAPLACE_EPS
+# Adapted from transformers.models.flava.image_processing_flava.LOGIT_LAPLACE_EPS
 LOGIT_LAPLACE_EPS: float = 0.1
 
 
-# Copied from transformers.models.flava.image_processing_flava.FlavaImageProcessorKwargs
+# Adapted from transformers.models.flava.image_processing_flava.FlavaImageProcessorKwargs
 class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     return_image_mask (`bool`, *optional*, defaults to `False`):
@@ -146,7 +146,7 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_image_std: float | Iterable[float]
 
 
-# Copied from transformers.models.flava.image_processing_flava.FlavaMaskingGenerator
+# Adapted from transformers.models.flava.image_processing_flava.FlavaMaskingGenerator
 # Inspired from https://github.com/microsoft/unilm/blob/master/beit/masking_generator.py
 class FlavaMaskingGenerator:
     def __init__(

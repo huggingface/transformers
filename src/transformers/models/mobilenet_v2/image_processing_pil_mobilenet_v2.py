@@ -36,7 +36,7 @@ from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
 
-# Copied from transformers.models.mobilenet_v2.image_processing_mobilenet_v2.MobileNetV2ImageProcessorKwargs
+# Adapted from transformers.models.mobilenet_v2.image_processing_mobilenet_v2.MobileNetV2ImageProcessorKwargs
 class MobileNetV2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):

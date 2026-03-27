@@ -34,7 +34,7 @@ if is_torch_available():
     pass
 
 
-# Copied from transformers.models.vitmatte.image_processing_vitmatte.VitMatteImageProcessorKwargs
+# Adapted from transformers.models.vitmatte.image_processing_vitmatte.VitMatteImageProcessorKwargs
 class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     size_divisor (`int`, *optional*, defaults to `self.size_divisor`):

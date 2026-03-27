@@ -247,7 +247,7 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-# Copied from transformers.models.detr.image_processing_detr.DetrImageProcessorKwargs
+# Adapted from transformers.models.detr.image_processing_detr.DetrImageProcessorKwargs
 class DetrImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
@@ -262,7 +262,7 @@ class DetrImageProcessorKwargs(ImagesKwargs, total=False):
     do_convert_annotations: bool
 
 
-# Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
+# Adapted from transformers.models.detr.image_processing_detr.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -287,7 +287,7 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# Copied from transformers.models.detr.image_processing_detr.check_segment_validity
+# Adapted from transformers.models.detr.image_processing_detr.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -306,7 +306,7 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, mask_k
 
 
-# Copied from transformers.models.detr.image_processing_detr.compute_segments
+# Adapted from transformers.models.detr.image_processing_detr.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
@@ -370,7 +370,7 @@ def compute_segments(
     return segmentation, segments
 
 
-# Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
+# Adapted from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -394,7 +394,7 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
-# Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
+# Adapted from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and

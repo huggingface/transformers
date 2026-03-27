@@ -31,7 +31,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessorKwargs
+# Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessorKwargs
 class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
     """
     patch_size (`Union[dict[str, int], int]` *optional*, defaults to `{"height": 16, "width": 16}`):
@@ -41,7 +41,7 @@ class PixtralImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: dict[str, int] | int
 
 
-# Copied from transformers.models.pixtral.image_processing_pixtral._num_image_tokens
+# Adapted from transformers.models.pixtral.image_processing_pixtral._num_image_tokens
 def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
     """
     Calculate the number of image tokens given the image size and patch size.
@@ -62,7 +62,7 @@ def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) 
     return num_height_tokens, num_width_tokens
 
 
-# Copied from transformers.models.pixtral.image_processing_pixtral.get_resize_output_image_size
+# Adapted from transformers.models.pixtral.image_processing_pixtral.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: ImageInput,
     size: int | tuple[int, int] | list[int] | tuple[int],

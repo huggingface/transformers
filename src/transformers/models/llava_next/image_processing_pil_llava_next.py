@@ -34,7 +34,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessorKwargs
+# Adapted from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessorKwargs
 class LlavaNextImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     image_grid_pinpoints (`list[list[int]]`, *optional*):

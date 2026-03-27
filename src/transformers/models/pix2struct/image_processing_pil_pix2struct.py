@@ -37,7 +37,7 @@ if is_torch_available():
 DEFAULT_FONT_PATH = "ybelkada/fonts"
 
 
-# Copied from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessorKwargs
+# Adapted from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessorKwargs
 class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_patches (`int`, *optional*):
@@ -57,7 +57,7 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     header_text: list[str] | str | None
 
 
-# Copied from transformers.models.pix2struct.image_processing_pix2struct.render_text
+# Adapted from transformers.models.pix2struct.image_processing_pix2struct.render_text
 # Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L106
 def render_text(
     text: str,
@@ -129,7 +129,7 @@ def render_text(
     return img
 
 
-# Copied from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
+# Adapted from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
 if is_torch_available():
     import torch
 

@@ -48,7 +48,7 @@ if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
-# Copied from transformers.models.zoedepth.image_processing_zoedepth.ZoeDepthImageProcessorKwargs
+# Adapted from transformers.models.zoedepth.image_processing_zoedepth.ZoeDepthImageProcessorKwargs
 class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
@@ -68,7 +68,7 @@ class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
     ensure_multiple_of: int
 
 
-# Copied from transformers.models.zoedepth.image_processing_zoedepth.get_resize_output_image_size
+# Adapted from transformers.models.zoedepth.image_processing_zoedepth.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: "torch.Tensor | np.ndarray",
     output_size: int | Iterable[int],

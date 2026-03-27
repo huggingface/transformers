@@ -30,7 +30,7 @@ from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
 
-# Copied from transformers.models.seggpt.image_processing_seggpt.SegGptImageProcessorKwargs
+# Adapted from transformers.models.seggpt.image_processing_seggpt.SegGptImageProcessorKwargs
 class SegGptImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     num_labels (`int`, *optional*):
@@ -43,7 +43,7 @@ class SegGptImageProcessorKwargs(ImagesKwargs, total=False):
     num_labels: int
 
 
-# Copied from transformers.models.seggpt.image_processing_seggpt.build_palette
+# Adapted from transformers.models.seggpt.image_processing_seggpt.build_palette
 # See https://huggingface.co/papers/2212.02499 at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation
 # Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
 def build_palette(num_labels: int) -> list[tuple[int, int, int]]:

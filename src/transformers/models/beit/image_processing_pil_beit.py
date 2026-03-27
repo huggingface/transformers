@@ -30,7 +30,7 @@ from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
 
-# Copied from transformers.models.beit.image_processing_beit.BeitImageProcessorKwargs
+# Adapted from transformers.models.beit.image_processing_beit.BeitImageProcessorKwargs
 class BeitImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):

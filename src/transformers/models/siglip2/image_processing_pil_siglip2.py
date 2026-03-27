@@ -53,7 +53,7 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
     return array, mask
 
 
-# Copied from transformers.models.siglip2.image_processing_siglip2.Siglip2ImageProcessorKwargs
+# Adapted from transformers.models.siglip2.image_processing_siglip2.Siglip2ImageProcessorKwargs
 class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to `self.patch_size`):
@@ -67,7 +67,7 @@ class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
     max_num_patches: int
 
 
-# Copied from transformers.models.siglip2.image_processing_siglip2.get_image_size_for_max_num_patches
+# Adapted from transformers.models.siglip2.image_processing_siglip2.get_image_size_for_max_num_patches
 def get_image_size_for_max_num_patches(
     image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
 ) -> tuple[int, int]:

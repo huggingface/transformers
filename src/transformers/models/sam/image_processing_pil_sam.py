@@ -64,7 +64,7 @@ def get_resize_output_image_size(
     return (new_height, new_width)
 
 
-# Copied from transformers.models.sam.image_processing_sam.SamImageProcessorKwargs
+# Adapted from transformers.models.sam.image_processing_sam.SamImageProcessorKwargs
 class SamImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):

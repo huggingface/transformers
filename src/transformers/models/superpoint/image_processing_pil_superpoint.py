@@ -58,7 +58,7 @@ def convert_to_grayscale(image: np.ndarray) -> np.ndarray:
     return gray_image
 
 
-# Copied from transformers.models.superpoint.image_processing_superpoint.SuperPointImageProcessorKwargs
+# Adapted from transformers.models.superpoint.image_processing_superpoint.SuperPointImageProcessorKwargs
 class SuperPointImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):

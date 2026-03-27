@@ -35,7 +35,7 @@ from ...utils import (
 )
 
 
-# Copied from transformers.models.gemma3.image_processing_gemma3.Gemma3ImageProcessorKwargs
+# Adapted from transformers.models.gemma3.image_processing_gemma3.Gemma3ImageProcessorKwargs
 class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_pan_and_scan (`bool`, *optional*):

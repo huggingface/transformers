@@ -75,7 +75,7 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
     return image
 
 
-# Copied from transformers.models.superglue.image_processing_superglue.validate_and_format_image_pairs
+# Adapted from transformers.models.superglue.image_processing_superglue.validate_and_format_image_pairs
 def validate_and_format_image_pairs(images: ImageInput):
     error_message = (
         "Input images must be a one of the following :",

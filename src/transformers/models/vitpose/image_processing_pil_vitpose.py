@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.VitPoseImageProcessorKwargs
+# Adapted from transformers.models.vitpose.image_processing_vitpose.VitPoseImageProcessorKwargs
 class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_affine_transform (`bool`, *optional*):
@@ -58,7 +58,7 @@ class VitPoseImageProcessorKwargs(ImagesKwargs, total=False):
     normalize_factor: float | None
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.box_to_center_and_scale
+# Adapted from transformers.models.vitpose.image_processing_vitpose.box_to_center_and_scale
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
     box: tuple | list | np.ndarray,
@@ -104,7 +104,7 @@ def box_to_center_and_scale(
     return center, scale
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.coco_to_pascal_voc
+# Adapted from transformers.models.vitpose.image_processing_vitpose.coco_to_pascal_voc
 def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     """
     Converts bounding boxes from the COCO format to the Pascal VOC format.
@@ -125,7 +125,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.get_keypoint_predictions
+# Adapted from transformers.models.vitpose.image_processing_vitpose.get_keypoint_predictions
 def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Get keypoint predictions from score maps.
 
@@ -159,7 +159,7 @@ def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarr
     return preds, scores
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.get_warp_matrix
+# Adapted from transformers.models.vitpose.image_processing_vitpose.get_warp_matrix
 def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, size_target: np.ndarray):
     """
     Calculate the transformation matrix under the constraint of unbiased. Paper ref: Huang et al. The Devil is in the
@@ -197,7 +197,7 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
     return matrix
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.post_dark_unbiased_data_processing
+# Adapted from transformers.models.vitpose.image_processing_vitpose.post_dark_unbiased_data_processing
 def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
     """DARK post-pocessing. Implemented by unbiased_data_processing.
 
@@ -258,7 +258,7 @@ def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.nd
     return coords
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.scipy_warp_affine
+# Adapted from transformers.models.vitpose.image_processing_vitpose.scipy_warp_affine
 def scipy_warp_affine(src, M, size):
     """
     This function implements cv2.warpAffine function using affine_transform in scipy. See https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.affine_transform.html and https://docs.opencv.org/4.x/d4/d61/tutorial_warp_affine.html for more details.
@@ -285,7 +285,7 @@ def scipy_warp_affine(src, M, size):
     return new_src
 
 
-# Copied from transformers.models.vitpose.image_processing_vitpose.transform_preds
+# Adapted from transformers.models.vitpose.image_processing_vitpose.transform_preds
 def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray) -> np.ndarray:
     """Get final keypoint predictions from heatmaps and apply scaling and
     translation to map them back to the image.

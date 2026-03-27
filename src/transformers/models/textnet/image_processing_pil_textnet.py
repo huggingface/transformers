@@ -31,7 +31,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.textnet.image_processing_textnet.TextNetImageProcessorKwargs
+# Adapted from transformers.models.textnet.image_processing_textnet.TextNetImageProcessorKwargs
 class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
     """
     size_divisor (`int`, *optional*, defaults to `self.size_divisor`):

@@ -81,7 +81,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels
 
 
-# Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessorKwargs
+# Adapted from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessorKwargs
 class MaskFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     ignore_index (`int`, *optional*):
@@ -108,7 +108,7 @@ class MaskFormerImageProcessorKwargs(ImagesKwargs, total=False):
     pad_size: SizeDict | None
 
 
-# Copied from transformers.models.maskformer.image_processing_maskformer.binary_mask_to_rle
+# Adapted from transformers.models.maskformer.image_processing_maskformer.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -133,7 +133,7 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# Copied from transformers.models.maskformer.image_processing_maskformer.check_segment_validity
+# Adapted from transformers.models.maskformer.image_processing_maskformer.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -152,7 +152,7 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, mask_k
 
 
-# Copied from transformers.models.maskformer.image_processing_maskformer.compute_segments
+# Adapted from transformers.models.maskformer.image_processing_maskformer.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
@@ -213,7 +213,7 @@ def compute_segments(
     return segmentation, segments
 
 
-# Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_to_rle
+# Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -235,7 +235,7 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
-# Copied from transformers.models.maskformer.image_processing_maskformer.remove_low_and_no_objects
+# Adapted from transformers.models.maskformer.image_processing_maskformer.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
@@ -750,7 +750,7 @@ class MaskFormerImageProcessorPil(PilBackend):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_panoptic_segmentation
+    # Adapted from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_panoptic_segmentation
     def post_process_panoptic_segmentation(
         self,
         outputs,

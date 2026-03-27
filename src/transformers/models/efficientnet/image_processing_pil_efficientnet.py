@@ -27,7 +27,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.efficientnet.image_processing_efficientnet.EfficientNetImageProcessorKwargs
+# Adapted from transformers.models.efficientnet.image_processing_efficientnet.EfficientNetImageProcessorKwargs
 class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
     """
     rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):

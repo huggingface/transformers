@@ -29,7 +29,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.poolformer.image_processing_poolformer.PoolFormerImageProcessorKwargs
+# Adapted from transformers.models.poolformer.image_processing_poolformer.PoolFormerImageProcessorKwargs
 class PoolFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     crop_pct (`float`, *optional*, defaults to `self.crop_pct`):

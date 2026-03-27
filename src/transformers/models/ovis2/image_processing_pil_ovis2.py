@@ -33,7 +33,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.ovis2.image_processing_ovis2.Ovis2ImageProcessorKwargs
+# Adapted from transformers.models.ovis2.image_processing_ovis2.Ovis2ImageProcessorKwargs
 class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
@@ -57,7 +57,7 @@ class Ovis2ImageProcessorKwargs(ImagesKwargs, total=False):
     use_covering_area_grid: bool
 
 
-# Copied from transformers.models.ovis2.image_processing_ovis2.get_all_supported_aspect_ratios
+# Adapted from transformers.models.ovis2.image_processing_ovis2.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """Computes all allowed aspect ratios for a given minimum and maximum number of input tiles."""
@@ -69,7 +69,7 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
     return sorted(aspect_ratios, key=lambda x: x[0] * x[1])
 
 
-# Copied from transformers.models.ovis2.image_processing_ovis2.compute_patch_covering_area
+# Adapted from transformers.models.ovis2.image_processing_ovis2.compute_patch_covering_area
 def compute_patch_covering_area(left: int, upper: int, right: int, lower: int, side: int) -> float:
     w = right - left
     h = lower - upper
@@ -80,7 +80,7 @@ def compute_patch_covering_area(left: int, upper: int, right: int, lower: int, s
     return w * h
 
 
-# Copied from transformers.models.ovis2.image_processing_ovis2.split_image_into_grid
+# Adapted from transformers.models.ovis2.image_processing_ovis2.split_image_into_grid
 def split_image_into_grid(h: int, w: int, grid: tuple[int, int]) -> list[tuple[int, int, int, int]]:
     row_height = h // grid[0]
     col_width = w // grid[1]
@@ -96,7 +96,7 @@ def split_image_into_grid(h: int, w: int, grid: tuple[int, int]) -> list[tuple[i
     ]
 
 
-# Copied from transformers.models.ovis2.image_processing_ovis2.get_min_tile_covering_grid
+# Adapted from transformers.models.ovis2.image_processing_ovis2.get_min_tile_covering_grid
 @lru_cache(maxsize=100)
 def get_min_tile_covering_grid(
     image_size: tuple[int, int],
@@ -124,7 +124,7 @@ def get_min_tile_covering_grid(
     return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
 
 
-# Copied from transformers.models.ovis2.image_processing_ovis2.get_optimal_tiled_canvas
+# Adapted from transformers.models.ovis2.image_processing_ovis2.get_optimal_tiled_canvas
 @lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],

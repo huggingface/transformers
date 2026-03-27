@@ -40,7 +40,7 @@ from ...utils.import_utils import requires
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.mobilevit.image_processing_mobilevit.MobileVitImageProcessorKwargs
+# Adapted from transformers.models.mobilevit.image_processing_mobilevit.MobileVitImageProcessorKwargs
 class MobileVitImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):

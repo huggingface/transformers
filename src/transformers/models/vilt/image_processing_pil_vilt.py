@@ -98,7 +98,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-# Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessorKwargs
+# Adapted from transformers.models.vilt.image_processing_vilt.ViltImageProcessorKwargs
 class ViltImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     size_divisor (`int`, *optional*, defaults to `self.size_divisor`):

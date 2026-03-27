@@ -33,7 +33,7 @@ from ...utils import TensorType, auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.glm4v.image_processing_glm4v.smart_resize
+# Adapted from transformers.models.glm4v.image_processing_glm4v.smart_resize
 def smart_resize(
     num_frames: int,
     height: int,

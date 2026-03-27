@@ -40,7 +40,7 @@ if is_torch_available():
     import torch
 
 
-# Copied from transformers.models.fuyu.image_processing_fuyu.FuyuBatchFeature
+# Adapted from transformers.models.fuyu.image_processing_fuyu.FuyuBatchFeature
 class FuyuBatchFeature(BatchFeature):
     """
     BatchFeature class for Fuyu image processor and processor.
@@ -152,7 +152,7 @@ class FuyuBatchFeature(BatchFeature):
         return self
 
 
-# Copied from transformers.models.fuyu.image_processing_fuyu.FuyuImagesKwargs
+# Adapted from transformers.models.fuyu.image_processing_fuyu.FuyuImagesKwargs
 class FuyuImagesKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
@@ -168,7 +168,7 @@ class FuyuImagesKwargs(ImagesKwargs, total=False):
     padding_mode: str
 
 
-# Copied from transformers.models.fuyu.image_processing_fuyu.make_list_of_list_of_images
+# Adapted from transformers.models.fuyu.image_processing_fuyu.make_list_of_list_of_images
 def make_list_of_list_of_images(
     images: list[list[ImageInput]] | list[ImageInput] | ImageInput,
 ) -> list[list[ImageInput]]:

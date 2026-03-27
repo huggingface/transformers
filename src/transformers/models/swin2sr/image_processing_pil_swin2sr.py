@@ -28,7 +28,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.swin2sr.image_processing_swin2sr.Swin2SRImageProcessorKwargs
+# Adapted from transformers.models.swin2sr.image_processing_swin2sr.Swin2SRImageProcessorKwargs
 class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
     """
     size_divisor (`int`, *optional*, defaults to `self.size_divisor`):

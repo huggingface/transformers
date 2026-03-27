@@ -56,7 +56,7 @@ def get_resize_output_image_size(
     return size
 
 
-# Copied from transformers.models.tvp.image_processing_tvp.TvpImageProcessorKwargs
+# Adapted from transformers.models.tvp.image_processing_tvp.TvpImageProcessorKwargs
 class TvpImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):

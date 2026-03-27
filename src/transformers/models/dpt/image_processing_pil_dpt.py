@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.dpt.image_processing_dpt.DPTImageProcessorKwargs
+# Adapted from transformers.models.dpt.image_processing_dpt.DPTImageProcessorKwargs
 class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     ensure_multiple_of (`int`, *optional*, defaults to 1):
@@ -62,7 +62,7 @@ class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-# Copied from transformers.models.dpt.image_processing_dpt.get_resize_output_image_size
+# Adapted from transformers.models.dpt.image_processing_dpt.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray,
     output_size: int | Iterable[int],

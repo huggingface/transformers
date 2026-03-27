@@ -29,7 +29,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.donut.image_processing_donut.DonutImageProcessorKwargs
+# Adapted from transformers.models.donut.image_processing_donut.DonutImageProcessorKwargs
 class DonutImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):

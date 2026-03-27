@@ -39,7 +39,7 @@ from ...utils import (
 )
 
 
-# Copied from transformers.models.nougat.image_processing_nougat.NougatImageProcessorKwargs
+# Adapted from transformers.models.nougat.image_processing_nougat.NougatImageProcessorKwargs
 class NougatImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_crop_margin (`bool`, *optional*, defaults to `self.do_crop_margin`):

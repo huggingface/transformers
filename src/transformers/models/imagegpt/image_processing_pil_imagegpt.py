@@ -50,7 +50,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
-# Copied from transformers.models.imagegpt.image_processing_imagegpt.ImageGPTImageProcessorKwargs
+# Adapted from transformers.models.imagegpt.image_processing_imagegpt.ImageGPTImageProcessorKwargs
 class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     clusters (`np.ndarray` or `list[list[int]]` or `torch.Tensor`, *optional*, defaults to `self.clusters`):

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.glpn.image_processing_glpn.GLPNImageProcessorKwargs
+# Adapted from transformers.models.glpn.image_processing_glpn.GLPNImageProcessorKwargs
 class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
     """
     size_divisor (`int`, *optional*, defaults to 32):

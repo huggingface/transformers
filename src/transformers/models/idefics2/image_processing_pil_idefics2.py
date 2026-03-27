@@ -45,7 +45,7 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.Idefics2ImageProcessorKwargs
+# Adapted from transformers.models.idefics2.image_processing_idefics2.Idefics2ImageProcessorKwargs
 class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
@@ -55,7 +55,7 @@ class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
     do_image_splitting: bool
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
+# Adapted from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
 def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
@@ -74,7 +74,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return alpha_composite
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.get_max_height_width
+# Adapted from transformers.models.idefics2.image_processing_idefics2.get_max_height_width
 def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> tuple[int, int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -89,7 +89,7 @@ def get_max_height_width(images_list: list[list["torch.Tensor|np.ndarray"]]) -> 
     return (max_height, max_width)
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.get_resize_output_image_size
+# Adapted from transformers.models.idefics2.image_processing_idefics2.get_resize_output_image_size
 def get_resize_output_image_size(image, size: SizeDict) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.

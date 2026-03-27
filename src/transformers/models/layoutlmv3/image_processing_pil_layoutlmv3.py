@@ -41,7 +41,7 @@ except ImportError:
     pytesseract = None
 
 
-# Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.LayoutLMv3ImageProcessorKwargs
+# Adapted from transformers.models.layoutlmv3.image_processing_layoutlmv3.LayoutLMv3ImageProcessorKwargs
 class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     apply_ocr (`bool`, *optional*, defaults to `True`):
@@ -61,7 +61,7 @@ class LayoutLMv3ImageProcessorKwargs(ImagesKwargs, total=False):
     tesseract_config: str | None
 
 
-# Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.normalize_box
+# Adapted from transformers.models.layoutlmv3.image_processing_layoutlmv3.normalize_box
 def normalize_box(box, width, height):
     return [
         int(1000 * (box[0] / width)),
@@ -71,7 +71,7 @@ def normalize_box(box, width, height):
     ]
 
 
-# Copied from transformers.models.layoutlmv3.image_processing_layoutlmv3.apply_tesseract
+# Adapted from transformers.models.layoutlmv3.image_processing_layoutlmv3.apply_tesseract
 def apply_tesseract(
     image: "np.ndarray | torch.Tensor",
     lang: str | None,

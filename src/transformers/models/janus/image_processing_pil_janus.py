@@ -40,7 +40,7 @@ from ...utils import (
 )
 
 
-# Copied from transformers.models.janus.image_processing_janus.JanusImageProcessorKwargs
+# Adapted from transformers.models.janus.image_processing_janus.JanusImageProcessorKwargs
 class JanusImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     min_size (`int`, *optional*, defaults to 14):

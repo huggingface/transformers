@@ -36,7 +36,7 @@ from ...utils import (
 )
 
 
-# Copied from transformers.models.got_ocr2.image_processing_got_ocr2.GotOcr2ImageProcessorKwargs
+# Adapted from transformers.models.got_ocr2.image_processing_got_ocr2.GotOcr2ImageProcessorKwargs
 class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
@@ -55,7 +55,7 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     max_patches: int
 
 
-# Copied from transformers.models.got_ocr2.image_processing_got_ocr2.get_all_supported_aspect_ratios
+# Adapted from transformers.models.got_ocr2.image_processing_got_ocr2.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """
@@ -91,7 +91,7 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
     return aspect_ratios
 
 
-# Copied from transformers.models.got_ocr2.image_processing_got_ocr2.get_optimal_tiled_canvas
+# Adapted from transformers.models.got_ocr2.image_processing_got_ocr2.get_optimal_tiled_canvas
 @lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],

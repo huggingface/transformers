@@ -79,7 +79,7 @@ def _get_resize_output_image_size(
     return (new_height, new_width)
 
 
-# Copied from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything.PromptDepthAnythingImageProcessorKwargs
+# Adapted from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything.PromptDepthAnythingImageProcessorKwargs
 class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     keep_aspect_ratio (`bool`, *optional*):

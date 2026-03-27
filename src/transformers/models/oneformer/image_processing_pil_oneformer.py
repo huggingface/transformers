@@ -70,7 +70,7 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
     return mask
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.OneFormerImageProcessorKwargs
+# Adapted from transformers.models.oneformer.image_processing_oneformer.OneFormerImageProcessorKwargs
 class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     repo_path (`str`, *optional*, defaults to `shi-labs/oneformer_demo`):
@@ -95,7 +95,7 @@ class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.binary_mask_to_rle
+# Adapted from transformers.models.oneformer.image_processing_oneformer.binary_mask_to_rle
 def binary_mask_to_rle(mask):
     """
     Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -120,7 +120,7 @@ def binary_mask_to_rle(mask):
     return list(runs)
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.check_segment_validity
+# Adapted from transformers.models.oneformer.image_processing_oneformer.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -139,7 +139,7 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, mask_k
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.compute_segments
+# Adapted from transformers.models.oneformer.image_processing_oneformer.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
@@ -198,7 +198,7 @@ def compute_segments(
     return segmentation, segments
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.convert_segmentation_to_rle
+# Adapted from transformers.models.oneformer.image_processing_oneformer.convert_segmentation_to_rle
 def convert_segmentation_to_rle(segmentation):
     """
     Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
@@ -220,7 +220,7 @@ def convert_segmentation_to_rle(segmentation):
     return run_length_encodings
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.load_metadata
+# Adapted from transformers.models.oneformer.image_processing_oneformer.load_metadata
 def load_metadata(repo_id, class_info_file):
     fname = os.path.join("" if repo_id is None else repo_id, class_info_file)
 
@@ -243,7 +243,7 @@ def load_metadata(repo_id, class_info_file):
     return class_info
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.prepare_metadata
+# Adapted from transformers.models.oneformer.image_processing_oneformer.prepare_metadata
 def prepare_metadata(class_info):
     metadata = {}
     class_names = []
@@ -258,7 +258,7 @@ def prepare_metadata(class_info):
     return metadata
 
 
-# Copied from transformers.models.oneformer.image_processing_oneformer.remove_low_and_no_objects
+# Adapted from transformers.models.oneformer.image_processing_oneformer.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
@@ -913,7 +913,7 @@ class OneFormerImageProcessorPil(PilBackend):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_panoptic_segmentation
+    # Adapted from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.post_process_panoptic_segmentation
     def post_process_panoptic_segmentation(
         self,
         outputs,

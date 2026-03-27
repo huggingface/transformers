@@ -21,14 +21,14 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring, is_torch_available
 
 
-# Copied from transformers.models.idefics.image_processing_idefics.IDEFICS_STANDARD_MEAN
+# Adapted from transformers.models.idefics.image_processing_idefics.IDEFICS_STANDARD_MEAN
 IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
 
-# Copied from transformers.models.idefics.image_processing_idefics.IDEFICS_STANDARD_STD
+# Adapted from transformers.models.idefics.image_processing_idefics.IDEFICS_STANDARD_STD
 IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
 
 
-# Copied from transformers.models.idefics.image_processing_idefics.IdeficsImageProcessorKwargs
+# Adapted from transformers.models.idefics.image_processing_idefics.IdeficsImageProcessorKwargs
 class IdeficsImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     transform (`Callable`, *optional*, defaults to `None`):

@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
 
 
-# Copied from transformers.models.kosmos2_5.image_processing_kosmos2_5.Kosmos2_5ImageProcessorKwargs
+# Adapted from transformers.models.kosmos2_5.image_processing_kosmos2_5.Kosmos2_5ImageProcessorKwargs
 class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
@@ -43,7 +43,7 @@ class Kosmos2_5ImageProcessorKwargs(ImagesKwargs, total=False):
     max_patches: int
 
 
-# Copied from transformers.models.kosmos2_5.image_processing_kosmos2_5.torch_extract_patches
+# Adapted from transformers.models.kosmos2_5.image_processing_kosmos2_5.torch_extract_patches
 # Similar to transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches but dealing with a batch of images directly.
 def torch_extract_patches(image_tensor, patch_height, patch_width):
     """

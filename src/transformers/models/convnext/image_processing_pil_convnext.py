@@ -29,7 +29,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Copied from transformers.models.convnext.image_processing_convnext.ConvNextImageProcessorKwargs
+# Adapted from transformers.models.convnext.image_processing_convnext.ConvNextImageProcessorKwargs
 class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     crop_pct (`float`, *optional*, defaults to `self.crop_pct`):

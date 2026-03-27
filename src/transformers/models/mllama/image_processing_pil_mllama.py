@@ -163,7 +163,7 @@ def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], 
     return aspect_ratios_ids
 
 
-# Copied from transformers.models.mllama.image_processing_mllama.MllamaImageProcessorKwargs
+# Adapted from transformers.models.mllama.image_processing_mllama.MllamaImageProcessorKwargs
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_image_tiles (`int`, *optional*):
@@ -173,7 +173,7 @@ class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     max_image_tiles: int
 
 
-# Copied from transformers.models.mllama.image_processing_mllama._validate_size
+# Adapted from transformers.models.mllama.image_processing_mllama._validate_size
 def _validate_size(size: SizeDict) -> None:
     if not (size.height and size.width):
         raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
@@ -181,7 +181,7 @@ def _validate_size(size: SizeDict) -> None:
         raise ValueError(f"Argument `size` must have the same height and width, got {size}")
 
 
-# Copied from transformers.models.mllama.image_processing_mllama._validate_mllama_preprocess_arguments
+# Adapted from transformers.models.mllama.image_processing_mllama._validate_mllama_preprocess_arguments
 def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
     if not do_pad:
         raise ValueError("MllamaImageProcessor doesn't support `do_pad=False` mode.")
@@ -192,7 +192,7 @@ def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_til
     _validate_size(size)
 
 
-# Copied from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
+# Adapted from transformers.models.idefics2.image_processing_idefics2.convert_to_rgb
 def convert_to_rgb(image: ImageInput) -> ImageInput:
     """
     Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
@@ -211,7 +211,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return alpha_composite
 
 
-# Copied from transformers.models.mllama.image_processing_mllama.get_all_supported_aspect_ratios
+# Adapted from transformers.models.mllama.image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
     """
@@ -242,7 +242,7 @@ def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int
     return aspect_ratios
 
 
-# Copied from transformers.models.mllama.image_processing_mllama.get_image_size_fit_to_canvas
+# Adapted from transformers.models.mllama.image_processing_mllama.get_image_size_fit_to_canvas
 def get_image_size_fit_to_canvas(
     image_height: int,
     image_width: int,
@@ -294,7 +294,7 @@ def get_image_size_fit_to_canvas(
     return new_height, new_width
 
 
-# Copied from transformers.models.mllama.image_processing_mllama.get_optimal_tiled_canvas
+# Adapted from transformers.models.mllama.image_processing_mllama.get_optimal_tiled_canvas
 @lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     image_height: int,

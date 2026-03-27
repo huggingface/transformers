@@ -77,7 +77,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
-# Copied from transformers.models.eomt.image_processing_eomt.check_segment_validity
+# Adapted from transformers.models.eomt.image_processing_eomt.check_segment_validity
 def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
     # Get the mask associated with the k class
     mask_k = mask_labels == k
@@ -100,7 +100,7 @@ def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overl
     return mask_exists, final_mask
 
 
-# Copied from transformers.models.eomt.image_processing_eomt.EomtImageProcessorKwargs
+# Adapted from transformers.models.eomt.image_processing_eomt.EomtImageProcessorKwargs
 class EomtImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     do_split_image (`bool`, *optional*, defaults to `self.do_split_image`):
@@ -116,7 +116,7 @@ class EomtImageProcessorKwargs(ImagesKwargs, total=False):
     ignore_index: int | None
 
 
-# Copied from transformers.models.eomt.image_processing_eomt.compute_segments
+# Adapted from transformers.models.eomt.image_processing_eomt.compute_segments
 def compute_segments(
     mask_probs,
     pred_scores,
@@ -171,7 +171,7 @@ def compute_segments(
     return segmentation, segments
 
 
-# Copied from transformers.models.eomt.image_processing_eomt.get_target_size
+# Adapted from transformers.models.eomt.image_processing_eomt.get_target_size
 def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     """Returns the height and width from a size dict."""
     target_height = size_dict["shortest_edge"]
@@ -180,7 +180,7 @@ def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
     return target_height, target_width
 
 
-# Copied from transformers.models.eomt.image_processing_eomt.remove_low_and_no_objects
+# Adapted from transformers.models.eomt.image_processing_eomt.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
     Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and

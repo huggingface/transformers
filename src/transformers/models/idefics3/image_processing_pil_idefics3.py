@@ -45,11 +45,11 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     return mask
 
 
-# Copied from transformers.models.idefics3.image_processing_idefics3.MAX_IMAGE_SIZE
+# Adapted from transformers.models.idefics3.image_processing_idefics3.MAX_IMAGE_SIZE
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
-# Copied from transformers.models.idefics3.image_processing_idefics3.Idefics3ImageProcessorKwargs
+# Adapted from transformers.models.idefics3.image_processing_idefics3.Idefics3ImageProcessorKwargs
 class Idefics3ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_image_splitting (`bool`, *optional*, defaults to `True`):
@@ -66,7 +66,7 @@ class Idefics3ImageProcessorKwargs(ImagesKwargs, total=False):
     return_row_col_info: bool
 
 
-# Copied from transformers.models.idefics3.image_processing_idefics3._resize_output_size_rescale_to_max_len
+# Adapted from transformers.models.idefics3.image_processing_idefics3._resize_output_size_rescale_to_max_len
 def _resize_output_size_rescale_to_max_len(
     height: int, width: int, min_len: int | None = 1, max_len: int | None = None
 ) -> tuple[int, int]:
@@ -104,7 +104,7 @@ def _resize_output_size_rescale_to_max_len(
     return height, width
 
 
-# Copied from transformers.models.idefics3.image_processing_idefics3._resize_output_size_scale_below_upper_bound
+# Adapted from transformers.models.idefics3.image_processing_idefics3._resize_output_size_scale_below_upper_bound
 def _resize_output_size_scale_below_upper_bound(
     height: int, width: int, max_len: dict[str, int] | None = None
 ) -> tuple[int, int]:
