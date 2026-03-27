@@ -737,17 +737,25 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         pre_tokenizer = getattr(self.backend_tokenizer, "pre_tokenizer", None)
         decoder = getattr(self.backend_tokenizer, "decoder", None)
         normalizer = getattr(self.backend_tokenizer, "normalizer", None)
+        
+        def _contains_bytelevel(component: Any) -> bool:
+            if component is None:
+                return False
+            if component.__class__.__name__ == "ByteLevel":
+                return True
+            # Some tokenizers expose wrappers like `Sequence([... ByteLevel(...) ...])`.
+            # We use repr-based detection as these wrappers do not consistently expose
+            # iterable internals in the Python bindings.
+            return "ByteLevel(" in repr(component)
 
-        # Some ByteLevel tokenizers (e.g. GPT-2 family) have ByteLevel pre-tokenizer/decoder
-        # but no normalizer. In this setup, raw unicode added tokens can decode incorrectly
+        # Some ByteLevel tokenizers (e.g. GPT-2/Qwen families) may use ByteLevel pre-tokenizer/decoder
+        # without a ByteLevel normalizer. In this setup, raw unicode added tokens can decode incorrectly
         # (e.g. U+010D -> '\r'). Encoding added token contents through the ByteLevel alphabet
         # preserves roundtrip behavior.
         if (
-            normalizer is None
-            and pre_tokenizer is not None
-            and pre_tokenizer.__class__.__name__ == "ByteLevel"
-            and decoder is not None
-            and decoder.__class__.__name__ == "ByteLevel"
+            _contains_bytelevel(pre_tokenizer)
+            and _contains_bytelevel(decoder)
+            and not _contains_bytelevel(normalizer)
         ):
             encoded_tokens: list[str | AddedToken] = []
             for token in new_tokens:
