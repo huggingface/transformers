@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -851,6 +852,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         image_hidden_states=None,
         logits_to_keep=None,
         is_first_iteration=False,
+        use_cache=False,
         **kwargs,
     ):
         # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
@@ -866,10 +868,11 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             image_hidden_states=image_hidden_states,
             logits_to_keep=logits_to_keep,
             is_first_iteration=is_first_iteration,
+            use_cache=use_cache,
             **kwargs,
         )
 
-        if image_hidden_states is not None or not is_first_iteration:
+        if image_hidden_states is not None or (use_cache and not is_first_iteration):
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 

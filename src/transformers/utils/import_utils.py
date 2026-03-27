@@ -132,7 +132,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
-TORCHAO_MIN_VERSION = "0.4.0"
+TORCHAO_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
 KERNELS_MIN_VERSION = "0.10.2"
@@ -644,6 +644,8 @@ def is_libcst_available() -> bool:
 
 @lru_cache
 def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
     return is_available and version.parse(accelerate_version) >= version.parse(min_version)
 
@@ -672,7 +674,7 @@ def is_pygments_available() -> bool:
 
 @lru_cache
 def is_torchvision_available() -> bool:
-    return _is_package_available("torchvision")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("torchvision")[0]
 
 
 @lru_cache
@@ -916,40 +918,53 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
 @lru_cache
 def is_flash_attn_2_available() -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available or not (is_torch_cuda_available() or is_torch_mlu_available()):
         return False
 
-    import torch
-
+    # Only allow versions >= 2.3.3 to avoid very old legacy workarounds that are now 2+ years old
     try:
-        torch_version = getattr(torch, "version")
-        if torch_version.cuda:
-            return version.parse(flash_attn_version) >= version.parse("2.1.0")
-        elif torch_version.hip:
-            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-            return version.parse(flash_attn_version) >= version.parse("2.0.4")
-        elif is_torch_mlu_available():
-            return version.parse(flash_attn_version) >= version.parse("2.3.3")
-        else:
-            return False
+        return version.parse(flash_attn_version) >= version.parse("2.3.3")
     except packaging.version.InvalidVersion:
         return False
 
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    return is_torch_cuda_available() and _is_package_available("flash_attn_3")[0]
+    # Universally available under `flash_attn_interface`
+    is_available = _is_package_available("flash_attn_interface")[0]
+    # Resolving and ensuring the proper name of FA3 being associated
+    is_available = is_available and "flash-attn-3" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
+    ]
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
-def is_flash_attn_greater_or_equal_2_10() -> bool:
-    _, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_flash_attn_2_available() and version.parse(flash_attn_version) >= version.parse("2.1.0")
+def is_flash_attn_4_available() -> bool:
+    is_available = _is_package_available("flash_attn")[0]
+    # FA2 is also distributed under "flash_attn", hence we need to check the naming here
+    # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
+    #       -> check for the proper (normalized) distribution name
+    is_available = is_available and "flash-attn-4" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
+    return is_available and is_torch_cuda_available()
 
 
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
+    # FA4 is also distributed under "flash_attn", hence we need to check the naming here
+    is_available = is_available and "flash-attn" in [
+        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn"]
+    ]
+
     if not is_available:
         return False
     try:
@@ -1113,12 +1128,17 @@ def is_tokenizers_available() -> bool:
 
 @lru_cache
 def is_vision_available() -> bool:
-    return _is_package_available("PIL")[0]
+    try:
+        import PIL.Image  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 @lru_cache
 def is_pytesseract_available() -> bool:
-    return _is_package_available("pytesseract")[0]
+    return _is_package_available("pytesseract")[0] and is_vision_available()
 
 
 @lru_cache
@@ -1153,7 +1173,7 @@ def is_soundfile_available() -> bool:
 
 @lru_cache
 def is_timm_available() -> bool:
-    return _is_package_available("timm")[0]
+    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
 
 
 @lru_cache
@@ -1178,11 +1198,13 @@ def is_numba_available() -> bool:
 
 @lru_cache
 def is_torchaudio_available() -> bool:
-    return _is_package_available("torchaudio")[0]
+    return is_torch_available() and _is_package_available("torchaudio")[0]
 
 
 @lru_cache
 def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
+    if not is_torch_available():
+        return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
 
@@ -1274,7 +1296,7 @@ def is_matplotlib_available() -> bool:
 
 @lru_cache
 def is_mistral_common_available() -> bool:
-    return _is_package_available("mistral_common")[0]
+    return is_vision_available() and _is_package_available("mistral_common")[0]
 
 
 @lru_cache
@@ -1942,7 +1964,7 @@ def requires_backends(obj, backends):
         obj: object to be checked
         backends: list or tuple of backends to check.
     """
-    if not isinstance(backends, (list, tuple)):
+    if not isinstance(backends, list | tuple):
         backends = [backends]
 
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
@@ -2101,6 +2123,26 @@ class _LazyModule(ModuleType):
         if name in self._object_missing_backend:
             missing_backends = self._object_missing_backend[name]
 
+            # Backward-compat fallback: before the image processor refactoring, the base
+            # `<Model>ImageProcessor` name referred to the PIL/slow backend. After the refactoring
+            # it refers to the TorchvisionBackend (which requires torchvision). So if torchvision
+            # is not installed, transparently fall back to `<Model>ImageProcessorPil` and warn once.
+            if "torchvision" in missing_backends and name.endswith("ImageProcessor"):
+                pil_name = f"{name}Pil"
+                if pil_name in self._class_to_module and pil_name not in self._object_missing_backend:
+                    try:
+                        pil_module = self._get_module(self._class_to_module[pil_name])
+                        pil_value = getattr(pil_module, pil_name)
+                        logger.warning_once(
+                            f"`{name}` requires torchvision (not installed); falling back to `{pil_name}` "
+                            f"for backward compatibility. Install torchvision to use the default backend, "
+                            f"or import `{pil_name}` directly to silence this warning."
+                        )
+                        setattr(self, name, pil_value)
+                        return pil_value
+                    except Exception as e:
+                        logger.debug(f"Could not load PIL fallback {pil_name}: {e}")
+
             class Placeholder(metaclass=DummyObject):
                 _backends = missing_backends
 
@@ -2229,6 +2271,46 @@ class _LazyModule(ModuleType):
             if name.endswith("TokenizerFast"):
                 fallback_name = name[:-4]
                 if fallback_name in self._class_to_module:
+                    try:
+                        fb_module = self._get_module(self._class_to_module[fallback_name])
+                        value = getattr(fb_module, fallback_name)
+                        setattr(self, fallback_name, value)
+                        setattr(self, name, value)
+                        return value
+                    except Exception as e:
+                        logger.debug(f"Could not load fallback {fallback_name}: {e}")
+            # V5: Handle *ImageProcessorFast backward compatibility
+            # Similar to TokenizerFast, but for image processors
+            if name.endswith("ImageProcessorFast"):
+                fallback_name = name[:-4]  # Remove "Fast"
+                if fallback_name in self._class_to_module:
+                    logger.warning_once(
+                        f"`{name}` is deprecated. The `Fast` suffix for image processors has been removed; "
+                        f"use `{fallback_name}` instead."
+                    )
+                    if fallback_name in self._object_missing_backend:
+                        # The Fast alias has no entry in the import structure, so `requires_backends` on
+                        # the real class never runs. Handle the missing backend explicitly here, otherwise
+                        # `_get_module` swallows the ImportError and the caller gets an AttributeError.
+                        # Do not fall through to the PIL fallback since a legacy "Fast" image processor was explicitly requested.
+                        missing_backends = self._object_missing_backend[fallback_name]
+
+                        class Placeholder(metaclass=DummyObject):
+                            _backends = missing_backends
+
+                            def __init__(self, *args, **kwargs):
+                                requires_backends(self, missing_backends)
+
+                            def call(self, *args, **kwargs):
+                                pass
+
+                        Placeholder.__name__ = fallback_name
+                        module_name = self._class_to_module[fallback_name]
+                        Placeholder.__module__ = (
+                            module_name if module_name.startswith("transformers.") else f"transformers.{module_name}"
+                        )
+                        setattr(self, name, Placeholder)
+                        return Placeholder
                     try:
                         fb_module = self._get_module(self._class_to_module[fallback_name])
                         value = getattr(fb_module, fallback_name)
@@ -2422,8 +2504,9 @@ def requires(*, backends=()):
     - The '@requires' string is used to dynamically import objects
     """
 
-    if not isinstance(backends, tuple):
-        raise TypeError("Backends should be a tuple.")
+    if not isinstance(backends, (tuple, list)):
+        raise TypeError("Backends should be a tuple or list.")
+    backends = tuple(backends)
 
     applied_backends = []
     for backend in backends:
@@ -2443,11 +2526,15 @@ def requires(*, backends=()):
 
 
 BASE_FILE_REQUIREMENTS = {
-    lambda e: "modeling_" in e: ("torch",),
-    lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
-    lambda e: e.startswith("image_processing_") and e.endswith("_fast"): ("vision", "torch", "torchvision"),
-    lambda e: e.startswith("image_processing_"): ("vision",),
-    lambda e: e.startswith("video_processing_"): ("vision", "torch", "torchvision"),
+    lambda name, content: "modeling_" in name: ("torch",),
+    lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
+    lambda name, content: "image_processing_" in name and "TorchvisionBackend" in content: (
+        "vision",
+        "torch",
+        "torchvision",
+    ),
+    lambda name, content: "image_processing_" in name: ("vision",),
+    lambda name, content: "video_processing_" in name: ("vision", "torch", "torchvision"),
 }
 
 
@@ -2587,8 +2674,8 @@ def create_import_structure_from_path(module_path):
         # For example, any file named `modeling_xxx.py`
         # should have torch as a required backend.
         base_requirements = ()
-        for string_check, requirements in BASE_FILE_REQUIREMENTS.items():
-            if string_check(module_name):
+        for check, requirements in BASE_FILE_REQUIREMENTS.items():
+            if check(module_name, file_content):
                 base_requirements = requirements
                 break
 
@@ -2604,20 +2691,25 @@ def create_import_structure_from_path(module_path):
                     continue
 
                 # Skipping line enables putting whatever we want between the
-                # export() call and the actual class/method definition.
+                # requires() call and the actual class/method definition.
                 # This is what enables having # Copied from statements, docs, etc.
                 skip_line = False
 
                 if "@requires" in previous_line:
                     skip_line = False
 
-                    # Backends are defined on the same line as export
+                    # Backends are defined on the same line as requires
                     if "backends" in previous_line:
-                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        try:
+                            backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        except IndexError:
+                            raise ValueError(
+                                f"Couldn't parse backends for @requires decorator in file {module_name}:{previous_line}"
+                            )
                         backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
 
-                    # Backends are defined in the lines following export, for example such as:
-                    # @export(
+                    # Backends are defined in the lines following requires, for example such as:
+                    # @requires(
                     #     backends=(
                     #             "sentencepiece",
                     #             "torch",
@@ -2626,7 +2718,7 @@ def create_import_structure_from_path(module_path):
                     #
                     # or
                     #
-                    # @export(
+                    # @requires(
                     #     backends=(
                     #             "sentencepiece",
                     #     )
@@ -2647,7 +2739,7 @@ def create_import_structure_from_path(module_path):
                                 break
                         backends = tuple(backends)
 
-                    # No backends are registered for export
+                    # No backends are registered for requires
                     else:
                         backends = ()
 

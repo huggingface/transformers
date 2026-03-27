@@ -30,6 +30,7 @@ COMMON_ENV_VARIABLES = {
     # will be adjust in `CircleCIJob.to_dict`.
     "RUN_FLAKY": True,
     "DISABLE_SAFETENSORS_CONVERSION": True,
+    "NETWORK_DEBUG_REPORT": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None, "random-order-bucket": "module", "random-order-seed": "${CIRCLE_BUILD_NUM:-0}"}
@@ -218,6 +219,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
+            {"store_artifacts": {"path": "network_debug_report.json"}},
         ]
         if self.parallelism:
             job["parallelism"] = parallel

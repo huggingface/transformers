@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import collections
 from dataclasses import dataclass
 
@@ -532,10 +533,6 @@ class GotOcr2ModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class GotOcr2Model(GotOcr2PreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "language_model",
-    }
-
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
@@ -643,12 +640,6 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
     """
 )
 class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_tower": "model.vision_tower",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: GotOcr2Config):

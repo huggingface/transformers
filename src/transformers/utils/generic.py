@@ -196,6 +196,8 @@ def maybe_autocast(
     Which makes graph splitting in `torch.compile` more flexible as it removes the
     requirement that partition IDs be monotonically increasing.
     """
+    if device_type == "meta":
+        return nullcontext()
     if torch.is_autocast_enabled(device_type) or enabled:
         return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
     else:
@@ -239,6 +241,10 @@ def is_flash_attention_requested(
         checked_attention_implementation = config._attn_implementation
     else:
         checked_attention_implementation = requested_attention_implementation
+
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
 
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
@@ -836,7 +842,7 @@ def del_attribute_from_modules(module: nn.Module, key: str):
 def can_return_tuple(func):
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
-    use_return_dict=False is set in the config.
+    return_dict=False is set in the config.
 
     Note:
         output.to_tuple() convert output to tuple skipping all `None` values.
@@ -934,6 +940,14 @@ def merge_with_config_defaults(func):
         return output
 
     return wrapper
+
+
+# bc for check_model_inputs:
+
+
+def check_model_inputs(func):
+    logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
+    return merge_with_config_defaults(func)
 
 
 class GeneralInterface(MutableMapping):

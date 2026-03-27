@@ -27,31 +27,27 @@ class Scheduler(ABC):
     schedulers implement different strategies for prioritizing and batching requests.
     """
 
-    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False):
+    def __init__(self, cache: PagedAttentionCache):
+        self.cache = cache
+        self._cancellation_lock = threading.Lock()
+        # This is to compute the read cache used by a new request being scheduled
+        self.read_cache_limit = None if self.cache.num_full_attention_groups else self.cache.config.sliding_window
+        self.max_decode_fast_path_length = self.cache.max_blocks_per_request * self.cache.block_size
+        # Initialize mutable states via reset()
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset scheduler state for a new generation loop."""
         self.active_requests: dict[str, RequestState] = {}
         self.waiting_requests: dict[str, RequestState] = {}
         self.waiting_requests_order: deque[str] = deque()
-        self.cache = cache
-        self.retain_cache_on_finish = retain_cache_on_finish
-        self._cancellation_lock = threading.Lock()
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
-        # This state is used to avoid infinite loops when offloading requests
         self.block_new_requests = False
-        # This is to compute the read cache used by a new request being scheduled
-        self.read_cache_limit = None if cache.num_full_attention_groups else cache.config.sliding_window
-        self.max_decode_fast_path_length = cache.max_blocks_per_request * cache.block_size
 
     @traced
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
-        if self.retain_cache_on_finish and state.request_id in self.active_requests:
-            old_state = self.active_requests.pop(state.request_id)
-            state.tokens_to_process = state.tokens_to_process[
-                len(old_state.initial_tokens) :
-            ]  # XXX: check for indexing error?
-            state.allocated_blocks = old_state.allocated_blocks
-            state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
         self.waiting_requests_order.append(state.request_id)
 
@@ -72,13 +68,12 @@ class Scheduler(ABC):
         return bool(len(self.active_requests) or len(self.waiting_requests))
 
     @traced
-    def finish_request(self, request_id: str, evict_from_cache: bool = True) -> None:
-        """Completes processing of a request and optionally frees its allocated cache blocks. This method is called
+    def finish_request(self, request_id: str) -> None:
+        """Completes processing of a request and frees its allocated cache blocks. This method is called
         when a request has finished generation or encountered an error.
         """
-        if evict_from_cache:
-            self.cache.free_blocks(request_id)
-            self.active_requests.pop(request_id, None)
+        self.cache.free_blocks(request_id)
+        self.active_requests.pop(request_id, None)
 
     @traced
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
@@ -299,12 +294,12 @@ class FIFOScheduler(Scheduler):
     prefilling requests. Additionally, it includes a safety margin mechanism to prevent cache exhaustion. By default,
     when 80% of the cache is full, new requests will not be scheduled to prioritize decoding active requests."""
 
-    def __init__(self, cache: PagedAttentionCache, retain_cache_on_finish: bool = False, safety_margin: float = 0.2):
+    def __init__(self, cache: PagedAttentionCache, safety_margin: float = 0.2):
         """Initializes the FIFO scheduler. The safety margin is the percentage of free blocks under which we stop
         scheduling new prefill requests, so safety_margin = 0.1 means that when there is less than 10% of free blocks,
         or equivalently when more than 90% of blocks are already allocated, we stop scheduling new prefill requests.
         """
-        super().__init__(cache, retain_cache_on_finish)
+        super().__init__(cache)
         self.safety_margin = safety_margin
 
     @traced

@@ -117,3 +117,20 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.convert_ids_to_tokens(tokenizer.encode(sequence, add_special_tokens=False))
 
         self.assertListEqual(tokens, tokens_target)
+
+    def test_post_processor_adds_special_tokens(self):
+        extractor = SentencePieceExtractor(SAMPLE_VOCAB)
+        vocab, vocab_scores, merges = extractor.extract()
+        tokenizer = DebertaV2Tokenizer(vocab=vocab_scores, unk_token="<unk>")
+
+        encoding = tokenizer("Hello world")
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"])
+        self.assertEqual(tokens[0], "[CLS]")
+        self.assertEqual(tokens[-1], "[SEP]")
+
+        encoding_pair = tokenizer("Hello", "World")
+        tokens_pair = tokenizer.convert_ids_to_tokens(encoding_pair["input_ids"])
+        self.assertEqual(tokens_pair[0], "[CLS]")
+        sep_indices = [i for i, t in enumerate(tokens_pair) if t == "[SEP]"]
+        self.assertEqual(len(sep_indices), 2)
+        self.assertEqual(sep_indices[-1], len(tokens_pair) - 1)

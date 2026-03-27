@@ -281,7 +281,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     softcap: float | None = None,
     **kwargs,
@@ -394,7 +394,6 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
         self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -571,11 +570,11 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 **kwargs,
@@ -806,7 +805,6 @@ def create_causal_mask_mapping(
     """
 )
 class Gemma3Model(Gemma3PreTrainedModel):
-    _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
@@ -966,12 +964,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
     """
 )
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-        "^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
@@ -1167,12 +1159,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
 
 class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "^language_model.model": "model.language_model",
-        "^vision_tower": "model.vision_tower",
-        "^multi_modal_projector": "model.multi_modal_projector",
-    }
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
