@@ -110,9 +110,7 @@ class ContinuousBatchProcessor:
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            deliver_outputs: Called with a list of ``GenerationOutput`` at the end of each
-                generation step. Provided by the manager to route results to registered
-                handlers or fall back to the output_queue.
+            deliver_outputs: Callback that receives a list of ``GenerationOutput`` after each step.
         """
         self.cache = cache
         self.config = config
@@ -604,10 +602,6 @@ class ContinuousBatchingManager:
         self.input_queue = queue.Queue(maxsize=self.continuous_batching_config.max_queue_size)
         self._has_new_requests = threading.Event()
         self.output_queue = queue.Queue()
-        # Per-request result handlers: request_id → (callback, event_loop).
-        # Registered via register_result_handler(). The generation thread delivers
-        # outputs directly via call_soon_threadsafe — no dispatcher thread needed.
-        # Unhandled results fall back to the output_queue for get_result() callers.
         self._result_handlers: dict[str, tuple[callable, asyncio.AbstractEventLoop]] = {}
         self._result_handlers_lock = threading.Lock()
         self.stop_event = threading.Event()
