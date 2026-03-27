@@ -195,12 +195,50 @@ def run_deps_table_checker(fix=False, line_callback=None):
     return 0, output
 
 
-def run_imports_checker(fix=False, line_callback=None):
-    """Check that all public imports work."""
-    rc, output = _run_cmd([sys.executable, "-c", "from transformers import *"], line_callback=line_callback)
+def _import_test(label, uninstall=None, line_callback=None):
+    """Run ``from transformers import *`` after optionally removing packages.
+
+    When *uninstall* is given the environment is restored afterwards.
+    """
+    output_parts: list[str] = []
+
+    if uninstall:
+        rc, out = _run_cmd(["uv", "pip", "uninstall", *uninstall, "-q"], line_callback=line_callback)
+        output_parts.append(out)
+        if rc != 0:
+            return rc, "".join(output_parts) + f"Failed to uninstall {', '.join(uninstall)}\n"
+
+    rc, out = _run_cmd([sys.executable, "-c", "from transformers import *"], line_callback=line_callback)
+    output_parts.append(out)
+
+    if uninstall:
+        rc_restore, out_restore = _run_cmd(
+            ["uv", "pip", "install", "-e", ".[quality]", "-q"], line_callback=line_callback
+        )
+        output_parts.append(out_restore)
+
     if rc != 0:
-        return rc, output + "Import failed, this means you introduced unprotected imports!\n"
-    return 0, output
+        return rc, "".join(output_parts) + f"🚨 {label}. Fix unprotected imports!! 🚨\n"
+    return 0, "".join(output_parts)
+
+
+_IMPORT_SCENARIOS = [
+    ("Import failed with all backends", None),
+    ("Import failed with torch only (no PIL)", ["Pillow", "torchvision"]),
+    ("Import failed with PIL only (no torch)", ["torch", "torchvision", "torchaudio"]),
+    ("Import failed with torch+PIL but no torchvision", ["torchvision"]),
+]
+
+
+def run_imports_checker(fix=False, line_callback=None):
+    """Check that public imports work under various backend combinations."""
+    all_output: list[str] = []
+    for label, uninstall in _IMPORT_SCENARIOS:
+        rc, output = _import_test(label, uninstall=uninstall, line_callback=line_callback)
+        all_output.append(output)
+        if rc != 0:
+            return rc, "".join(all_output)
+    return 0, "".join(all_output)
 
 
 RUFF_TARGETS = ["examples", "tests", "src", "utils", "scripts", "benchmark", "benchmark_v2", "setup.py", "conftest.py"]
