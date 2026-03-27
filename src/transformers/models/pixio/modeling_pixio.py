@@ -132,10 +132,12 @@ class PixioEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(
+            pixel_values.to(dtype=target_dtype), interpolate_pos_encoding=interpolate_pos_encoding
+        )
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
@@ -407,12 +409,13 @@ class PixioModel(PixioPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         encoder_outputs: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         sequence_output = encoder_outputs.last_hidden_state
@@ -451,7 +454,12 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        interpolate_pos_encoding: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BackboneOutput:
         r"""
         Examples:
 
@@ -480,7 +488,7 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
         ```"""
         kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
         hidden_states = output.hidden_states
 
