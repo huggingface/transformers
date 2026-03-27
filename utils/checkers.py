@@ -195,31 +195,9 @@ def run_deps_table_checker(fix=False, line_callback=None):
     return 0, output
 
 
-def _import_test(label, uninstall=None, line_callback=None):
-    """Run ``from transformers import *`` after optionally removing packages.
-
-    When *uninstall* is given the environment is restored afterwards.
-    """
-    output_parts: list[str] = []
-
-    if uninstall:
-        rc, out = _run_cmd(["uv", "pip", "uninstall", *uninstall, "-q"], line_callback=line_callback)
-        output_parts.append(out)
-        if rc != 0:
-            return rc, "".join(output_parts) + f"Failed to uninstall {', '.join(uninstall)}\n"
-
-    rc, out = _run_cmd([sys.executable, "-c", "from transformers import *"], line_callback=line_callback)
-    output_parts.append(out)
-
-    if uninstall:
-        rc_restore, out_restore = _run_cmd(
-            ["uv", "pip", "install", "-e", ".[quality]", "-q"], line_callback=line_callback
-        )
-        output_parts.append(out_restore)
-
-    if rc != 0:
-        return rc, "".join(output_parts) + f"🚨 {label}. Fix unprotected imports!! 🚨\n"
-    return 0, "".join(output_parts)
+def _restore_env(line_callback=None):
+    """Reinstall the quality extras to restore the environment."""
+    return _run_cmd(["uv", "pip", "install", "-e", ".[quality]", "-q"], line_callback=line_callback)
 
 
 _IMPORT_SCENARIOS = [
@@ -234,10 +212,29 @@ def run_imports_checker(fix=False, line_callback=None):
     """Check that public imports work under various backend combinations."""
     all_output: list[str] = []
     for label, uninstall in _IMPORT_SCENARIOS:
-        rc, output = _import_test(label, uninstall=uninstall, line_callback=line_callback)
-        all_output.append(output)
+        output_parts: list[str] = []
+
+        if uninstall:
+            rc, out = _run_cmd(["uv", "pip", "uninstall", *uninstall, "-q"], line_callback=line_callback)
+            output_parts.append(out)
+            if rc != 0:
+                # Restore before returning
+                _, out_restore = _restore_env(line_callback=line_callback)
+                output_parts.append(out_restore)
+                all_output.append("".join(output_parts) + f"Failed to uninstall {', '.join(uninstall)}\n")
+                return rc, "".join(all_output)
+
+        rc, out = _run_cmd([sys.executable, "-c", "from transformers import *"], line_callback=line_callback)
+        output_parts.append(out)
+
+        if uninstall:
+            _, out_restore = _restore_env(line_callback=line_callback)
+            output_parts.append(out_restore)
+
+        all_output.append("".join(output_parts))
         if rc != 0:
-            return rc, "".join(all_output)
+            return rc, "".join(all_output) + f"🚨 {label}. Fix unprotected imports!! 🚨\n"
+
     return 0, "".join(all_output)
 
 
