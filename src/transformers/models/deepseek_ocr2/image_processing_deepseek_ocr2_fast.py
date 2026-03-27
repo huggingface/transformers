@@ -195,8 +195,9 @@ class DeepseekOcr2ImageProcessorFast(BaseImageProcessorFast):
             interpolation = tvF.InterpolationMode.BICUBIC
 
         # --- Local patches (batched by shape group) ---
-        all_pixel_values_local = []
+        # Same shape = same aspect ratio = same grid, so batch crop is possible.
         num_local_patches = {}
+        local_patches_grouped = {}
 
         if crop_to_patches:
             grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -204,7 +205,7 @@ class DeepseekOcr2ImageProcessorFast(BaseImageProcessorFast):
             for shape, stacked_images in grouped_images.items():
                 h, w = shape[-2:]
                 if max(h, w) > tile_size:
-                    # Batch crop: (batch, C, H, W) → (batch, num_patches, C, tile, tile)
+                    # (batch, C, H, W) → (batch, n_patches, C, tile, tile)
                     stacked_patches, n_patches = self.crop_image_to_patches(
                         stacked_images,
                         min_patches=min_patches,
@@ -212,59 +213,45 @@ class DeepseekOcr2ImageProcessorFast(BaseImageProcessorFast):
                         tile_size=tile_size,
                         interpolation=interpolation,
                     )
-                    # Rescale + normalize patches in batch
-                    batch_size = stacked_patches.shape[0]
-                    # Reshape to (batch * num_patches, C, tile, tile) for rescale_and_normalize
+                    # Rescale + normalize as (batch*n_patches, C, tile, tile)
                     flat_patches = stacked_patches.reshape(-1, *stacked_patches.shape[2:])
                     flat_patches = self.rescale_and_normalize(
                         flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
                     )
-                    # Split back per image: list of (num_patches, C, tile, tile)
-                    per_image_patches = flat_patches.reshape(batch_size, n_patches, *flat_patches.shape[1:])
-                    all_pixel_values_local.append(per_image_patches)
-                    num_local_patches[shape] = [n_patches] * batch_size
+                    # Split back to per-image list of (n_patches, C, tile, tile)
+                    local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
+                    num_local_patches[shape] = [n_patches] * stacked_images.shape[0]
                 else:
+                    local_patches_grouped[shape] = [None] * stacked_images.shape[0]
                     num_local_patches[shape] = [0] * stacked_images.shape[0]
 
-            # Restore original order
             num_local_patches = reorder_images(num_local_patches, grouped_images_index)
+            ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
         else:
             num_local_patches = [0] * len(images)
+            ordered_local = []
 
-        # Flatten local patches to list for output
-        flat_local_list = []
-        if all_pixel_values_local:
-            for per_image in torch.cat(all_pixel_values_local, dim=0):
-                # per_image: (num_patches, C, tile, tile)
-                for patch in per_image:
-                    flat_local_list.append(patch)
+        # Flatten to list of (C, tile, tile) in original image order
+        flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
 
-        # --- Global view ---
+        # --- Global view (batched by shape group) ---
+        # Same shape = same aspect ratio = same (new_h, new_w), so batch resize is possible.
         global_target_size = size.height if crop_to_patches else tile_size
 
-        global_resized = []
-        for image in images:
-            original_height, original_width = image.shape[-2:]
-            scale = global_target_size / max(original_height, original_width)
-            new_height = int(original_height * scale)
-            new_width = int(original_width * scale)
-            resized = self.resize(
-                image.unsqueeze(0), SizeDict(height=new_height, width=new_width), interpolation=interpolation
-            )
-            global_resized.append(resized.squeeze(0))
-
-        # Pad to square + rescale + normalize (batched by shape)
-        grouped_global, grouped_global_index = group_images_by_shape(
-            global_resized, disable_grouping=disable_grouping
-        )
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_global_grouped = {}
-        for shape, stacked in grouped_global.items():
+        for shape, stacked in grouped_images.items():
+            h, w = shape[-2:]
+            scale = global_target_size / max(h, w)
+            new_h = int(h * scale)
+            new_w = int(w * scale)
+            stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), interpolation=interpolation)
             stacked = self.pad_to_square(stacked, background_color=self.background_color)
             stacked = self.rescale_and_normalize(
                 stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             processed_global_grouped[shape] = stacked
-        all_pixel_values_global = reorder_images(processed_global_grouped, grouped_global_index)
+        all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
 
         data = {
             "pixel_values": all_pixel_values_global,
