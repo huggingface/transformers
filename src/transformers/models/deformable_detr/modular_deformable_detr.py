@@ -36,7 +36,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.import_utils import requires_backends
+from ...utils.import_utils import requires, requires_backends
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
@@ -131,6 +131,7 @@ class DeformableDetrImageProcessor(DetrImageProcessor):
 
 
 class DeformableDetrImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):

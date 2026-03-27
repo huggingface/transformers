@@ -34,6 +34,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deformable_detr.modeling_deformable_detr import inverse_sigmoid
 from ..detr.image_processing_detr import DetrImageProcessor
@@ -173,6 +174,7 @@ class ConditionalDetrImageProcessor(DetrImageProcessor):
 
 
 class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
@@ -233,6 +235,7 @@ class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
 
         return results
 
+    @requires(backends=("vision", "torch"))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.

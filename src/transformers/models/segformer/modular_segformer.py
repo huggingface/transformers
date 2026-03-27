@@ -32,6 +32,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...utils import TensorType
+from ...utils.import_utils import requires
 
 
 class SegformerImageProcessor(BeitImageProcessor):
@@ -141,6 +142,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         return processed_images
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

@@ -33,14 +33,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class LlavaOnevisionImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
@@ -167,7 +165,7 @@ class LlavaOnevisionImageProcessorPil(PilBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

@@ -14,6 +14,9 @@
 """Image processor class for OneFormer."""
 
 import numpy as np
+import torch
+from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -30,22 +33,8 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-)
-
-
-if is_torch_available():
-    import torch
-    from torch import nn
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
+from ...utils import TensorType, auto_docstring, logging
+from ...utils.import_utils import requires
 from .image_processing_oneformer import (
     OneFormerImageProcessorKwargs,
     compute_segments,
@@ -78,6 +67,7 @@ def make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarr
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class OneFormerImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -204,12 +194,7 @@ class OneFormerImageProcessorPil(PilBackend):
 
         return encoded_inputs
 
-    def _pad_image(
-        self,
-        image: np.ndarray,
-        output_size: tuple[int, int],
-        constant_values: float = 0,
-    ) -> np.ndarray:
+    def _pad_image(self, image: np.ndarray, output_size: tuple[int, int], constant_values: float = 0) -> np.ndarray:
         """
         Pad an image with zeros to the given size using numpy operations.
 
@@ -249,10 +234,7 @@ class OneFormerImageProcessorPil(PilBackend):
         return padded_image
 
     def pad(
-        self,
-        images: list[np.ndarray],
-        return_pixel_mask: bool = True,
-        return_tensors: str | TensorType | None = None,
+        self, images: list[np.ndarray], return_pixel_mask: bool = True, return_tensors: str | TensorType | None = None
     ) -> BatchFeature:
         """
         Pad a batch of images to the same size using numpy operations.
@@ -494,10 +476,7 @@ class OneFormerImageProcessorPil(PilBackend):
 
                 # Convert segmentation map to binary masks using numpy operations
                 masks, classes = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map,
-                    instance_id,
-                    ignore_index=ignore_index,
-                    do_reduce_labels=do_reduce_labels,
+                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
                 )
 
                 annotations.append({"masks": masks, "classes": classes})

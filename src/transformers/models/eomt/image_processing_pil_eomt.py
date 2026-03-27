@@ -16,6 +16,8 @@
 import math
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -31,20 +33,8 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-)
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_eomt import (
     EomtImageProcessorKwargs,
     compute_segments,
@@ -92,6 +82,7 @@ def convert_segmentation_map_to_binary_masks(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class EomtImageProcessorPil(PilBackend):
     valid_kwargs = EomtImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -231,9 +222,7 @@ class EomtImageProcessorPil(PilBackend):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = convert_segmentation_map_to_binary_masks(
-                    segmentation_map,
-                    instance_id,
-                    ignore_index=ignore_index,
+                    segmentation_map, instance_id, ignore_index=ignore_index
                 )
 
                 mask_labels.append(torch.from_numpy(masks))
@@ -349,10 +338,7 @@ class EomtImageProcessorPil(PilBackend):
         for idx, (logit_sum, count) in enumerate(zip(aggregated_logits, patch_counts)):
             averaged_logits = logit_sum / count.clamp(min=1)
             resized_logits = torch.nn.functional.interpolate(
-                averaged_logits[None, ...],
-                size=target_sizes[idx],
-                mode="bilinear",
-                align_corners=False,
+                averaged_logits[None, ...], size=target_sizes[idx], mode="bilinear", align_corners=False
             )[0]
 
             reconstructed_logits.append(resized_logits)
@@ -360,10 +346,7 @@ class EomtImageProcessorPil(PilBackend):
         return reconstructed_logits
 
     def unpad_image(
-        self,
-        segmentation_logits: torch.Tensor,
-        target_sizes: list[tuple[int, int]],
-        size: dict[str, int],
+        self, segmentation_logits: torch.Tensor, target_sizes: list[tuple[int, int]], size: dict[str, int]
     ) -> list[torch.Tensor]:
         """Restores panoptic segmentation logits to their original image resolutions."""
 
@@ -381,10 +364,7 @@ class EomtImageProcessorPil(PilBackend):
         return resized_logits
 
     def post_process_semantic_segmentation(
-        self,
-        outputs,
-        target_sizes: list[tuple[int, int]],
-        size: dict[str, int] | None = None,
+        self, outputs, target_sizes: list[tuple[int, int]], size: dict[str, int] | None = None
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
 
@@ -395,11 +375,7 @@ class EomtImageProcessorPil(PilBackend):
         patch_offsets = outputs.patch_offsets
 
         output_size = get_target_size(size)
-        masks_queries_logits = torch.nn.functional.interpolate(
-            masks_queries_logits,
-            size=output_size,
-            mode="bilinear",
-        )
+        masks_queries_logits = torch.nn.functional.interpolate(masks_queries_logits, size=output_size, mode="bilinear")
 
         # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
@@ -445,11 +421,7 @@ class EomtImageProcessorPil(PilBackend):
         num_labels = class_queries_logits.shape[-1] - 1
 
         output_size = get_target_size(size)
-        masks_queries_logits = torch.nn.functional.interpolate(
-            masks_queries_logits,
-            size=output_size,
-            mode="bilinear",
-        )
+        masks_queries_logits = torch.nn.functional.interpolate(masks_queries_logits, size=output_size, mode="bilinear")
 
         mask_probs_batch = self.unpad_image(masks_queries_logits, target_sizes, size)
         pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
@@ -482,11 +454,7 @@ class EomtImageProcessorPil(PilBackend):
         return results
 
     def post_process_instance_segmentation(
-        self,
-        outputs,
-        target_sizes: list[tuple[int, int]],
-        threshold: float = 0.8,
-        size: dict[str, int] | None = None,
+        self, outputs, target_sizes: list[tuple[int, int]], threshold: float = 0.8, size: dict[str, int] | None = None
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
 
@@ -496,11 +464,7 @@ class EomtImageProcessorPil(PilBackend):
         class_queries_logits = outputs.class_queries_logits
 
         output_size = get_target_size(size)
-        masks_queries_logits = torch.nn.functional.interpolate(
-            masks_queries_logits,
-            size=output_size,
-            mode="bilinear",
-        )
+        masks_queries_logits = torch.nn.functional.interpolate(masks_queries_logits, size=output_size, mode="bilinear")
 
         mask_probs_batch = self.unpad_image(masks_queries_logits, target_sizes, size)
 

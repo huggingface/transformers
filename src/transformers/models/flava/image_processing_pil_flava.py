@@ -31,13 +31,8 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
+from ...utils.import_utils import requires
 from .image_processing_flava import (
     FLAVA_CODEBOOK_MEAN,
     FLAVA_CODEBOOK_STD,
@@ -49,6 +44,7 @@ from .image_processing_flava import (
 )
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class FlavaImageProcessorPil(PilBackend):
     valid_kwargs = FlavaImageProcessorKwargs
@@ -138,7 +134,7 @@ class FlavaImageProcessorPil(PilBackend):
         codebook_crop_size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
         codebook_image_mean: float | list[float] | None = None,
         codebook_image_std: float | list[float] | None = None,
-        codebook_resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        codebook_resample: "PILImageResampling | int | None" = None,
         data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
@@ -178,7 +174,7 @@ class FlavaImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -211,7 +207,7 @@ class FlavaImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -231,7 +227,7 @@ class FlavaImageProcessorPil(PilBackend):
         return_codebook_pixels: bool | None,
         codebook_do_resize: bool | None,
         codebook_size: SizeDict | None,
-        codebook_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        codebook_resample: "PILImageResampling | int | None",
         codebook_do_center_crop: bool | None,
         codebook_crop_size: SizeDict | None,
         codebook_do_rescale: bool | None,

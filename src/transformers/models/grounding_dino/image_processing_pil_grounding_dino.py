@@ -61,6 +61,7 @@ from ...utils import (
     is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_grounding_dino import GroundingDinoImageProcessorKwargs
 
 
@@ -289,6 +290,7 @@ def _scale_boxes(boxes, target_sizes):
     return boxes
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class GroundingDinoImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
@@ -703,6 +705,7 @@ class GroundingDinoImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",

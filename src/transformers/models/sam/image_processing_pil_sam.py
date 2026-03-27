@@ -20,6 +20,9 @@ from itertools import product
 from typing import Any, Optional, Union
 
 import numpy as np
+import torch
+import torch.nn.functional as F
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -33,16 +36,10 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
+from ...utils.import_utils import requires
 from .image_processing_sam import SamImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 if is_vision_available():
     import PIL
@@ -66,6 +63,7 @@ def get_resize_output_image_size(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class SamImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
