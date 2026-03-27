@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import unittest
+
 from transformers.cli.advisor import advisor
+
 
 class TransformersCLIAdvisorTest(unittest.TestCase):
     def test_advisor_basic(self):
