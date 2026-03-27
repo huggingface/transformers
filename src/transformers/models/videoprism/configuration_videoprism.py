@@ -77,13 +77,11 @@ class VideoPrismTextConfig(PreTrainedConfig):
     max_position_embeddings: int = 64
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-6
-    attention_dropout: float | int = 0.0
     # This differs from `CLIPTokenizer`'s default and from openai/videoprism
     # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
     pad_token_id: int | None = 1
     bos_token_id: int | None = 49406
     eos_token_id: int | list[int] | None = 49407
-    projection_size: int | None = None
     attention_probs_dropout_prob: float | int = 0.0
     apply_l2_norm: bool = True
     qkv_bias: bool = True

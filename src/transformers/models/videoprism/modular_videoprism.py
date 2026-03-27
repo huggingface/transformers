@@ -1,10 +1,11 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from huggingface_hub.dataclasses import strict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...masking_utils import create_causal_mask
@@ -97,6 +98,8 @@ class VideoPrismTextConfig(SiglipTextConfig):
     hidden_dropout_prob: float = 0.0
     initializer_range: float = 0.02
     attn_logit_softcapping: float = 50.0
+    attention_dropout = AttributeError()
+    projection_size = AttributeError()
 
 
 @auto_docstring(
@@ -128,6 +131,7 @@ class VideoPrismConfig(SiglipConfig):
     >>> configuration = model.config
     ```
     """
+
     initializer_factor = AttributeError()
 
 

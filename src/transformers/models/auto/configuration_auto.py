@@ -485,7 +485,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
-        ("videomt", "VideomtConfig"),      
+        ("videomt", "VideomtConfig"),
         ("videoprism", "VideoPrismConfig"),
         ("videoprism_vision_model", "VideoPrismVisionConfig"),
         ("vilt", "ViltConfig"),
