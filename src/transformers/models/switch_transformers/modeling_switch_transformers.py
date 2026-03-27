@@ -91,7 +91,7 @@ class SwitchTransformersTop1Router(nn.Module):
         if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-        router_logits = self.classifier(hidden_states)
+        router_logits = self.classifier(hidden_states.to(self.classifier.weight.dtype))
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
