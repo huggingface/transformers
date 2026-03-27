@@ -604,20 +604,18 @@ class CBGenerateManager(BaseGenerateManager):
         )
         streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
 
-        # Consume CB outputs and decode tokens into the SSE text queue.
-        # It's a coroutine on the event loop (via async_request_id_iter)
-        # to avoid spawning a thread per concurrent request.
-        async def _read_and_decode():
+        # Register a direct callback: the dispatcher calls this on the event loop
+        # with each GenerationOutput. This decodes tokens and pushes text straight
+        # to the SSE text_queue — no intermediate async queue or coroutine needed.
+        def _on_output(output):
             try:
-                async for output in self._cb.async_request_id_iter(request_id):
-                    streamer.put(output)
-                    if output.is_finished():
-                        break
-                streamer.end()
+                streamer.put(output)
+                if output.is_finished():
+                    streamer.end()
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
 
-        asyncio.ensure_future(_read_and_decode())
+        self._cb.register_streaming_callback(request_id, _on_output)
         return text_queue, streamer
 
     async def generate_non_streaming(self, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast", inputs: dict, gen_config: "GenerationConfig", request_id: str | None = None):
