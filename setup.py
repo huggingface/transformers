@@ -333,7 +333,10 @@ if __name__ == "__main__":
         package_dir={"": "src"},
         packages=find_packages("src"),
         include_package_data=True,
-        package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
+        package_data={
+            "": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"],
+            "transformers.models.auto": ["auto_mappings.json"],
+        },
         zip_safe=False,
         extras_require=extras,
         entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
