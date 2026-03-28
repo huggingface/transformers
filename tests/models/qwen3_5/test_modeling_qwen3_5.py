@@ -177,7 +177,7 @@ class Qwen3_5VisionText2TextModelTester:
             "vocab_size": 99,
             "intermediate_size": 37,
             "max_position_embeddings": 512,
-            "model_type": "qwen3_vl",
+            "model_type": "qwen3_5_text",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
@@ -595,6 +595,11 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        return Qwen3_5TextModelTest.test_reverse_loading_mapping(
+            self, check_keys_were_modified=check_keys_were_modified
+        )
 
 
 @require_torch
