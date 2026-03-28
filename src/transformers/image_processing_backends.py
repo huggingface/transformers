@@ -58,9 +58,8 @@ from .utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
-    requires_backends,
 )
-from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
 
 
 if is_vision_available():
@@ -81,11 +80,11 @@ else:
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch", "torchvision"))
 class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
-        requires_backends(self, "torchvision")
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
@@ -407,6 +406,7 @@ class TorchvisionBackend(BaseImageProcessor):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
+@requires(backends=("vision",))
 class PilBackend(BaseImageProcessor):
     """PIL/NumPy backend for portable CPU-only image processing."""
 

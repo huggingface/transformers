@@ -16,6 +16,8 @@
 from typing import Union
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -29,27 +31,16 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class MobileViTImageProcessorPil(PilBackend):
     """PIL backend for MobileViT with flip_channel_order and reduce_label support."""
 

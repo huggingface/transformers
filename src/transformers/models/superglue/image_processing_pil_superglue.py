@@ -19,14 +19,10 @@ import numpy as np
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-    to_numpy_array,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils.import_utils import requires
 from .image_processing_superglue import validate_and_format_image_pairs
 
 
@@ -37,24 +33,17 @@ if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 
-def is_grayscale(
-    image: np.ndarray,
-):
+def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
 
 
-def convert_to_grayscale(
-    image: ImageInput,
-) -> ImageInput:
+def convert_to_grayscale(image: ImageInput) -> ImageInput:
     """
     Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
@@ -92,6 +81,7 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class SuperGlueImageProcessorPil(PilBackend):
     valid_kwargs = SuperGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -110,11 +100,7 @@ class SuperGlueImageProcessorPil(PilBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[SuperGlueImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-        **kwargs,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, **kwargs) -> ImageInput:
         # we need to handle image pairs validation and flattening
         images = self.fetch_images(images)
         return validate_and_format_image_pairs(images)
@@ -220,9 +206,7 @@ class SuperGlueImageProcessorPil(PilBackend):
         return results
 
     def visualize_keypoint_matching(
-        self,
-        images: ImageInput,
-        keypoint_matching_output: list[dict[str, torch.Tensor]],
+        self, images: ImageInput, keypoint_matching_output: list[dict[str, torch.Tensor]]
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.
@@ -259,11 +243,7 @@ class SuperGlueImageProcessorPil(PilBackend):
                 keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
             ):
                 color = self._get_color(matching_score)
-                draw.line(
-                    (keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y),
-                    fill=color,
-                    width=3,
-                )
+                draw.line((keypoint0_x, keypoint0_y, keypoint1_x + width0, keypoint1_y), fill=color, width=3)
                 draw.ellipse((keypoint0_x - 2, keypoint0_y - 2, keypoint0_x + 2, keypoint0_y + 2), fill="black")
                 draw.ellipse(
                     (keypoint1_x + width0 - 2, keypoint1_y - 2, keypoint1_x + width0 + 2, keypoint1_y + 2),

@@ -30,6 +30,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
@@ -132,6 +133,7 @@ class GroundingDinoImageProcessor(DetrImageProcessor):
 
 
 class GroundingDinoImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",

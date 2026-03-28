@@ -30,6 +30,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils.import_utils import requires
 from .image_processing_vitmatte import VitMatteImageProcessorKwargs
 
 
@@ -37,6 +38,7 @@ if is_torch_available():
     import torch
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class VitMatteImageProcessorPil(PilBackend):
     do_rescale = True

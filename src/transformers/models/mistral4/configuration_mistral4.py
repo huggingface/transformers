@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="mistralai/Mistral-Small-4-119B-2603")
-@strict(accept_kwargs=True)
+@strict
 class Mistral4Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):

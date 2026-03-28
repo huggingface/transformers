@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM2-1.2B")
-@strict(accept_kwargs=True)
+@strict
 class Lfm2Config(PreTrainedConfig):
     r"""
     conv_bias (`bool`, *optional*, defaults to `False`):
@@ -37,7 +37,6 @@ class Lfm2Config(PreTrainedConfig):
     full_attn_idxs (`Optional`, *optional*):
         Index of the layers which use attention.
 
-
     ```python
     >>> from transformers import Lfm2Model, Lfm2Config
 
@@ -49,7 +48,8 @@ class Lfm2Config(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "lfm2"
     keys_to_ignore_at_inference = ["past_key_values"]

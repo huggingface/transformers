@@ -32,23 +32,15 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
@@ -67,10 +59,7 @@ def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
 
 
 def _get_resize_output_image_size(
-    input_image: np.ndarray,
-    output_size: tuple[int, int],
-    keep_aspect_ratio: bool,
-    multiple: int,
+    input_image: np.ndarray, output_size: tuple[int, int], keep_aspect_ratio: bool, multiple: int
 ) -> tuple[int, int]:
     """Get the output size for resizing an image."""
     input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
@@ -96,6 +85,7 @@ def _get_resize_output_image_size(
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class PromptDepthAnythingImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "prompt_depth"]
 
@@ -152,17 +142,9 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         )
 
         # Standard resize method with calculated output size
-        return self.resize(
-            image=image,
-            size=SizeDict(height=output_size[0], width=output_size[1]),
-            resample=resample,
-        )
+        return self.resize(image=image, size=SizeDict(height=output_size[0], width=output_size[1]), resample=resample)
 
-    def pad_image(
-        self,
-        image: np.ndarray,
-        size_divisor: int,
-    ) -> np.ndarray:
+    def pad_image(self, image: np.ndarray, size_divisor: int) -> np.ndarray:
         """
         Center pad an image to be a multiple of size_divisor.
         """
@@ -295,9 +277,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         return processed_images
 
     def post_process_depth_estimation(
-        self,
-        outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
+        self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None | None = None
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

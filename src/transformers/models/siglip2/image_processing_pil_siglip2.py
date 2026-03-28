@@ -22,16 +22,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
+from ...utils.import_utils import requires
 from .image_processing_siglip2 import (
     Siglip2ImageProcessorKwargs,
     get_image_size_for_max_num_patches,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
@@ -62,6 +58,7 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
     return array, mask
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Siglip2ImageProcessorPil(PilBackend):
     valid_kwargs = Siglip2ImageProcessorKwargs
@@ -93,7 +90,7 @@ class Siglip2ImageProcessorPil(PilBackend):
         do_resize: bool,
         patch_size: int,
         max_num_patches: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

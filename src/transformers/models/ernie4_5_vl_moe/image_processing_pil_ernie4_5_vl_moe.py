@@ -25,6 +25,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, logging
+from ...utils.import_utils import requires
 from .image_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeImageProcessorKwargs, smart_resize
 
 
@@ -37,6 +38,7 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class Ernie4_5_VLMoeImageProcessorPil(PilBackend):
     do_resize = True

@@ -28,7 +28,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/tapas-base-finetuned-sqa")
-@strict(accept_kwargs=True)
+@strict
 class TapasConfig(PreTrainedConfig):
     r"""
     type_vocab_sizes (`list[int]`, *optional*, defaults to `[3, 256, 256, 2, 256, 256, 10]`):
