@@ -659,8 +659,9 @@ class Ernie4_5_VLMoePatchEmbed(Qwen2_5_VisionPatchEmbed):
         super().__init__(patch_size, in_channels, embed_dim)
 
         del self.temporal_patch_size
-        del self.patch_volume  # noqa: F821
         del kernel_size  # noqa: F821
+        del self.linear_proj
+        del self.patch_volume
         self.proj = nn.Linear(in_channels * patch_size * patch_size, embed_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
