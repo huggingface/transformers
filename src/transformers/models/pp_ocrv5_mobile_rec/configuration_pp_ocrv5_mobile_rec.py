@@ -28,7 +28,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_rec_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPOCRV5MobileRecConfig(PreTrainedConfig):
     r"""
     head_out_channels (`int`, *optional*, defaults to 18385):

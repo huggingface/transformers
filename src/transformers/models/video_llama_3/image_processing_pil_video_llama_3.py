@@ -26,6 +26,7 @@ from ...image_processing_backends import PilBackend
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils.import_utils import requires
 from .image_processing_video_llama_3 import VideoLlama3ImageProcessorKwargs, smart_resize
 
 
@@ -33,6 +34,7 @@ if is_torchvision_available():
     from torchvision.transforms.v2 import functional as tvF
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class VideoLlama3ImageProcessorPil(PilBackend):
     do_resize = True

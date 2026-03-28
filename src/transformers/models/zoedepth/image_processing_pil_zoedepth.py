@@ -31,22 +31,24 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
 
 
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
-if is_torch_available():
-    import torch
-    from torch import nn
+import torch
+from torch import nn
+
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class ZoeDepthImageProcessorPil(PilBackend):
     valid_kwargs = ZoeDepthImageProcessorKwargs
     do_pad = True

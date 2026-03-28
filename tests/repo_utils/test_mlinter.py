@@ -285,7 +285,7 @@ from transformers.models.llama.modeling_llama import LlamaAttention
         source = """
 from huggingface_hub.dataclasses import strict
 
-@strict(accept_kwargs=True)
+@strict
 class FooConfig(PretrainedConfig):
     pass
 """
@@ -303,13 +303,13 @@ class FooConfig(PretrainedConfig):
         violations = mlinter.analyze_file(file_path, source, enabled_rules={mlinter.TRF010})
         trf010 = [v for v in violations if v.rule_id == mlinter.TRF010]
         self.assertEqual(len(trf010), 1)
-        self.assertIn("missing @strict(accept_kwargs=True)", trf010[0].message)
+        self.assertIn("missing @strict", trf010[0].message)
 
     def test_trf010_ignores_non_direct_config_alias_wrappers(self):
         source = """
 from huggingface_hub.dataclasses import strict
 
-@strict(accept_kwargs=True)
+@strict
 class FooConfig(PretrainedConfig):
     pass
 

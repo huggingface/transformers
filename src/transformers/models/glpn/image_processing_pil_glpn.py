@@ -16,32 +16,16 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_glpn import GLPNImageProcessorKwargs
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
-if is_torch_available():
-    import torch
 
 
 if TYPE_CHECKING:
@@ -51,6 +35,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class GLPNImageProcessorPil(PilBackend):
     """PIL backend for GLPN with size_divisor resize."""
 
@@ -120,9 +105,7 @@ class GLPNImageProcessorPil(PilBackend):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_depth_estimation(
-        self,
-        outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None = None,
+        self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
     ) -> list[dict[str, TensorType]]:
         """
         Convert raw model outputs to final depth predictions.

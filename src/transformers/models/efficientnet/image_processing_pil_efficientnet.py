@@ -24,14 +24,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class EfficientNetImageProcessorPil(PilBackend):
     """PIL backend for EfficientNet with rescale offset and include_top."""
@@ -71,7 +69,7 @@ class EfficientNetImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="DeepGlint-AI/mlcd-vit-bigG-patch14-336")
-@strict(accept_kwargs=True)
+@strict
 class MLCDVisionConfig(PreTrainedConfig):
     r"""
     num_key_value_groups (`int`, *optional*, defaults to 1):

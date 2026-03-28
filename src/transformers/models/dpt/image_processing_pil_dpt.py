@@ -30,30 +30,23 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_dpt import DPTImageProcessorKwargs, get_resize_output_image_size
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-if is_torch_available():
-    import torch
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class DPTImageProcessorPil(PilBackend):
     """PIL backend for DPT with custom resize and pad."""
 
@@ -156,12 +149,7 @@ class DPTImageProcessorPil(PilBackend):
         )
         return super().resize(image, output_size, resample, **kwargs)
 
-    def pad_image(
-        self,
-        image: np.ndarray,
-        size_divisor: int = 1,
-        **kwargs,
-    ) -> np.ndarray:
+    def pad_image(self, image: np.ndarray, size_divisor: int = 1, **kwargs) -> np.ndarray:
         """Center pad image to be a multiple of size_divisor."""
 
         def _get_pad(size, size_divisor):
@@ -206,11 +194,7 @@ class DPTImageProcessorPil(PilBackend):
                 image = self.reduce_label(image)
             if do_resize:
                 image = self.resize(
-                    image,
-                    size,
-                    resample,
-                    ensure_multiple_of=ensure_multiple_of,
-                    keep_aspect_ratio=keep_aspect_ratio,
+                    image, size, resample, ensure_multiple_of=ensure_multiple_of, keep_aspect_ratio=keep_aspect_ratio
                 )
             if do_rescale:
                 image = self.rescale(image, rescale_factor)
@@ -245,9 +229,7 @@ class DPTImageProcessorPil(PilBackend):
         return semantic_segmentation
 
     def post_process_depth_estimation(
-        self,
-        outputs: "DepthEstimatorOutput",
-        target_sizes: TensorType | list[tuple[int, int]] | None = None,
+        self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
     ) -> list[dict[str, TensorType]]:
         """Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions."""
         requires_backends(self, "torch")

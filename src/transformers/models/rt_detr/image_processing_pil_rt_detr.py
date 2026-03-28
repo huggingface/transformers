@@ -48,6 +48,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
@@ -114,7 +115,7 @@ def prepare_coco_detection_annotation_pil(
     return new_target
 
 
-@auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class RTDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -492,6 +493,7 @@ class RTDetrImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs,
