@@ -9,6 +9,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
+from ...utils.auto_docstring import auto_docstring
 
 
 logger = logging.get_logger(__name__)
@@ -156,6 +157,25 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
 
 
+MOLMO2_TEXT_CONFIG_ARGS = r"""
+    additional_vocab_size (`int`, *optional*, defaults to 128):
+        Number of additional vocabulary tokens beyond the base vocabulary.
+    rope_theta (`float`, *optional*, defaults to 1000000.0):
+        The base period of the RoPE embeddings.
+    rope_scaling (`dict[str, Any]`, *optional*):
+        Dictionary containing the scaling configuration for the RoPE embeddings.
+    rope_scaling_layers (`list[int]`, *optional*):
+        List of layer indices where rope scaling is applied.
+    qk_norm_type (`str`, *optional*, defaults to `"olmo"`):
+        The type of query-key normalization to use.
+    norm_after (`bool`, *optional*, defaults to `False`):
+        Whether to apply layer normalization after the attention/FFN blocks instead of before.
+    attn_implementation (`str`, *optional*, defaults to `"eager"`):
+        The attention implementation to use.
+"""
+
+
+@auto_docstring(checkpoint="allenai/Molmo2-8B", custom_args=MOLMO2_TEXT_CONFIG_ARGS)
 @strict
 class Molmo2TextConfig(PreTrainedConfig):
     r"""
@@ -259,6 +279,33 @@ class Molmo2TextConfig(PreTrainedConfig):
         rope_config_validation(self)
 
 
+MOLMO2_CONFIG_ARGS = r"""
+    vit_config (`Molmo2VitConfig`, *optional*):
+        Configuration for the vision transformer backbone.
+    adapter_config (`Molmo2AdapterConfig`, *optional*):
+        Configuration for the vision-to-language adapter.
+    image_start_token_id (`int`, *optional*):
+        Token ID marking the start of an image region.
+    low_res_image_start_token_id (`int`, *optional*):
+        Token ID marking the start of a low-resolution image crop.
+    image_end_token_id (`int`, *optional*):
+        Token ID marking the end of an image region.
+    image_low_res_id (`int`, *optional*):
+        Token ID for low-resolution image patches.
+    image_patch_id (`int`, *optional*):
+        Token ID for image patches.
+    image_col_id (`int`, *optional*):
+        Token ID for column separators in image patch sequences.
+    frame_start_token_id (`int`, *optional*):
+        Token ID marking the start of a video frame.
+    frame_end_token_id (`int`, *optional*):
+        Token ID marking the end of a video frame.
+    use_frame_special_tokens (`bool`, *optional*, defaults to `True`):
+        Whether to use special tokens to delineate video frames.
+"""
+
+
+@auto_docstring(checkpoint="allenai/Molmo2-8B", custom_args=MOLMO2_CONFIG_ARGS)
 @strict
 class Molmo2Config(PreTrainedConfig):
     r"""
