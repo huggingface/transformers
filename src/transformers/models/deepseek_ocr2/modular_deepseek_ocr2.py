@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2SamVisionConfig(SamVisionConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -83,7 +83,7 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2VisionConfig(Qwen2Config):
     r"""
     sam_config (`dict` or `PreTrainedConfig`, *optional*):
@@ -113,7 +113,7 @@ class DeepseekOcr2VisionConfig(Qwen2Config):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2TextConfig(DeepseekV2Config):
     r"""
     first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -157,7 +157,7 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""
     vision_config (`dict` or `DeepseekOcr2VisionConfig`, *optional*):

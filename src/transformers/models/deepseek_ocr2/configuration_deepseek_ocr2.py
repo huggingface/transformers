@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
     r"""
     output_channels (`int`, *optional*, defaults to 256):
@@ -77,7 +77,7 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
     sam_config (`dict` or `PreTrainedConfig`, *optional*):
@@ -143,7 +143,7 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2TextConfig(PreTrainedConfig):
     r"""
     first_k_dense_replace (`int`, *optional*, defaults to 0):
@@ -235,7 +235,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@strict(accept_kwargs=True)
+@strict
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""
     vision_config (`dict` or `DeepseekOcr2VisionConfig`, *optional*):
