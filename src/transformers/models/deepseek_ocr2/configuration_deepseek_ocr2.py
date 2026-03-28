@@ -82,8 +82,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
     sam_config (`dict` or `PreTrainedConfig`, *optional*):
         Configuration for the SAM ViT-B vision encoder. Defaults to `DeepseekOcr2SamVisionConfig()`.
-    max_query (`int`, *optional*, defaults to 400):
-        Maximum number of learnable query tokens for the vision encoder.
     """
 
     model_type = "deepseek_ocr2_vision"
@@ -119,7 +117,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     }
 
     sam_config: dict | PreTrainedConfig | None = None
-    max_query: int = 400
 
     def __post_init__(self, **kwargs):
         if self.sam_config is None:
