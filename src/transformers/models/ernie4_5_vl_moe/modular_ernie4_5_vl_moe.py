@@ -659,6 +659,7 @@ class Ernie4_5_VLMoePatchEmbed(Qwen2_5_VisionPatchEmbed):
         super().__init__(patch_size, in_channels, embed_dim)
 
         del self.temporal_patch_size
+        del self.patch_volume  # noqa: F821
         del kernel_size  # noqa: F821
         self.proj = nn.Linear(in_channels * patch_size * patch_size, embed_dim, bias=False)
 

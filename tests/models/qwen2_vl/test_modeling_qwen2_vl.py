@@ -29,6 +29,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.models.qwen2_vl.modeling_qwen2_vl import PatchEmbed
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -195,6 +196,42 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_patch_embed_linear_forward_matches_conv3d(self):
+        patch_embed = PatchEmbed(patch_size=2, temporal_patch_size=2, in_channels=3, embed_dim=8)
+        hidden_states = torch.randn(
+            5,
+            patch_embed.in_channels
+            * patch_embed.temporal_patch_size
+            * patch_embed.patch_size
+            * patch_embed.patch_size,
+        )
+
+        actual = patch_embed(hidden_states)
+
+        reference_conv3d = torch.nn.Conv3d(
+            patch_embed.in_channels,
+            patch_embed.embed_dim,
+            kernel_size=[patch_embed.temporal_patch_size, patch_embed.patch_size, patch_embed.patch_size],
+            stride=[patch_embed.temporal_patch_size, patch_embed.patch_size, patch_embed.patch_size],
+            bias=patch_embed.linear_proj.bias is not None,
+        )
+        reference_conv3d.weight.data.copy_(patch_embed.linear_proj.weight.view_as(reference_conv3d.weight))
+        if patch_embed.linear_proj.bias is not None:
+            reference_conv3d.bias.data.copy_(patch_embed.linear_proj.bias)
+
+        reshaped_hidden_states = hidden_states.view(
+            -1,
+            patch_embed.in_channels,
+            patch_embed.temporal_patch_size,
+            patch_embed.patch_size,
+            patch_embed.patch_size,
+        )
+        expected = reference_conv3d(reshaped_hidden_states.to(dtype=patch_embed.linear_proj.weight.dtype)).view(
+            -1, patch_embed.embed_dim
+        )
+
+        torch.testing.assert_close(actual, expected)
 
     def test_mismatching_num_image_tokens(self):
         """

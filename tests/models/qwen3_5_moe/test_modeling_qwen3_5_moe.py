@@ -258,7 +258,7 @@ class Qwen3_5MoeVisionText2TextModelTester:
             "vocab_size": 99,
             "intermediate_size": 37,
             "max_position_embeddings": 512,
-            "model_type": "qwen3_vl",
+            "model_type": "qwen3_5_moe_text",
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
@@ -400,6 +400,11 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        return Qwen3_5MoeTextModelTest.test_reverse_loading_mapping(
+            self, check_keys_were_modified=check_keys_were_modified
+        )
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         "Qwen3.5 Moe has a special Cache as it alternates with gated deltanet layers"

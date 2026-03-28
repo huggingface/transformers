@@ -295,6 +295,108 @@ class Transpose(ConversionOps):
         return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
+class Conv3dToLinear(ConversionOps):
+    """Conv3d patch-embed weights → Linear layout. ``get_patch_shape`` (optional) is passed through on ``reverse_op``."""
+
+    def __init__(self, get_patch_shape: Callable[[Any], tuple[int, int, tuple[int, int]]] | None = None):
+        self._get_patch_shape = get_patch_shape
+
+    def get_target_pattern(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        if tensor.ndim == 5:
+            tensor = tensor.reshape(tensor.shape[0], -1).contiguous()
+        elif tensor.ndim != 2:
+            raise ValueError(f"Conv3dToLinear expects a 5D or 2D tensor, got {tensor.ndim}D")
+
+        return {target_pattern: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return LinearToConv3d(get_patch_shape=self._get_patch_shape)
+
+
+class LinearToConv3d(ConversionOps):
+    """Linear patch-embed weights → Conv3d layout. Shape comes from ``config`` in :meth:`convert`, via
+    :meth:`default_get_conv3d_patch_shape_from_config` unless ``get_patch_shape`` is given."""
+
+    @classmethod
+    def default_get_conv3d_patch_shape_from_config(cls, config) -> tuple[int, int, tuple[int, int]]:
+        """Patch layout ``(in_channels, temporal_patch_size, (patch_h, patch_w))`` from ``vision_config`` or ``config``.
+        Override or pass ``get_patch_shape`` on the op when field names differ."""
+        vision_config = getattr(config, "vision_config", config)
+
+        temporal_patch_size = vision_config.temporal_patch_size
+        if isinstance(temporal_patch_size, (list, tuple)):
+            temporal_patch_size = temporal_patch_size[0]
+
+        patch_size = vision_config.patch_size
+        if isinstance(patch_size, int):
+            spatial_patch_shape = (patch_size, patch_size)
+        else:
+            spatial_patch_shape = tuple(patch_size)
+
+        return vision_config.in_channels, temporal_patch_size, spatial_patch_shape
+
+    def __init__(self, get_patch_shape: Callable[[Any], tuple[int, int, tuple[int, int]]] | None = None):
+        self._get_patch_shape = get_patch_shape
+
+    def get_target_pattern(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        if tensor.ndim == 5:
+            return {target_pattern: tensor.contiguous()}
+        if tensor.ndim != 2:
+            raise ValueError(f"LinearToConv3d expects a 2D or 5D tensor, got {tensor.ndim}D")
+
+        # read patch shape from config, use default_get_conv3d_patch_shape_from_config if _get_patch_shape is not provided
+        get_patch = self._get_patch_shape or type(self).default_get_conv3d_patch_shape_from_config
+        in_channels, temporal_patch_size, spatial_patch_shape = get_patch(kwargs["config"])
+        target_shape = (tensor.shape[0], in_channels, temporal_patch_size, *spatial_patch_shape)
+        if tensor.numel() != math.prod(target_shape):
+            raise ValueError(f"Cannot reshape tensor with shape {tensor.shape} into {target_shape}")
+
+        return {target_pattern: tensor.reshape(target_shape).contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Conv3dToLinear(get_patch_shape=self._get_patch_shape)
+
+
 class PermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
