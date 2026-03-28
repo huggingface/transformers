@@ -134,6 +134,10 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
+    "DeepseekOcr2TextModel",
+    "DeepseekOcr2TextPreTrainedModel",
+    "DeepseekOcr2VisionModel",
+    "DeepseekOcr2VisionPreTrainedModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
