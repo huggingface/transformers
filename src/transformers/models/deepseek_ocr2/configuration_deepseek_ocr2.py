@@ -88,7 +88,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     model_type = "deepseek_ocr2_vision"
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Vision encoder uses SAM-style attention, not Qwen2-style — disable inherited TP plan
     base_model_tp_plan = {}
     base_model_pp_plan = {}
 
