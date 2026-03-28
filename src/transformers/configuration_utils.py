@@ -233,6 +233,19 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     label2id: dict[str, int] | dict[str, str] | None = None
     problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
 
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        """Allow PreTrainedConfig to be used as a field type in Pydantic models.
+
+        Without this, Pydantic treats the dataclass as introspectable and tries to resolve
+        all field annotations — including forward references like `torch.dtype` that are
+        only available under TYPE_CHECKING. Returning an ``is-instance`` schema tells
+        Pydantic to accept any instance of this class without inspecting its fields.
+        """
+        from pydantic_core import core_schema
+
+        return core_schema.is_instance_schema(cls)
+
     def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
         # Do not warn, as it would otherwise always be triggered since most configs on the hub have `torch_dtype`
