@@ -245,6 +245,54 @@ class Molmo2TextConfig(PreTrainedConfig):
         attn_implementation: str = "eager",
         **kwargs,
     ):
+        r"""
+        hidden_size (`int`, *optional*, defaults to 3584):
+            Dimension of the hidden representations.
+        num_attention_heads (`int`, *optional*, defaults to 28):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 4):
+            Number of key-value heads for Grouped Query Attention. If `None`, defaults to `num_attention_heads`.
+        head_dim (`int`, *optional*, defaults to 128):
+            The attention head dimension.
+        vocab_size (`int`, *optional*, defaults to 152064):
+            Vocabulary size of the model.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in query, key, and value projections.
+        num_hidden_layers (`int`, *optional*, defaults to 48):
+            Number of hidden layers in the Transformer decoder.
+        intermediate_size (`int`, *optional*, defaults to 18944):
+            Dimension of the MLP representations.
+        hidden_act (`str`, *optional*, defaults to `"silu"`):
+            The non-linear activation function in the decoder.
+        embedding_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the embedding layer.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        residual_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio applied after residual connections.
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model might ever be used with.
+        rope_theta (`float`, *optional*, defaults to 1000000.0):
+            The base period of the RoPE embeddings.
+        rope_scaling (`dict[str, Any]`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings.
+        rope_scaling_layers (`list[int]`, *optional*):
+            List of layer indices where rope scaling is applied.
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply query-key normalization.
+        qk_norm_type (`str`, *optional*, defaults to `"olmo"`):
+            The type of query-key normalization to use.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
+        norm_after (`bool`, *optional*, defaults to `False`):
+            Whether to apply layer normalization after the attention/FFN blocks instead of before.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings.
+        attn_implementation (`str`, *optional*, defaults to `"eager"`):
+            The attention implementation to use.
+        """
         if attn_implementation is None:
             attn_implementation = "eager"
         self.attn_implementation = attn_implementation
@@ -374,6 +422,32 @@ class Molmo2Config(PreTrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
+        r"""
+        adapter_config (`Molmo2AdapterConfig`, *optional*):
+            Configuration for the vision-to-language adapter.
+        text_config (`Molmo2TextConfig`, *optional*):
+            Configuration for the text model.
+        image_start_token_id (`int`, *optional*):
+            Token ID marking the start of an image region.
+        low_res_image_start_token_id (`int`, *optional*):
+            Token ID marking the start of a low-resolution image crop.
+        image_end_token_id (`int`, *optional*):
+            Token ID marking the end of an image region.
+        image_low_res_id (`int`, *optional*):
+            Token ID for low-resolution image patches.
+        image_patch_id (`int`, *optional*):
+            Token ID for image patches.
+        image_col_id (`int`, *optional*):
+            Token ID for column separators in image patch sequences.
+        frame_start_token_id (`int`, *optional*):
+            Token ID marking the start of a video frame.
+        frame_end_token_id (`int`, *optional*):
+            Token ID marking the end of a video frame.
+        use_frame_special_tokens (`bool`, *optional*, defaults to `True`):
+            Whether to use special tokens to delineate video frames.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        """
         super().__init__(**kwargs)
         if vit_config is None:
             self.vit_config = Molmo2VitConfig()
