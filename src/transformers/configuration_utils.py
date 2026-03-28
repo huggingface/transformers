@@ -75,6 +75,11 @@ ALLOWED_LAYER_TYPES = (
 def wrap_init_to_accept_kwargs(cls: dataclass):
     original_init = cls.__init__
 
+    # During type checking, don't wrap the __init__ to preserve the dataclass signature
+    # This allows mypy to see the actual field types instead of **kwargs: Any
+    if TYPE_CHECKING:
+        return cls
+
     @wraps(original_init)
     def __init__(self, *args, **kwargs: Any) -> None:
         # Extract only the fields that are part of the dataclass
