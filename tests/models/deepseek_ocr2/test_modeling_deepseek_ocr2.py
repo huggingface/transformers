@@ -42,7 +42,6 @@ if is_vision_available():
 
 
 class DeepseekOcr2VisionText2TextModelTester:
-
     def __init__(
         self,
         parent,

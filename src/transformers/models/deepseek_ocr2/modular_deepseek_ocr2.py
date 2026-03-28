@@ -116,12 +116,6 @@ class DeepseekOcr2VisionConfig(Qwen2Config):
 @strict(accept_kwargs=True)
 class DeepseekOcr2TextConfig(DeepseekV2Config):
     r"""
-    Configuration for the DeepSeek-OCR-2 language model.
-
-    This model uses standard MHA (not MLA), so MLA-specific fields
-    (`kv_lora_rank`, `q_lora_rank`, `qk_nope_head_dim`, `qk_rope_head_dim`, `v_head_dim`)
-    are removed and `head_dim` is computed from `hidden_size // num_attention_heads`.
-
     first_k_dense_replace (`int`, *optional*, defaults to 0):
         The number of initial decoder layers that use dense MLP instead of MoE.
     n_group (`int`, *optional*):
@@ -267,12 +261,18 @@ class DeepseekOcr2SamVisionProj(nn.Module):
         self.conv1 = nn.Conv2d(
             config.output_channels,
             config.downsample_channels[0],
-            kernel_size=3, stride=2, padding=1, bias=False,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
         )
         self.conv2 = nn.Conv2d(
             config.downsample_channels[0],
             config.downsample_channels[1],
-            kernel_size=3, stride=2, padding=1, bias=False,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -320,7 +320,10 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
             return pos_embed
         pos_embed = pos_embed.permute(0, 3, 1, 2).float()
         pos_embed = torch.nn.functional.interpolate(
-            pos_embed, size=(target_size, target_size), mode="bicubic", align_corners=False,
+            pos_embed,
+            size=(target_size, target_size),
+            mode="bicubic",
+            align_corners=False,
         )
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
@@ -328,9 +331,9 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
-            hidden_states = hidden_states + self._interpolate_pos_encoding(
-                self.pos_embed, hidden_states.shape[1]
-            ).to(hidden_states.dtype)
+            hidden_states = hidden_states + self._interpolate_pos_encoding(self.pos_embed, hidden_states.shape[1]).to(
+                hidden_states.dtype
+            )
 
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states)
@@ -391,8 +394,8 @@ def _create_deepseek_ocr2_hybrid_mask(
     batch_size, seq_len = token_type_ids.shape
     min_dtype = torch.finfo(dtype).min
 
-    is_image = (token_type_ids == 0)
-    is_query = (token_type_ids == 1)
+    is_image = token_type_ids == 0
+    is_query = token_type_ids == 1
 
     target_is_image = is_image.unsqueeze(1)  # [B, 1, seq_len]
     source_is_query = is_query.unsqueeze(2)  # [B, seq_len, 1]
@@ -419,10 +422,9 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
         self.vision_encoder = DeepseekOcr2VisionEncoder(config)
 
         # Resolution-specific learnable queries
-        self.query_768 = nn.Embedding(144, config.hidden_size)   # 12x12 for 768px
+        self.query_768 = nn.Embedding(144, config.hidden_size)  # 12x12 for 768px
         self.query_1024 = nn.Embedding(256, config.hidden_size)  # 16x16 for 1024px
         self.post_init()
-
 
     def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutput:
         """
@@ -441,13 +443,14 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
         queries = queries.unsqueeze(0).expand(bsz, -1, -1)
         combined = torch.cat([x, queries], dim=1)
 
-        token_type_ids = torch.cat([
-            torch.zeros(bsz, n_patches, dtype=torch.long, device=x.device),
-            torch.ones(bsz, n_queries, dtype=torch.long, device=x.device),
-        ], dim=1)
-        hybrid_mask = _create_deepseek_ocr2_hybrid_mask(
-            token_type_ids, dtype=combined.dtype, device=combined.device
+        token_type_ids = torch.cat(
+            [
+                torch.zeros(bsz, n_patches, dtype=torch.long, device=x.device),
+                torch.ones(bsz, n_queries, dtype=torch.long, device=x.device),
+            ],
+            dim=1,
         )
+        hybrid_mask = _create_deepseek_ocr2_hybrid_mask(token_type_ids, dtype=combined.dtype, device=combined.device)
 
         encoder_outputs = self.vision_encoder(
             inputs_embeds=combined,
@@ -610,7 +613,6 @@ class DeepseekOcr2Model(LlavaNextModel):
 
 @auto_docstring
 class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration, GenerationMixin):
-
     def pack_image_features(self, *args, **kwargs):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
 

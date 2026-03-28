@@ -1664,6 +1664,9 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    def pack_image_features(self, *args, **kwargs):
+        raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
+
     @can_return_tuple
     def get_image_features(
         self,

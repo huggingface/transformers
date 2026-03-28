@@ -146,12 +146,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 @strict(accept_kwargs=True)
 class DeepseekOcr2TextConfig(PreTrainedConfig):
     r"""
-    Configuration for the DeepSeek-OCR-2 language model.
-
-    This model uses standard MHA (not MLA), so MLA-specific fields
-    (`kv_lora_rank`, `q_lora_rank`, `qk_nope_head_dim`, `qk_rope_head_dim`, `v_head_dim`)
-    are removed and `head_dim` is computed from `hidden_size // num_attention_heads`.
-
     first_k_dense_replace (`int`, *optional*, defaults to 0):
         The number of initial decoder layers that use dense MLP instead of MoE.
     n_group (`int`, *optional*):

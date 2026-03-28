@@ -257,9 +257,7 @@ def test(output_dir: str):
     model.eval()
 
     tokenizer = PreTrainedTokenizerFast.from_pretrained(output_dir)
-    processor = DeepseekOcr2Processor(
-        image_processor=DeepseekOcr2ImageProcessor(), tokenizer=tokenizer
-    )
+    processor = DeepseekOcr2Processor(image_processor=DeepseekOcr2ImageProcessor(), tokenizer=tokenizer)
 
     image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
     print(f"Image size: {image.size[0]}x{image.size[1]}")
@@ -306,9 +304,16 @@ def main():
             --test
     """
     parser = argparse.ArgumentParser(description=main.__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--input_dir", type=str, required=True, help="Path to the downloaded DeepSeek-OCR-2 checkpoint.")
+    parser.add_argument(
+        "--input_dir", type=str, required=True, help="Path to the downloaded DeepSeek-OCR-2 checkpoint."
+    )
     parser.add_argument("--output_dir", type=str, required=True, help="Path to write the converted model.")
-    parser.add_argument("--hub_repo_id", type=str, default=None, help="Push converted model to this HF Hub repo (e.g. 'my-org/DeepSeek-OCR-2-hf').")
+    parser.add_argument(
+        "--hub_repo_id",
+        type=str,
+        default=None,
+        help="Push converted model to this HF Hub repo (e.g. 'my-org/DeepSeek-OCR-2-hf').",
+    )
     parser.add_argument("--test", action="store_true", help="Run inference test after conversion.")
     args = parser.parse_args()
 

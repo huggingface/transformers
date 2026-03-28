@@ -231,9 +231,7 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
         target_height = tile_size * num_rows
         num_blocks = num_columns * num_rows
 
-        resized = self.resize(
-            images, SizeDict(height=target_height, width=target_width), resample=resample
-        )
+        resized = self.resize(images, SizeDict(height=target_height, width=target_width), resample=resample)
 
         patches = []
         for i in range(num_blocks):

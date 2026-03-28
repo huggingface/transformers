@@ -213,6 +213,4 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             if ref_local is not None and other_local is not None:
                 self.assertEqual(len(ref_local), len(other_local))
                 for i in range(len(ref_local)):
-                    self._assert_tensors_equivalence(
-                        torch.from_numpy(ref_local[i]), other_local[i]
-                    )
+                    self._assert_tensors_equivalence(torch.from_numpy(ref_local[i]), other_local[i])

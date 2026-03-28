@@ -13,13 +13,14 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2026-01-28 and added to Hugging Face Transformers on 2026-03-28.*
 
 # DeepSeek-OCR-2
 
 
 ## Overview
 
-The DeepSeek-OCR-2 model was proposed in [Visual Causal Flow: A Novel Approach to OCR-Specialized Vision-Language Models](https://arxiv.org/abs/2601.20552) by the DeepSeek team.
+The DeepSeek-OCR-2 model was proposed in [Visual Causal Flow: A Novel Approach to OCR-Specialized Vision-Language Models](https://huggingface.co/papers/2601.20552) by the DeepSeek team.
 
 DeepSeek-OCR-2 is an OCR-specialized vision-language model built on a distinctive architecture: a SAM ViT-B vision encoder feeds into a Qwen2 hybrid attention encoder, which is connected through an MLP projector to a DeepSeek-V2 Mixture-of-Experts (MoE) language model. A key feature of the model is its hybrid attention mechanism, which applies bidirectional attention over image tokens and causal attention over query tokens, enabling efficient and accurate document understanding.
 
