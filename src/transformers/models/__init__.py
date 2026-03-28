@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .cohere2_vision import *
+    from .cohere_asr import *
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
@@ -415,11 +416,13 @@ if TYPE_CHECKING:
     from .unispeech_sat import *
     from .univnet import *
     from .upernet import *
+    from .uvdoc import *
     from .vaultgemma import *
     from .vibevoice_asr import *
     from .video_llama_3 import *
     from .video_llava import *
     from .videomae import *
+    from .videomt import *
     from .vilt import *
     from .vipllava import *
     from .vision_encoder_decoder import *

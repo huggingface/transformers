@@ -14,7 +14,12 @@
 from typing import Union
 
 import torch
-from torchvision.ops import masks_to_boxes
+
+from ...utils import is_torchvision_available
+
+
+if is_torchvision_available():
+    from torchvision.ops import masks_to_boxes
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -25,7 +30,7 @@ from ...video_utils import VideoInput
 from .modeling_sam3_video import Sam3VideoInferenceSession
 
 
-@requires(backends=("torch",))
+@requires(backends=("torch", "torchvision"))
 @auto_docstring
 class Sam3VideoProcessor(ProcessorMixin):
     def __init__(

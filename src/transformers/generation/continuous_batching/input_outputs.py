@@ -95,7 +95,8 @@ class ContinuousBatchingIOs:
         config: PretrainedConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int = 32,
+        max_graphs: int,
+        return_logprobs: bool,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
@@ -103,6 +104,7 @@ class ContinuousBatchingIOs:
         - device: The device to allocate tensors on. If the device is CPU, then the memory is pinned.
         - model_dtype: The data type for model computations.
         - max_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
+        - return_logprobs: Whether to return log probabilities along with the token IDs.
         """
         # Memoize attributes
         self.cache = cache
@@ -110,6 +112,7 @@ class ContinuousBatchingIOs:
         self.config = config
         self.model_dtype = model_dtype
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
+        self.return_logprobs = return_logprobs
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
         self.max_kv_read = 0  # number of KV tokens read from cache (maxed across all groups). Can be padded.
@@ -136,7 +139,7 @@ class ContinuousBatchingIOs:
           `logits_indices`, `cumulative_seqlens_k`, `carry_over_ids`.
         - `attention_mask`: Optional attention masks (only for eager/SDPA implementations)
         - `write_index` and `read_index` storage: Cache indexing tensors for each attention group
-        - `output_ids`: Storage for generated token IDs
+        - `output_ids`: Storage for generated token IDs and maybe log probabilities if return_logprobs is True
         """
         num_groups = self.cache.num_groups
         max_batch_tokens = self.cache.max_batch_tokens
@@ -167,8 +170,9 @@ class ContinuousBatchingIOs:
             self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
 
         # Output tensor and scalars
+        num_output_rows = 2 if self.return_logprobs else 1
         self.output_ids = torch.empty(
-            (max_batch_tokens + 1,), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_output_rows, max_batch_tokens + 1), dtype=torch.int32, device=self.device, pin_memory=pin_memory
         )
         # Last output token is never changed and set to 0 for async carry on purpose
         self.output_ids.zero_()
@@ -254,7 +258,7 @@ class ContinuousBatchingIOs:
 
         # Reset the logits indices and output ids
         self.logits_indices[:q_len].zero_()
-        self.output_ids[:q_len].zero_()
+        self.output_ids[:, :q_len].zero_()
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -277,6 +281,14 @@ class ContinuousBatchingIOs:
             self.write_index_storage[:, :q_len].fill_(-2)  # -1 is used to let the cache where new states go
             self.read_index_storage[:, : q_len + kv_len].fill_(-2)  # same
 
+    def reset(self) -> None:
+        """Reset all relevant states for a new generation loop."""
+        self._reset_static_tensors(full_reset=True)
+        self.requests_in_batch = []
+        self.req_id_to_new_token_position = {}
+        if self.compute_stream is not None:
+            self.compute_stream.synchronize()
+
     # These getter function help create a common interface for the sync and async IOs
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Get the cumulative sequence lengths for the current batch."""
@@ -291,10 +303,16 @@ class ContinuousBatchingIOs:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
 
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         requests_in_batch = self.requests_in_batch
-        new_tokens = self.output_ids[: len(self.requests_in_batch)].tolist()
-        return requests_in_batch, new_tokens
+        new_tokens = self.output_ids[0, : len(self.requests_in_batch)].tolist()
+        # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
+        if self.return_logprobs:
+            logprobs = self.output_ids[1, : len(self.requests_in_batch)].view(dtype=torch.float32).tolist()
+        # Otherwise, we can return an empty list because they wont be used
+        else:
+            logprobs = None
+        return requests_in_batch, new_tokens, logprobs
 
     @traced
     def prepare_batch_tensors(
@@ -507,15 +525,25 @@ class HostDeviceIOPair:
         config: PretrainedConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int = 32,
+        max_graphs: int,
+        return_logprobs: bool,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
-        self.host_io = ContinuousBatchingIOs(cache, config, torch.device("cpu"), model_dtype, max_graphs)
-        self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs)
+        self.host_io = ContinuousBatchingIOs(
+            cache, config, torch.device("cpu"), model_dtype, max_graphs, return_logprobs
+        )
+        self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs, return_logprobs)
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
         self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
         self.d2h_over = torch.cuda.Event() if torch.cuda.is_available() else None
+
+    def reset(self) -> None:
+        self.host_io.reset()
+        self.device_io.reset()
+        for event in [self.h2d_over, self.compute_over, self.d2h_over]:
+            if event is not None:
+                event.synchronize()
 
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
@@ -578,14 +606,17 @@ class ContinuousBatchingAsyncIOs:
         config: PretrainedConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int = 32,
+        max_graphs: int,
+        return_logprobs: bool,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
         if not torch.cuda.is_available():
             raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
-        self.io_pairs = [HostDeviceIOPair(cache, config, device, model_dtype, max_graphs) for _ in range(2)]
+        self.io_pairs = [
+            HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, return_logprobs) for _ in range(2)
+        ]
         # CUDA streams
         self.h2d_stream = torch.cuda.Stream(device=device)
         self.d2h_stream = torch.cuda.Stream(device=device)
@@ -664,7 +695,7 @@ class ContinuousBatchingAsyncIOs:
         before launching the forwar pass of batch N+1. This method performs the carry over, and is recorded in CUDA
         graphs if they are enabled."""
         # Compute tokens to carry over and the corresponding mask
-        carried_over_ids = prev_output_ids[carry_over_ids]
+        carried_over_ids = prev_output_ids[0, carry_over_ids]
         carried_over_mask = (carry_over_ids != -1).int()
         # Truncate everything to the right size
         carried_over_ids = carried_over_ids[: input_ids.size(1)]
@@ -701,7 +732,16 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
+
+    def reset(self) -> None:
+        """Reset all state for a new generation session. Used in persistent mode between sessions."""
+        self.current_pair = 0
+        for io_pair in self.io_pairs:
+            io_pair.reset()
+        self.h2d_stream.synchronize()
+        self.d2h_stream.synchronize()
+        self.compute_stream.synchronize()

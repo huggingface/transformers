@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/hf-seamless-m4t-medium")
-@strict(accept_kwargs=True)
+@strict
 class SeamlessM4TConfig(PreTrainedConfig):
     r"""
     t2u_vocab_size (`int`, *optional*, defaults to 10082):
@@ -151,7 +151,8 @@ class SeamlessM4TConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "seamless_m4t"
     attribute_map = {"num_hidden_layers": "decoder_layers", "num_attention_heads": "decoder_attention_heads"}

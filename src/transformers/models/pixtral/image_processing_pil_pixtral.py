@@ -26,15 +26,12 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_pixtral import PixtralImageProcessorKwargs, get_resize_output_image_size
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class PixtralImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
@@ -63,7 +60,7 @@ class PixtralImageProcessorPil(PilBackend):
         image: np.ndarray,
         size: SizeDict,
         patch_size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -115,7 +112,7 @@ class PixtralImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

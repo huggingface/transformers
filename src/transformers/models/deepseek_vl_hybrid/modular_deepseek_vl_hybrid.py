@@ -44,7 +44,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -61,9 +60,6 @@ from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCa
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
-
 logger = logging.get_logger(__name__)
 
 
@@ -75,7 +71,7 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-7b-chat")
-@strict(accept_kwargs=True)
+@strict
 class DeepseekVLHybridConfig(DeepseekVLConfig):
     r"""
     high_res_vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SamVisionConfig`):
@@ -539,8 +535,8 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
+        high_res_resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -650,8 +646,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
+        high_res_resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

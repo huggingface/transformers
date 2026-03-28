@@ -15,19 +15,54 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2025-08-22.*
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # HunYuanMoEV1
 
-## Overview
+HunYuanMoEV1 is Tencent's mixture-of-experts language model with 80B total parameters and 13B active parameters per token. It uses fine-grained expert routing with Grouped Query Attention, supports 256K context length, and offers dual-mode reasoning (fast and slow thinking).
 
-To be released with the official model launch.
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
-### Model Details
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-To be released with the official model launch.
+```py
+import torch
+from transformers import pipeline
 
-## Usage tips
+pipe = pipeline(
+    task="text-generation",
+    model="tencent/Hunyuan-A13B-Instruct",
+    dtype=torch.bfloat16,
+)
+pipe("The future of artificial intelligence is")
+```
 
-To be released with the official model launch.
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-A13B-Instruct")
+model = AutoModelForCausalLM.from_pretrained(
+    "tencent/Hunyuan-A13B-Instruct",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+input_ids = tokenizer("The future of artificial intelligence is", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
 
 ## HunYuanMoEV1Config
 

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="FacebookAI/xlm-roberta-xl")
-@strict(accept_kwargs=True)
+@strict
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
     Examples:

@@ -16,34 +16,20 @@
 import math
 
 import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import get_size_dict
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-    get_image_size,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict, get_image_size
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
+from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
 @auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class FuyuImageProcessorPil(PilBackend):
     do_resize = True
     size = {"height": 1080, "width": 1920}
@@ -69,11 +55,7 @@ class FuyuImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[FuyuImagesKwargs]):
         super().__init__(**kwargs)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-        expected_ndims: int = 3,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_list_of_list_of_images(images)
 
@@ -428,11 +410,7 @@ class FuyuImageProcessorPil(PilBackend):
             }
         )
 
-    def _standardize_kwargs(
-        self,
-        patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, patch_size: dict[str, int] | SizeDict | None = None, **kwargs) -> dict:
         """
         Process Fuyu-specific kwargs before validation.
         """

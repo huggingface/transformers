@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
-@strict(accept_kwargs=True)
+@strict
 class VibeVoiceAsrConfig(PretrainedConfig):
     r"""
     acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):

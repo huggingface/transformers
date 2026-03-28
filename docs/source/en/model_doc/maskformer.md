@@ -64,6 +64,10 @@ This model was contributed by [francesco](https://huggingface.co/francesco). The
 
 [[autodoc]] models.maskformer.modeling_maskformer.MaskFormerForInstanceSegmentationOutput
 
+## MaskFormerDetrConfig
+
+[[autodoc]] MaskFormerDetrConfig
+
 ## MaskFormerConfig
 
 [[autodoc]] MaskFormerConfig

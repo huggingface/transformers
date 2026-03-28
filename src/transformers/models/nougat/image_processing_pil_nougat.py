@@ -36,16 +36,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
+from ...utils.import_utils import requires
 from .image_processing_nougat import NougatImageProcessorKwargs
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class NougatImageProcessorPil(PilBackend):
     valid_kwargs = NougatImageProcessorKwargs
@@ -211,7 +207,7 @@ class NougatImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
         reducing_gap: int | None = None,
         **kwargs,
     ) -> np.ndarray:
@@ -223,7 +219,7 @@ class NougatImageProcessorPil(PilBackend):
                 Image to resize.
             size (`SizeDict`):
                 Size of the output image.
-            resample (`PILImageResampling | tvF.InterpolationMode | int`, *optional*):
+            resample (`PILImageResampling | int`, *optional*):
                 Resampling filter to use when resizing the image.
         Returns:
             `np.ndarray`: The resized image.
@@ -247,7 +243,7 @@ class NougatImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -26,14 +26,12 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 from .image_processing_donut import DonutImageProcessorKwargs
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class DonutImageProcessorPil(PilBackend):
     """PIL backend for Donut with align_long_axis, thumbnail, and pad_image."""
@@ -132,7 +130,7 @@ class DonutImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | int | None" = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize the image to make a thumbnail."""
@@ -163,7 +161,7 @@ class DonutImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

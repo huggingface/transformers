@@ -26,15 +26,12 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_torch_available,
-    is_torchvision_available,
 )
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 from .image_processing_imagegpt import ImageGPTImageProcessorKwargs
 
@@ -54,6 +51,7 @@ def color_quantize(x, clusters):
     return np.argmin(d, axis=1)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class ImageGPTImageProcessorPil(PilBackend):
     model_input_names = ["input_ids"]
@@ -87,7 +85,7 @@ class ImageGPTImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

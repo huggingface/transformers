@@ -16,6 +16,7 @@
 from collections.abc import Iterable
 
 import numpy as np
+import PIL
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -36,15 +37,12 @@ from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_vision_available,
 )
+from ...utils.import_utils import requires
 from .image_processing_janus import JanusImageProcessorKwargs
 
 
-if is_vision_available():
-    import PIL
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class JanusImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

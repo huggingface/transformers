@@ -34,6 +34,7 @@ from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..paligemma.processing_paligemma import PaligemmaProcessor
 from ..siglip.image_processing_siglip import SiglipImageProcessor
@@ -61,6 +62,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
+@requires(backends=("vision", "torch"))
 class PI0Processor(PaligemmaProcessor):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
@@ -172,7 +174,7 @@ class PI0Processor(PaligemmaProcessor):
 
 
 @auto_docstring(checkpoint="lerobot/pi0_base")
-@strict(accept_kwargs=True)
+@strict
 class PI0Config(PreTrainedConfig):
     r"""
     vlm_config (`dict`, *optional*):
@@ -199,8 +201,6 @@ class PI0Config(PreTrainedConfig):
         Minimum period for sinusoidal time embedding.
     max_period (`float`, *optional*, defaults to 4.0):
         Maximum period for sinusoidal time embedding.
-    vlm_projection_dim (`int`, *optional*, defaults to 2048):
-        The projection dimension for VLM's multimodal projection layer.
     loss_reduction (`str`, *optional*, defaults to `"mean"`):
         The reduction to use on MSE loss.
 
