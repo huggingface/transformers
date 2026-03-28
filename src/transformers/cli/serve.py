@@ -54,6 +54,8 @@ from transformers.utils.import_utils import (
 
 
 if TYPE_CHECKING:
+    from pydantic import TypeAdapter
+
     from transformers import (
         PreTrainedModel,
         PreTrainedTokenizerFast,
