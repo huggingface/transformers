@@ -162,14 +162,14 @@ class SwitchTransformersTop1Router(nn.Module):
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
+        router_max_probs, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
-        router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return router_probs, expert_index, router_logits
+        router_max_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
+        return router_max_probs, expert_index, router_logits
 
 
 class SwitchTransformersLayerNorm(T5LayerNorm):
