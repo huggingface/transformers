@@ -60,6 +60,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 # TODO: Replace with the official Transformers ckpt once uploaded.
 CHECKPOINT = "harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers"
+CHECKPOINT_LITE = "harshaljanjani/DEIMv2_HGNetv2_PICO_COCO_Transformers"
+CHECKPOINT_DINOV3 = "harshaljanjani/DEIMv2_DINOv3_S_COCO_Transformers"
 
 
 class Deimv2ModelTester:
@@ -337,26 +339,32 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel")
+    # No class-level flag; Multi-scale deformable attention is incompatible with nn.DataParallel
+    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel`")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    # No class-level flag; Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)
     @unittest.skip(reason="Deimv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Deimv2 does not use test_inputs_embeds_matches_input_ids")
+    # Same as test_inputs_embeds; Forward signature has inputs_embeds but no input_ids
+    @unittest.skip(reason="Deimv2 does not use inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    # No class-level flag; Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack
     @unittest.skip(reason="Deimv2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
+    # No class-level flag; Decoder heads are shared via reference assignment so untied saving is not applicable
     @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
     def test_load_save_without_tied_weights(self):
         pass
 
+    # Override: Multi-scale deformable attention outputs have different shapes than standard self-attention
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -505,6 +513,7 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # Override: Custom gradient retention check for multi-scale deformable attention outputs
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -538,6 +547,7 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    # Override: Deimv2 uses pixel_values as main input, not input_ids
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -920,30 +930,37 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel")
+    # No class-level flag; Multi-scale deformable attention is incompatible with nn.DataParallel
+    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel`")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    # No class-level flag; Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)
     @unittest.skip(reason="Deimv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Deimv2 does not use test_inputs_embeds_matches_input_ids")
+    # Same as test_inputs_embeds; Forward signature has inputs_embeds but no input_ids
+    @unittest.skip(reason="Deimv2 does not use inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    # No class-level flag; Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack
     @unittest.skip(reason="Deimv2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
+    # No class-level flag; Decoder heads are shared via reference assignment so untied saving is not applicable
     @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
     def test_load_save_without_tied_weights(self):
         pass
 
+    # LiteEncoder has no encoder_hidden_states so the base test fails accessing encoder_hidden_states[0]
     @unittest.skip(reason="LiteEncoder has no encoder attentions for gradient retention check")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    # Override: LiteEncoder has no encoder hidden states, only decoder hidden states
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -977,6 +994,7 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # Override: Deimv2 uses pixel_values as main input, not input_ids
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1261,30 +1279,37 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel")
+    # No class-level flag; Multi-scale deformable attention is incompatible with nn.DataParallel
+    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel`")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    # No class-level flag; Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)
     @unittest.skip(reason="Deimv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Deimv2 does not use test_inputs_embeds_matches_input_ids")
+    # Same as test_inputs_embeds; Forward signature has inputs_embeds but no input_ids
+    @unittest.skip(reason="Deimv2 does not use inputs_embeds_matches_input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    # No class-level flag; Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack
     @unittest.skip(reason="Deimv2 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
+    # No class-level flag; Decoder heads are shared via reference assignment so untied saving is not applicable
     @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
     def test_load_save_without_tied_weights(self):
         pass
 
+    # No class-level flag; DINOv3 RoPE with dynamic interpolation causes torch.compile inductor overflow
     @unittest.skip(reason="DINOv3 backbone with RoPE and dynamic interpolation causes torch.compile inductor overflow")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    # Override: DINOv3 backbone requires wider tolerances for SDPA vs eager comparison
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
@@ -1329,13 +1354,16 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             rtols=rtols,
         )
 
+    # Override: DINOv3 backbone numerical precision requires wider tolerances
     def test_batching_equivalence(self):
         super().test_batching_equivalence(atol=1e-4, rtol=1e-4)
 
+    # No class-level flag; Flex attention test requires decoder_input_ids which detection models don't have
     @unittest.skip(reason="Deimv2 is not a generative encoder-decoder model and has no decoder_input_ids")
     def test_flex_attention_with_grads(self):
         pass
 
+    # Override: Multi-scale deformable attention outputs have different shapes than standard self-attention
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -1434,6 +1462,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 ],
             )
 
+    # Override: Encoder hidden states are multi-scale feature maps, not a standard sequence of layer outputs
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -1484,6 +1513,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # Override: Custom gradient retention check for multi-scale deformable attention outputs
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -1517,6 +1547,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    # Override: Deimv2 uses pixel_values as main input, not input_ids
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1614,10 +1645,10 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
         expected_logits = torch.tensor(
-            [[-4.0907, -6.9117, -5.4756], [-5.5819, -5.9783, -6.4277], [-6.1450, -6.8475, -6.8653]]
+            [[-4.1046, -6.9181, -5.4832], [-6.1406, -6.8442, -6.8622], [-5.5840, -5.9846, -6.4334]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [[0.1886, 0.1663, 0.2880], [0.0661, 0.1804, 0.9302], [0.2510, 0.2141, 0.9108]]
+            [[0.1887, 0.1663, 0.2879], [0.2509, 0.2146, 0.9108], [0.0671, 0.1800, 0.9321]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
@@ -1630,14 +1661,14 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor([0.7631, 0.2989, 0.2504, 0.2459], device=torch_device)
+        expected_scores = torch.tensor([0.7642, 0.2940, 0.2581, 0.2442], device=torch_device)
         expected_labels = [65, 65, 15, 59]
         expected_slice_boxes = torch.tensor(
             [
-                [4.0577e01, 6.7796e01, 1.7578e02, 1.1168e02],
-                [4.8434e01, 7.5436e01, 2.1149e02, 9.1387e01],
-                [1.1113e01, 7.2270e01, 6.1295e02, 4.0068e02],
-                [2.2998e01, -9.0475e01, 7.0761e02, 3.7892e02],
+                [4.0585e01, 6.7780e01, 1.7577e02, 1.1170e02],
+                [4.8297e01, 7.5466e01, 2.1148e02, 9.1343e01],
+                [1.1395e01, 7.0541e01, 6.1267e02, 4.0169e02],
+                [2.7738e01, -9.0490e01, 7.0742e02, 3.7850e02],
             ],
             device=torch_device,
         )
@@ -1645,3 +1676,71 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes[:4], atol=1e-3, rtol=1e-4)
+
+
+@require_torch
+@require_vision
+@slow
+class Deimv2LiteEncoderIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained(CHECKPOINT_LITE, use_fast=False) if is_vision_available() else None
+
+    def test_inference_object_detection_head(self):
+        model = Deimv2ForObjectDetection.from_pretrained(CHECKPOINT_LITE).to(torch_device)
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [[-2.5599, -6.5060, -6.3436], [-3.9014, -6.1730, -7.4103], [-2.4303, -4.1889, -3.3519]]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [[0.7995, 0.2987, 0.3835], [0.5536, 0.5373, 0.0388], [0.3501, 0.4576, 0.7515]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
+
+        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)
+
+
+@require_torch
+@require_vision
+@slow
+class Deimv2DINOv3IntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained(CHECKPOINT_DINOV3, use_fast=False) if is_vision_available() else None
+
+    def test_inference_object_detection_head(self):
+        model = Deimv2ForObjectDetection.from_pretrained(CHECKPOINT_DINOV3).to(torch_device)
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [[-2.1084, -2.8673, -3.2874], [-2.2519, -2.6152, -3.2174], [-3.2455, -4.0411, -4.5967]]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [[0.5244, 0.7709, 0.7996], [0.3737, 0.1937, 0.7978], [0.5080, 0.5891, 0.8612]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=2e-4, rtol=2e-4)

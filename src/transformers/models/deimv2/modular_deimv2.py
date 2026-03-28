@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+from types import SimpleNamespace
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...backbone_utils import load_backbone
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import ModelOutput
 from ...utils import auto_docstring, logging
 from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
@@ -45,16 +48,16 @@ from ..d_fine.modeling_d_fine import (
     DFineSCDown,
     get_contrastive_denoising_training_group,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Intellindust/DEIMv2_HGNetv2_N_COCO")
-@strict(accept_kwargs=True)
+@strict
 class Deimv2Config(DFineConfig):
-    """
+    r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
         If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
@@ -62,31 +65,17 @@ class Deimv2Config(DFineConfig):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
         Multi level features input for encoder.
-    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-        The non-linear activation function (function or string) in the encoder and pooler.
-    eval_size (`list[int]` or `tuple[int, int]`, *optional*):
-        Height and width used to computes the effective height and width of the position embeddings after taking
-        into account the stride.
-    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-        Multi level features dimension for decoder.
-    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function (function or string) in the decoder.
-    use_focal_loss (`bool`, *optional*, defaults to `True`):
-        Parameter informing if focal loss should be used.
-    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
-        Parameter alpha used to compute the focal loss.
-    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
-        Parameter gamma used to compute the focal loss.
-    eval_idx (`int`, *optional*, defaults to -1):
-        Index of the decoder layer to use for evaluation.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
     feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
         Strides used in each feature map.
     encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
         Indexes of the projected layers to be used in the encoder.
     positional_encoding_temperature (`int`, *optional*, defaults to 10000):
         The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler.
+    eval_size (`list[int]` or `tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
     normalize_before (`bool`, *optional*, defaults to `False`):
         Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
         feed-forward modules.
@@ -94,10 +83,14 @@ class Deimv2Config(DFineConfig):
         Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder.
     num_feature_levels (`int`, *optional*, defaults to 3):
         The number of input feature levels.
     decoder_n_points (`int`, *optional*, defaults to 4):
         The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
     label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -120,6 +113,12 @@ class Deimv2Config(DFineConfig):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
         The relative weight of the giou loss of used by the Hungarian Matcher.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal loss should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
     weight_loss_vfl (`float`, *optional*, defaults to 1.0):
         Relative weight of the varifocal loss in the object detection loss.
     weight_loss_bbox (`float`, *optional*, defaults to 5.0):
@@ -130,8 +129,8 @@ class Deimv2Config(DFineConfig):
         Relative weight of the fine-grained localization loss in the object detection loss.
     weight_loss_ddf (`float`, *optional*, defaults to 1.5):
         Relative weight of the decoupled distillation focal loss in the object detection loss.
-    eos_coefficient (`float`, *optional*, defaults to 0.0001):
-        Relative classification weight of the 'no-object' class in the object detection loss.
+    eval_idx (`int`, *optional*, defaults to -1):
+        Index of the decoder layer to use for evaluation.
     layer_scale (`float`, *optional*, defaults to `1.0`):
         Scaling factor for the hidden dimension in later decoder layers.
     max_num_bins (`int`, *optional*, defaults to 32):
@@ -159,7 +158,7 @@ class Deimv2Config(DFineConfig):
     mal_alpha (`float`, *optional*):
         Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
     encoder_fuse_op (`str`, *optional*, defaults to `"sum"`):
-        Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-Fine's `"cat"`.
+        Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-FINE's `"cat"`.
     sta_inplanes (`int`, *optional*, defaults to 16):
         Number of input planes for the STA convolutional stem.
     encoder_type (`str`, *optional*, defaults to `"hybrid"`):
@@ -199,21 +198,40 @@ class Deimv2ModelOutput(DFineModelOutput):
     pass
 
 
+@dataclass
+class Deimv2EncoderOutput(ModelOutput):
+    """
+    Output type for DEIMv2 encoder modules (HybridEncoder and LiteEncoder).
+
+    Args:
+        feature_maps (`list[torch.FloatTensor]`):
+            List of multi-scale feature maps from the encoder, one per feature level.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, sequence_length, sequence_length)`.
+    """
+
+    feature_maps: list[torch.FloatTensor] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 class Deimv2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Deimv2SwiGLUFFN(nn.Module):
+class Deimv2SwiGLUFFN(LlamaMLP):
     def __init__(self, in_features: int, hidden_features: int, out_features: int):
-        super().__init__()
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features)
-        self.weights_out = nn.Linear(hidden_features, out_features)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.weights_in(hidden_states)
-        x1, x2 = hidden_states.chunk(2, dim=-1)
-        hidden = F.silu(x1) * x2
-        return self.weights_out(hidden)
+        config = SimpleNamespace(
+            hidden_size=in_features,
+            intermediate_size=hidden_features,
+            mlp_bias=True,
+            hidden_act="silu",
+        )
+        super().__init__(config)
 
 
 class Deimv2Gate(DFineGate):
@@ -239,6 +257,12 @@ class Deimv2RepVggBlock(DFineRepVggBlock):
 
 
 class Deimv2CSPRepLayer(nn.Module):
+    """
+    Cross Stage Partial (CSP) network layer with RepVGG blocks.
+    Differs from DFineCSPRepLayer: uses a single conv that splits into residual + processing path
+    (instead of two separate convs), and has an optional trailing conv controlled by `encoder_has_trailing_conv`.
+    """
+
     def __init__(
         self, config: Deimv2Config, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
     ):
@@ -249,19 +273,27 @@ class Deimv2CSPRepLayer(nn.Module):
         self.bottlenecks = nn.ModuleList(
             [Deimv2RepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
         )
-        if config.encoder_has_trailing_conv:
-            self.conv3 = Deimv2ConvNormLayer(config, hidden_channels, out_channels, 3, 1, activation=activation)
-        else:
-            self.conv3 = nn.Identity()
+        self.conv2 = (
+            Deimv2ConvNormLayer(config, hidden_channels, out_channels, 3, 1, activation=activation)
+            if config.encoder_has_trailing_conv
+            else nn.Identity()
+        )
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state_1, hidden_state_2 = self.conv1(hidden_state).chunk(2, 1)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual, hidden_states = self.conv1(hidden_states).chunk(2, dim=1)
         for bottleneck in self.bottlenecks:
-            hidden_state_2 = bottleneck(hidden_state_2)
-        return self.conv3(hidden_state_1 + hidden_state_2)
+            hidden_states = bottleneck(hidden_states)
+        return self.conv2(residual + hidden_states)
 
 
 class Deimv2RepNCSPELAN5(nn.Module):
+    """
+    Rep(VGG) N(etwork) CSP (Cross Stage Partial) ELAN (Efficient Layer Aggregation Network) block.
+    Similar to DFineRepNCSPELAN4 but without intermediate convolutions between CSP branches,
+    resulting in a simpler 4-way concatenation (split + 2 CSP branches) instead of D-FINE's
+    4-branch design with interleaved convolutions.
+    """
+
     def __init__(self, config: Deimv2Config, numb_blocks: int = 3):
         super().__init__()
         activation = config.activation_function
@@ -269,21 +301,19 @@ class Deimv2RepNCSPELAN5(nn.Module):
         out_channels = config.encoder_hidden_dim
         split_channels = config.encoder_hidden_dim * 2
         csp_channels = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
-        self.conv_dim = split_channels // 2
         self.conv1 = Deimv2ConvNormLayer(config, in_channels, split_channels, 1, 1, activation=activation)
         self.csp_rep1 = Deimv2CSPRepLayer(config, split_channels // 2, csp_channels, num_blocks=numb_blocks)
         self.csp_rep2 = Deimv2CSPRepLayer(config, csp_channels, csp_channels, num_blocks=numb_blocks)
-        self.conv4 = Deimv2ConvNormLayer(
+        self.conv2 = Deimv2ConvNormLayer(
             config, split_channels + (2 * csp_channels), out_channels, 1, 1, activation=activation
         )
 
-    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
-        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
-        branch1 = self.csp_rep1(split_features[-1])
-        branch2 = self.csp_rep2(branch1)
-        split_features.extend([branch1, branch2])
-        merged_features = torch.cat(split_features, 1)
-        return self.conv4(merged_features)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states_1, hidden_states_2 = self.conv1(hidden_states).chunk(2, dim=1)
+        hidden_states_3 = self.csp_rep1(hidden_states_2)
+        hidden_states_4 = self.csp_rep2(hidden_states_3)
+        merged_hidden_states = torch.cat([hidden_states_1, hidden_states_2, hidden_states_3, hidden_states_4], dim=1)
+        return self.conv2(merged_hidden_states)
 
 
 class Deimv2SCDown(DFineSCDown):
@@ -302,114 +332,91 @@ class Deimv2SpatialTuningAdapter(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
         inplanes = config.sta_inplanes
-        self.stem = nn.Sequential(
-            nn.Conv2d(3, inplanes, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(inplanes),
-            nn.GELU(),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
-        )
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(inplanes, 2 * inplanes, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(2 * inplanes),
-        )
-        self.conv3 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(2 * inplanes, 4 * inplanes, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(4 * inplanes),
-        )
-        self.conv4 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(4 * inplanes, 4 * inplanes, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(4 * inplanes),
-        )
+        self.stem_conv = Deimv2ConvNormLayer(config, 3, inplanes, 3, 2, activation="gelu")
+        self.stem_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.conv2 = Deimv2ConvNormLayer(config, inplanes, 2 * inplanes, 3, 2)
+        self.act3 = nn.GELU()
+        self.conv3 = Deimv2ConvNormLayer(config, 2 * inplanes, 4 * inplanes, 3, 2)
+        self.act4 = nn.GELU()
+        self.conv4 = Deimv2ConvNormLayer(config, 4 * inplanes, 4 * inplanes, 3, 2)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        hidden_states = self.stem(pixel_values)
-        feature_map_8 = self.conv2(hidden_states)
-        feature_map_16 = self.conv3(feature_map_8)
-        feature_map_32 = self.conv4(feature_map_16)
-        return feature_map_8, feature_map_16, feature_map_32
+        hidden_states_1 = self.stem_pool(self.stem_conv(pixel_values))
+        hidden_states_2 = self.conv2(hidden_states_1)
+        hidden_states_3 = self.conv3(self.act3(hidden_states_2))
+        hidden_states_4 = self.conv4(self.act4(hidden_states_3))
+        return hidden_states_2, hidden_states_3, hidden_states_4
 
 
-class Deimv2GAPFusion(nn.Module):
-    def __init__(self, config: Deimv2Config, channels: int):
+class Deimv2FeatureFusion(nn.Module):
+    """Fuses two feature maps via element-wise sum or channel-wise concatenation."""
+
+    def __init__(self, fuse_op: str = "sum"):
         super().__init__()
-        self.conv_norm = Deimv2ConvNormLayer(config, channels, channels, 1, 1, activation=config.activation_function)
+        self.fuse_op = fuse_op
 
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return self.conv_norm(hidden_state + F.adaptive_avg_pool2d(hidden_state, 1))
+    def forward(self, feature_map_a: torch.Tensor, feature_map_b: torch.Tensor) -> torch.Tensor:
+        if self.fuse_op == "sum":
+            return feature_map_a + feature_map_b
+        return torch.cat([feature_map_a, feature_map_b], dim=1)
 
 
 class Deimv2LiteEncoder(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
         hidden_dim = config.encoder_hidden_dim
-        act = config.activation_function
+        activation = config.activation_function
 
-        self.input_proj = nn.ModuleList()
-        for in_channel in config.encoder_in_channels:
-            self.input_proj.append(
-                nn.Sequential(
-                    nn.Conv2d(in_channel, hidden_dim, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(hidden_dim),
-                )
-            )
-
-        self.down_sample1 = nn.Sequential(
-            nn.AvgPool2d(kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(hidden_dim, hidden_dim, 1, 1, bias=False),
-            nn.BatchNorm2d(hidden_dim),
-            nn.SiLU(inplace=True) if act == "silu" else nn.ReLU(inplace=True),
-        )
-        self.down_sample2 = nn.Sequential(
-            nn.AvgPool2d(kernel_size=3, stride=2, padding=1),
-            nn.Conv2d(hidden_dim, hidden_dim, 1, 1, bias=False),
-            nn.BatchNorm2d(hidden_dim),
-            nn.SiLU(inplace=True) if act == "silu" else nn.ReLU(inplace=True),
+        self.input_proj = nn.ModuleList(
+            [Deimv2ConvNormLayer(config, in_channel, hidden_dim, 1, 1) for in_channel in config.encoder_in_channels]
         )
 
-        self.bi_fusion = Deimv2GAPFusion(config, hidden_dim)
+        self.down_pool1 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
+        self.down_conv1 = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
+        self.down_pool2 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
+        self.down_conv2 = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
+
+        self.bi_fusion_conv = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
 
         num_blocks = round(3 * config.depth_mult)
         self.fpn_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
         self.pan_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
 
-    def forward(self, inputs_embeds=None, **kwargs) -> BaseModelOutput:
-        feats = inputs_embeds
-        proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
-        proj_feats.append(self.down_sample1(proj_feats[-1]))
+    def forward(self, inputs_embeds: list[torch.Tensor], **kwargs) -> Deimv2EncoderOutput:
+        projected_features = []
+        for i, feature in enumerate(inputs_embeds):
+            projected_features.append(self.input_proj[i](feature))
+        projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
 
-        proj_feats[-1] = self.bi_fusion(proj_feats[-1])
+        projected_features[-1] = self.bi_fusion_conv(
+            projected_features[-1] + F.adaptive_avg_pool2d(projected_features[-1], 1)
+        )
 
-        outs = []
-        fuse_feat = proj_feats[0] + F.interpolate(proj_feats[1], scale_factor=2.0, mode="nearest")
-        outs.append(self.fpn_block(fuse_feat))
+        outputs = []
+        fused_feature = projected_features[0] + F.interpolate(projected_features[1], scale_factor=2.0, mode="nearest")
+        outputs.append(self.fpn_block(fused_feature))
 
-        fuse_feat = proj_feats[1] + self.down_sample2(outs[-1])
-        outs.append(self.pan_block(fuse_feat))
+        fused_feature = projected_features[1] + self.down_conv2(self.down_pool2(outputs[-1]))
+        outputs.append(self.pan_block(fused_feature))
 
-        return BaseModelOutput(last_hidden_state=outs)
+        return Deimv2EncoderOutput(feature_maps=outputs)
 
 
 class Deimv2ConvEncoder(DFineConvEncoder):
     def __init__(self, config):
         super().__init__(config)
-        if config.encoder_type != "lite":
-            encoder_input_proj = []
-            for in_channel in self.intermediate_channel_sizes:
-                encoder_input_proj.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channel, config.encoder_hidden_dim, kernel_size=1, bias=False),
-                        nn.BatchNorm2d(config.encoder_hidden_dim),
-                    )
-                )
-            self.encoder_input_proj = nn.ModuleList(encoder_input_proj)
+        self.encoder_input_proj = nn.ModuleList(
+            [
+                Deimv2ConvNormLayer(config, in_channel, config.encoder_hidden_dim, 1, 1)
+                if config.encoder_type != "lite"
+                else nn.Identity()
+                for in_channel in self.intermediate_channel_sizes
+            ]
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
         features = self.model(pixel_values).feature_maps
-        if hasattr(self, "encoder_input_proj"):
-            return [self.encoder_input_proj[i](feat) for i, feat in enumerate(features)]
-        return list(features)
+        return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
 
 
 class Deimv2DINOv3ConvEncoder(nn.Module):
@@ -421,40 +428,39 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
 
         embed_dim = config.backbone_config.hidden_size
         hidden_dim = config.encoder_hidden_dim
-        sta_ch = config.sta_inplanes
-        self.convs = nn.ModuleList(
+        sta_channels = config.sta_inplanes
+        self.fusion_proj = nn.ModuleList(
             [
-                nn.Conv2d(embed_dim + sta_ch * 2, hidden_dim, 1, bias=False),
-                nn.Conv2d(embed_dim + sta_ch * 4, hidden_dim, 1, bias=False),
-                nn.Conv2d(embed_dim + sta_ch * 4, hidden_dim, 1, bias=False),
+                Deimv2ConvNormLayer(config, embed_dim + sta_channels * 2, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + sta_channels * 4, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + sta_channels * 4, hidden_dim, 1, 1),
             ]
         )
-        self.norms = nn.ModuleList([nn.BatchNorm2d(hidden_dim) for _ in range(3)])
 
     def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
         backbone_output = self.backbone(pixel_values)
         feature_maps = backbone_output.feature_maps
 
         patch_size = self.backbone.config.patch_size
-        h_patches = pixel_values.shape[2] // patch_size
-        w_patches = pixel_values.shape[3] // patch_size
+        height_patches = pixel_values.shape[2] // patch_size
+        width_patches = pixel_values.shape[3] // patch_size
 
-        sem_feats = []
+        semantic_features = []
         num_scales = len(feature_maps)
         for i, feat in enumerate(feature_maps):
-            resize_h = int(h_patches * 2 ** (num_scales - 2 - i))
-            resize_w = int(w_patches * 2 ** (num_scales - 2 - i))
+            resize_h = int(height_patches * 2 ** (num_scales - 2 - i))
+            resize_w = int(width_patches * 2 ** (num_scales - 2 - i))
             spatial = F.interpolate(feat, size=[resize_h, resize_w], mode="bilinear", align_corners=False)
-            sem_feats.append(spatial)
+            semantic_features.append(spatial)
 
-        detail_feats = self.sta(pixel_values)
+        detail_features = self.sta(pixel_values)
 
-        outs = []
-        for i, (sem_feat, detail_feat) in enumerate(zip(sem_feats, detail_feats)):
-            fused = torch.cat([sem_feat, detail_feat], dim=1)
-            outs.append(self.norms[i](self.convs[i](fused)))
+        outputs = []
+        for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
+            fused = torch.cat([semantic_feature, detail_feature], dim=1)
+            outputs.append(self.fusion_proj[i](fused))
 
-        return outs
+        return outputs
 
 
 class Deimv2Integral(DFineIntegral):
@@ -473,25 +479,23 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)
         self.mlp = Deimv2SwiGLUFFN(config.d_model, config.decoder_ffn_dim // 2, config.d_model)
         self.use_gateway = config.use_gateway
-        if config.use_gateway:
-            self.gateway = Deimv2Gate(config.d_model)
-        else:
-            del self.gateway
-            self.encoder_attn_layer_norm = Deimv2RMSNorm(config.d_model)
+        self.gateway = Deimv2Gate(config.d_model) if config.use_gateway else None
+        self.encoder_attn_layer_norm = None if config.use_gateway else Deimv2RMSNorm(config.d_model)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
+        reference_points: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        spatial_shapes_list: list[tuple[int, int]] | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
 
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=encoder_attention_mask,
@@ -505,6 +509,7 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
 
         residual = hidden_states
 
+        # Cross-Attention
         hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
         hidden_states, _ = self.encoder_attn(
             hidden_states=hidden_states,
@@ -515,17 +520,17 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        if self.use_gateway:
+        if self.gateway is not None:
             hidden_states = self.gateway(residual, hidden_states)
         else:
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        clamp_value = torch.finfo(hidden_states.dtype).max
-        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-clamp_value, max=clamp_value))
+        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
 
         return hidden_states
 
@@ -536,10 +541,12 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
         super()._init_weights(module)
 
         if isinstance(module, Deimv2SwiGLUFFN):
-            init.xavier_uniform_(module.weights_in.weight)
-            init.constant_(module.weights_in.bias, 0)
-            init.xavier_uniform_(module.weights_out.weight)
-            init.constant_(module.weights_out.bias, 0)
+            init.xavier_uniform_(module.gate_proj.weight)
+            init.constant_(module.gate_proj.bias, 0)
+            init.xavier_uniform_(module.up_proj.weight)
+            init.constant_(module.up_proj.bias, 0)
+            init.xavier_uniform_(module.down_proj.weight)
+            init.constant_(module.down_proj.bias, 0)
 
         if isinstance(module, Deimv2RMSNorm):
             init.ones_(module.weight)
@@ -558,7 +565,7 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
         self.eval_size = config.eval_size
         self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
-        self.encoder_fuse_op = config.encoder_fuse_op
+        self.feature_fusion = Deimv2FeatureFusion(config.encoder_fuse_op)
 
         self.aifi = nn.ModuleList([Deimv2AIFILayer(config) for _ in range(len(self.encode_proj_layers))])
 
@@ -582,9 +589,9 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
 
     def forward(
         self,
-        inputs_embeds=None,
+        inputs_embeds: list[torch.Tensor] | None = None,
         **kwargs,
-    ) -> BaseModelOutput:
+    ) -> Deimv2EncoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -596,6 +603,7 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
             for i, enc_ind in enumerate(self.encode_proj_layers):
                 feature_maps[enc_ind] = self.aifi[i](feature_maps[enc_ind], **kwargs)
 
+        # top-down FPN
         fpn_feature_maps = [feature_maps[-1]]
         for idx, (lateral_conv, fpn_block) in enumerate(zip(self.lateral_convs, self.fpn_blocks)):
             backbone_feature_map = feature_maps[self.num_fpn_stages - idx - 1]
@@ -603,28 +611,23 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
             fpn_feature_maps[-1] = top_fpn_feature_map
             top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
-            if self.encoder_fuse_op == "sum":
-                fused_feature_map = top_fpn_feature_map + backbone_feature_map
-            else:
-                fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
+            fused_feature_map = self.feature_fusion(top_fpn_feature_map, backbone_feature_map)
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
         fpn_feature_maps.reverse()
 
+        # bottom-up PAN
         pan_feature_maps = [fpn_feature_maps[0]]
         for idx, (downsample_conv, pan_block) in enumerate(zip(self.downsample_convs, self.pan_blocks)):
             top_pan_feature_map = pan_feature_maps[-1]
             fpn_feature_map = fpn_feature_maps[idx + 1]
             downsampled_feature_map = downsample_conv(top_pan_feature_map)
-            if self.encoder_fuse_op == "sum":
-                fused_feature_map = downsampled_feature_map + fpn_feature_map
-            else:
-                fused_feature_map = torch.concat([downsampled_feature_map, fpn_feature_map], dim=1)
+            fused_feature_map = self.feature_fusion(downsampled_feature_map, fpn_feature_map)
             new_pan_feature_map = pan_block(fused_feature_map)
             pan_feature_maps.append(new_pan_feature_map)
 
-        return BaseModelOutput(last_hidden_state=pan_feature_maps)
+        return Deimv2EncoderOutput(feature_maps=pan_feature_maps)
 
 
 class Deimv2Decoder(DFineDecoder):
@@ -652,15 +655,10 @@ class Deimv2Model(DFineModel):
         Deimv2PreTrainedModel.__init__(self, config)
 
         is_dinov3 = getattr(config.backbone_config, "model_type", None) == "dinov3_vit"
-        if is_dinov3:
-            self.conv_encoder = Deimv2DINOv3ConvEncoder(config)
-        else:
-            self.conv_encoder = Deimv2ConvEncoder(config)
-
-        if config.encoder_type == "lite":
-            self.encoder = Deimv2LiteEncoder(config)
-        else:
-            self.encoder = Deimv2HybridEncoder(config=config)
+        self.conv_encoder = Deimv2DINOv3ConvEncoder(config) if is_dinov3 else Deimv2ConvEncoder(config)
+        self.encoder = (
+            Deimv2LiteEncoder(config) if config.encoder_type == "lite" else Deimv2HybridEncoder(config=config)
+        )
 
         if config.num_denoising > 0:
             self.denoising_class_embed = nn.Embedding(
@@ -684,19 +682,17 @@ class Deimv2Model(DFineModel):
         decoder_input_proj = []
         in_channels = config.decoder_in_channels[-1]
         for _ in range(num_backbone_outs):
-            if config.hidden_size == config.decoder_in_channels[-1]:
-                decoder_input_proj.append(nn.Identity())
-            else:
-                conv = nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False)
-                batchnorm = nn.BatchNorm2d(config.d_model, config.batch_norm_eps)
-                decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+            decoder_input_proj.append(
+                nn.Identity()
+                if config.hidden_size == config.decoder_in_channels[-1]
+                else Deimv2ConvNormLayer(config, in_channels, config.d_model, 1, 1)
+            )
         for _ in range(config.num_feature_levels - num_backbone_outs):
-            if config.hidden_size == config.decoder_in_channels[-1]:
-                decoder_input_proj.append(nn.Identity())
-            else:
-                conv = nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False)
-                batchnorm = nn.BatchNorm2d(config.d_model, config.batch_norm_eps)
-                decoder_input_proj.append(nn.Sequential(conv, batchnorm))
+            decoder_input_proj.append(
+                nn.Identity()
+                if config.hidden_size == config.decoder_in_channels[-1]
+                else Deimv2ConvNormLayer(config, in_channels, config.d_model, 3, 2)
+            )
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
         self.decoder = Deimv2Decoder(config)
 
@@ -732,22 +728,22 @@ class Deimv2Model(DFineModel):
                 proj_feats,
                 **kwargs,
             )
-        elif not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
+        elif not isinstance(encoder_outputs, Deimv2EncoderOutput):
+            encoder_outputs = Deimv2EncoderOutput(
+                feature_maps=encoder_outputs[0] if isinstance(encoder_outputs[0], list) else [encoder_outputs[0]],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         sources = []
-        for level, source in enumerate(encoder_outputs.last_hidden_state):
+        for level, source in enumerate(encoder_outputs.feature_maps):
             sources.append(self.decoder_input_proj[level](source))
 
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.feature_maps[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
-                sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
+                sources.append(self.decoder_input_proj[i](encoder_outputs.feature_maps[-1]))
 
         source_flatten = []
         spatial_shapes_list = []
@@ -844,7 +840,7 @@ class Deimv2Model(DFineModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_last_hidden_state=encoder_outputs.feature_maps,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             init_reference_points=init_reference_points,
@@ -866,7 +862,7 @@ class Deimv2ForObjectDetection(DFineForObjectDetection):
             "class_embed": "model.decoder.class_embed",
             "bbox_embed": "model.decoder.bbox_embed",
         }
-        if getattr(self.config, "share_bbox_head", False):
+        if self.config.share_bbox_head:
             keys[r"model\.decoder\.bbox_embed\.(?![0])\d+"] = r"model.decoder.bbox_embed.0"
             keys[r"bbox_embed.(?![0])\d+"] = r"bbox_embed.0"
         return keys
@@ -910,8 +906,8 @@ class Deimv2ForObjectDetection(DFineForObjectDetection):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = load_image(url)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("Intellindust/DEIMv2_HGNetv2_N_COCO")
-        >>> model = Deimv2ForObjectDetection.from_pretrained("Intellindust/DEIMv2_HGNetv2_N_COCO")
+        >>> image_processor = AutoImageProcessor.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers")
+        >>> model = Deimv2ForObjectDetection.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")

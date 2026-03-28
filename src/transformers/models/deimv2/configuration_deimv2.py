@@ -29,9 +29,9 @@ from ..auto import AutoConfig
 # TODO: Attribute map assignment logic should be fixed in modular
 # as well as super() call parsing because otherwise we cannot re-write args after initialization
 @auto_docstring(checkpoint="Intellindust/DEIMv2_HGNetv2_N_COCO")
-@strict(accept_kwargs=True)
+@strict
 class Deimv2Config(PreTrainedConfig):
-    """
+    r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
         If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
@@ -39,31 +39,17 @@ class Deimv2Config(PreTrainedConfig):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
         Multi level features input for encoder.
-    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
-        The non-linear activation function (function or string) in the encoder and pooler.
-    eval_size (`list[int]` or `tuple[int, int]`, *optional*):
-        Height and width used to computes the effective height and width of the position embeddings after taking
-        into account the stride.
-    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
-        Multi level features dimension for decoder.
-    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function (function or string) in the decoder.
-    use_focal_loss (`bool`, *optional*, defaults to `True`):
-        Parameter informing if focal loss should be used.
-    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
-        Parameter alpha used to compute the focal loss.
-    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
-        Parameter gamma used to compute the focal loss.
-    eval_idx (`int`, *optional*, defaults to -1):
-        Index of the decoder layer to use for evaluation.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
     feat_strides (`list[int]`, *optional*, defaults to `[8, 16, 32]`):
         Strides used in each feature map.
     encode_proj_layers (`list[int]`, *optional*, defaults to `[2]`):
         Indexes of the projected layers to be used in the encoder.
     positional_encoding_temperature (`int`, *optional*, defaults to 10000):
         The temperature parameter used to create the positional encodings.
+    encoder_activation_function (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function (function or string) in the encoder and pooler.
+    eval_size (`list[int]` or `tuple[int, int]`, *optional*):
+        Height and width used to computes the effective height and width of the position embeddings after taking
+        into account the stride.
     normalize_before (`bool`, *optional*, defaults to `False`):
         Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
         feed-forward modules.
@@ -71,10 +57,14 @@ class Deimv2Config(PreTrainedConfig):
         Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries.
+    decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
+        Multi level features dimension for decoder.
     num_feature_levels (`int`, *optional*, defaults to 3):
         The number of input feature levels.
     decoder_n_points (`int`, *optional*, defaults to 4):
         The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
     label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -97,6 +87,12 @@ class Deimv2Config(PreTrainedConfig):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
         The relative weight of the giou loss of used by the Hungarian Matcher.
+    use_focal_loss (`bool`, *optional*, defaults to `True`):
+        Parameter informing if focal loss should be used.
+    focal_loss_alpha (`float`, *optional*, defaults to 0.75):
+        Parameter alpha used to compute the focal loss.
+    focal_loss_gamma (`float`, *optional*, defaults to 2.0):
+        Parameter gamma used to compute the focal loss.
     weight_loss_vfl (`float`, *optional*, defaults to 1.0):
         Relative weight of the varifocal loss in the object detection loss.
     weight_loss_bbox (`float`, *optional*, defaults to 5.0):
@@ -107,8 +103,8 @@ class Deimv2Config(PreTrainedConfig):
         Relative weight of the fine-grained localization loss in the object detection loss.
     weight_loss_ddf (`float`, *optional*, defaults to 1.5):
         Relative weight of the decoupled distillation focal loss in the object detection loss.
-    eos_coefficient (`float`, *optional*, defaults to 0.0001):
-        Relative classification weight of the 'no-object' class in the object detection loss.
+    eval_idx (`int`, *optional*, defaults to -1):
+        Index of the decoder layer to use for evaluation.
     layer_scale (`float`, *optional*, defaults to `1.0`):
         Scaling factor for the hidden dimension in later decoder layers.
     max_num_bins (`int`, *optional*, defaults to 32):
@@ -136,7 +132,7 @@ class Deimv2Config(PreTrainedConfig):
     mal_alpha (`float`, *optional*):
         Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
     encoder_fuse_op (`str`, *optional*, defaults to `"sum"`):
-        Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-Fine's `"cat"`.
+        Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-FINE's `"cat"`.
     sta_inplanes (`int`, *optional*, defaults to 16):
         Number of input planes for the STA convolutional stem.
     encoder_type (`str`, *optional*, defaults to `"hybrid"`):

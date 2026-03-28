@@ -296,8 +296,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"backbone\.stages\.(\d+)\.downsample\.lab\.(scale|bias)": r"model.conv_encoder.model.encoder.stages.\1.downsample.lab.\2",
     # Encoder mappings
     # Input projections
-    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.conv_encoder.encoder_input_proj.\1.0.weight",
-    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.encoder_input_proj.\1.1.\2",
+    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.conv_encoder.encoder_input_proj.\1.conv.weight",
+    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.encoder_input_proj.\1.norm.\2",
     # AIFI transformer encoder layers
     r"encoder\.encoder\.(\d+)\.layers\.0\.self_attn\.out_proj\.(weight|bias)": r"model.encoder.aifi.\1.layers.0.self_attn.o_proj.\2",
     r"encoder\.encoder\.(\d+)\.layers\.0\.linear1\.(weight|bias)": r"model.encoder.aifi.\1.layers.0.mlp.layers.0.\2",
@@ -311,8 +311,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Basic convolutions
     r"encoder\.fpn_blocks\.(\d+)\.cv1\.conv\.weight": r"model.encoder.fpn_blocks.\1.conv1.conv.weight",
     r"encoder\.fpn_blocks\.(\d+)\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.conv1.norm.\2",
-    r"encoder\.fpn_blocks\.(\d+)\.cv4\.conv\.weight": r"model.encoder.fpn_blocks.\1.conv4.conv.weight",
-    r"encoder\.fpn_blocks\.(\d+)\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.conv4.norm.\2",
+    r"encoder\.fpn_blocks\.(\d+)\.cv4\.conv\.weight": r"model.encoder.fpn_blocks.\1.conv2.conv.weight",
+    r"encoder\.fpn_blocks\.(\d+)\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.conv2.norm.\2",
     # CSP Rep1 path
     r"encoder\.fpn_blocks\.(\d+)\.cv2\.0\.conv1\.conv\.weight": r"model.encoder.fpn_blocks.\1.csp_rep1.conv1.conv.weight",
     r"encoder\.fpn_blocks\.(\d+)\.cv2\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.csp_rep1.conv1.norm.\2",
@@ -328,15 +328,15 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"encoder\.fpn_blocks\.(\d+)\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.fpn_blocks.\1.csp_rep2.bottlenecks.\2.conv2.conv.weight",
     r"encoder\.fpn_blocks\.(\d+)\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.csp_rep2.bottlenecks.\2.conv2.norm.\3",
     # FPN trailing convs
-    r"encoder\.fpn_blocks\.(\d+)\.cv2\.1\.conv\.weight": r"model.encoder.fpn_blocks.\1.csp_rep1.conv3.conv.weight",
-    r"encoder\.fpn_blocks\.(\d+)\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.csp_rep1.conv3.norm.\2",
-    r"encoder\.fpn_blocks\.(\d+)\.cv3\.1\.conv\.weight": r"model.encoder.fpn_blocks.\1.csp_rep2.conv3.conv.weight",
-    r"encoder\.fpn_blocks\.(\d+)\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.csp_rep2.conv3.norm.\2",
+    r"encoder\.fpn_blocks\.(\d+)\.cv2\.1\.conv\.weight": r"model.encoder.fpn_blocks.\1.csp_rep1.conv2.conv.weight",
+    r"encoder\.fpn_blocks\.(\d+)\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.csp_rep1.conv2.norm.\2",
+    r"encoder\.fpn_blocks\.(\d+)\.cv3\.1\.conv\.weight": r"model.encoder.fpn_blocks.\1.csp_rep2.conv2.conv.weight",
+    r"encoder\.fpn_blocks\.(\d+)\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.csp_rep2.conv2.norm.\2",
     # PAN blocks - complete structure
     r"encoder\.pan_blocks\.(\d+)\.cv1\.conv\.weight": r"model.encoder.pan_blocks.\1.conv1.conv.weight",
     r"encoder\.pan_blocks\.(\d+)\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.conv1.norm.\2",
-    r"encoder\.pan_blocks\.(\d+)\.cv4\.conv\.weight": r"model.encoder.pan_blocks.\1.conv4.conv.weight",
-    r"encoder\.pan_blocks\.(\d+)\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.conv4.norm.\2",
+    r"encoder\.pan_blocks\.(\d+)\.cv4\.conv\.weight": r"model.encoder.pan_blocks.\1.conv2.conv.weight",
+    r"encoder\.pan_blocks\.(\d+)\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.conv2.norm.\2",
     # CSP Rep1 path
     r"encoder\.pan_blocks\.(\d+)\.cv2\.0\.conv1\.conv\.weight": r"model.encoder.pan_blocks.\1.csp_rep1.conv1.conv.weight",
     r"encoder\.pan_blocks\.(\d+)\.cv2\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep1.conv1.norm.\2",
@@ -352,16 +352,16 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"encoder\.pan_blocks\.(\d+)\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.pan_blocks.\1.csp_rep2.bottlenecks.\2.conv2.conv.weight",
     r"encoder\.pan_blocks\.(\d+)\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep2.bottlenecks.\2.conv2.norm.\3",
     # PAN trailing convs
-    r"encoder\.pan_blocks\.(\d+)\.cv2\.1\.conv\.weight": r"model.encoder.pan_blocks.\1.csp_rep1.conv3.conv.weight",
-    r"encoder\.pan_blocks\.(\d+)\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep1.conv3.norm.\2",
-    r"encoder\.pan_blocks\.(\d+)\.cv3\.1\.conv\.weight": r"model.encoder.pan_blocks.\1.csp_rep2.conv3.conv.weight",
-    r"encoder\.pan_blocks\.(\d+)\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep2.conv3.norm.\2",
+    r"encoder\.pan_blocks\.(\d+)\.cv2\.1\.conv\.weight": r"model.encoder.pan_blocks.\1.csp_rep1.conv2.conv.weight",
+    r"encoder\.pan_blocks\.(\d+)\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep1.conv2.norm.\2",
+    r"encoder\.pan_blocks\.(\d+)\.cv3\.1\.conv\.weight": r"model.encoder.pan_blocks.\1.csp_rep2.conv2.conv.weight",
+    r"encoder\.pan_blocks\.(\d+)\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep2.conv2.norm.\2",
     # Downsample convolutions
     r"encoder\.downsample_convs\.(\d+)\.0\.cv(\d+)\.conv\.weight": r"model.encoder.downsample_convs.\1.conv\2.conv.weight",
     r"encoder\.downsample_convs\.(\d+)\.0\.cv(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.downsample_convs.\1.conv\2.norm.\3",
     # Decoder layers
-    r"decoder\.input_proj\.(\d+)\.0\.weight": r"model.decoder_input_proj.\1.0.weight",
-    r"decoder\.input_proj\.(\d+)\.1\.(weight|bias|running_mean|running_var)": r"model.decoder_input_proj.\1.1.\2",
+    r"decoder\.input_proj\.(\d+)\.0\.weight": r"model.decoder_input_proj.\1.conv.weight",
+    r"decoder\.input_proj\.(\d+)\.1\.(weight|bias|running_mean|running_var)": r"model.decoder_input_proj.\1.norm.\2",
     r"decoder\.decoder\.layers\.(\d+)\.self_attn\.out_proj\.(weight|bias)": r"model.decoder.layers.\1.self_attn.o_proj.\2",
     r"decoder\.decoder\.layers\.(\d+)\.cross_attn\.sampling_offsets\.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.sampling_offsets.\2",
     r"decoder\.decoder\.layers\.(\d+)\.cross_attn\.attention_weights\.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.attention_weights.\2",
@@ -370,8 +370,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"decoder\.decoder\.layers\.(\d+)\.cross_attn\.num_points_scale": r"model.decoder.layers.\1.encoder_attn.num_points_scale",
     r"decoder\.decoder\.layers\.(\d+)\.norm1\.scale": r"model.decoder.layers.\1.self_attn_layer_norm.weight",
     r"decoder\.decoder\.layers\.(\d+)\.norm3\.scale": r"model.decoder.layers.\1.final_layer_norm.weight",
-    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w12\.(weight|bias)": r"model.decoder.layers.\1.mlp.weights_in.\2",
-    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w3\.(weight|bias)": r"model.decoder.layers.\1.mlp.weights_out.\2",
+    r"decoder\.decoder\.layers\.(\d+)\.swish_ffn\.w3\.(weight|bias)": r"model.decoder.layers.\1.mlp.down_proj.\2",
     r"decoder\.decoder\.layers\.(\d+)\.gateway\.gate\.(weight|bias)": r"model.decoder.layers.\1.gateway.gate.\2",
     r"decoder\.decoder\.layers\.(\d+)\.gateway\.norm\.scale": r"model.decoder.layers.\1.gateway.norm.weight",
     # LQE layers
@@ -395,56 +394,58 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 LITE_ENCODER_KEY_MAPPING = {
     # LiteEncoder input_proj
-    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.encoder.input_proj.\1.0.weight",
-    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.input_proj.\1.1.\2",
+    r"encoder\.input_proj\.(\d+)\.conv\.weight": r"model.encoder.input_proj.\1.conv.weight",
+    r"encoder\.input_proj\.(\d+)\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.input_proj.\1.norm.\2",
     # Downsamples
-    r"encoder\.down_sample(\d+)\.1\.weight": r"model.encoder.down_sample\1.1.weight",
-    r"encoder\.down_sample(\d+)\.2\.(weight|bias|running_mean|running_var)": r"model.encoder.down_sample\1.2.\2",
+    r"encoder\.down_sample1\.1\.weight": r"model.encoder.down_conv1.conv.weight",
+    r"encoder\.down_sample1\.2\.(weight|bias|running_mean|running_var)": r"model.encoder.down_conv1.norm.\1",
+    r"encoder\.down_sample2\.1\.weight": r"model.encoder.down_conv2.conv.weight",
+    r"encoder\.down_sample2\.2\.(weight|bias|running_mean|running_var)": r"model.encoder.down_conv2.norm.\1",
     # GAP_Fusion
-    r"encoder\.bi_fusion\.cv\.conv\.weight": r"model.encoder.bi_fusion.conv_norm.conv.weight",
-    r"encoder\.bi_fusion\.cv\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.bi_fusion.conv_norm.norm.\1",
-    # FPN block (RepNCSPELAN4)
+    r"encoder\.bi_fusion\.cv\.conv\.weight": r"model.encoder.bi_fusion_conv.conv.weight",
+    r"encoder\.bi_fusion\.cv\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.bi_fusion_conv.norm.\1",
+    # FPN block (RepNCSPELAN5)
     r"encoder\.fpn_block\.cv1\.conv\.weight": r"model.encoder.fpn_block.conv1.conv.weight",
     r"encoder\.fpn_block\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.conv1.norm.\1",
-    r"encoder\.fpn_block\.cv4\.conv\.weight": r"model.encoder.fpn_block.conv4.conv.weight",
-    r"encoder\.fpn_block\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.conv4.norm.\1",
+    r"encoder\.fpn_block\.cv4\.conv\.weight": r"model.encoder.fpn_block.conv2.conv.weight",
+    r"encoder\.fpn_block\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.conv2.norm.\1",
     r"encoder\.fpn_block\.cv2\.0\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.conv1.conv.weight",
     r"encoder\.fpn_block\.cv2\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.conv1.norm.\1",
     r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv1.conv.weight",
     r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv1.norm.\2",
     r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv2.conv.weight",
     r"encoder\.fpn_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.bottlenecks.\1.conv2.norm.\2",
-    r"encoder\.fpn_block\.cv2\.1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.conv3.conv.weight",
-    r"encoder\.fpn_block\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.conv3.norm.\1",
+    r"encoder\.fpn_block\.cv2\.1\.conv\.weight": r"model.encoder.fpn_block.csp_rep1.conv2.conv.weight",
+    r"encoder\.fpn_block\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep1.conv2.norm.\1",
     r"encoder\.fpn_block\.cv3\.0\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.conv1.conv.weight",
     r"encoder\.fpn_block\.cv3\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.conv1.norm.\1",
     r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv1.conv.weight",
     r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv1.norm.\2",
     r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv2.conv.weight",
     r"encoder\.fpn_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.bottlenecks.\1.conv2.norm.\2",
-    r"encoder\.fpn_block\.cv3\.1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.conv3.conv.weight",
-    r"encoder\.fpn_block\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.conv3.norm.\1",
+    r"encoder\.fpn_block\.cv3\.1\.conv\.weight": r"model.encoder.fpn_block.csp_rep2.conv2.conv.weight",
+    r"encoder\.fpn_block\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_block.csp_rep2.conv2.norm.\1",
     # PAN block (same structure as FPN)
     r"encoder\.pan_block\.cv1\.conv\.weight": r"model.encoder.pan_block.conv1.conv.weight",
     r"encoder\.pan_block\.cv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.conv1.norm.\1",
-    r"encoder\.pan_block\.cv4\.conv\.weight": r"model.encoder.pan_block.conv4.conv.weight",
-    r"encoder\.pan_block\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.conv4.norm.\1",
+    r"encoder\.pan_block\.cv4\.conv\.weight": r"model.encoder.pan_block.conv2.conv.weight",
+    r"encoder\.pan_block\.cv4\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.conv2.norm.\1",
     r"encoder\.pan_block\.cv2\.0\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.conv1.conv.weight",
     r"encoder\.pan_block\.cv2\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.conv1.norm.\1",
     r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv1.conv.weight",
     r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv1.norm.\2",
     r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv2.conv.weight",
     r"encoder\.pan_block\.cv2\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.bottlenecks.\1.conv2.norm.\2",
-    r"encoder\.pan_block\.cv2\.1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.conv3.conv.weight",
-    r"encoder\.pan_block\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.conv3.norm.\1",
+    r"encoder\.pan_block\.cv2\.1\.conv\.weight": r"model.encoder.pan_block.csp_rep1.conv2.conv.weight",
+    r"encoder\.pan_block\.cv2\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep1.conv2.norm.\1",
     r"encoder\.pan_block\.cv3\.0\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.conv1.conv.weight",
     r"encoder\.pan_block\.cv3\.0\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.conv1.norm.\1",
     r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv1.conv.weight",
     r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv1.norm.\2",
     r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.conv\.weight": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv2.conv.weight",
     r"encoder\.pan_block\.cv3\.0\.bottlenecks\.(\d+)\.conv2\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.bottlenecks.\1.conv2.norm.\2",
-    r"encoder\.pan_block\.cv3\.1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.conv3.conv.weight",
-    r"encoder\.pan_block\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.conv3.norm.\1",
+    r"encoder\.pan_block\.cv3\.1\.conv\.weight": r"model.encoder.pan_block.csp_rep2.conv2.conv.weight",
+    r"encoder\.pan_block\.cv3\.1\.norm\.(weight|bias|running_mean|running_var)": r"model.encoder.pan_block.csp_rep2.conv2.norm.\1",
 }
 
 DECODER_NO_GATEWAY_KEY_MAPPING = {
@@ -475,17 +476,17 @@ DINOV3_KEY_MAPPING = {
     # Norm (L/X only)
     r"backbone\.dinov3\.norm\.(weight|bias)": r"model.conv_encoder.backbone.norm.\1",
     # STA adapter
-    r"backbone\.sta\.stem\.0\.(weight|bias)": r"model.conv_encoder.sta.stem.0.\1",
-    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.stem.1.\1",
-    r"backbone\.sta\.conv2\.0\.(weight)": r"model.conv_encoder.sta.conv2.0.\1",
-    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv2.1.\1",
-    r"backbone\.sta\.conv3\.1\.(weight)": r"model.conv_encoder.sta.conv3.1.\1",
-    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv3.2.\1",
-    r"backbone\.sta\.conv4\.1\.(weight)": r"model.conv_encoder.sta.conv4.1.\1",
-    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv4.2.\1",
-    # Projection convs/norms
-    r"backbone\.convs\.(\d+)\.weight": r"model.conv_encoder.convs.\1.weight",
-    r"backbone\.norms\.(\d+)\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.norms.\1.\2",
+    r"backbone\.sta\.stem\.0\.(weight)": r"model.conv_encoder.sta.stem_conv.conv.\1",
+    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.stem_conv.norm.\1",
+    r"backbone\.sta\.conv2\.0\.(weight)": r"model.conv_encoder.sta.conv2.conv.\1",
+    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv2.norm.\1",
+    r"backbone\.sta\.conv3\.1\.(weight)": r"model.conv_encoder.sta.conv3.conv.\1",
+    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv3.norm.\1",
+    r"backbone\.sta\.conv4\.1\.(weight)": r"model.conv_encoder.sta.conv4.conv.\1",
+    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv4.norm.\1",
+    # Fusion projection convs/norms
+    r"backbone\.convs\.(\d+)\.weight": r"model.conv_encoder.fusion_proj.\1.conv.weight",
+    r"backbone\.norms\.(\d+)\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.fusion_proj.\1.norm.\2",
 }
 
 
@@ -570,6 +571,21 @@ def read_in_q_k_v(state_dict, config):
             state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-d_model:]
 
 
+def split_swiglu_fused_weights(state_dict, config):
+    for i in range(
+        2 * config.decoder_layers
+        - (config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx)
+        - 1
+    ):
+        for param in ["weight", "bias"]:
+            fused_key = f"decoder.decoder.layers.{i}.swish_ffn.w12.{param}"
+            if fused_key in state_dict:
+                fused = state_dict.pop(fused_key)
+                gate, up = fused.chunk(2, dim=0)
+                state_dict[f"model.decoder.layers.{i}.mlp.gate_proj.{param}"] = gate
+                state_dict[f"model.decoder.layers.{i}.mlp.up_proj.{param}"] = up
+
+
 def strip_dinov3_model_prefix(state_dict):
     for key in list(state_dict.keys()):
         if "backbone.dinov3._model." in key:
@@ -642,6 +658,9 @@ def convert_deimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
 
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
+
+    # split fused SwiGLU weights (w12) into separate gate_proj and up_proj
+    split_swiglu_fused_weights(state_dict, config)
 
     state_dict = convert_old_keys_to_new_keys(state_dict, config)
 
