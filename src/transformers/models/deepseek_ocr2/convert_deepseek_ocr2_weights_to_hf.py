@@ -27,6 +27,7 @@ from safetensors import safe_open
 
 from transformers import DeepseekOcr2Config, DeepseekOcr2ForConditionalGeneration, PreTrainedTokenizerFast
 
+
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # SAM vision encoder
