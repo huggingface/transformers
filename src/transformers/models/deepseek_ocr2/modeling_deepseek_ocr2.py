@@ -127,7 +127,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
     _supports_sdpa = False
-    _can_compile_fullgraph = False  # MoE routing + conditional query selection not compatible with fullgraph
+    _can_compile_fullgraph = False
     _supports_flex_attn = False
     _supports_attention_backend = True
 

@@ -234,7 +234,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""

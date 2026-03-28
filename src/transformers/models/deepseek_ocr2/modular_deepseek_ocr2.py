@@ -93,7 +93,6 @@ class DeepseekOcr2VisionConfig(Qwen2Config):
     """
 
     base_config_key = "vision_config"
-    # Vision encoder uses SAM-style attention, not Qwen2-style — disable inherited TP plan
     base_model_tp_plan = {}
     base_model_pp_plan = {}
     sub_configs = {
@@ -156,7 +155,7 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""
@@ -215,7 +214,7 @@ class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     _no_split_modules = ["DeepseekOcr2SamVisionLayer", "DeepseekOcr2TextDecoderLayer"]
-    _can_compile_fullgraph = False  # MoE routing + conditional query selection not compatible with fullgraph
+    _can_compile_fullgraph = False
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
