@@ -317,6 +317,7 @@ class RfDetrImageLoss(LwDetrImageLoss):
         source_masks = source_masks.unsqueeze(1)
         target_masks = target_masks.unsqueeze(1).float()
 
+        # Select H points or H * W // self.mask_point_sample_ratio points, whichever is larger
         num_points = max(
             source_masks.shape[-2], source_masks.shape[-2] * source_masks.shape[-1] // self.mask_point_sample_ratio
         )
