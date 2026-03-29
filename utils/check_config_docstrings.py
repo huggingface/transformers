@@ -76,8 +76,8 @@ def check_config_docstrings_have_checkpoints():
         raise ValueError(
             f"The following configurations don't contain any valid checkpoint:\n{message}\n\n"
             "The requirement is to include a link pointing to one of the models of this architecture in the "
-            "docstring of the config classes listed above. The link should be passed to an `auto_docstring`"
-            "decorator as follows `@auto_docstring(checkpoint='myorg/mymodel')."
+            "docstring of the config classes listed above. The link should be passed to an `auto_docstring` "
+            "decorator as follows `@auto_docstring(checkpoint='myorg/mymodel')`."
         )
 
 
