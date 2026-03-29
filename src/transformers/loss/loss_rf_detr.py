@@ -269,8 +269,7 @@ class RfDetrHungarianMatcher(nn.Module):
         cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         # we assume any good match will not cause NaN or Inf, so we replace them with a large value
-        max_cost = cost_matrix.max() if cost_matrix.numel() > 0 else 0
-        cost_matrix[cost_matrix.isinf() | cost_matrix.isnan()] = max_cost * 2
+        cost_matrix[cost_matrix.isinf() | cost_matrix.isnan()] = torch.finfo(cost_matrix.dtype).max
 
         # Hungarian matching
         sizes = [len(v["masks"]) for v in targets]
