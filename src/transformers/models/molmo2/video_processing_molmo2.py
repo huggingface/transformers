@@ -10,8 +10,8 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ImageInput,
@@ -19,8 +19,8 @@ from transformers.image_utils import (
     SizeDict,
     validate_kwargs,
 )
-from transformers.processing_utils import Unpack, VideosKwargs
-from transformers.utils import (
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import (
     TensorType,
     is_av_available,
     is_decord_available,
@@ -31,8 +31,8 @@ from transformers.utils import (
     logging,
     to_numpy,
 )
-from transformers.video_processing_utils import BaseVideoProcessor
-from transformers.video_utils import (
+from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import (
     VideoInput,
     VideoMetadata,
     is_valid_video,
@@ -960,7 +960,5 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
 
         return BatchFeature(data, tensor_type=return_tensors)
 
-
-Molmo2VideoProcessor.register_for_auto_class()
 
 __all__ = ["Molmo2VideoProcessor"]

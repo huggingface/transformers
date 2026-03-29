@@ -2,10 +2,10 @@
 
 import numpy as np
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_processing_utils import BaseImageProcessor, get_size_dict
-from transformers.image_transforms import convert_to_rgb
-from transformers.image_utils import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_transforms import convert_to_rgb
+from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ImageInput,
@@ -14,8 +14,8 @@ from transformers.image_utils import (
     to_numpy_array,
     valid_images,
 )
-from transformers.processing_utils import ImagesKwargs
-from transformers.utils import TensorType, is_torch_available, is_torchvision_available, logging
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, is_torch_available, is_torchvision_available, logging
 
 
 if is_torch_available():
@@ -505,7 +505,5 @@ class Molmo2ImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data, tensor_type=return_tensors)
 
-
-Molmo2ImageProcessor.register_for_auto_class()
 
 __all__ = ["Molmo2ImageProcessor"]

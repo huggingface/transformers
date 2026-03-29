@@ -4,18 +4,16 @@ Processor class for Molmo2.
 
 import numpy as np
 
-from transformers import AutoTokenizer
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_utils import ImageInput
-from transformers.processing_utils import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
+from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
 )
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from transformers.utils import logging
-from transformers.video_utils import VideoInput
-
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import logging
+from ...video_utils import VideoInput
 from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
 from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
 
@@ -83,7 +81,7 @@ class Molmo2Processor(ProcessorMixin):
         self,
         image_processor: Molmo2ImageProcessor = None,
         video_processor: Molmo2VideoProcessor = None,
-        tokenizer: AutoTokenizer = None,
+        tokenizer=None,
         chat_template: str | None = None,
         image_use_col_tokens: bool | None = True,
         use_single_crop_col_tokens: bool | None = None,
@@ -385,7 +383,5 @@ class Molmo2Processor(ProcessorMixin):
             **kwargs,
         )
 
-
-Molmo2Processor.register_for_auto_class()
 
 __all__ = ["Molmo2Processor"]
