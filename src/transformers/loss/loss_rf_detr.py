@@ -291,12 +291,7 @@ class RfDetrHungarianMatcher(HungarianMatcher):
 
 class RfDetrImageLoss(LwDetrImageLoss):
     def __init__(self, matcher, num_classes, focal_alpha, losses, group_detr, mask_point_sample_ratio):
-        nn.Module.__init__(self)
-        self.matcher = matcher
-        self.num_classes = num_classes
-        self.focal_alpha = focal_alpha
-        self.losses = losses
-        self.group_detr = group_detr
+        super().__init__(matcher, num_classes, focal_alpha, losses, group_detr)
         self.mask_point_sample_ratio = mask_point_sample_ratio
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
