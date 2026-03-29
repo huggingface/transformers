@@ -2,6 +2,8 @@
 Processor class for Molmo2.
 """
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
@@ -12,10 +14,17 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_vision_available, logging
 from ...video_utils import VideoInput
-from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
-from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
+
+
+if is_vision_available():
+    from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
+    from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
+
+if TYPE_CHECKING:
+    from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
+    from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
