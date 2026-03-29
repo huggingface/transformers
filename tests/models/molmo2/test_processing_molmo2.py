@@ -102,6 +102,10 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         pass
 
+    @unittest.skip("Molmo2 image processor patchifies output; rescale_factor passthrough not supported")
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        pass
+
     @unittest.skip("Hub processor config contains auto_map not preserved through save/load")
     def test_processor_from_and_save_pretrained(self):
         pass

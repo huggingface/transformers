@@ -1,8 +1,6 @@
 """Image processor class for Molmo2"""
 
 import numpy as np
-import torch
-import torchvision.transforms
 
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_processing_utils import BaseImageProcessor, get_size_dict
@@ -17,7 +15,14 @@ from transformers.image_utils import (
     valid_images,
 )
 from transformers.processing_utils import ImagesKwargs
-from transformers.utils import TensorType, logging
+from transformers.utils import TensorType, is_torch_available, is_torchvision_available, logging
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    import torchvision.transforms
 
 
 logger = logging.get_logger(__name__)

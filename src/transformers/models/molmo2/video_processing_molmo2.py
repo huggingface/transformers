@@ -9,8 +9,6 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 import numpy as np
-import torch
-import torchvision.transforms
 
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import (
@@ -26,7 +24,9 @@ from transformers.utils import (
     TensorType,
     is_av_available,
     is_decord_available,
+    is_torch_available,
     is_torchcodec_available,
+    is_torchvision_available,
     is_yt_dlp_available,
     logging,
     to_numpy,
@@ -40,6 +40,12 @@ from transformers.video_utils import (
     make_batched_videos,
 )
 
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    import torchvision.transforms
 
 logger = logging.get_logger(__name__)
 
