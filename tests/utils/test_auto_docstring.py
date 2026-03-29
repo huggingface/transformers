@@ -679,11 +679,13 @@ Args:
         See: https://github.com/huggingface/transformers/issues/45103
         """
         import inspect
+        from typing import Optional
 
         from transformers.utils.auto_docstring import _process_kwargs_parameters
 
         # Case 1: string annotation that resolves successfully via get_type_hints().
-        # Inject CustomKwargs into the function's globals so get_type_hints() can find it.
+        # Inject CustomKwargs and Optional into the function's globals so get_type_hints() can find them.
+        # (get_type_hints resolves against func.__globals__, i.e. the module scope, not the local test scope.)
         class CustomKwargs:
             """
             Custom kwargs.
@@ -700,6 +702,7 @@ Args:
 
         func_with_string_annotation.__annotations__["kwargs"] = "Optional[CustomKwargs]"
         func_with_string_annotation.__globals__["CustomKwargs"] = CustomKwargs
+        func_with_string_annotation.__globals__["Optional"] = Optional
 
         sig = inspect.signature(func_with_string_annotation)
         self.assertIsInstance(sig.parameters["kwargs"].annotation, str)  # confirm string at runtime
