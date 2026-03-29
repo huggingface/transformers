@@ -307,8 +307,8 @@ class RfDetrImageLoss(LwDetrImageLoss):
         source_masks = outputs["pred_masks"][source_idx]
         if source_masks.numel() == 0:
             return {
-                "loss_mask_ce": source_masks.sum(),
-                "loss_mask_dice": source_masks.sum(),
+                "loss_mask_ce": torch.zeros_like(source_masks),
+                "loss_mask_dice": torch.zeros_like(source_masks),
             }
 
         # gather matched target masks
