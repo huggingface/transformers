@@ -168,6 +168,23 @@ class VoxtralProcessor(ProcessorMixin):
             is_batched = False
             conversations = [conversation]
 
+        # Resolve chat_template if not provided
+        if chat_template is None:
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
+                raise ValueError(
+                    'The processor has multiple chat templates but none of them are named "default". You need to specify'
+                    " which one to use by passing the `chat_template` argument. Available templates are: "
+                    f"{', '.join(self.chat_template.keys())}"
+                )
+            elif self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                raise ValueError(
+                    "Cannot use apply_chat_template because this processor does not have a chat template."
+                )
+
         # Users might still be passing processing kwargs in `**kwargs` so we need to filter
         # out additional kwargs that the template expects via Jinja2 template introspection
         # We strip unrelated kwargs to avoid passing unrecognized kwargs to `_merge_kwargs`.
