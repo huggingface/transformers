@@ -147,9 +147,8 @@ def _get_feat_extract_output_lengths(input_lengths):
     Computes the output length of the convolutional layers and the output length of the audio encoder
     """
 
-    input_lengths_leave = input_lengths % 100
-    feat_lengths = (input_lengths_leave - 1) // 2 + 1
-    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // 100) * 13
+    feat_lengths = (input_lengths - 1) // 2 + 1
+    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1
     return output_lengths
 
 
