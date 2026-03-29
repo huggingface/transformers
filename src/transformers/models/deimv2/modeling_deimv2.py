@@ -1134,7 +1134,8 @@ class Deimv2DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-65504, max=65504))
+        max_val = torch.finfo(hidden_states.dtype).max
+        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-max_val, max=max_val))
 
         return hidden_states
 
