@@ -3616,7 +3616,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.append(torch.device("meta"))
+            # Skip meta device initialization for remote code models, as they may perform
+            # real-tensor operations during model construction (e.g., calling .item() on tensors).
+            # See https://github.com/huggingface/transformers/issues/45092
+            if not cls.is_remote_code():
+                init_contexts.append(torch.device("meta"))
 
         return init_contexts
 
