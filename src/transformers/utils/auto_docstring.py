@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from types import UnionType
+import typing
 from typing import ClassVar, Union, get_args, get_origin
 
 import regex as re
@@ -3578,6 +3579,18 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         # If kwargs not typed, skip
         if kwarg_param.annotation == inspect.Parameter.empty:
             continue
+
+        # If annotation is a string (from `from __future__ import annotations`),
+        # try to resolve it via get_type_hints(); skip if resolution fails.
+        if isinstance(kwarg_param.annotation, str):
+            try:
+                kwarg_name = next(n for n, p in sig.parameters.items() if p is kwarg_param)
+                resolved = typing.get_type_hints(func).get(kwarg_name)
+                if resolved is None:
+                    continue
+                kwarg_param = kwarg_param.replace(annotation=resolved)
+            except Exception:
+                continue
 
         if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
             # Extract documentation for kwargs
