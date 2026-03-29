@@ -448,6 +448,7 @@ def RfDetrForSegmentationLoss(
     if config.auxiliary_loss:
         auxiliary_outputs = _set_aux_loss(outputs_class, outputs_coord, outputs_masks)
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
     loss_dict = criterion(outputs_loss, labels)
     # Fourth: compute total loss, as a weighted sum of the various losses
     weight_dict = {"loss_ce": config.class_loss_coefficient, "loss_bbox": config.bbox_loss_coefficient}
