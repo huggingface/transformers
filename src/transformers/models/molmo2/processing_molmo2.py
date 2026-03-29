@@ -2,29 +2,20 @@
 Processor class for Molmo2.
 """
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import (
+    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
+    VideosKwargs,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_vision_available, logging
+from ...utils import logging
 from ...video_utils import VideoInput
-
-
-if is_vision_available():
-    from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
-    from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
-
-if TYPE_CHECKING:
-    from .image_processing_molmo2 import Molmo2ImageProcessor, Molmo2ImagesKwargs
-    from .video_processing_molmo2 import Molmo2VideoProcessor, Molmo2VideoProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -54,11 +45,26 @@ IMAGE_TOKENS = [
 ]
 
 
+class Molmo2ImagesKwargs(ImagesKwargs, total=False):
+    max_crops: int | None
+    overlap_margins: list[int] | None
+    patch_size: int | None
+    pooling_size: list[int] | None
+
+
+class Molmo2VideosKwargs(VideosKwargs, total=False):
+    patch_size: int | None
+    pooling_size: list[int] | None
+    frame_sample_mode: str | None
+    max_fps: int | None
+    sampling_fps: int | None
+
+
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
 
     images_kwargs: Molmo2ImagesKwargs
-    videos_kwargs: Molmo2VideoProcessorKwargs
+    videos_kwargs: Molmo2VideosKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -88,8 +94,8 @@ class Molmo2Processor(ProcessorMixin):
 
     def __init__(
         self,
-        image_processor: Molmo2ImageProcessor = None,
-        video_processor: Molmo2VideoProcessor = None,
+        image_processor=None,
+        video_processor=None,
         tokenizer=None,
         chat_template: str | None = None,
         image_use_col_tokens: bool | None = True,
