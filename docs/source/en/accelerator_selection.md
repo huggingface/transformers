@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 During distributed training, you can specify the number and order of accelerators (CUDA, XPU, MPS, HPU, etc.) to use. This can be useful when you have accelerators with different computing power and you want to use the faster accelerator first. Or you could only use a subset of the available accelerators. The selection process works for both [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) and [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html). You don't need Accelerate or [DeepSpeed integration](./main_classes/deepspeed).
 
-This guide will show you how to select the number of accelerators to use and the order to use them in.
+This guide explains how to select the number of accelerators and their usage order.
 
 ## Number of accelerators
 
