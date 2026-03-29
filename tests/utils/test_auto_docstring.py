@@ -669,6 +669,57 @@ Args:
 
         self.assertEqual(actual_class_docstring, expected_class_docstring)
 
+    def test_process_kwargs_parameters_with_string_annotations(self):
+        """Test that _process_kwargs_parameters handles string annotations from `from __future__ import annotations`.
+
+        `from __future__ import annotations` makes all annotations strings at runtime.
+        _process_kwargs_parameters must resolve them via get_type_hints() rather than
+        crashing when accessing annotation.__args__.
+
+        See: https://github.com/huggingface/transformers/issues/45103
+        """
+        import inspect
+
+        from transformers.utils.auto_docstring import _process_kwargs_parameters
+
+        # Case 1: string annotation that resolves successfully via get_type_hints().
+        # Inject CustomKwargs into the function's globals so get_type_hints() can find it.
+        class CustomKwargs:
+            """
+            Custom kwargs.
+
+            Args:
+                image_size (`int`):
+                    Size of the image.
+            """
+
+            image_size: int = 224
+
+        def func_with_string_annotation(self, **kwargs):
+            pass
+
+        func_with_string_annotation.__annotations__["kwargs"] = "Optional[CustomKwargs]"
+        func_with_string_annotation.__globals__["CustomKwargs"] = CustomKwargs
+
+        sig = inspect.signature(func_with_string_annotation)
+        self.assertIsInstance(sig.parameters["kwargs"].annotation, str)  # confirm string at runtime
+
+        docstring, summary = _process_kwargs_parameters(sig, func_with_string_annotation, ProcessorMixin, {}, 4, [])
+        self.assertIn("image_size", docstring, "Expected resolved kwargs docstring to include 'image_size'")
+
+        # Case 2: string annotation that cannot be resolved — must skip gracefully, not crash.
+        def func_with_unresolvable_annotation(self, **kwargs):
+            pass
+
+        func_with_unresolvable_annotation.__annotations__["kwargs"] = "UnresolvableTypeXYZ"
+
+        sig2 = inspect.signature(func_with_unresolvable_annotation)
+        docstring2, summary2 = _process_kwargs_parameters(
+            sig2, func_with_unresolvable_annotation, ProcessorMixin, {}, 4, []
+        )
+        self.assertEqual(docstring2, "", "Expected empty docstring when annotation cannot be resolved")
+        self.assertEqual(summary2, "", "Expected empty summary when annotation cannot be resolved")
+
 
 # ---------------------------------------------------------------------------
 # Performance tests for auto_docstring
