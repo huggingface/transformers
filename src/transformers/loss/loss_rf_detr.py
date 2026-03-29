@@ -304,8 +304,7 @@ class RfDetrImageLoss(LwDetrImageLoss):
             raise KeyError("No predicted masks found in outputs")
 
         source_idx = self._get_source_permutation_idx(indices)
-        source_masks = outputs["pred_masks"]
-        source_masks = source_masks[source_idx]
+        source_masks = outputs["pred_masks"][source_idx]
         if source_masks.numel() == 0:
             return {
                 "loss_mask_ce": source_masks.sum(),
