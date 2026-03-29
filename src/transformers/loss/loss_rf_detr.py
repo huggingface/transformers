@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable
 
 import numpy as np
 import torch
@@ -136,30 +135,8 @@ def sample_point(
     return point_features
 
 
-def calculate_uncertainty(logits: torch.Tensor) -> torch.Tensor:
-    """
-    Copied from Mask2FormerLoss.calculate_uncertainty, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
-    for the foreground class in `classes`.
-
-    Args:
-        logits (`torch.Tensor`):
-        A tensor of shape (R, 1, ...) for class-specific or class-agnostic, where R is the total number of predicted masks in all images and C is:
-        the number of foreground classes. The values are logits.
-
-    Returns:
-        scores (`torch.Tensor`): A tensor of shape (R, 1, ...) that contains uncertainty scores with the most
-        uncertain locations having the highest uncertainty score.
-    """
-    uncertainty_scores = -(torch.abs(logits))
-    return uncertainty_scores
-
-
 def sample_points_using_uncertainty(
-    logits: Tensor,
-    uncertainty_function: Callable[[Tensor], Tensor],
-    num_points: int,
-    oversample_ratio: int,
-    importance_sample_ratio: float,
+    logits: Tensor, num_points: int, oversample_ratio: int, importance_sample_ratio: float
 ) -> Tensor:
     """
     Copied from Mask2FormerLoss.sample_points_using_uncertainty, this function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
@@ -191,7 +168,7 @@ def sample_points_using_uncertainty(
     # Get sampled prediction value for the point coordinates
     point_logits = sample_point(logits, point_coordinates, align_corners=False)
     # Calculate the uncertainties based on the sampled prediction values of the points
-    point_uncertainties = uncertainty_function(point_logits)
+    point_uncertainties = -(torch.abs(point_logits))
 
     num_uncertain_points = int(importance_sample_ratio * num_points)
     num_random_points = num_points - num_uncertain_points
@@ -363,9 +340,7 @@ class RfDetrImageLoss(LwDetrImageLoss):
 
         with torch.no_grad():
             # sample point_coords
-            point_coords = sample_points_using_uncertainty(
-                source_masks, lambda logits: calculate_uncertainty(logits), num_points, 3, 0.75
-            )
+            point_coords = sample_points_using_uncertainty(source_masks, num_points, 3, 0.75)
             # get gt labels
             point_labels = sample_point(target_masks, point_coords, align_corners=False, mode="nearest").squeeze(1)
 
