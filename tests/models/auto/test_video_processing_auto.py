@@ -226,7 +226,16 @@ class AutoVideoProcessorTest(unittest.TestCase):
             self.assertEqual(video_processor.__class__.__name__, "NewVideoProcessor")
             self.assertTrue(video_processor.is_local)
 
-            # If remote is enabled, we load from the Hub
+            # If remote is enabled but local is registered, local takes precedence
+            video_processor = AutoVideoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_video_processor", trust_remote_code=True
+            )
+            self.assertEqual(video_processor.__class__.__name__, "NewVideoProcessor")
+            self.assertTrue(video_processor.is_local)
+
+            # If we unregister the local class, remote code is used again
+            del CONFIG_MAPPING._extra_content["custom"]
+            del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
             video_processor = AutoVideoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_video_processor", trust_remote_code=True
             )

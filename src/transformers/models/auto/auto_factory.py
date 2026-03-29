@@ -218,7 +218,7 @@ class _BaseAutoModelClass:
                 trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not has_local_code:
             if "--" in class_ref:
                 repo_id, class_ref = class_ref.split("--")
             else:
@@ -359,7 +359,7 @@ class _BaseAutoModelClass:
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not has_local_code:
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )

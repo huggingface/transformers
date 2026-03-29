@@ -459,7 +459,13 @@ class AutoModelTest(unittest.TestCase):
             model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=False)
             self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
 
-            # If remote is enabled, we load from the Hub
+            # If remote is enabled but local is registered, local takes precedence
+            model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
+            self.assertEqual(model.config.__class__.__name__, "NewModelConfigLocal")
+
+            # If we unregister the local class, remote code is used again
+            del CONFIG_MAPPING._extra_content["new-model"]
+            del MODEL_MAPPING._extra_content[NewModelConfigLocal]
             model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
             self.assertEqual(model.config.__class__.__name__, "NewModelConfig")
 

@@ -324,14 +324,14 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertFalse(processor.feature_extractor.special_attribute_present)
             self.assertFalse(processor.tokenizer.special_attribute_present)
 
-            # If remote is enabled, we load from the Hub.
+            # If remote is enabled but local is registered, local takes precedence
             processor = AutoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
             )
             self.assertEqual(processor.__class__.__name__, "NewProcessor")
-            self.assertTrue(processor.special_attribute_present)
-            self.assertTrue(processor.feature_extractor.special_attribute_present)
-            self.assertTrue(processor.tokenizer.special_attribute_present)
+            self.assertFalse(processor.special_attribute_present)
+            self.assertFalse(processor.feature_extractor.special_attribute_present)
+            self.assertFalse(processor.tokenizer.special_attribute_present)
 
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:

@@ -174,7 +174,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
             self.assertTrue(feature_extractor.is_local)
 
-            # If remote is enabled, we load from the Hub
+            # If remote is enabled but local is registered, local takes precedence
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
+            )
+            self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+            self.assertTrue(feature_extractor.is_local)
+
+            # If we unregister the local class, remote code is used again
+            del CONFIG_MAPPING._extra_content["custom"]
+            del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
             feature_extractor = AutoFeatureExtractor.from_pretrained(
                 "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
             )

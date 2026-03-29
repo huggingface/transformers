@@ -503,6 +503,17 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
             self.assertFalse(tokenizer.special_attribute_present)
 
+            # If remote is enabled but local is registered, local takes precedence
+            tokenizer = AutoTokenizer.from_pretrained(
+                "hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True, use_fast=False
+            )
+            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            self.assertFalse(tokenizer.special_attribute_present)
+
+            # If we unregister the local class, remote code is used again
+            del CONFIG_MAPPING._extra_content["custom"]
+            del TOKENIZER_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
             tokenizer = AutoTokenizer.from_pretrained(
                 "hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True, use_fast=False
             )
