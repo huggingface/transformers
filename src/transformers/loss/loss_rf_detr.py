@@ -234,11 +234,7 @@ class RfDetrHungarianMatcher(nn.Module):
         class_cost = pos_cost_class[:, target_ids] - neg_cost_class[:, target_ids]
 
         # Compute the L1 cost between boxes, cdist only supports float32
-        dtype = out_bbox.dtype
-        out_bbox = out_bbox.to(torch.float32)
-        target_bbox = target_bbox.to(torch.float32)
-        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-        bbox_cost = bbox_cost.to(dtype)
+        bbox_cost = torch.cdist(out_bbox.to(torch.float32), target_bbox.to(torch.float32), p=1).type_as(out_bbox)
 
         # Compute the giou cost between boxes
         giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
