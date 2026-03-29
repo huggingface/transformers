@@ -149,8 +149,6 @@ def get_model_config(model_name: str):
 
     if "objects365" in model_name:
         config["num_labels"] = 366
-    elif "coco" in model_name:
-        config["num_labels"] = 91
     else:
         config["num_labels"] = 91
 
