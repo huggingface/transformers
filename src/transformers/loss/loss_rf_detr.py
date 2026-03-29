@@ -206,6 +206,7 @@ class RfDetrHungarianMatcher(HungarianMatcher):
         Differences:
         - out_prob = outputs["logits"].flatten(0, 1).sigmoid() instead of softmax
         - class_cost uses alpha and gamma
+        - Additionally, mask cost is computed using pair-wise sigmoid cross entropy loss and dice loss
         """
         batch_size, num_queries = outputs["logits"].shape[:2]
 
