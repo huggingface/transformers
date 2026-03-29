@@ -17,10 +17,10 @@ import torch
 import torch.distributed as dist
 from torch import Tensor, nn
 
-from .. import requires_backends
 from ..image_transforms import center_to_corners_format
 from ..utils import is_scipy_available
 from .loss_for_object_detection import (
+    HungarianMatcher,
     dice_loss,
     generalized_box_iou,
 )
@@ -184,7 +184,7 @@ def sample_points_using_uncertainty(
     return point_coordinates
 
 
-class RfDetrHungarianMatcher(nn.Module):
+class RfDetrHungarianMatcher(HungarianMatcher):
     def __init__(
         self,
         class_cost: float = 1,
@@ -194,14 +194,7 @@ class RfDetrHungarianMatcher(nn.Module):
         cost_mask_class_cost: float = 1,
         cost_mask_dice_cost: float = 1,
     ):
-        super().__init__()
-        requires_backends(self, ["scipy"])
-
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
-            raise ValueError("All costs of the Matcher can't be 0")
+        super().__init__(class_cost, bbox_cost, giou_cost)
 
         self.mask_point_sample_ratio = mask_point_sample_ratio
         self.cost_mask_class = cost_mask_class_cost
