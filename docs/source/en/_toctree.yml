@@ -634,6 +634,8 @@
         title: HunYuanDenseV1
       - local: model_doc/hunyuan_v1_moe
         title: HunYuanMoEV1
+      - local: model_doc/hyperclovax
+        title: HyperCLOVAX
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jais2
@@ -1202,8 +1204,6 @@
         title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
-      - local: model_doc/hyperclovax
-        title: HyperCLOVAX
       - local: model_doc/idefics
         title: IDEFICS
       - local: model_doc/idefics2

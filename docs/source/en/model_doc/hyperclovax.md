@@ -17,7 +17,9 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
@@ -25,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-HyperCLOVA X SEED Think is NAVER Cloud's lightweight language model combining pruning and knowledge distillation with advanced reasoning capabilities. The 14B model features a Transformer-based architecture with Peri-Layer Normalization and Maximal Update Parameterization (μP), 14.74B parameters, and 32k context length. It supports dual-mode reasoning (think / non-think) and function calling via a ChatML-based format.
+HyperCLOVA X SEED Think is NAVER Cloud's language model combining pruning and knowledge distillation with advanced reasoning capabilities. The 14B model features a Transformer-based architecture with Peri-Layer Normalization and Maximal Update Parameterization (μP), 14.74B parameters, and 32k context length. It supports dual-mode reasoning (think / non-think) and function calling via a ChatML-based format.
 
 The model was trained with a multi-stage RL pipeline (SFT → RLVR → Length Controllability → joint RLHF+RLVR) and achieves strong performance on Korean language benchmarks and reasoning tasks.
 
@@ -63,6 +65,8 @@ model_inputs = tokenizer.apply_chat_template(
     messages,
     add_generation_prompt=True,
     return_tensors="pt",
+    # force_reasoning=True,
+    # skip_reasoning=True,
 ).to(model.device)
 
 output = model.generate(
