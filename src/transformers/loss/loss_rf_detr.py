@@ -371,6 +371,7 @@ class RfDetrImageLoss(LwDetrImageLoss):
             losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        # Difference with LwDetrImageLoss: we don't ignore masks losses for auxiliary outputs
         if "auxiliary_outputs" in outputs:
             for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
                 indices = self.matcher(auxiliary_outputs, targets, group_detr)
