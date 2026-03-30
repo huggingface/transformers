@@ -6,6 +6,7 @@
 #     "transformers[serving] @ git+https://github.com/huggingface/transformers.git@main",
 #     "openai>=2.26.0",
 #     "torchvision",
+#     "kernels",
 # ]
 # ///
 import argparse
@@ -108,7 +109,7 @@ def main():
         serve_cmd.append("--continuous-batching")
 
     # Always use sdpa attention implementation
-    serve_cmd.extend(["--attn-implementation", "sdpa"])
+    serve_cmd.extend(["--attn-implementation", "kernels-community/flash-attn2"])
 
     print("Starting transformers serve with continuous batching...")
     print(f"Model: {args.model}")
