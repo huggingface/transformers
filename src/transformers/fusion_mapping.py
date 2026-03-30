@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-_patch_embedding_fusion_cache: dict[type, tuple[dict[str, type[nn.Module]], list[WeightConverter]]] = {}
+_FUSION_DISCOVERY_CACHE: dict[str, dict[type, tuple[dict[str, type[nn.Module]], list[WeightConverter]]]] = {}
 
 
 def _is_fusable_patch_embedding(module: nn.Module) -> bool:
@@ -94,11 +94,17 @@ def _build_weight_converter_for_module(module_name: str, reference_module: nn.Mo
     )
 
 
-def _discover_fusable_patch_embedding_classes(
-    cls: "type[PreTrainedModel]", config
+def _discover_fusable_modules(
+    cls: "type[PreTrainedModel]",
+    config,
+    fusion_name: str,
+    is_fusable: Callable[[nn.Module], bool],
+    make_fused_class: Callable[[type[nn.Module], nn.Module], type[nn.Module]],
+    make_weight_converter: Callable[[str, nn.Module], WeightConverter],
 ) -> tuple[dict[str, type[nn.Module]], list[WeightConverter]]:
-    if cls in _patch_embedding_fusion_cache:
-        return _patch_embedding_fusion_cache[cls]
+    cache = _FUSION_DISCOVERY_CACHE.setdefault(fusion_name, {})
+    if cls in cache:
+        return cache[cls]
 
     with torch.device("meta"):
         model = cls(config)
@@ -107,23 +113,30 @@ def _discover_fusable_patch_embedding_classes(
     patch_mapping = {}
     converters = []
     for module_name, module in model.named_modules():
-        module_cls = type(module)
-        if not _is_fusable_patch_embedding(module):
+        if not is_fusable(module):
             continue
 
-        converters.append(_build_weight_converter_for_module(module_name, module))
+        module_cls = type(module)
+        converters.append(make_weight_converter(module_name, module))
         if module_cls in seen_classes:
             continue
 
         seen_classes.add(module_cls)
-        patch_mapping[module_cls.__name__] = _make_fused_patch_embedding_class(module_cls, module)
+        patch_mapping[module_cls.__name__] = make_fused_class(module_cls, module)
 
-    _patch_embedding_fusion_cache[cls] = (patch_mapping, converters)
+    cache[cls] = (patch_mapping, converters)
     return patch_mapping, converters
 
 
-def register_patch_embedding_patches(cls: "type[PreTrainedModel]", config) -> None:
-    fusable_classes, converters = _discover_fusable_patch_embedding_classes(cls, config)
+def _register_patch_embedding_fusion(cls: "type[PreTrainedModel]", config) -> None:
+    fusable_classes, converters = _discover_fusable_modules(
+        cls,
+        config,
+        fusion_name="patch_embeddings",
+        is_fusable=_is_fusable_patch_embedding,
+        make_fused_class=_make_fused_patch_embedding_class,
+        make_weight_converter=_build_weight_converter_for_module,
+    )
     if not fusable_classes:
         logger.debug("No compatible patch-embedding classes found to fuse for %s", cls.__name__)
         return
@@ -151,20 +164,31 @@ def register_patch_embedding_patches(cls: "type[PreTrainedModel]", config) -> No
     register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
 
 
-def register_fusion_patches(
-    cls: "type[PreTrainedModel]", config, fusion_config: Mapping[str, bool | Mapping[str, Any]] | None = None
-) -> None:
-    if not fusion_config:
-        return
+_FUSION_REGISTRY: dict[str, Callable[["type[PreTrainedModel]", Any], None]] = {
+    "patch_embeddings": _register_patch_embedding_fusion
+}
 
+
+def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]]) -> list[str]:
+    enabled_fusions = []
     for fusion_name, fusion_options in fusion_config.items():
+        if fusion_name not in _FUSION_REGISTRY:
+            raise ValueError(f"Unknown fusion type: {fusion_name}")
         if fusion_options is False:
             continue
         if fusion_options is not True and not isinstance(fusion_options, Mapping):
             raise ValueError(
                 f"Invalid fusion config for {fusion_name}: expected `True`, `False`, or a mapping of options."
             )
-        if fusion_name != "patch_embeddings":
-            raise ValueError(f"Unknown fusion type: {fusion_name}")
+        enabled_fusions.append(fusion_name)
+    return enabled_fusions
 
-        register_patch_embedding_patches(cls, config)
+
+def register_fusion_patches(
+    cls: "type[PreTrainedModel]", config, fusion_config: Mapping[str, bool | Mapping[str, Any]] | None = None
+) -> None:
+    if not fusion_config:
+        return
+
+    for fusion_name in _iter_enabled_fusions(fusion_config):
+        _FUSION_REGISTRY[fusion_name](cls, config)
