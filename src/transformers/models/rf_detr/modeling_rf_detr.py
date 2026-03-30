@@ -1375,7 +1375,6 @@ def refine_bboxes(reference_points, deltas):
 class RfDetrModel(RfDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
-    _no_split_modules = None
     _checkpoint_conversion_mapping = {
         # backbone RfDetrConvEncoder
         "backbone.0.encoder.encoder": "backbone.backbone",
