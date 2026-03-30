@@ -115,7 +115,6 @@ PRIVATE_MODELS = [
     "Owlv2VisionTransformer",
     "OwlViTTextTransformer",
     "OwlViTVisionTransformer",
-    "XCLIPTextTransformer",
     "CLIPSegTextTransformer",
     "DetrDecoder",
     "GroupViTTextTransformer",
@@ -123,7 +122,6 @@ PRIVATE_MODELS = [
     "Kosmos2TextTransformer",
     "Kosmos2VisionTransformer",
     "Kosmos2_5TextTransformer",
-    "XCLIPVisionTransformer",
     # end of should have beens
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",

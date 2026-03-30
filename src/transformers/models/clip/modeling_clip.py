@@ -601,7 +601,6 @@ class CLIPVisionModel(CLIPPreTrainedModel):
     config: CLIPVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["CLIPEncoderLayer"]
     _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: CLIPVisionConfig):
@@ -665,8 +664,6 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
 @auto_docstring
 class CLIPModel(CLIPPreTrainedModel):
-    config: CLIPConfig
-
     def __init__(self, config: CLIPConfig):
         super().__init__(config)
 
