@@ -25,7 +25,6 @@ from transformers.utils.import_utils import is_mistral_common_available
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
-from ...tokenization_python import PythonBackend
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     extract_commit_hash,
@@ -715,8 +714,11 @@ class AutoTokenizer:
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
             tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
-            if tokenizer_class is not None and tokenizer_class not in (TokenizersBackend, PythonBackend):
+            if tokenizer_class is not None and tokenizer_class.__name__ not in ("TokenizersBackend", "PythonBackend"):
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+            if TokenizersBackend is not None:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             raise ValueError(
                 f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
