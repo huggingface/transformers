@@ -15,16 +15,17 @@
 
 from typing import TYPE_CHECKING
 
+import torch
+
 from ...image_processing_backends import PilBackend
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import _scale_boxes, box_iou
 
 
-if is_torch_available():
-    import torch
 if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTObjectDetectionOutput
 
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class OwlViTImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
@@ -57,6 +59,7 @@ class OwlViTImageProcessorPil(PilBackend):
 
         super().__init__(**kwargs)
 
+    @requires(backends=("vision", "torch"))
     def post_process_object_detection(
         self,
         outputs: "OwlViTObjectDetectionOutput",
@@ -111,6 +114,7 @@ class OwlViTImageProcessorPil(PilBackend):
 
         return results
 
+    @requires(backends=("vision", "torch"))
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO

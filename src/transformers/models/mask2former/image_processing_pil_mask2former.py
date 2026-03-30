@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from .image_processing_mask2former import (
     Mask2FormerImageProcessorKwargs,
     compute_segments,
@@ -102,7 +103,7 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels
 
 
-@auto_docstring
+@requires(backends=("vision", "torch", "torchvision"))
 class Mask2FormerImageProcessorPil(PilBackend):
     valid_kwargs = Mask2FormerImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -178,11 +179,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
         if size.shortest_edge and size.longest_edge:
             # Get current image size
             height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
-            new_size = get_size_with_aspect_ratio(
-                (height, width),
-                size.shortest_edge,
-                size.longest_edge,
-            )
+            new_size = get_size_with_aspect_ratio((height, width), size.shortest_edge, size.longest_edge)
         elif size.max_height and size.max_width:
             height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
             new_size = get_image_size_for_max_height_width((height, width), size.max_height, size.max_width)
@@ -357,10 +354,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 seg_map = segmentation_maps[idx]
                 if do_resize:
                     seg_map = self.resize(
-                        image=seg_map,
-                        size=size,
-                        size_divisor=size_divisor,
-                        resample=PILImageResampling.NEAREST,
+                        image=seg_map, size=size, size_divisor=size_divisor, resample=PILImageResampling.NEAREST
                     )
                 resized_segmentation_maps.append(seg_map)
 
@@ -385,10 +379,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 if segmentation_map.ndim == 3 and segmentation_map.shape[0] == 1:
                     segmentation_map = segmentation_map.squeeze(0)
                 masks, classes = convert_segmentation_map_to_binary_masks(
-                    segmentation_map,
-                    instance_id,
-                    ignore_index=ignore_index,
-                    do_reduce_labels=do_reduce_labels,
+                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
                 )
                 mask_labels.append(masks)
                 class_labels.append(classes)
@@ -412,8 +403,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
         )
 
         encoded_inputs = BatchFeature(
-            data={"pixel_values": padded_images, "pixel_mask": pixel_masks},
-            tensor_type=return_tensors,
+            data={"pixel_values": padded_images, "pixel_mask": pixel_masks}, tensor_type=return_tensors
         )
         # we cannot batch them since they don't share a common class size
         if segmentation_maps is not None:

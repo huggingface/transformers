@@ -22,17 +22,14 @@ from collections.abc import Iterable
 from typing import Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
@@ -176,8 +173,8 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
+        high_res_resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

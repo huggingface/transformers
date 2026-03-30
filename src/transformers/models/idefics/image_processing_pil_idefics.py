@@ -17,9 +17,11 @@ from ...image_processing_backends import PilBackend
 from ...image_utils import ImageInput, PILImageResampling, make_flat_list_of_images
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, is_torch_available
+from ...utils.import_utils import requires
 from .image_processing_idefics import IDEFICS_STANDARD_MEAN, IDEFICS_STANDARD_STD, IdeficsImageProcessorKwargs
 
 
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class IdeficsImageProcessorPil(PilBackend):
     valid_kwargs = IdeficsImageProcessorKwargs

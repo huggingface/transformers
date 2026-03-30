@@ -25,14 +25,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils.import_utils import requires
 from .image_processing_layoutlmv2 import LayoutLMv2ImageProcessorKwargs, apply_tesseract
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
+@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class LayoutLMv2ImageProcessorPil(PilBackend):
     valid_kwargs = LayoutLMv2ImageProcessorKwargs
@@ -56,7 +54,7 @@ class LayoutLMv2ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         return_tensors: str | TensorType | None,
         apply_ocr: bool = True,
         ocr_lang: str | None = None,

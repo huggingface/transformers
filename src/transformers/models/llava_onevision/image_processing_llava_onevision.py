@@ -172,7 +172,7 @@ class LlavaOnevisionImageProcessor(TorchvisionBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
