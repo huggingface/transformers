@@ -702,7 +702,7 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # tokenizer_config_class doesn't match the registered tokenizer for this model_type.
+        # if there is a config, we can check that the tokenizer class != than model class.
         # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
         if (
             tokenizer_auto_map is None
