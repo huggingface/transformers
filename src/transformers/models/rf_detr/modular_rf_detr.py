@@ -1066,12 +1066,12 @@ class RfDetrSegmentationMLPBlock(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
         dim = config.d_model
-        self.norm_in = nn.LayerNorm(dim)
+        self.norm = nn.LayerNorm(dim)
         self.mlp = RfDetrSegmentationMLP(config)
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         residual = features
-        features = self.norm_in(features)
+        features = self.norm(features)
         features = self.mlp(features)
         features = features + residual
         return features
@@ -1102,6 +1102,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
         # segmentation head (specific rules first)
         r"segmentation_head.query_features_block.layers.0": "query_features_block.mlp.fc1",
         r"segmentation_head.query_features_block.layers.2": "query_features_block.mlp.fc2",
+        r"segmentation_head.query_features_block.norm_in": "query_features_block.norm",
         r"segmentation_head.blocks.(\d+).norm": r"blocks.\1.layernorm",
         # Generic prefix rules later
         r"segmentation_head.spatial_features_proj": "spatial_features_proj",
