@@ -357,10 +357,10 @@ class PagedAttentionCache:
 
         Returns the complete KV states (cached + new) for attention computation.
         """
-        # Retrieve the layer read and write indices, and if there is a sliding window
+        # Retrieve the layer read and write indices, cast to int64 for index_select/index_copy_
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
-        layer_read_index = read_index[group_idx]
-        layer_write_index = write_index[group_idx]
+        layer_read_index = read_index[group_idx].long()
+        layer_write_index = write_index[group_idx].long()
         # Select the correct cache
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
@@ -504,8 +504,8 @@ class PagedAttentionMemoryHandler:
         - inputs_ids + outputs_ids + position_ids + logits_indices: 4 * max_tokens_per_batch * int32_size
         - attention_mask: num_attention_masks * num_pages * max_tokens_per_batch * activation_dtype_size
         - cumulative_seqlens_q + cumulative_seqlens_k: (1 + 2) * max_tokens_per_batch * int32_size
-        - write_index_tensor: num_groups * max_tokens_per_batch * int64_size
-        - read_index_tensor: num_groups * (num_pages + max_tokens_per_batch) * int64_size
+        - write_index_tensor: num_groups * max_tokens_per_batch * int32_size
+        - read_index_tensor: num_groups * (num_pages + max_tokens_per_batch) * int32_size
 
     The handler can operate in three modes:
     1. Auto-sizing: Determines both number of pages and maximum number of tokens per batch using quadratic optimization
@@ -575,11 +575,11 @@ class PagedAttentionMemoryHandler:
 
         available_memory = sum([
             MN * num_attention_masks * activation_dtype_size,
-            2N * (layer_group_size * page_size * cache_dtype + 4 * num_group),
-            M * (peak_activation_per_token * activation_dtype + 28 + 8 * num_group),
+            2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
+            M * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
         ])
 
-        where we already simplified int32_size = 4 and int64_size = 8.
+        where we already simplified int32_size = 4.
         """
         if num_blocks is None:
             if max_batch_tokens is None:
@@ -620,8 +620,8 @@ class PagedAttentionMemoryHandler:
 
         available_memory = sum([
             m * N^2 * num_attention_masks * activation_dtype_size,
-            2N * (layer_group_size * page_size * cache_dtype + 4 * num_group),
-            m * N * (peak_activation_per_token * activation_dtype + 28 + 8 * num_group),
+            2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
+            m * N * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
         ])
 
         If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial.
@@ -631,8 +631,8 @@ class PagedAttentionMemoryHandler:
 
         # Compute second-degree polynomial coefficients
         a = m * self.num_attention_masks * self._activation_dtype.itemsize
-        b = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 4 * self.num_groups)
-        b += m * (self.peak_activation_per_token * self._activation_dtype.itemsize + 28 + 8 * self.num_groups)
+        b = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
+        b += m * (self.peak_activation_per_token * self._activation_dtype.itemsize + 28 + 4 * self.num_groups)
         c = -cache_memory
         logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
 
@@ -669,19 +669,19 @@ class PagedAttentionMemoryHandler:
     ) -> int:
         """Calculate maximum batch tokens M given a fixed number of cache blocks. The formula for M is given by:
 
-        M = (available_memory - 2N * (layer_group_size * page_size * cache_dtype + 4 * num_group))
-            / (activation_dtype_size * (N * num_attention_masks + peak_activation_per_token) + 28 + 8 * num_group)
+        M = (available_memory - 2N * (layer_group_size * page_size * cache_dtype + 2 * num_group))
+            / (activation_dtype_size * (N * num_attention_masks + peak_activation_per_token) + 28 + 4 * num_group)
         """
         cache_memory = self.get_available_memory(max_memory_percent)
         num_pages = num_blocks * self.block_size
         # Compute numerator
         num = cache_memory
-        num -= 2 * num_pages * (self.group_size * self.page_size * cache_dtype.itemsize + 4 * self.num_groups)
+        num -= 2 * num_pages * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
         # Compute denominator
         denum = self._activation_dtype.itemsize * (
             num_pages * self.num_attention_masks + self.peak_activation_per_token
         )
-        denum += 28 + 8 * self.num_groups
+        denum += 28 + 4 * self.num_groups
         # Compute max batch tokens and return
         max_batch_tokens = floor(num / denum)
         if max_batch_tokens > self._upper_bound_max_batch_tokens:
@@ -697,16 +697,16 @@ class PagedAttentionMemoryHandler:
     ) -> int:
         """Calculate number of cache blocks N given a fixed maximum token per token M. The formula for N is given by:
 
-        N = (available_memory - M * (peak_activation_per_token * activation_dtype + 28 + 8 * num_group))
-          / (2 * (layer_group_size * page_size * cache_dtype + 4 * num_group) + M * (num_attention_masks * activation_dtype_size))
+        N = (available_memory - M * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group))
+          / (2 * (layer_group_size * page_size * cache_dtype + 2 * num_group) + M * (num_attention_masks * activation_dtype_size))
         """
         cache_memory = self.get_available_memory(max_memory_percent)
         # Compute numerator
         num = cache_memory
         num -= max_batch_tokens * self.peak_activation_per_token * self._activation_dtype.itemsize
-        num -= max_batch_tokens * (28 + 8 * self.num_groups)
+        num -= max_batch_tokens * (28 + 4 * self.num_groups)
         # Compute denominator
-        denum = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 4 * self.num_groups)
+        denum = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
         denum += max_batch_tokens * (self.num_attention_masks * self._activation_dtype.itemsize)
         denum += max_batch_tokens * self._activation_dtype.itemsize
         # Compute cache size and return number of blocks
@@ -728,8 +728,8 @@ class PagedAttentionMemoryHandler:
 
         available_memory = sum([
             MN * num_attention_masks * activation_dtype_size,
-            2N * (layer_group_size * page_size * cache_dtype + 4 * num_group),
-            M * (peak_activation_per_token * activation_dtype + 28 + 8 * num_group),
+            2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
+            M * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
         ])
         but is broken down below.
         """
@@ -747,8 +747,8 @@ class PagedAttentionMemoryHandler:
 
         cumulative_seqlens_memory_footprint = 3 * max_batch_tokens * 4  # 4 is for int32 size
 
-        write_index_memory_footprint = self.num_groups * max_batch_tokens * 8  # 8 is for int64 size
-        read_index_memory_footprint = self.num_groups * (num_pages + max_batch_tokens) * 8  # 8 is for int64 size
+        write_index_memory_footprint = self.num_groups * max_batch_tokens * 4  # 4 is for int32 size
+        read_index_memory_footprint = self.num_groups * (num_pages + max_batch_tokens) * 4  # 4 is for int32 size
 
         total_memory_footprint = sum(
             [
