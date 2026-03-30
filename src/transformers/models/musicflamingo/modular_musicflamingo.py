@@ -16,7 +16,6 @@
 import re
 from math import pi
 
-import torch
 from huggingface_hub.dataclasses import strict
 from torch import Tensor, broadcast_tensors
 
@@ -25,7 +24,7 @@ from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -33,6 +32,10 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
+
+
+if is_torch_available():
+    import torch
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")

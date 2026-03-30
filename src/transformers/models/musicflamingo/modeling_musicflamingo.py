@@ -23,7 +23,6 @@ from collections.abc import Callable
 from math import pi
 from typing import Optional
 
-import torch
 from torch import Tensor, broadcast_tensors, nn
 
 from ... import initialization as init
@@ -34,9 +33,13 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_musicflamingo import MusicFlamingoConfig
+
+
+if is_torch_available():
+    import torch
 
 
 class MusicFlamingoRotaryEmbedding(nn.Module):
