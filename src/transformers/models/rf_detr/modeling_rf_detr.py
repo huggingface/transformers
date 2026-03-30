@@ -1975,16 +1975,16 @@ class RfDetrSegmentationBlock(nn.Module):
         self.depthwise_conv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
         self.pointwise_conv = nn.Linear(dim, dim)
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        residual = features
-        features = self.depthwise_conv(features)
-        features = features.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
-        features = self.layernorm(features)
-        features = self.pointwise_conv(features)
-        features = self.act(features)
-        features = features.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
-        features = features + residual
-        return features
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.depthwise_conv(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+        hidden_states = self.layernorm(hidden_states)
+        hidden_states = self.pointwise_conv(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+        hidden_states = hidden_states + residual
+        return hidden_states
 
 
 class RfDetrSegmentationMLP(nn.Module):
