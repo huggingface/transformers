@@ -78,6 +78,30 @@ class ProtoPretrainedModel(nn.Module):
         pass
 
 
+class OutputRouter:
+    """Dedicated object for routing generation outputs to the right destination.
+
+    When an async handler is registered for a request, the output is forwarded
+    to that handler via ``call_soon_threadsafe``. Otherwise the output is placed
+    on the shared ``output_queue``.
+    """
+
+    def __init__(self) -> None:
+        self.output_queue = queue.Queue()
+        self.result_handlers: dict[str, tuple[callable, asyncio.AbstractEventLoop]] = {}
+        self._lock = threading.Lock()
+
+    def deliver(self, output: GenerationOutput) -> None:
+        """Route a single output to its registered handler or the output_queue."""
+        with self._lock:
+            entry = self.result_handlers.get(output.request_id)
+        if entry is not None:
+            callback, loop = entry
+            loop.call_soon_threadsafe(callback, output)
+        else:
+            self.output_queue.put(output)
+
+
 # Continuous Batch Processor (Internal Logic)
 @attach_tracer()
 class ContinuousBatchProcessor:
@@ -91,12 +115,11 @@ class ContinuousBatchProcessor:
         generation_config: GenerationConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         input_queue: queue.Queue,
-        output_queue: queue.Queue,
+        output_router: OutputRouter,
         stop_event: threading.Event,
         model_device: torch.device,
         model_dtype: torch.dtype,
         scheduler: Scheduler,
-        deliver_output: callable,
     ) -> None:
         """Initialize the continuous batch processor.
 
@@ -105,23 +128,21 @@ class ContinuousBatchProcessor:
             config: The model configuration
             generation_config: The generation configuration
             input_queue: Queue for incoming requests
-            output_queue: Queue for outgoing results (used by ``get_result()`` callers)
+            output_router: An [`OutputRouter`] object that routes outputs to handlers or the output queue.
             stop_event: Event to signal processing should stop
             model_device: Device for model inputs/outputs
             model_dtype: Data type for model inputs/outputs
             scheduler: The [`Scheduler`] to use
-            deliver_output: Callback that receives a single ``GenerationOutput``.
         """
         self.cache = cache
         self.config = config
         self.cb_config = continuous_batching_config
         self.input_queue = input_queue
-        self.output_queue = output_queue
+        self.output_router = output_router
         self.stop_event = stop_event
         self.model_device = model_device
         self.model_dtype = model_dtype
         self.scheduler = scheduler
-        self._deliver_output = deliver_output
 
         # Generation-related attributes
         self.do_sample = getattr(generation_config, "do_sample", True)
@@ -181,7 +202,7 @@ class ContinuousBatchProcessor:
 
     def __repr__(self) -> str:
         return (
-            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, "
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, "
             f"active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
             + self.inputs_and_outputs.get_model_kwargs().__repr__()
         )
@@ -254,7 +275,7 @@ class ContinuousBatchProcessor:
             state.generated_tokens = []
 
         self.metrics.record_request_completion(state.created_time, state.request_id)
-        self.output_queue.put(state.to_generation_output())
+        self.output_router.deliver(state.to_generation_output())
 
     # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
     # Including a policy to not allow offloading and crashing the generation
@@ -366,7 +387,7 @@ class ContinuousBatchProcessor:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
-                    self._deliver_output(state.to_generation_output())
+                    self.output_router.deliver(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING:
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
@@ -596,9 +617,7 @@ class ContinuousBatchingManager:
 
         self.input_queue = queue.Queue(maxsize=self.continuous_batching_config.max_queue_size)
         self._has_new_requests = threading.Event()
-        self.output_queue = queue.Queue()
-        self._result_handlers: dict[str, tuple[callable, asyncio.AbstractEventLoop]] = {}
-        self._result_handlers_lock = threading.Lock()
+        self.output_router = OutputRouter()
         self.stop_event = threading.Event()
         self.batch_processor: ContinuousBatchProcessor | None = None
         self._generation_thread = None
@@ -625,30 +644,6 @@ class ContinuousBatchingManager:
         self.q_padding_interval_size = self.continuous_batching_config.q_padding_interval_size
         self.kv_padding_interval_size = self.continuous_batching_config.kv_padding_interval_size
         self.max_cached_graphs = self.continuous_batching_config.max_cached_graphs
-
-        # Log probability generation is not supported yet (TODO)
-        if self.log_prob_generation:
-            raise NotImplementedError("log_prob_generation is not supported yet")
-
-    def _register_handler(self, request_id: str, callback: callable, loop: asyncio.AbstractEventLoop) -> None:
-        """Register a result handler for a request."""
-        with self._result_handlers_lock:
-            self._result_handlers[request_id] = (callback, loop)
-
-    def _unregister_handler(self, request_id: str) -> None:
-        """Remove a result handler for a request."""
-        with self._result_handlers_lock:
-            self._result_handlers.pop(request_id, None)
-
-    def _deliver_output(self, output: GenerationOutput) -> None:
-        """Route a single output to its registered handler or the output_queue."""
-        with self._result_handlers_lock:
-            entry = self._result_handlers.get(output.request_id)
-        if entry is not None:
-            callback, loop = entry
-            loop.call_soon_threadsafe(callback, output)
-        else:
-            self.output_queue.put(output)
 
     @traced
     def start(self) -> None:
@@ -807,12 +802,12 @@ class ContinuousBatchingManager:
         Returns:
             Optional[GenerationOutput]: The result data or None if timeout.
         """
-        if self._generation_thread is None and self.output_queue.empty():
+        if self._generation_thread is None and self.output_router.output_queue.empty():
             return None
         try:
-            result = self.output_queue.get(block=True, timeout=timeout)
+            result = self.output_router.output_queue.get(block=True, timeout=timeout)
             if request_id is not None and result.request_id != request_id:
-                self.output_queue.put(result)
+                self.output_router.output_queue.put(result)
                 return None
             return result
         except queue.Empty:
@@ -856,9 +851,11 @@ class ContinuousBatchingManager:
         def _auto_cleanup(result):
             callback(result)
             if result.is_finished():
-                self._unregister_handler(request_id)
+                with self.output_router._lock:
+                    self.output_router.result_handlers.pop(request_id, None)
 
-        self._register_handler(request_id, _auto_cleanup, loop)
+        with self.output_router._lock:
+            self.output_router.result_handlers[request_id] = (_auto_cleanup, loop)
 
     @traced
     def _generation_step(self) -> None:
@@ -892,12 +889,11 @@ class ContinuousBatchingManager:
             generation_config=self.generation_config,
             continuous_batching_config=self.continuous_batching_config,
             input_queue=self.input_queue,
-            output_queue=self.output_queue,
+            output_router=self.output_router,
             stop_event=self.stop_event,
             model_device=self.model.device,
             model_dtype=self.model.dtype,
             scheduler=scheduler(paged_attention_cache),
-            deliver_output=self._deliver_output,
         )
         return batch_processor
 
