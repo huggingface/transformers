@@ -17,7 +17,7 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndProjection,
@@ -313,7 +313,7 @@ class AltCLIPVisionModel(CLIPVisionModel):
     """
 )
 class AltRobertaModel(AltCLIPPreTrainedModel):
-    config: AltCLIPConfig
+    config: AltCLIPTextConfig
     input_modalities = ("text",)
 
     _input_embed_layer = "word_embeddings"
@@ -371,11 +371,10 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        attention_mask = create_causal_mask(
+        attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
         )
 
         encoder_outputs = self.encoder(
@@ -395,7 +394,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
 class AltCLIPTextModel(AltCLIPPreTrainedModel):
     config: AltCLIPTextConfig
     input_modalities = ("text",)
-    _input_embed_layer = "token_embedding"
+    _input_embed_layer = "word_embedding"
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -519,7 +518,7 @@ class AltCLIPModel(ChineseCLIPModel, AltCLIPPreTrainedModel):
         return_loss: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | AltRobertaOutput:
+    ) -> tuple | AltCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -561,7 +560,7 @@ class AltCLIPModel(ChineseCLIPModel, AltCLIPPreTrainedModel):
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[0][:, 0, :]
+        text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
