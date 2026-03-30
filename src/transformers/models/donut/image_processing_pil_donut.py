@@ -25,13 +25,23 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_donut import DonutImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.donut.image_processing_donut.DonutImageProcessorKwargs
+class DonutImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
+        Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    """
+
+    do_thumbnail: bool
+    do_align_long_axis: bool
+
+
 @auto_docstring
 class DonutImageProcessorPil(PilBackend):
     """PIL backend for Donut with align_long_axis, thumbnail, and pad_image."""
@@ -130,7 +140,7 @@ class DonutImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize the image to make a thumbnail."""
@@ -161,7 +171,7 @@ class DonutImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
