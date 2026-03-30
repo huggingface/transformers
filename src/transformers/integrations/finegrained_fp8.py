@@ -438,7 +438,7 @@ def _build_contiguous_layout(expert_ids_sorted: torch.Tensor, num_experts: int, 
     cumulative_padding = padding_per_expert.cumsum(0) - padding_per_expert
     row_map = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
 
-    if torch.cuda.get_device_capability()[0] >= 10:  # Blackwell (SM100+) supports psum layout
+    if torch.cuda.get_device_capability(device)[0] >= 10:  # Blackwell (SM100+) supports psum layout
         # Blackwell: compact (num_experts,) cumulative actual token counts
         grouped_layout = tokens_per_expert.cumsum(0).int()
     else:
@@ -507,7 +507,7 @@ def fp8_deepgemm_experts_forward(
 
     # Build TMA-aligned contiguous layout for DeepGEMM
     row_map, grouped_layout, total_rows = _build_contiguous_layout(
-        expert_ids_g, self.num_experts, _DEEPGEMM_M_ALIGNMENT
+        expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT
     )
 
     # --- Up projection per expert (DeepGEMM grouped contiguous) ---
@@ -516,12 +516,9 @@ def fp8_deepgemm_experts_forward(
     act_fp8, act_scales = per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
     act_fp8, act_scales = _pad_for_contiguous_layout(act_fp8, act_scales, row_map, total_rows)
     proj_out = torch.zeros(total_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     grouped_contiguous_fp8_gemm(
-        (act_fp8, act_scales),
-        (w_up, ws_up),
-        proj_out,
-        grouped_layout,
-        use_psum_layout=torch.cuda.get_device_capability()[0] >= 10,
+        (act_fp8, act_scales), (w_up, ws_up), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
     # Apply gating or activation
@@ -531,15 +528,12 @@ def fp8_deepgemm_experts_forward(
         proj_out = self.act_fn(proj_out)
 
     # --- Down projection per expert (DeepGEMM grouped contiguous) ---
-    # proj_out is already in the padded layout from the up projection — just quantize
+    w_down = self.down_proj
+    ws_down = self.down_proj_scale_inv
     proj_fp8, proj_scales = per_token_cast_to_fp8(proj_out, use_ue8m0=False)
     proj_out = torch.zeros(total_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     grouped_contiguous_fp8_gemm(
-        (proj_fp8, proj_scales),
-        (self.down_proj, self.down_proj_scale_inv),
-        proj_out,
-        grouped_layout,
-        use_psum_layout=torch.cuda.get_device_capability()[0] >= 10,
+        (proj_fp8, proj_scales), (w_down, ws_down), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
     # Remove padding rows
