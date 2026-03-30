@@ -2012,12 +2012,12 @@ class RfDetrSegmentationMLPBlock(nn.Module):
         self.norm = nn.LayerNorm(dim)
         self.mlp = RfDetrSegmentationMLP(config)
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        residual = features
-        features = self.norm(features)
-        features = self.mlp(features)
-        features = features + residual
-        return features
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = hidden_states + residual
+        return hidden_states
 
 
 class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
