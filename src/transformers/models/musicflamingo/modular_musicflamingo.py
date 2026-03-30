@@ -81,7 +81,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         self.head_dim = self.audio_config.hidden_size
 
 
-class MusicFlamingoProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 
 
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
