@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -100,6 +101,10 @@ class VideoPrismTextConfig(SiglipTextConfig):
     initializer_range: float = 0.02
     attn_logit_softcapping: float = 50.0
     attention_dropout = AttributeError()
+    projection_size = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        PreTrainedConfig.__post_init__(**kwargs)
 
 
 @auto_docstring(
