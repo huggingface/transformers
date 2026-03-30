@@ -111,7 +111,7 @@ encoder_convert_list = [
     # OmniASRFeatureProjection
     ("encoder_frontend.model_dim_proj", "encoder.feature_projection.projection"),
     # OmniASREncoder
-    ("encoder_frontend.pos_encoder.conv", "encoder.encoder.embed_positions.conv"),
+    ("encoder_frontend.pos_encoder.conv", "encoder.encoder.pos_conv_embed.conv"),
     ("encoder.layers", "encoder.encoder.layers"),
     ("self_attn.output_proj", "self_attn.out_proj"),
     ("self_attn_layer_norm", "layer_norm"),
@@ -199,6 +199,7 @@ def _convert_model(
             # Only permute decoder Q/K weights, not encoder weights
             if "language_model.model.layers" in k and ".self_attn.q_proj.weight" in k:
                 weight = state_dict[k]
+                dim1, dim2 = weight.shape
                 state_dict[k] = weight.view(num_heads, head_dim // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
                 if verbose:
                     print(f"Permuted {k} for RoPE: {weight.shape} -> {state_dict[k].shape}")

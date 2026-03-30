@@ -15,11 +15,8 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union, List
-
-import numpy as np
+from typing import Optional, Union
 import torch
-from safetensors.torch import load_file as safe_load_file
 from torch import nn
 
 from ... import initialization as init
@@ -42,159 +39,10 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    cached_file,
-    check_torch_load_is_safe,
-    logging,
     can_return_tuple,
 )
 from .configuration_omniasr import OmniASRCTCConfig, OmniASRLLMConfig, OmniASREncoderConfig
 
-
-OMNIASR_ADAPTER_PT_FILE = "adapter.{}.bin"
-OMNIASR_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
-
-
-logger = logging.get_logger(__name__)
-
-
-def _compute_mask_indices(
-    shape: tuple[int, int],
-    mask_prob: float,
-    mask_length: int,
-    attention_mask: Optional[torch.LongTensor] = None,
-    min_masks: int = 0,
-) -> np.ndarray:
-    """
-    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
-    CPU as part of the preprocessing during training.
-
-    Args:
-        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
-               the first element is the batch size and the second element is the length of the axis to span.
-        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
-                    independently generated mask spans of length `mask_length` is computed by
-                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
-                    actual percentage will be smaller.
-        mask_length: size of the mask
-        min_masks: minimum number of masked spans
-        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
-                        each batch dimension.
-    """
-    batch_size, sequence_length = shape
-
-    if mask_length < 1:
-        raise ValueError("`mask_length` has to be bigger than 0.")
-
-    if mask_length > sequence_length:
-        raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
-            f" and `sequence_length`: {sequence_length}`"
-        )
-
-    # epsilon is used for probabilistic rounding
-    epsilon = np.random.rand(1).item()
-
-    def compute_num_masked_span(input_length):
-        """Given input length, compute how many spans should be masked"""
-        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
-        num_masked_span = max(num_masked_span, min_masks)
-
-        # make sure num masked span <= sequence_length
-        if num_masked_span * mask_length > sequence_length:
-            num_masked_span = sequence_length // mask_length
-
-        # make sure num_masked span is also <= input_length - (mask_length - 1)
-        if input_length - (mask_length - 1) < num_masked_span:
-            num_masked_span = max(input_length - (mask_length - 1), 0)
-
-        return num_masked_span
-
-    # compute number of masked spans in batch
-    input_lengths = (
-        attention_mask.detach().sum(-1).tolist()
-        if attention_mask is not None
-        else [sequence_length for _ in range(batch_size)]
-    )
-
-    # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
-    spec_aug_mask_idxs = []
-
-    max_num_masked_span = compute_num_masked_span(sequence_length)
-
-    if max_num_masked_span == 0:
-        return spec_aug_mask
-
-    for input_length in input_lengths:
-        # compute num of masked spans for this input
-        num_masked_span = compute_num_masked_span(input_length)
-
-        # get random indices to mask
-        spec_aug_mask_idx = np.random.choice(
-            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
-        )
-
-        # pick first sampled index that will serve as a dummy index to pad vector
-        # to ensure same dimension for all batches due to probabilistic rounding
-        # Picking first sample just pads those vectors twice.
-        if len(spec_aug_mask_idx) == 0:
-            # this case can only happen if `input_length` is strictly smaller then
-            # `sequence_length` in which case the last token has to be a padding
-            # token which we can use as a dummy mask id
-            dummy_mask_idx = sequence_length - 1
-        else:
-            dummy_mask_idx = spec_aug_mask_idx[0]
-
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
-        spec_aug_mask_idxs.append(spec_aug_mask_idx)
-
-    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
-
-    # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(
-        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
-
-    # add offset to the starting indexes so that indexes now create a span
-    offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
-
-    # ensure that we cannot have indices larger than sequence_length
-    if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
-
-    # scatter indices to mask
-    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
-
-    return spec_aug_mask
-
-
-class OmniASRNoLayerNormConvLayer(GradientCheckpointingLayer):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
 
 
 class OmniASRLayerNormConvLayer(GradientCheckpointingLayer):
@@ -224,31 +72,8 @@ class OmniASRLayerNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class OmniASRGroupNormConvLayer(GradientCheckpointingLayer):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
 # TODO use pos_encoder_depth? or always set to 1?
+# NOTE: overwrite comapared to `Wav2Vec2PositionalConvEmbedding` as it doesnt weight norm with in the component
 class OmniASRPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -259,9 +84,7 @@ class OmniASRPositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-
-        # self.padding = OmniASRSamePadLayer(config.num_conv_pos_embeddings)
-        # NOTE (ebezzam) changed to original: https://github.com/facebookresearch/fairseq2/blob/a1f0c565a99d3cd3e3157678b5c48653e3d439f4/src/fairseq2/models/wav2vec2/position_encoder.py#L64
+        # NOTE original: https://github.com/facebookresearch/fairseq2/blob/a1f0c565a99d3cd3e3157678b5c48653e3d439f4/src/fairseq2/models/wav2vec2/position_encoder.py#L64
         self.remove_pad = config.num_conv_pos_embeddings % 2 == 0
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -278,36 +101,16 @@ class OmniASRPositionalConvEmbedding(nn.Module):
         return hidden_states + residual
 
 
-class OmniASRSamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
-        super().__init__()
-        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
-
-    def forward(self, hidden_states):
-        if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
-        return hidden_states
-
-
+# NOTE: modular from Wav2Vec2FeatureEncoder?
 class OmniASRFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
     def __init__(self, config):
         super().__init__()
 
-        # TODO remove group? "layer" used by CTC
-        if config.feat_extract_norm == "group":
-            conv_layers = [OmniASRGroupNormConvLayer(config, layer_id=0)] + [
-                OmniASRNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
-            ]
-        elif config.feat_extract_norm == "layer":
-            conv_layers = [
-                OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
-            ]
-        else:
-            raise ValueError(
-                f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
-            )
+        conv_layers = [
+            OmniASRLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+        ]
         self.conv_layers = nn.ModuleList(conv_layers)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
@@ -326,9 +129,11 @@ class OmniASRFeatureEncoder(nn.Module):
         return hidden_states
 
 
+# NOTE: modular from Wav2Vec2FeatureProjection (with self.layer_norm removed)?
 class OmniASRFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
+        # self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)    # removed compared to `Wav2Vec2FeatureProjection`
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
@@ -506,113 +311,16 @@ class OmniASREncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-# See Wav2Vec2BertRelPositionalEmbedding, TODO maybe not needed here 
-class OmniASRRelPositionalEmbedding(nn.Module):
-    """Relative positional encoding module."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.max_len = config.max_source_positions
-        self.d_model = config.hidden_size
-        self.register_buffer("pe", self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
-
-    def extend_pe(self, x, pe=None):
-        # Reset the positional encodings
-        if pe is not None:
-            # self.pe contains both positive and negative parts
-            # the length of self.pe is 2 * input_len - 1
-            if pe.size(1) >= x.size(1) * 2 - 1:
-                if pe.dtype != x.dtype or pe.device != x.device:
-                    pe = pe.to(dtype=x.dtype, device=x.device)
-                return pe
-        # Suppose `i` is the position of query vector and `j` is the
-        # position of key vector. We use positive relative positions when keys
-        # are to the left (i>j) and negative relative positions otherwise (i<j).
-        pe_positive = torch.zeros(x.size(1), self.d_model)
-        pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.d_model)
-        )
-        pe_positive[:, 0::2] = torch.sin(position * div_term)
-        pe_positive[:, 1::2] = torch.cos(position * div_term)
-        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
-        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
-
-        # Reverse the order of positive indices and concat both positive and
-        # negative indices. This is used to support the shifting trick
-        # as in https://huggingface.co/papers/1901.02860
-        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
-        pe_negative = pe_negative[1:].unsqueeze(0)
-        pe = torch.cat([pe_positive, pe_negative], dim=1)
-        return pe.to(device=x.device, dtype=x.dtype)
-
-    def forward(self, hidden_states: torch.Tensor):
-        self.pe = self.extend_pe(hidden_states, self.pe)
-        start_idx = self.pe.size(1) // 2 - hidden_states.size(1) + 1
-        end_idx = self.pe.size(1) // 2 + hidden_states.size(1)
-        relative_position_embeddings = self.pe[:, start_idx:end_idx]
-
-        return relative_position_embeddings
-
-
-# See Wav2Vec2BertRotaryPositionalEmbedding, TODO maybe not needed here 
-class OmniASRRotaryPositionalEmbedding(nn.Module):
-    """Rotary positional embedding
-    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        dim = config.hidden_size // config.num_attention_heads
-        base = config.rotary_embedding_base
-
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        # Ignore copy
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.cached_sequence_length = None
-        self.cached_rotary_positional_embedding = None
-
-    def forward(self, hidden_states):
-        sequence_length = hidden_states.shape[1]
-
-        if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
-            return self.cached_rotary_positional_embedding
-
-        self.cached_sequence_length = sequence_length
-        # Embeddings are computed in the dtype of the inv_freq constant
-        time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
-        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
-        embeddings = torch.cat((freqs, freqs), dim=-1)
-
-        cos_embeddings = embeddings.cos()[:, None, None, :]
-        sin_embeddings = embeddings.sin()[:, None, None, :]
-        # Computed embeddings are cast to the dtype of the hidden state inputs
-        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings]).type_as(hidden_states)
-        return self.cached_rotary_positional_embedding
-
-
-# see Wav2Vec2BertEncoder
+# NOTE: modular from Wav2Vec2Encoder?
 class OmniASREncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
 
         # NOTE in fairseq2 (embed_positions, layer_norm, dropout) are in "Frontend" instead of Encoder: https://github.com/facebookresearch/fairseq2/blob/main/src/fairseq2/models/wav2vec2/frontend.py#L209-L216
-        # self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)  # Wav2vec2
-        # below is like in Wav2Vec2BertEncoder
-        # TODO only keep conv?
-        if config.position_embeddings_type == "relative":
-            self.embed_positions = OmniASRRelPositionalEmbedding(config)
-        elif config.position_embeddings_type == "rotary":
-            self.embed_positions = OmniASRRotaryPositionalEmbedding(config)
-        elif config.position_embeddings_type == "conv":
-            self.embed_positions = OmniASRPositionalConvEmbedding(config)
-        else:
-            self.embed_positions = None
+        self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)  # Wav2vec2
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # Wav2vec2 applies here, while Wav2Vec2Bert applies within layers?
         self.dropout = nn.Dropout(config.hidden_dropout)
-
         self.layers = nn.ModuleList([OmniASREncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -639,8 +347,7 @@ class OmniASREncoder(nn.Module):
             )
         
         # NOTE (ebezzam) equivalent code? https://github.com/facebookresearch/fairseq2/blob/main/src/fairseq2/models/wav2vec2/frontend.py#L209-L213
-        if self.embed_positions is not None:
-            hidden_states = self.embed_positions(hidden_states)
+        hidden_states = self.pos_conv_embed(hidden_states)
 
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
@@ -680,79 +387,6 @@ class OmniASREncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-class OmniASRAdapter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        # feature dim might need to be down-projected
-        if config.output_hidden_size != config.hidden_size:
-            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
-        else:
-            self.proj = self.proj_layer_norm = None
-
-        self.layers = nn.ModuleList(OmniASRAdapterLayer(config) for _ in range(config.num_adapter_layers))
-        self.layerdrop = config.layerdrop
-
-    def forward(self, hidden_states):
-        # down project hidden_states if necessary
-        if self.proj is not None and self.proj_layer_norm is not None:
-            hidden_states = self.proj(hidden_states)
-            hidden_states = self.proj_layer_norm(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-
-        for layer in self.layers:
-            layerdrop_prob = np.random.random()
-            if not self.training or (layerdrop_prob > self.layerdrop):
-                hidden_states = layer(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
-class OmniASRAdapterLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.output_hidden_size,
-            2 * config.output_hidden_size,
-            config.adapter_kernel_size,
-            stride=config.adapter_stride,
-            padding=1,
-        )
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-        return hidden_states
-
-
-class OmniASRAttnAdapterLayer(nn.Module):
-    def __init__(self, config):
-        """
-        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
-        up training throughput.
-        """
-        super().__init__()
-        self.input_dim = config.adapter_attn_dim
-        self.hidden_dim = config.hidden_size
-
-        self.norm = nn.LayerNorm(self.hidden_dim)
-        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
-        self.act_fn = nn.ReLU()
-        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
-
-    def forward(self, hidden_states: torch.FloatTensor):
-        hidden_states = self.norm(hidden_states)
-
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-
-        return hidden_states
 
 
 @auto_docstring
@@ -803,18 +437,18 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(self.encoder.encoder.embed_positions.conv.weight, modifier_rank=0):
-                weight_norm(self.encoder.encoder.embed_positions.conv, name="weight", dim=2)
-            if hasattr(self.encoder.encoder.embed_positions.conv, "parametrizations"):
-                weight_g = self.encoder.encoder.embed_positions.conv.parametrizations.weight.original0
-                weight_v = self.encoder.encoder.embed_positions.conv.parametrizations.weight.original1
+            with deepspeed.zero.GatheredParameters(self.encoder.encoder.pos_conv_embed.conv.weight, modifier_rank=0):
+                weight_norm(self.encoder.encoder.pos_conv_embed.conv, name="weight", dim=2)
+            if hasattr(self.encoder.encoder.pos_conv_embed.conv, "parametrizations"):
+                weight_g = self.encoder.encoder.pos_conv_embed.conv.parametrizations.weight.original0
+                weight_v = self.encoder.encoder.pos_conv_embed.conv.parametrizations.weight.original1
             else:
-                weight_g = self.encoder.encoder.embed_positions.conv.weight_g
-                weight_v = self.encoder.encoder.embed_positions.conv.weight_v
-            deepspeed.zero.register_external_parameter(self.encoder.encoder.embed_positions, weight_v)
-            deepspeed.zero.register_external_parameter(self.encoder.encoder.embed_positions, weight_g)
+                weight_g = self.encoder.encoder.pos_conv_embed.conv.weight_g
+                weight_v = self.encoder.encoder.pos_conv_embed.conv.weight_v
+            deepspeed.zero.register_external_parameter(self.encoder.encoder.pos_conv_embed, weight_v)
+            deepspeed.zero.register_external_parameter(self.encoder.encoder.pos_conv_embed, weight_g)
         else:
-            weight_norm(self.encoder.encoder.embed_positions.conv, name="weight", dim=2)
+            weight_norm(self.encoder.encoder.pos_conv_embed.conv, name="weight", dim=2)
 
 
     def remove_weight_norm(self, legacy=True):
@@ -823,7 +457,7 @@ class OmniASRPreTrainedModel(PreTrainedModel):
             remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
 
         # TODO deepspeed zero3 case
-        remove_weight_norm(self.encoder.encoder.embed_positions.conv, name="weight")
+        remove_weight_norm(self.encoder.encoder.pos_conv_embed.conv, name="weight")
     
 
     def _get_feat_extract_output_lengths(
@@ -869,218 +503,6 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    # TODO remove?
-    def _get_adapters(self):
-        raise ValueError("TODO remove")
-        if self.config.adapter_attn_dim is None:
-            raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`.")
-
-        adapter_weights = {}
-        for name, module in self.named_modules():
-            if isinstance(module, OmniASRAttnAdapterLayer):
-                for param_name, param in module.named_parameters():
-                    adapter_weights[".".join([name, param_name])] = param
-
-        if isinstance(self, OmniASRForCTC):
-            for name, param in self.lm_head.named_parameters():
-                adapter_weights[".".join(["lm_head", name])] = param
-
-        return adapter_weights
-
-    # TODO remove?
-    def init_adapter_layers(self):
-        """
-        (Re-)initialize attention adapter layers and lm head for adapter-only fine-tuning
-        """
-        raise ValueError("TODO remove")
-
-        # init attention adapters
-        for module in self.modules():
-            if isinstance(module, OmniASRAttnAdapterLayer):
-                self._init_weights(module)
-
-        # init lm head
-        if isinstance(self, OmniASRForCTC):
-            self._init_weights(self.lm_head)
-
-    # TODO remove?
-    def load_adapter(self, target_lang: str, force_load=True, **kwargs):
-        r"""
-        Load a language adapter model from a pre-trained adapter model.
-
-        Parameters:
-            target_lang (`str`):
-                Has to be a language id of an existing adapter weight. Adapter weights are stored in the format
-                adapter.<lang>.safetensors or adapter.<lang>.bin
-            force_load (`bool`, defaults to `True`):
-                Whether the weights shall be loaded even if `target_lang` matches `self.target_lang`.
-            cache_dir (`Union[str, os.PathLike]`, *optional*):
-                Path to a directory in which a downloaded pretrained model configuration should be cached if the
-                standard cache should not be used.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            local_files_only(`bool`, *optional*, defaults to `False`):
-                Whether or not to only look at local files (i.e., do not try to download the model).
-            token (`str` or `bool`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
-                the token generated when running `hf auth login` (stored in `~/.huggingface`).
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-                identifier allowed by git.
-
-                <Tip>
-
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-                </Tip>
-
-            mirror (`str`, *optional*):
-                Mirror source to accelerate downloads in China. If you are from China and have an accessibility
-                problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
-                Please refer to the mirror site for more information.
-
-        <Tip>
-
-        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
-        use this method in a firewalled environment.
-
-        </Tip>
-
-        Examples:
-
-        ```python
-        >>> from transformers import OmniASRForCTC, AutoProcessor
-
-        >>> ckpt = "facebook/mms-1b-all"
-        >>> processor = AutoProcessor.from_pretrained(ckpt)
-        >>> model = OmniASRForCTC.from_pretrained(ckpt, target_lang="eng")
-        >>> # set specific language
-        >>> processor.tokenizer.set_target_lang("spa")
-        >>> model.load_adapter("spa")
-        ```
-        """
-        raise ValueError("TODO remove")
-
-        if self.config.adapter_attn_dim is None:
-            raise ValueError(f"Cannot load_adapter for {target_lang} if `config.adapter_attn_dim` is not defined.")
-
-        if target_lang == self.target_lang and not force_load:
-            logger.warning(f"Adapter weights are already set to {target_lang}.")
-            return
-
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        token = kwargs.pop("token", None)
-        revision = kwargs.pop("revision", None)
-        use_safetensors = kwargs.pop("use_safetensors", None)
-        model_path_or_id = self.config._name_or_path
-        state_dict = None
-
-        # 1. Let's first try loading a safetensors adapter weight
-        if use_safetensors is not False:
-            filepath = OMNIASR_ADAPTER_SAFE_FILE.format(target_lang)
-
-            try:
-                weight_path = cached_file(
-                    model_path_or_id,
-                    filename=filepath,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    revision=revision,
-                    cache_dir=cache_dir,
-                )
-
-                state_dict = safe_load_file(weight_path)
-
-            except OSError:
-                if use_safetensors:
-                    # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
-                    # to the original exception.
-                    raise
-
-            except Exception:
-                # For any other exception, we throw a generic error.
-                if use_safetensors:
-                    raise OSError(
-                        f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
-                        " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
-                        f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
-                        f" directory containing a file named {filepath}."
-                    )
-
-        # 2. If this didn't work let's try loading a PyTorch adapter weight
-        if state_dict is None:
-            filepath = OMNIASR_ADAPTER_PT_FILE.format(target_lang)
-
-            try:
-                weight_path = cached_file(
-                    model_path_or_id,
-                    filename=filepath,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    revision=revision,
-                    cache_dir=cache_dir,
-                )
-
-                check_torch_load_is_safe()
-                state_dict = torch.load(
-                    weight_path,
-                    map_location="cpu",
-                    weights_only=True,
-                )
-
-            except OSError:
-                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
-                # to the original exception.
-                raise
-
-            except ValueError:
-                raise
-
-            except Exception:
-                # For any other exception, we throw a generic error.
-                raise OSError(
-                    f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
-                    " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
-                    f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
-                    f" directory containing a file named {filepath}."
-                )
-
-        adapter_weights = self._get_adapters()
-        unexpected_keys = set(state_dict.keys()) - set(adapter_weights.keys())
-        missing_keys = set(adapter_weights.keys()) - set(state_dict.keys())
-
-        if len(unexpected_keys) > 0:
-            raise ValueError(f"The adapter weights {weight_path} has unexpected keys: {', '.join(unexpected_keys)}.")
-        elif len(missing_keys) > 0:
-            raise ValueError(f"The adapter weights {weight_path} has missing keys: {', '.join(missing_keys)}.")
-
-        # make sure now vocab size is correct
-        target_vocab_size = state_dict["lm_head.weight"].shape[0]
-        if target_vocab_size != self.config.vocab_size:
-            self.lm_head = nn.Linear(
-                self.config.output_hidden_size, target_vocab_size, device=self.device, dtype=self.dtype
-            )
-            self.config.vocab_size = target_vocab_size
-
-        # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
-        state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
-        self.load_state_dict(state_dict, strict=False)
-
-        # set target language correctly
-        self.target_lang = target_lang
-
 
 class OmniASRFeedForward(nn.Module):
     def __init__(self, config):
@@ -1107,6 +529,7 @@ class OmniASRFeedForward(nn.Module):
 
 
 # TODO rename this to OmniASREncoder and unwrap .encoder?
+# NOTE: modular from Wav2Vec2Model? or directly AutoMode?
 @auto_docstring
 class OmniASRModel(OmniASRPreTrainedModel):
     def __init__(self, config: OmniASREncoderConfig):
@@ -1115,65 +538,10 @@ class OmniASRModel(OmniASRPreTrainedModel):
         self.config = config
         self.feature_extractor = OmniASRFeatureEncoder(config)
         self.feature_projection = OmniASRFeatureProjection(config)
-
-        # model only needs masking vector if mask prob is > 0.0
-        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            raise ValueError("TODO (ebezzam) remove not used by final model?")
-            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
-
         self.encoder = OmniASREncoder(config)
         self.dropout = nn.Dropout(config.final_dropout)
-
-        # TODO (ebezzam) remove? as add_adapter=False
-        self.adapter = OmniASRAdapter(config) if config.add_adapter else None
-
         self.post_init()
 
-    def _mask_hidden_states(
-        self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://huggingface.co/papers/1904.08779).
-        """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return hidden_states
-
-        # generate indices & apply SpecAugment along time axis
-        batch_size, sequence_length, hidden_size = hidden_states.size()
-
-        if mask_time_indices is not None:
-            # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-        elif self.config.mask_time_prob > 0 and self.training:
-            mask_time_indices = _compute_mask_indices(
-                (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
-                mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
-                min_masks=self.config.mask_time_min_masks,
-            )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-        if self.config.mask_feature_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along feature axis
-            mask_feature_indices = _compute_mask_indices(
-                (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
-                mask_length=self.config.mask_feature_length,
-                min_masks=self.config.mask_feature_min_masks,
-            )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
-            hidden_states[mask_feature_indices] = 0
-
-        return hidden_states
 
     @can_return_tuple
     @auto_docstring
@@ -1203,13 +571,8 @@ class OmniASRModel(OmniASRPreTrainedModel):
             attention_mask = self._get_feature_vector_attention_mask(
                 hidden_states.shape[1], attention_mask, add_adapter=False
             )
-
         hidden_states = self.feature_projection(hidden_states)
 
-        # TODO remove? has to do with specaugment
-        # hidden_states = self._mask_hidden_states(
-        #     hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        # )
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1219,10 +582,6 @@ class OmniASRModel(OmniASRPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
-
-        if self.adapter is not None:
-            # TODO remove if not used?
-            hidden_states = self.adapter(hidden_states)
 
         if self.training:
             hidden_states = self.dropout(hidden_states)
@@ -1234,6 +593,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
         )
 
 
+# NOTE: see Wav2Vec2ForCTC
 @auto_docstring(
     custom_intro="""
     OmniASR Model with a head for Connectionist Temporal Classification (CTC).
