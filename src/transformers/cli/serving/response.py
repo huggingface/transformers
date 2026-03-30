@@ -69,6 +69,7 @@ logger = logging.get_logger(__name__)
 
 class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
     generation_config: str
+    seed: int
 
 
 UNUSED_RESPONSE_FIELDS = {

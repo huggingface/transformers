@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 
 class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
     generation_config: str
+    seed: int
 
 
 # Fields accepted by the OpenAI schema but not yet supported.
