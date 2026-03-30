@@ -87,3 +87,8 @@ This HF implementation is contributed by [Sukriti Sharma](https://huggingface.co
 
 [[autodoc]] GraniteMoeHybridForCausalLM
     - forward
+
+## GraniteMoeHybridForSequenceClassification
+
+[[autodoc]] GraniteMoeHybridForSequenceClassification
+    - forward

@@ -18,6 +18,7 @@ from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -220,4 +221,8 @@ class GraniteForCausalLM(LlamaForCausalLM):
         )
 
 
-__all__ = ["GraniteForCausalLM", "GraniteModel", "GranitePreTrainedModel"]
+class GraniteForSequenceClassification(GenericForSequenceClassification, GranitePreTrainedModel):
+    pass
+
+
+__all__ = ["GraniteForCausalLM", "GraniteForSequenceClassification", "GraniteModel", "GranitePreTrainedModel"]

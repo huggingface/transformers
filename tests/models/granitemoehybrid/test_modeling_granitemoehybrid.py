@@ -39,7 +39,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...models.bamba.test_modeling_bamba import BambaModelTester
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -48,6 +48,7 @@ if is_torch_available():
 
     from transformers import (
         GraniteMoeHybridForCausalLM,
+        GraniteMoeHybridForSequenceClassification,
         GraniteMoeHybridModel,
     )
     from transformers.models.granitemoehybrid.modeling_granitemoehybrid import HybridMambaAttentionDynamicCache
@@ -65,11 +66,13 @@ class GraniteMoeHybridModelTester(BambaModelTester):
         use_cache=False,
         shared_intermediate_size=174,
         layer_types=None,
+        type_sequence_label_size=2,
     ):
         super().__init__(parent)
         self.shared_intermediate_size = shared_intermediate_size
         self.layer_types = layer_types
         self.use_cache = use_cache
+        self.type_sequence_label_size = type_sequence_label_size
 
     def _update_layer_configs(self):
         super()._update_layer_configs()
@@ -84,6 +87,30 @@ class GraniteMoeHybridModelTester(BambaModelTester):
             layer_types=self.layer_types,
         )
 
+    def prepare_config_and_inputs_for_sequence_classification(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+
+        sequence_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
+        self._update_layer_configs()
+        config = self.get_config()
+
+        return config, input_ids, input_mask, sequence_labels
+
+    def create_and_check_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels):
+        config.num_labels = self.num_labels
+        model = GraniteMoeHybridForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
 
 @require_torch
 class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -92,6 +119,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         (
             GraniteMoeHybridModel,
             GraniteMoeHybridForCausalLM,
+            GraniteMoeHybridForSequenceClassification,
         )
         if is_torch_available()
         else ()
@@ -100,6 +128,7 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         {
             "feature-extraction": GraniteMoeHybridModel,
             "text-generation": GraniteMoeHybridForCausalLM,
+            "text-classification": GraniteMoeHybridForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -141,6 +170,10 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_sequence_classification()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
