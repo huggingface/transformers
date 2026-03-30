@@ -36,22 +36,46 @@ from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
 
 
-_is_torch_available = False
-if is_torch_available():
-    # required for @can_return_tuple decorator to work with torchdynamo
-    import torch
-    from torch.types import _dtype
-
-    from ..model_debugging_utils import model_addition_debugger_context
-
-    _is_torch_available = True
-
-
 if TYPE_CHECKING:
+    import torch
     from torch import nn
 
 
 logger = logging.get_logger(__name__)
+
+
+_is_torch_available = is_torch_available()
+_registered_model_output_types: set[type[Any]] = set()
+
+
+def _get_torch():
+    if not _is_torch_available:
+        return None
+
+    import torch
+
+    return torch
+
+
+def _get_model_addition_debugger_context():
+    from ..model_debugging_utils import model_addition_debugger_context
+
+    return model_addition_debugger_context
+
+
+def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
+    if not _is_torch_available or output_type in _registered_model_output_types:
+        return
+
+    import torch.utils._pytree as torch_pytree
+
+    torch_pytree.register_pytree_node(
+        output_type,
+        _model_output_flatten,
+        partial(_model_output_unflatten, output_type=output_type),
+        serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+    )
+    _registered_model_output_types.add(output_type)
 
 
 # required for @can_return_tuple decorator to work with torchdynamo
@@ -136,14 +160,22 @@ def is_torch_tensor(x) -> bool:
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.Tensor)
+    if not _is_torch_available:
+        return False
+
+    torch = _get_torch()
+    return isinstance(x, torch.Tensor)
 
 
 def is_torch_device(x) -> bool:
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.device)
+    if not _is_torch_available:
+        return False
+
+    torch = _get_torch()
+    return isinstance(x, torch.device)
 
 
 def is_torch_dtype(x) -> bool:
@@ -152,6 +184,8 @@ def is_torch_dtype(x) -> bool:
     """
     if not _is_torch_available:
         return False
+
+    torch = _get_torch()
     if isinstance(x, str):
         if hasattr(torch, x):
             x = getattr(torch, x)
@@ -182,7 +216,7 @@ def _is_tensor_or_array_like(value):
 
 def maybe_autocast(
     device_type: str,
-    dtype: _dtype | None = None,
+    dtype: torch.dtype | None = None,
     enabled: bool = True,
     cache_enabled: bool | None = None,
 ):
@@ -196,6 +230,10 @@ def maybe_autocast(
     Which makes graph splitting in `torch.compile` more flexible as it removes the
     requirement that partition IDs be monotonically increasing.
     """
+    torch = _get_torch()
+    if torch is None:
+        raise ImportError("`maybe_autocast` requires PyTorch to be installed.")
+
     if device_type == "meta":
         return nullcontext()
     if torch.is_autocast_enabled(device_type) or enabled:
@@ -342,18 +380,11 @@ class ModelOutput(OrderedDict):
         This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
-        if _is_torch_available:
-            from torch.utils._pytree import register_pytree_node
-
-            register_pytree_node(
-                cls,
-                _model_output_flatten,
-                partial(_model_output_unflatten, output_type=cls),
-                serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-            )
+        _register_model_output_pytree_node(cls)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        _register_model_output_pytree_node(type(self))
 
         # Subclasses of ModelOutput must use the @dataclass decorator
         # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
@@ -372,6 +403,7 @@ class ModelOutput(OrderedDict):
 
         Only occurs if @dataclass decorator has been used.
         """
+        _register_model_output_pytree_node(type(self))
         class_fields = fields(self)
 
         # Safety and consistency checks
@@ -468,25 +500,16 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-if _is_torch_available:
-    import torch.utils._pytree as _torch_pytree
+def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], list[str]]:
+    return list(output.values()), list(output.keys())
 
-    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], _torch_pytree.Context]:
-        return list(output.values()), list(output.keys())
 
-    def _model_output_unflatten(
-        values: Iterable[Any],
-        context: _torch_pytree.Context,
-        output_type: type[ModelOutput] | None = None,
-    ) -> ModelOutput:
-        return output_type(**dict(zip(context, values)))
-
-    _torch_pytree.register_pytree_node(
-        ModelOutput,
-        _model_output_flatten,
-        partial(_model_output_unflatten, output_type=ModelOutput),
-        serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-    )
+def _model_output_unflatten(
+    values: Iterable[Any],
+    context: list[str],
+    output_type: type[ModelOutput] | None = None,
+) -> ModelOutput:
+    return output_type(**dict(zip(context, values)))
 
 
 class ExplicitEnum(str, Enum):
@@ -654,6 +677,7 @@ def torch_int(x):
     if not _is_torch_available:
         return int(x)
 
+    torch = _get_torch()
     return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
@@ -664,6 +688,7 @@ def torch_float(x):
     if not _is_torch_available:
         return int(x)
 
+    torch = _get_torch()
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
@@ -923,6 +948,7 @@ def merge_with_config_defaults(func):
         # Call the original forward with the updated kwargs/config
         try:
             if kwargs.get("debug_io", False):
+                model_addition_debugger_context = _get_model_addition_debugger_context()
                 with model_addition_debugger_context(
                     self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
                 ):
