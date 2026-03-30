@@ -631,8 +631,11 @@ class GptOssGgufLoadingTest(unittest.TestCase):
 
     def test_gguf_registration(self):
         """Check that the GGUF loader recognises GPT‑OSS architecture and processor."""
-        from transformers.modeling_gguf_pytorch_utils import GGUF_SUPPORTED_ARCHITECTURES, TENSOR_PROCESSORS
-        from transformers.models.gpt_oss import GptOssTensorProcessor
+        from transformers.modeling_gguf_pytorch_utils import (
+            GGUF_SUPPORTED_ARCHITECTURES,
+            TENSOR_PROCESSORS,
+            GptOssTensorProcessor,
+        )
 
         self.assertIn("gpt_oss", GGUF_SUPPORTED_ARCHITECTURES)
         self.assertIn("gpt_oss", TENSOR_PROCESSORS)
