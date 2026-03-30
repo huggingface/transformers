@@ -43,7 +43,11 @@ if is_torch_available():
 class MusicFlamingoConfig(AudioFlamingo3Config):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
+<<<<<<< HEAD
         The beginning-of-audio token index used to mark the start of audio spans.
+=======
+            The beginning-of-audio token index used to mark the start of audio spans.
+>>>>>>> f94ecaf22e (Add Music Flamingo (#43538))
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
     audio_frame_step (`float`, *optional*, defaults to 0.01):
