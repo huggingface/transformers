@@ -31,7 +31,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3PreTrainedModel,
 )
-from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
+from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 
@@ -79,8 +79,6 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
             self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
-
-
 
 
 class MusicFlamingoProcessor(AudioFlamingo3Processor):

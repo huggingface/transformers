@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
-@strict(accept_kwargs=True)
+@strict
 class MusicFlamingoConfig(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
