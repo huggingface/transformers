@@ -624,13 +624,14 @@ I am a language model, not a human being"""
         decoded_string = tokenizer.decode(tokens)
         self.assertTrue(original_output.startswith(decoded_string))
 
+
 @require_torch
 class GptOssGgufLoadingTest(unittest.TestCase):
     """Test loading GPT‑OSS from GGUF files."""
 
     def test_gguf_registration(self):
         """Check that the GGUF loader recognises GPT‑OSS architecture and processor."""
-        from transformers.modeling_gguf_pytorch_utils import TENSOR_PROCESSORS, GGUF_SUPPORTED_ARCHITECTURES
+        from transformers.modeling_gguf_pytorch_utils import GGUF_SUPPORTED_ARCHITECTURES, TENSOR_PROCESSORS
         from transformers.models.gpt_oss import GptOssTensorProcessor
 
         self.assertIn("gpt_oss", GGUF_SUPPORTED_ARCHITECTURES)
@@ -640,7 +641,6 @@ class GptOssGgufLoadingTest(unittest.TestCase):
     @slow
     def test_load_20b_gguf(self):
         """Load the 20B GGUF file from the Hub and verify config reconstruction."""
-        import os
         from huggingface_hub import hf_hub_download
 
         repo_id = "unsloth/gpt-oss-20b-GGUF"
@@ -648,7 +648,7 @@ class GptOssGgufLoadingTest(unittest.TestCase):
 
         # Download the GGUF file to a local path (cached by huggingface_hub)
         try:
-            local_path = hf_hub_download(repo_id, gguf_file, cache_dir=None)
+            hf_hub_download(repo_id, gguf_file, cache_dir=None)
         except Exception as e:
             self.skipTest(f"Could not download {gguf_file} from {repo_id}: {e}")
 
@@ -663,15 +663,13 @@ class GptOssGgufLoadingTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(repo_id, gguf_file=gguf_file)
 
-    
         config = model.config
         self.assertEqual(config.model_type, "gpt_oss")
         self.assertIsInstance(config.rope_scaling, dict)
         self.assertEqual(config.rope_scaling.get("rope_type"), "yarn")
-        self.assertEqual(config.sliding_window, 128)  
-        self.assertEqual(config.num_hidden_layers, 24)        
+        self.assertEqual(config.sliding_window, 128)
+        self.assertEqual(config.num_hidden_layers, 24)
         self.assertEqual(config.num_local_experts, 32)
-
 
         inputs = tokenizer("Hello", return_tensors="pt").to(model.device)
         with torch.no_grad():
