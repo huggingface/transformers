@@ -270,4 +270,52 @@ class NemotronHConfig(PreTrainedConfig):
         return [pattern_mapping[char] for char in pattern]
 
 
-__all__ = ["NemotronHConfig"]
+class NemotronHDenseConfig(PreTrainedConfig):
+    """Draft: NemotronH Dense (M,-,* pattern) → BambaForCausalLM.
+
+    Dense NemotronH models (4B/8B/47B/56B) pair `M-` and `M*-` chars into
+    2-stage decoder layers (Mamba+FFN or Attention+FFN), structurally identical
+    to Bamba. This config uses `model_type = "nemotron_h_dense"` so AutoModel
+    routes to BambaForCausalLM.
+
+    Note: Full weight conversion from NemotronH's 52 individual layers to
+    Bamba-style 24 paired decoder layers requires a converter script.
+    See conversion_mapping.py for structural weight renames.
+    """
+
+    model_type = "nemotron_h_dense"
+
+    def __post_init__(self, **kwargs):
+        # Pop NemotronH-only fields before calling super (they're not Bamba fields)
+        for field in [
+            "layers_block_type",
+            "mtp_layers_block_type",
+            "num_nextn_predict_layers",
+            "moe_latent_size",
+            "n_routed_experts",
+            "n_shared_experts",
+            "moe_intermediate_size",
+            "moe_shared_expert_intermediate_size",
+            "moe_shared_expert_overlap",
+            "num_experts_per_tok",
+            "routed_scaling_factor",
+            "n_group",
+            "topk_group",
+            "norm_topk_prob",
+            "use_bias",
+            "residual_in_fp32",
+            "rescale_prenorm_residual",
+            "use_mamba_kernels",
+            "mamba_hidden_act",
+            "mamba_ssm_cache_dtype",
+            "head_dim",
+            "sliding_window",
+            "hidden_dropout",
+            "hybrid_override_pattern",
+        ]:
+            kwargs.pop(field, None)
+
+        super().__post_init__(**kwargs)
+
+
+__all__ = ["NemotronHConfig", "NemotronHDenseConfig"]

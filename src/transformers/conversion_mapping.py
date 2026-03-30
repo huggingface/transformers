@@ -531,6 +531,26 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
     ]
 
+    # NemotronH MoE: rename structural weight keys to GraniteMoeHybrid-compatible names
+    mapping["nemotron_h"] = [
+        WeightRenaming(r"model\.embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"model\.norm_f\.", "model.norm."),
+        WeightRenaming(r"(model\.layers\.\d+)\.norm\.", r"\1.input_layernorm."),
+        # mamba/moe layers: mixer.* → mamba.*
+        # attention layers: mixer.* → self_attn.*
+        # Per-layer-type renaming requires config context; handled by _keys_to_ignore
+        # and the WeightRenaming below which covers the common mamba case.
+        WeightRenaming(r"(model\.layers\.\d+)\.mixer\.", r"\1.mamba."),
+    ]
+
+    # NemotronH Dense → Bamba: structural renames
+    mapping["nemotron_h_dense"] = [
+        WeightRenaming(r"model\.embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"model\.norm_f\.", "model.norm."),
+        WeightRenaming(r"(model\.layers\.\d+)\.norm\.", r"\1.input_layernorm."),
+        WeightRenaming(r"(model\.layers\.\d+)\.mixer\.", r"\1.mamba."),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
