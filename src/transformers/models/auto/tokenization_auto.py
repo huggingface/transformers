@@ -25,6 +25,7 @@ from transformers.utils.import_utils import is_mistral_common_available
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
+from ...tokenization_python import PythonBackend
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     extract_commit_hash,
@@ -702,8 +703,8 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
-        # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
+        # tokenizer_config_class doesn't match the registered tokenizer for this model_type.
+        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
         if (
             tokenizer_auto_map is None
             and tokenizer_config_class is not None
@@ -714,12 +715,12 @@ class AutoTokenizer:
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
             tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
-            if tokenizer_class is not None:
+            if tokenizer_class is not None and tokenizer_class not in (TokenizersBackend, PythonBackend):
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             raise ValueError(
                 f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
-                f"The tokenizer likely needs to be converted or re-saved."
+                f"The tokenizer may need to be converted or re-saved."
             )
 
         if "_commit_hash" in tokenizer_config:
