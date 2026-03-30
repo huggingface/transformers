@@ -137,7 +137,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[doc]
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[docs]
 
       - name: GPU visibility
         working-directory: /transformers
