@@ -290,96 +290,122 @@ class ResponseHandler(BaseHandler):
                 )
                 seq += 1
 
-                # 4. Stream tokens
+                # 4. Stream tokens — drain queue to batch HTTP writes
                 full_text = ""
                 tool_calls = []
+                done = False
 
-                while True:
+                while not done:
                     text = await queue.get()
-                    if text is None:
-                        break
-                    if isinstance(text, _StreamError):
-                        logger.error(f"Exception in response generation: {text.msg}")
-                        yield self.chunk_to_sse(
-                            ResponseErrorEvent(type="error", sequence_number=seq, message=text.msg)
+                    # Drain all available tokens for one batched HTTP write
+                    batch = [text]
+                    try:
+                        while True:
+                            batch.append(queue.get_nowait())
+                    except asyncio.QueueEmpty:
+                        pass
+
+                    sse_parts: list[str] = []
+                    for text in batch:
+                        if text is None:
+                            done = True
+                            break
+                        if isinstance(text, _StreamError):
+                            logger.error(f"Exception in response generation: {text.msg}")
+                            sse_parts.append(
+                                self.chunk_to_sse(
+                                    ResponseErrorEvent(type="error", sequence_number=seq, message=text.msg)
+                                )
+                            )
+                            seq += 1
+                            sse_parts.append(
+                                self.chunk_to_sse(
+                                    ResponseFailedEvent(
+                                        type="response.failed",
+                                        sequence_number=seq,
+                                        response=Response(
+                                            **response_base,
+                                            status="failed",
+                                            output=[],
+                                            error=ResponseError(code="server_error", message=text.msg),
+                                        ),
+                                    )
+                                )
+                            )
+                            yield "".join(sse_parts)
+                            return
+
+                        # Tool call parsing
+                        if parser is not None and (result := parser.feed(text)) is not None:
+                            if result is not ToolCallParser.CONSUMED:
+                                tc_id = f"{request_id}_tool_call"
+                                name = result["name"]
+                                arguments = result["arguments"]
+                                tc_item = ResponseFunctionToolCall(
+                                    id=tc_id,
+                                    call_id=tc_id,
+                                    type="function_call",
+                                    name=name,
+                                    arguments=arguments,
+                                    status="completed",
+                                )
+                                tool_calls.append(tc_item)
+                                output_index += 1
+                                sse_parts.append(
+                                    self.chunk_to_sse(
+                                        ResponseOutputItemAddedEvent(
+                                            type="response.output_item.added",
+                                            sequence_number=seq,
+                                            output_index=output_index,
+                                            item=tc_item,
+                                        )
+                                    )
+                                )
+                                seq += 1
+                                sse_parts.append(
+                                    self.chunk_to_sse(
+                                        ResponseFunctionCallArgumentsDoneEvent(
+                                            type="response.function_call_arguments.done",
+                                            sequence_number=seq,
+                                            item_id=tc_id,
+                                            output_index=output_index,
+                                            arguments=arguments,
+                                            name=name,
+                                        )
+                                    )
+                                )
+                                seq += 1
+                                sse_parts.append(
+                                    self.chunk_to_sse(
+                                        ResponseOutputItemDoneEvent(
+                                            type="response.output_item.done",
+                                            sequence_number=seq,
+                                            output_index=output_index,
+                                            item=tc_item,
+                                        )
+                                    )
+                                )
+                                seq += 1
+                            continue
+
+                        full_text += text
+                        sse_parts.append(
+                            self.chunk_to_sse(
+                                ResponseTextDeltaEvent(
+                                    type="response.output_text.delta",
+                                    item_id=msg_id,
+                                    sequence_number=seq,
+                                    output_index=0,
+                                    content_index=0,
+                                    delta=text,
+                                    logprobs=[],
+                                )
+                            )
                         )
                         seq += 1
-                        yield self.chunk_to_sse(
-                            ResponseFailedEvent(
-                                type="response.failed",
-                                sequence_number=seq,
-                                response=Response(
-                                    **response_base,
-                                    status="failed",
-                                    output=[],
-                                    error=ResponseError(code="server_error", message=text.msg),
-                                ),
-                            )
-                        )
-                        return
 
-                    # Tool call parsing
-                    if parser is not None and (result := parser.feed(text)) is not None:
-                        if result is not ToolCallParser.CONSUMED:
-                            # Emit tool call as a function_call output item
-                            tc_id = f"{request_id}_tool_call"
-                            name = result["name"]
-                            arguments = result["arguments"]
-                            tc_item = ResponseFunctionToolCall(
-                                id=tc_id,
-                                call_id=tc_id,
-                                type="function_call",
-                                name=name,
-                                arguments=arguments,
-                                status="completed",
-                            )
-                            tool_calls.append(tc_item)
-                            # output[0] = message, output[1..N] = tool calls (required by OpenAI SSE spec)
-                            output_index += 1
-                            yield self.chunk_to_sse(
-                                ResponseOutputItemAddedEvent(
-                                    type="response.output_item.added",
-                                    sequence_number=seq,
-                                    output_index=output_index,
-                                    item=tc_item,
-                                )
-                            )
-                            seq += 1
-                            yield self.chunk_to_sse(
-                                ResponseFunctionCallArgumentsDoneEvent(
-                                    type="response.function_call_arguments.done",
-                                    sequence_number=seq,
-                                    item_id=tc_id,
-                                    output_index=output_index,
-                                    arguments=arguments,
-                                    name=name,
-                                )
-                            )
-                            seq += 1
-                            yield self.chunk_to_sse(
-                                ResponseOutputItemDoneEvent(
-                                    type="response.output_item.done",
-                                    sequence_number=seq,
-                                    output_index=output_index,
-                                    item=tc_item,
-                                )
-                            )
-                            seq += 1
-                        continue
-
-                    full_text += text
-                    yield self.chunk_to_sse(
-                        ResponseTextDeltaEvent(
-                            type="response.output_text.delta",
-                            item_id=msg_id,
-                            sequence_number=seq,
-                            output_index=0,
-                            content_index=0,
-                            delta=text,
-                            logprobs=[],
-                        )
-                    )
-                    seq += 1
+                    if sse_parts:
+                        yield "".join(sse_parts)
 
                 # 5. Close text output
                 output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])

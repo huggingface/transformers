@@ -182,32 +182,47 @@ class ChatCompletionHandler(BaseHandler):
             try:
                 yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
 
-                while True:
+                done = False
+                while not done:
                     text = await queue.get()
-                    if text is None:
-                        break
-                    elif isinstance(text, _StreamError):
-                        yield f'data: {{"error": "{text.msg}"}}\n\n'
-                        return
+                    batch = [text]
+                    try:
+                        while True:
+                            batch.append(queue.get_nowait())
+                    except asyncio.QueueEmpty:
+                        pass
 
-                    # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
-                    chunk_kwargs = {"content": text}
-                    if parser is not None and (result := parser.feed(text)) is not None:
-                        if result is ToolCallParser.CONSUMED:
-                            continue
-                        has_tool_calls = True
-                        chunk_kwargs = {
-                            "tool_calls": [
-                                ChoiceDeltaToolCall(
-                                    index=0,
-                                    type="function",
-                                    id=f"{request_id}_tool_call",
-                                    function={"name": result["name"], "arguments": result["arguments"]},
-                                )
-                            ]
-                        }
+                    sse_parts: list[str] = []
+                    for text in batch:
+                        if text is None:
+                            done = True
+                            break
+                        if isinstance(text, _StreamError):
+                            sse_parts.append(f'data: {{"error": "{text.msg}"}}\n\n')
+                            yield "".join(sse_parts)
+                            return
 
-                    yield self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs)
+                        # Tool call parsing: None = normal text, CONSUMED = buffering, else = tool call dict
+                        chunk_kwargs = {"content": text}
+                        if parser is not None and (result := parser.feed(text)) is not None:
+                            if result is ToolCallParser.CONSUMED:
+                                continue
+                            has_tool_calls = True
+                            chunk_kwargs = {
+                                "tool_calls": [
+                                    ChoiceDeltaToolCall(
+                                        index=0,
+                                        type="function",
+                                        id=f"{request_id}_tool_call",
+                                        function={"name": result["name"], "arguments": result["arguments"]},
+                                    )
+                                ]
+                            }
+
+                        sse_parts.append(self._build_chunk_sse(request_id, model=model_id, **chunk_kwargs))
+
+                    if sse_parts:
+                        yield "".join(sse_parts)
 
                 hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
                 if has_tool_calls:
