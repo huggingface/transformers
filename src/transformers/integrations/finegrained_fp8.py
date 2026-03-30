@@ -184,6 +184,7 @@ def w8a8_fp8_matmul(
     if block_size is not None and block_size[0] == block_size[1] == 128:
         try:
             _load_deepgemm_kernel()
+            global deepgemm_fp8_matmul
         except ImportError:
             logger.warning_once(
                 "DeepGEMM kernel is not available or compatible, falling back to Triton finegrained-fp8 kernel. "
@@ -199,6 +200,7 @@ def w8a8_fp8_matmul(
             return output.view(A.shape[:-1] + (B.shape[0],))
 
     _load_triton_kernel()
+    global triton_fp8_matmul
     return triton_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
 
@@ -253,6 +255,7 @@ class FP8Linear(nn.Linear):
 
         if self.activation_scheme == "dynamic":
             _load_triton_kernel()
+            global triton_fp8_act_quant
             qinput, scale = triton_fp8_act_quant(
                 input, self.block_size[1] if self.block_size is not None else input.shape[-1]
             )
@@ -290,6 +293,8 @@ def fp8_batched_mm_experts_forward(
         )
 
     _load_triton_kernel()
+    global triton_batched_fp8_matmul
+
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -352,6 +357,8 @@ def fp8_grouped_mm_experts_forward(
         )
 
     _load_triton_kernel()
+    global triton_grouped_fp8_matmul
+
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -495,6 +502,7 @@ def fp8_deepgemm_experts_forward(
         raise ValueError(f"DeepGEMM requires block_size=(128, 128), got {self.block_size}")
 
     _load_deepgemm_kernel()
+    global deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -684,9 +692,11 @@ class FP8Experts(nn.Module):
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
             _load_triton_kernel()
+            global triton_fp8_act_quant
             qinput, scale = triton_fp8_act_quant(
                 input, self.block_size[1] if self.block_size is not None else input.shape[-1]
             )
+
         output = w8a8_fp8_matmul(
             qinput,
             weight,
