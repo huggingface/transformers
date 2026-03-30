@@ -28,18 +28,30 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.gemma3.image_processing_gemma3.Gemma3ImageProcessorKwargs
+class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_pan_and_scan (`bool`, *optional*):
+        Whether to apply `pan_and_scan` to images.
+    pan_and_scan_min_crop_size (`int`, *optional*):
+        Minimum size of each crop in pan and scan.
+    pan_and_scan_max_num_crops (`int`, *optional*):
+        Maximum number of crops per image in pan and scan.
+    pan_and_scan_min_ratio_to_activate (`float`, *optional*):
+        Minimum aspect ratio to activate pan and scan.
+    """
 
-from .image_processing_gemma3 import Gemma3ImageProcessorKwargs
+    do_pan_and_scan: bool
+    pan_and_scan_min_crop_size: int
+    pan_and_scan_max_num_crops: int
+    pan_and_scan_min_ratio_to_activate: float
 
 
 @auto_docstring
@@ -162,7 +174,7 @@ class Gemma3ImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

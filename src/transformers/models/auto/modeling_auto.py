@@ -92,6 +92,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cohere", "CohereModel"),
         ("cohere2", "Cohere2Model"),
         ("cohere2_vision", "Cohere2VisionModel"),
+        ("cohere_asr", "CohereAsrModel"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
@@ -929,6 +930,7 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
+        ("videomt", "VideomtForUniversalSegmentation"),
     ]
 )
 
@@ -1187,6 +1189,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("cohere_asr", "CohereAsrForConditionalGeneration"),
         ("dia", "DiaForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextForConditionalGeneration"),
