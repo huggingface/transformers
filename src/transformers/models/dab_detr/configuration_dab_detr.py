@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="IDEA-Research/dab-detr-resnet-50")
-@strict(accept_kwargs=True)
+@strict
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):

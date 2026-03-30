@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/phi-1")
-@strict(accept_kwargs=True)
+@strict
 class PhiConfig(PreTrainedConfig):
     r"""
     qk_layernorm (`bool`, *optional*, defaults to `False`):

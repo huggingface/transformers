@@ -86,6 +86,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
         ("cohere2_vision", "Cohere2VisionConfig"),
+        ("cohere_asr", "CohereAsrConfig"),
         ("colmodernvbert", "ColModernVBertConfig"),
         ("colpali", "ColPaliConfig"),
         ("colqwen2", "ColQwen2Config"),
@@ -435,6 +436,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("siglip2", "Siglip2Config"),
         ("siglip2_vision_model", "Siglip2VisionConfig"),
         ("siglip_vision_model", "SiglipVisionConfig"),
+        ("slanext", "SLANeXtConfig"),
         ("smollm3", "SmolLM3Config"),
         ("smolvlm", "SmolVLMConfig"),
         ("smolvlm_vision", "SmolVLMVisionConfig"),
@@ -474,6 +476,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
+        ("uvdoc", "UVDocConfig"),
+        ("uvdoc_backbone", "UVDocBackboneConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -483,6 +487,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
+        ("videomt", "VideomtConfig"),
         ("vilt", "ViltConfig"),
         ("vipllava", "VipLlavaConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -587,6 +592,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("cohere", "Cohere"),
         ("cohere2", "Cohere2"),
         ("cohere2_vision", "Cohere2Vision"),
+        ("cohere_asr", "CohereASR"),
         ("colmodernvbert", "ColModernVBert"),
         ("colpali", "ColPali"),
         ("colqwen2", "ColQwen2"),
@@ -958,6 +964,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("siglip2", "SigLIP2"),
         ("siglip2_vision_model", "Siglip2VisionModel"),
         ("siglip_vision_model", "SiglipVisionModel"),
+        ("slanext", "SLANeXt"),
         ("smollm3", "SmolLM3"),
         ("smolvlm", "SmolVLM"),
         ("smolvlm_vision", "SmolVLMVisionTransformer"),
@@ -999,6 +1006,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSat"),
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
+        ("uvdoc", "UVDoc"),
+        ("uvdoc_backbone", "UVDocBackbone"),
         ("vaultgemma", "VaultGemma"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -1008,6 +1017,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
+        ("videomt", "VidEoMT"),
         ("vilt", "ViLT"),
         ("vipllava", "VipLlava"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
@@ -1140,6 +1150,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("wav2vec2-bert", "wav2vec2_bert"),
         ("vibevoice_acoustic_tokenizer_encoder", "vibevoice_acoustic_tokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "vibevoice_acoustic_tokenizer"),
+        ("uvdoc_backbone", "uvdoc"),
     ]
 )
 
@@ -1389,7 +1400,7 @@ class AutoConfig:
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PreTrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
-                    - A path or url to a saved configuration JSON *file*, e.g.,
+                    - a path to a saved configuration JSON *file*, e.g.,
                       `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
