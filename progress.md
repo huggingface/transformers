@@ -20,6 +20,7 @@ Updated on 2026-03-28 while working in `/Users/nielsrogge/Documents/python_proje
 - A first dedicated `sam3_1_video` test module now exists at [test_modeling_sam3_1_video.py](/Users/nielsrogge/Documents/python_projecten/transformers/tests/models/sam3_1_video/test_modeling_sam3_1_video.py).
 - SAM 3.1 docs now exist at [sam3_1.md](/Users/nielsrogge/Documents/python_projecten/transformers/docs/source/en/model_doc/sam3_1.md) and [sam3_1_video.md](/Users/nielsrogge/Documents/python_projecten/transformers/docs/source/en/model_doc/sam3_1_video.md), and both pages are registered in [docs/source/en/_toctree.yml](/Users/nielsrogge/Documents/python_projecten/transformers/docs/source/en/_toctree.yml).
 - `make check-repo` now passes in the existing `.venv-codex` environment.
+- Technically, the current SAM 3.1 patch set is in PR-shape for a first review pass; the main blocker is now procedural rather than code-quality-related: we still need explicit issue coordination before opening an AI-assisted PR against `huggingface/transformers`.
 
 ## What changed in this round
 
@@ -68,6 +69,13 @@ Updated on 2026-03-28 while working in `/Users/nielsrogge/Documents/python_proje
 - Exported `Sam3_1ViTModel` from the generated SAM 3.1 video modeling module, documented it in [sam3_1_video.md](/Users/nielsrogge/Documents/python_projecten/transformers/docs/source/en/model_doc/sam3_1_video.md), and registered the `sam3_1` doc page label in [configuration_auto.py](/Users/nielsrogge/Documents/python_projecten/transformers/src/transformers/models/auto/configuration_auto.py).
 - Added `all_model_classes` plus a direct `Sam3_1ViTModel` backbone forward smoke test to [test_modeling_sam3_1_video.py](/Users/nielsrogge/Documents/python_projecten/transformers/tests/models/sam3_1_video/test_modeling_sam3_1_video.py), and updated [utils/check_repo.py](/Users/nielsrogge/Documents/python_projecten/transformers/utils/check_repo.py) so this backbone is treated like the other intentionally non-auto-configured building-block models.
 - Updated `Sam3_1VideoModel.forward()` to accept `**kwargs`, which was required to make the repo checker happy with the public model forward signature.
+- Ran the mandatory duplicate-work checks for a potential `huggingface/transformers` PR with `gh`:
+- `gh issue list --repo huggingface/transformers --search "sam 3.1" --state all --limit 20`
+- `gh issue list --repo huggingface/transformers --search "sam3.1" --state all --limit 20`
+- `gh search issues '"SAM 3.1" OR "Object Multiplex"' --repo huggingface/transformers --state open/closed`
+- `gh pr list --repo huggingface/transformers --state open --limit 300 --json ... | jq ...`
+- `gh search prs '"SAM 3.1" OR "Object Multiplex"' --repo huggingface/transformers --state open`
+- Result: I did not find an existing SAM 3.1 support issue or an overlapping open PR in `huggingface/transformers`, so the remaining PR blocker is the absence of coordination evidence rather than duplicate work.
 
 ## Verified locally
 
@@ -99,11 +107,13 @@ Updated on 2026-03-28 while working in `/Users/nielsrogge/Documents/python_proje
 - `make check-repo` now passes in `.venv-codex` with `All 21 checks passed.` The `Type annotations` phase still prints four existing `ty` diagnostics from untouched repo code, but in this checker configuration the target still returns success and is not currently blocked by the SAM 3.1 changes.
 - The new `push_to_hub` validation path is also exercised locally:
 - calling `convert_checkpoint(..., push_to_hub=True, repo_id=None)` raises `ValueError: repo_id must be provided when push_to_hub=True`
+- `git status --short` was clean before updating this progress note.
 
 ## Remaining work
 
-1. Decide how much of the higher-level SAM 3.1 runtime should live in `sam3_1_video` versus a future detector/predictor wrapper model.
-2. Decide whether to add a higher-level SAM 3.1 processor / session API before trying to mirror the full `tests/models/sam3_video/test_modeling_sam3_video.py` integration coverage.
-3. Decide whether to add a dedicated SAM 3.1 image test module or keep relying on the real image conversion verification plus the existing `sam3` model test suite.
-4. Decide whether to publish converted SAM 3.1 image/video checkpoints to the Hub so the docs can use `from_pretrained(...)` directly instead of requiring local conversion first.
-5. If we want full upstream image-model parity later, build a closer apples-to-apples forward comparator for `Sam3Model` than the current preprocessing-plus-save/load verification path.
+1. Open or coordinate on a `huggingface/transformers` issue for SAM 3.1 support before any PR is opened, and wait for clear maintainer/issue-thread approval. This is required for AI-assisted contributions and skipping it can lead to automatic banning.
+2. Once issue coordination exists, decide whether the first PR should keep the current scope (SAM 3.1 image conversion + `sam3_1_video`) or be narrowed further for reviewability.
+3. Decide whether to add a higher-level SAM 3.1 processor / session API before trying to mirror the full `tests/models/sam3_video/test_modeling_sam3_video.py` integration coverage.
+4. Decide whether to add a dedicated SAM 3.1 image test module or keep relying on the real image conversion verification plus the existing `sam3` model test suite.
+5. Decide whether to publish converted SAM 3.1 image/video checkpoints to the Hub so the docs can use `from_pretrained(...)` directly instead of requiring local conversion first.
+6. If we want full upstream image-model parity later, build a closer apples-to-apples forward comparator for `Sam3Model` than the current preprocessing-plus-save/load verification path.
