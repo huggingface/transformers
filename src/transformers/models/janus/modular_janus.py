@@ -1062,9 +1062,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         inputs_embeds = self.get_input_embeddings()(input_tokens)
 
-        # Only prepare static cache if model is not distributed across devices
-        is_model_distributed = hasattr(self, "hf_device_map") and len(set(self.hf_device_map.values())) > 1
-        if model_kwargs.get("past_key_values", None) is None and not is_model_distributed:
+        if model_kwargs.get("past_key_values", None) is None:
             # Prepare cache if not provided.
             model_kwargs["past_key_values"] = self._prepare_static_cache(
                 cache_implementation=generation_config.cache_implementation or "static",
