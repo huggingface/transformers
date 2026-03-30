@@ -474,6 +474,16 @@ class PagedAttentionCache:
             destination_blocks.extend(dst_blocks)
         return source_blocks, destination_blocks
 
+    def free_all_requests(self) -> None:
+        """Free all blocks allocated to requests across all cache managers. This preserves prefix hashes in the block
+        manager (blocks become initialized rather than uninitialized if they were complete), allowing prefix sharing
+        to work across generation sessions."""
+        all_request_ids = set()
+        for cm in self.group_cache_managers:
+            all_request_ids.update(cm.block_table.keys())
+        for request_id in all_request_ids:
+            self.free_blocks(request_id)
+
 
 # TODO: rework computation with the groups and their sizes
 class PagedAttentionMemoryHandler:

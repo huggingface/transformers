@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="ModernVBERT/colmodernvbert-merged")
-@strict(accept_kwargs=True)
+@strict
 class ColModernVBertConfig(ColQwen2Config):
     r"""
     Example:

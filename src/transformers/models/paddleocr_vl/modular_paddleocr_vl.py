@@ -38,8 +38,9 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
+from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...processing_utils import (
+    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -50,7 +51,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
     torch_compilable_check,
     torch_int,
@@ -88,10 +88,6 @@ from ..video_llama_3.modeling_video_llama_3 import (
 )
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -127,7 +123,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
+class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -136,6 +132,12 @@ class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
@@ -147,7 +149,7 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -258,7 +260,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -464,16 +466,12 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVisionConfig(SiglipVisionConfig):
     r"""
     Example:
@@ -505,13 +503,13 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRTextConfig(Ernie4_5Config):
     model_type = "paddleocr_vl_text"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
-@strict(accept_kwargs=True)
+@strict
 class PaddleOCRVLConfig(Qwen2VLConfig):
     r"""
     Example:

@@ -2567,7 +2567,7 @@ class PerceiverTrainablePositionEncoding(PerceiverAbstractPositionEncoding):
 
         position_embeddings = nn.functional.interpolate(
             position_embeddings,
-            size=(new_height, new_width),
+            size=(height, width),
             mode="bicubic",
             align_corners=False,
         )
