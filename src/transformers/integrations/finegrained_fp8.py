@@ -20,6 +20,7 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
+from ..utils.import_utils import get_cuda_runtime_version
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
 
@@ -36,18 +37,18 @@ _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 # bi-directionally transfer 1D-5D tensors between GPU global and shared memory
 _DEEPGEMM_M_ALIGNMENT = 128
 
-# Lazily-loaded finegrained-fp8 Triton kernel functions (populated by _load_triton)
-fp8_matmul = None
-fp8_act_quant = None
-batched_fp8_matmul = None
-grouped_fp8_matmul = None
+# Lazily-loaded finegrained-fp8 Triton kernel functions (populated by _load_triton_kernel)
+triton_fp8_matmul = None
+triton_fp8_act_quant = None
+triton_batched_fp8_matmul = None
+triton_grouped_fp8_matmul = None
 # _triton_available: None = not yet attempted, True = loaded, False = failed (won't retry)
 _triton_available = None
 
-# Lazily-loaded DeepGEMM kernel functions (populated by _load_deepgemm)
-fp8_gemm = None
-per_token_cast_to_fp8 = None
-grouped_contiguous_fp8_gemm = None
+# Lazily-loaded DeepGEMM kernel functions (populated by _load_deepgemm_kernel)
+deepgemm_fp8_matmul = None
+deepgemm_grouped_fp8_matmul = None
+deepgemm_per_token_cast_to_fp8 = None
 # _deepgemm_available: None = not yet attempted, True = loaded, False = failed (won't retry)
 _deepgemm_available = None
 
@@ -58,7 +59,12 @@ def _load_triton_kernel():
     Uses the hub kernels lazy loading pattern. Raises an error if the kernel
     cannot be loaded or required functions are missing. Only attempts loading once.
     """
-    global _triton_available, fp8_act_quant, fp8_matmul, batched_fp8_matmul, grouped_fp8_matmul
+    global \
+        _triton_available, \
+        triton_fp8_act_quant, \
+        triton_fp8_matmul, \
+        triton_batched_fp8_matmul, \
+        triton_grouped_fp8_matmul
 
     if _triton_available is not None:
         if not _triton_available:
@@ -68,23 +74,24 @@ def _load_triton_kernel():
     _triton_available = False  # mark attempted before any early exit
 
     kernel = lazy_load_kernel("finegrained-fp8")
+
     if kernel is None:
         raise ImportError(
             "finegrained-fp8 kernel could not be loaded. Install the `kernels` package (`pip install kernels`)."
         )
 
-    fp8_matmul = getattr(kernel, "w8a8_fp8_matmul", None)
-    fp8_act_quant = getattr(kernel, "fp8_act_quant", None)
-    batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched", None)
-    grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped", None)
+    triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul")
+    triton_fp8_act_quant = getattr(kernel, "fp8_act_quant")
+    triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched")
+    triton_grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped")
 
     missing = [
         name
         for name, attr in [
-            ("fp8_act_quant", fp8_act_quant),
-            ("w8a8_fp8_matmul", fp8_matmul),
-            ("w8a8_fp8_matmul_batched", batched_fp8_matmul),
-            ("w8a8_fp8_matmul_grouped", grouped_fp8_matmul),
+            ("w8a8_fp8_matmul", triton_fp8_matmul),
+            ("fp8_act_quant", triton_fp8_act_quant),
+            ("w8a8_fp8_matmul_batched", triton_batched_fp8_matmul),
+            ("w8a8_fp8_matmul_grouped", triton_grouped_fp8_matmul),
         ]
         if attr is None
     ]
@@ -104,7 +111,7 @@ def _load_deepgemm_kernel():
     cannot be loaded, required functions are missing, or the hardware is insufficient.
     Only attempts loading once.
     """
-    global _deepgemm_available, fp8_gemm, grouped_contiguous_fp8_gemm, per_token_cast_to_fp8
+    global _deepgemm_available, deepgemm_fp8_matmul, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8
 
     if _deepgemm_available is not None:
         if not _deepgemm_available:
@@ -121,15 +128,13 @@ def _load_deepgemm_kernel():
             f"has compute capability {major}.x. Use a different `experts_implementation`."
         )
 
-    # DeepGEMM requires CUDA 12.3+ (JIT compilation uses NVCC/NVRTC ≥ 12.3, TMA needs driver ≥ 12.1)
-    cuda_version = torch.version.cuda
-    if cuda_version is not None:
-        cuda_major, cuda_minor = (int(x) for x in cuda_version.split(".")[:2])
-        if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
-            raise ImportError(
-                f"DeepGEMM requires CUDA 12.3 or newer, but found CUDA {cuda_version}. "
-                "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
-            )
+    # DeepGEMM JIT-compiles via NVRTC at runtime, requiring CUDA runtime ≥ 12.3.
+    cuda_major, cuda_minor = get_cuda_runtime_version()
+    if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
+        raise ImportError(
+            f"DeepGEMM requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
+            "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
+        )
 
     kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
@@ -138,16 +143,18 @@ def _load_deepgemm_kernel():
             "(`pip install kernels`) or set `experts_implementation` to a different strategy."
         )
 
-    fp8_gemm = getattr(kernel, "fp8_gemm_nt", None)
-    grouped_contiguous_fp8_gemm = getattr(kernel, "m_grouped_contiguous_fp8_gemm_nt_contiguous", None)
-    per_token_cast_to_fp8 = getattr(kernel.utils, "per_token_cast_to_fp8", None) if hasattr(kernel, "utils") else None
+    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt", None)
+    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
+    deepgemm_per_token_cast_to_fp8 = (
+        getattr(kernel.utils, "per_token_cast_to_fp8", None) if hasattr(kernel, "utils") else None
+    )
 
     missing = [
         name
         for name, attr in [
-            ("fp8_gemm_nt", fp8_gemm),
-            ("m_grouped_contiguous_fp8_gemm_nt_contiguous", grouped_contiguous_fp8_gemm),
-            ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
+            ("fp8_gemm_nt", deepgemm_fp8_matmul),
+            ("m_grouped_fp8_gemm_nt_contiguous", deepgemm_grouped_fp8_matmul),
+            ("utils.per_token_cast_to_fp8", deepgemm_per_token_cast_to_fp8),
         ]
         if attr is None
     ]
@@ -190,16 +197,20 @@ def w8a8_fp8_matmul(
         try:
             _load_deepgemm_kernel()
         except ImportError:
-            pass
+            logger.warning_once(
+                "DeepGEMM kernel is not available or compatible, falling back to Triton finegrained-fp8 kernel. "
+                "To use DeepGEMM FP8 matmul, ensure you have a Hopper (SM90+) or newer GPU with CUDA runtime 12.3+, "
+                "and that the `kernels` package is installed and up to date (`pip install -U kernels`)."
+            )
         else:
             A_2d = A.view(-1, A.shape[-1])
             As_2d = As.view(-1, As.shape[-1])
             output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
-            fp8_gemm((A_2d, As_2d), (B, Bs), output)
+            deepgemm_fp8_matmul((A_2d, As_2d), (B, Bs), output)
             return output.view(A.shape[:-1] + (B.shape[0],))
 
     _load_triton_kernel()
-    return fp8_matmul(A, B, As, Bs, block_size, output_dtype)
+    return triton_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
 
 class FP8Linear(nn.Linear):
@@ -253,7 +264,7 @@ class FP8Linear(nn.Linear):
 
         if self.activation_scheme == "dynamic":
             _load_triton_kernel()
-            qinput, scale = fp8_act_quant(
+            qinput, scale = triton_fp8_act_quant(
                 input, self.block_size[1] if self.block_size is not None else input.shape[-1]
             )
         elif self.activation_scheme == "static":
@@ -304,7 +315,7 @@ def fp8_batched_mm_experts_forward(
     selected_hidden_states = hidden_states[token_idx]
 
     # --- Up projection per expert (FP8 batched) ---
-    proj_out = batched_fp8_matmul(
+    proj_out = triton_batched_fp8_matmul(
         selected_hidden_states,
         self.gate_up_proj if self.has_gate else self.up_proj,
         self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
@@ -321,7 +332,7 @@ def fp8_batched_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 batched) ---
-    proj_out = batched_fp8_matmul(
+    proj_out = triton_batched_fp8_matmul(
         proj_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -379,7 +390,7 @@ def fp8_grouped_mm_experts_forward(
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (FP8 grouped) ---
-    proj_out = grouped_fp8_matmul(
+    proj_out = triton_grouped_fp8_matmul(
         selected_hidden_states_g,
         self.gate_up_proj if self.has_gate else self.up_proj,
         self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
@@ -397,7 +408,7 @@ def fp8_grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    proj_out = grouped_fp8_matmul(
+    proj_out = triton_grouped_fp8_matmul(
         proj_out,
         self.down_proj,
         self.down_proj_scale_inv,
@@ -513,11 +524,11 @@ def fp8_deepgemm_experts_forward(
     # --- Up projection per expert (DeepGEMM grouped contiguous) ---
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
-    act_fp8, act_scales = per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
+    act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
     act_fp8, act_scales = _pad_for_contiguous_layout(act_fp8, act_scales, row_map, total_rows)
     proj_out = torch.zeros(total_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
-    grouped_contiguous_fp8_gemm(
+    deepgemm_grouped_fp8_matmul(
         (act_fp8, act_scales), (w_up, ws_up), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
@@ -530,9 +541,9 @@ def fp8_deepgemm_experts_forward(
     # --- Down projection per expert (DeepGEMM grouped contiguous) ---
     w_down = self.down_proj
     ws_down = self.down_proj_scale_inv
-    proj_fp8, proj_scales = per_token_cast_to_fp8(proj_out, use_ue8m0=False)
+    proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
     proj_out = torch.zeros(total_rows, hidden_dim, device=device, dtype=torch.bfloat16)
-    grouped_contiguous_fp8_gemm(
+    deepgemm_grouped_fp8_matmul(
         (proj_fp8, proj_scales), (w_down, ws_down), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
@@ -674,7 +685,7 @@ class FP8Experts(nn.Module):
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
             _load_triton_kernel()
-            qinput, scale = fp8_act_quant(
+            qinput, scale = triton_fp8_act_quant(
                 input, self.block_size[1] if self.block_size is not None else input.shape[-1]
             )
         output = w8a8_fp8_matmul(

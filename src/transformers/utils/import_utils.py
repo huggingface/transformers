@@ -217,6 +217,22 @@ def is_cuda_platform() -> bool:
 
 
 @lru_cache
+def get_cuda_runtime_version() -> tuple[int, int]:
+    """Return the CUDA runtime version as (major, minor).
+
+    Unlike ``torch.version.cuda`` which reports the compile-time version,
+    this queries ``cudaRuntimeGetVersion`` from ``libcudart.so`` to get the
+    actual runtime version installed on the system.
+    """
+    import ctypes
+
+    version = ctypes.c_int()
+    cudart = ctypes.CDLL("libcudart.so")
+    cudart.cudaRuntimeGetVersion(ctypes.byref(version))
+    return version.value // 1000, (version.value % 1000) // 10
+
+
+@lru_cache
 def is_rocm_platform() -> bool:
     if is_torch_available():
         import torch
