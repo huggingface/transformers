@@ -24,13 +24,29 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_aria import AriaImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.aria.image_processing_aria.AriaImageProcessorKwargs
+class AriaImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    max_image_size (`int`, *optional*, defaults to `self.max_image_size`):
+        Maximum image size. Must be either 490 or 980.
+    min_image_size (`int`, *optional*, defaults to `self.min_image_size`):
+        Minimum image size. Images smaller than this in any dimension will be scaled up.
+    split_resolutions (`list[list[int]]`, *optional*, defaults to `self.split_resolutions`):
+        A list of possible resolutions as (height, width) pairs for splitting high-resolution images into patches.
+    split_image (`bool`, *optional*, defaults to `self.split_image`):
+        Whether to split the image into patches using the best matching resolution from `split_resolutions`.
+    """
+
+    max_image_size: int
+    min_image_size: int
+    split_resolutions: list[list[int]]
+    split_image: bool
+
+
 @auto_docstring
 class AriaImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "pixel_mask", "num_crops"]
@@ -65,7 +81,7 @@ class AriaImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         target_resolution: tuple,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
     ) -> np.ndarray:
         """Resize an image to a target resolution while maintaining aspect ratio."""
         new_height, new_width = get_patch_output_size(
@@ -90,7 +106,7 @@ class AriaImageProcessorPil(PilBackend):
         image: np.ndarray,
         grid_pinpoints: list[list[int]],
         patch_size: int,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
     ) -> list[np.ndarray]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -131,7 +147,7 @@ class AriaImageProcessorPil(PilBackend):
         min_image_size: int = 336,
         split_resolutions: list[list[int]] | None = None,
         split_image: bool = False,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         **kwargs,
     ) -> BatchFeature:
         if max_image_size not in [490, 980]:

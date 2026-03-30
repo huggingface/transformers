@@ -14,7 +14,7 @@
 """Image processor class for PromptDepthAnything."""
 
 import math
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -31,18 +31,13 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
-
-import torch
-from torchvision.transforms.v2 import functional as tvF
-
-from .image_processing_prompt_depth_anything import PromptDepthAnythingImageProcessorKwargs
 
 
 def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
@@ -84,8 +79,26 @@ def _get_resize_output_image_size(
     return (new_height, new_width)
 
 
+# Adapted from transformers.models.prompt_depth_anything.image_processing_prompt_depth_anything.PromptDepthAnythingImageProcessorKwargs
+class PromptDepthAnythingImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    keep_aspect_ratio (`bool`, *optional*):
+        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
+    ensure_multiple_of (`int`, *optional*):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value.
+    prompt_scale_to_meter (`float`, *optional*):
+        Scale factor to convert the prompt depth to meters.
+    size_divisor (`int`, *optional*):
+        If `do_pad` is `True`, pads the image dimensions to be divisible by this value.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+    size_divisor: int
+    prompt_scale_to_meter: float
+
+
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
 class PromptDepthAnythingImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "prompt_depth"]
 
@@ -125,7 +138,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | None = None,
     ) -> np.ndarray:
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
@@ -181,7 +194,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         prompt_depth: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         return_tensors: str | TensorType | None = None,
         prompt_scale_to_meter: float | None = None,
         **kwargs,
@@ -240,7 +253,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -276,6 +289,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_depth_estimation(
         self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None | None = None
     ) -> list[dict[str, TensorType]]:
@@ -294,7 +308,7 @@ class PromptDepthAnythingImageProcessorPil(PilBackend):
             `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
+        import torch
 
         predicted_depth = outputs.predicted_depth
 

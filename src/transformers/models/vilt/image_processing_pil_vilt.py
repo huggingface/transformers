@@ -30,12 +30,11 @@ from ...image_utils import (
     get_image_size,
     get_max_height_width,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import (
     TensorType,
     auto_docstring,
 )
-from ...utils.import_utils import requires
-from .image_processing_vilt import ViltImageProcessorKwargs
 
 
 # Set maximum size based on the typical aspect ratio of the COCO dataset
@@ -99,7 +98,17 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.vilt.image_processing_vilt.ViltImageProcessorKwargs
+class ViltImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
+        is set to `True`.
+    """
+
+    size_divisor: int
+
+
 @auto_docstring
 class ViltImageProcessorPil(PilBackend):
     valid_kwargs = ViltImageProcessorKwargs
@@ -119,7 +128,7 @@ class ViltImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         size_divisor: int | None = None,
     ) -> np.ndarray:
         """
@@ -201,7 +210,7 @@ class ViltImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

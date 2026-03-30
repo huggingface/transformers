@@ -13,7 +13,11 @@
 # limitations under the License.
 from typing import Union
 
-import torch
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 from ...utils import is_torchvision_available
 
