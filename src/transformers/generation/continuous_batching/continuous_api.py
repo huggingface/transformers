@@ -20,6 +20,7 @@ from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 from math import ceil
 from time import perf_counter
+from typing import Any
 
 import torch
 from torch import nn
@@ -37,7 +38,7 @@ from .cache import PagedAttentionCache
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import attn_mask_is_needed, pad_to_interval
+from .utils import attn_mask_is_needed, create_warmup_future_states, pad_to_interval
 
 
 """
@@ -463,26 +464,25 @@ class ContinuousBatchProcessor:
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
-                # TODO: remove this once we are sure there are no race conditions
-                # compute_stream.wait_stream(torch.cuda.current_stream())
-                # Warmup
-                with torch.cuda.stream(compute_stream):
-                    forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
-                # torch.cuda.current_stream().wait_stream(compute_stream)
-                # Capture
-                graph = torch.cuda.CUDAGraph()
-                # Continuous batching can run multiple manager threads concurrently in one process, but PyTorch's
-                # default capture mode ("global") errors on CUDA actions from other threads. This means capture can be
-                # invalidated even when each manager uses a different device. To avoid this, we use "thread_local" mode.
-                with torch.cuda.graph(
-                    graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"
-                ):
-                    forward_fn(model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
-                # Store
-                self.inputs_and_outputs.set_graph(graph)
+                args = (model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
+                self.capture_graph(forward_fn, compute_stream, *args)
 
         # In any case, we transfer the outputs to the host
         self.inputs_and_outputs.retrieve_device_outputs()
+
+    def capture_graph(self, forward_fn: Any, compute_stream: torch.cuda.Stream, *args) -> None:
+        # Warmup (ensures the right result is computed before capturing the graph)
+        with torch.cuda.stream(compute_stream):
+            forward_fn(*args)
+        # Capture
+        graph = torch.cuda.CUDAGraph()
+        # Continuous batching can run multiple manager threads concurrently in one process, but PyTorch's
+        # default capture mode ("global") errors on CUDA actions from other threads. This means capture can be
+        # invalidated even when each manager uses a different device. To avoid this, we use "thread_local" mode.
+        with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"):
+            forward_fn(*args)
+        # Store
+        self.inputs_and_outputs.set_graph(graph)
 
     @traced
     def _forward_process_and_sample(
@@ -558,6 +558,97 @@ class ContinuousBatchProcessor:
             # In order to match the dtype of output_ids, we cast the fp32 logprobs as int32 without changing the
             # underlying data. It's just a trick to use the same storage for both tensors.
             output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
+
+    @torch.no_grad()
+    def warmup(
+        self,
+        model: nn.Module,
+        logit_processor: LogitsProcessorList,
+        num_cache_tokens: int = 0,
+        num_query_tokens: int = 0,
+    ) -> dict[str, float]:
+        """Pre-capture CUDA graphs for varlen and decode paths by directly building model kwargs and capturing graphs.
+        In async mode, both IO pairs are warmed up since each has its own graph buffer and static tensors."""
+
+        warmup_times = {"varlen_warmup_time": 0.0, "decode_warmup_times": []}
+        if not self.use_cuda_graph:
+            logger.info("CUDA graphs disabled, skipping warmup.")
+            return warmup_times
+
+        num_query_tokens = num_query_tokens if num_query_tokens > 0 else self.max_batch_tokens
+        num_cache_tokens = num_cache_tokens if num_cache_tokens > 0 else self.cache.block_size * num_query_tokens
+        num_pages = self.cache.num_blocks * self.cache.block_size
+        compute_stream = self.inputs_and_outputs.compute_stream
+
+        # In async mode, each IO pair has its own graph buffer and static tensors, so we warm up both
+        num_io_pairs = 2 if self.use_async_batching else 1
+
+        for pair_idx in range(num_io_pairs):
+            if self.use_async_batching:
+                self.inputs_and_outputs.current_pair = pair_idx
+                logger.info(f"Warming up IO pair {pair_idx + 1}/2...")
+
+            # --- Varlen path ---
+            padded_q = pad_to_interval(num_query_tokens, self.q_padding_interval_size, self.max_batch_tokens)
+            padded_kv = pad_to_interval(num_cache_tokens + num_query_tokens, self.kv_padding_interval_size, num_pages)
+            logger.info(f"Warming up varlen path ({padded_q} Q tokens, {padded_kv} KV tokens)...")
+
+            future_states = create_warmup_future_states(
+                1, RequestStatus.PREFILLING, num_query_tokens, num_cache_tokens, self.cache
+            )
+            try:
+                start = perf_counter()
+                self.inputs_and_outputs.prepare_batch_tensors(future_states, False, padded_q, padded_kv - padded_q)
+                batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
+                carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
+                forward_fn = self._compiled_varlen or self._forward_process_and_sample
+                forward_fn_args = (model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
+                self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
+                warmup_times["varlen_warmup_time"] += perf_counter() - start
+            except Exception as e:
+                logger.warning(f"Failed to warm up varlen path: {e}")
+                warmup_times["varlen_warmup_time"] = -1.0
+            finally:
+                for fs in future_states:
+                    self.cache.free_blocks(fs.state.request_id)
+            logger.info(f"Varlen warmup completed in {warmup_times['varlen_warmup_time']:.2f}s")
+
+            # Exit here if the decode fast path is not available
+            if self.cache.max_blocks_per_request == 0:
+                continue
+
+            # --- Decode fast path ---
+            logger.info("Warming up decode fast path...")
+            q_interval = self.q_padding_interval_size  # shorthand to avoid overly long lines
+            for num_requests in range(q_interval, self.max_batch_tokens + 1, q_interval):
+                future_states = create_warmup_future_states(
+                    num_requests, RequestStatus.DECODING, 0, num_cache_tokens, self.cache
+                )
+                if not future_states:
+                    continue
+                try:
+                    start = perf_counter()
+                    padded_q = pad_to_interval(len(future_states), q_interval, self.max_batch_tokens)
+                    self.inputs_and_outputs.prepare_batch_tensors(future_states, True, padded_q, 0)
+                    batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
+                    carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
+                    forward_fn = self._compiled_decode or self._forward_process_and_sample
+                    forward_fn_args = (model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
+                    self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
+                    warmup_times["decode_warmup_times"].append(perf_counter() - start)
+                except Exception as e:
+                    logger.warning(f"Failed to warm up decode path for {num_requests} requests: {e}")
+                    warmup_times["decode_warmup_times"].append(-1.0)
+                finally:
+                    for fs in future_states:
+                        self.cache.free_blocks(fs.state.request_id)
+            logger.info(f"Decode warmup completed ({len(warmup_times['decode_warmup_times'])} graphs).")
+
+        # If using async batching, reset to pair 0 for the generation loop
+        if self.use_async_batching:
+            self.inputs_and_outputs.current_pair = 0
+
+        return warmup_times
 
 
 # Manager Class (User Interface)
@@ -637,6 +728,16 @@ class ContinuousBatchingManager:
     def is_running(self) -> bool:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
+
+    def warmup(self, num_cache_tokens: int = 0, num_query_tokens: int = 0) -> dict[str, float]:
+        """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
+        processor if not already done. Returns a dict with timing keys 'varlen_warmup_time' and 'decode_warmup_time'."""
+        # Create the batch processor if it doesn't exist
+        if self.batch_processor is None:
+            self.batch_processor = self._create_batch_processor()
+
+        # Delegate to the processor's warmup method
+        return self.batch_processor.warmup(self.model, self.logit_processor, num_cache_tokens, num_query_tokens)
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def stop(self, block: bool = True, timeout: float | None = None, keep_for_next_session: bool = False) -> None:
@@ -849,6 +950,7 @@ class ContinuousBatchingManager:
         )
         return batch_processor
 
+    @torch.inference_mode()
     def _run_generation_loop(self) -> None:
         """Main processing loop running in the background thread."""
         try:
@@ -928,6 +1030,7 @@ class ContinuousMixin:
 
     generation_config: GenerationConfig
 
+    @torch.inference_mode()
     def init_continuous_batching(
         self,
         generation_config: GenerationConfig | None = None,
@@ -988,6 +1091,7 @@ class ContinuousMixin:
             delattr(self, "_cached_continuous_batching_manager")
 
     @contextmanager
+    @torch.inference_mode()
     def continuous_batching_context_manager(
         self,
         generation_config: GenerationConfig | None = None,
@@ -995,19 +1099,21 @@ class ContinuousMixin:
         timeout: float | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         persistent_manager: bool = False,
+        warmup: bool = True,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
-        """A context manager to safely use the continuous batching manager. Arguments are similars to the ones of
-        `init_continuous_batching`, expect for:
+        """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
+        `init_continuous_batching`, except for:
             - block: whether to block the thread when stopping the manager. Default is True.
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
-            - persistent_manager: whether to persist the manager after the context manager is exited. Default is False.
         """
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
             **deprecated_kwargs,
         )
+        if warmup:
+            manager.warmup()
         manager.start()
         try:
             yield manager
@@ -1027,6 +1133,7 @@ class ContinuousMixin:
         record_timestamps: bool = False,
         progress_bar: bool = True,
         persistent_manager: bool = False,
+        warmup: bool = True,
         **kwargs,
     ) -> dict[str, GenerationOutput]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1038,6 +1145,7 @@ class ContinuousMixin:
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
             persistent_manager: whether to persist the manager after the generation is finished. Default is False.
+            warmup: whether to pre-capture CUDA graphs before processing requests. Default is True.
             **kwargs: Additional generation parameters. Only max_new_tokens is used, but other deprecated arguments
                 are extracted and passed to the continuous_batching_config object.
         Returns:
@@ -1081,6 +1189,7 @@ class ContinuousMixin:
             block=True,
             timeout=5,
             persistent_manager=persistent_manager,
+            warmup=warmup,
             **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])
