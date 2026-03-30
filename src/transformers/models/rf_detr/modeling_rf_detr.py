@@ -410,7 +410,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
-        shortcut = hidden_states
+        residual = hidden_states
 
         # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before the attention
         if self.global_attention:
@@ -426,17 +426,18 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         self_attention_output = self.layer_scale1(self_attention_output)
 
         # first residual connection
-        hidden_states = self.drop_path(self_attention_output) + shortcut
+        hidden_states = self.drop_path(self_attention_output) + residual
+        residual = hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
 
         # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
+        hidden_states = self.drop_path(hidden_states) + residual
 
-        return layer_output
+        return hidden_states
 
     def window_unpartition_before_attention(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # For layers configured to use global attention, merges the window-batched sequences back
