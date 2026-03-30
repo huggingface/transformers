@@ -1131,7 +1131,21 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
 
         self.post_init()
 
-    def get_mask_logits(self, query_features, spatial_features):
+    def get_mask_logits(self, query_features: Tensor, spatial_features: Tensor) -> Tensor:
+        """
+        Compute the per-query mask logits.
+        Query features are projected to the same dimension as the spatial features and then multiplied
+        with the spatial features to get the mask logits.
+        The mask logits are then reshaped to the spatial dimensions and broadcast with a segmentation bias
+        parameter.
+
+        Args:
+            query_features (`torch.Tensor`): Query features of shape (batch_size, num_queries, d_model).
+            spatial_features (`torch.Tensor`): Spatial features of shape (batch_size, hidden_dim, height, width).
+
+        Returns:
+            `torch.Tensor`: Mask logits of shape (batch_size, num_queries, height, width).
+        """
         batch_size, num_queries, _ = query_features.shape
         height, width = spatial_features.shape[2], spatial_features.shape[3]
 
