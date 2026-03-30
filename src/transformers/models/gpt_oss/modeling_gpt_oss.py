@@ -702,4 +702,5 @@ __all__ = [
     "GptOssForTokenClassification",
     "GptOssModel",
     "GptOssPreTrainedModel",
+    "GptOssTensorProcessor",
 ]

@@ -70,6 +70,23 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 - SDPA is not supported because attention sinks require direct access to the full attention logits before softmax. Use Flash Attention or Flex Attention instead.
 - When using Flex Attention, attention sinks require special handling. The `score_mod` function operates on individual score elements rather than the full attention matrix, so sink renormalization is applied after computation using the log-sum-exp (LSE) values returned by Flex Attention.
 
+## Loading GGUF files
+
+GPT‑OSS models are also available as quantised GGUF files (e.g., from [Unsloth](https://huggingface.co/unsloth) or [ggml‑org](https://huggingface.co/ggml-org)). You can load them directly with `from_pretrained` by passing the `gguf_file` argument:
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained(
+    "path/to/local/directory",
+    gguf_file="gpt-oss-20b-Q5_K_M.gguf",
+    device_map="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained(
+    "path/to/local/directory",
+    gguf_file="gpt-oss-20b-Q5_K_M.gguf",
+)
+
 ## GptOssConfig
 
 [[autodoc]] GptOssConfig
