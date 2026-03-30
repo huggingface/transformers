@@ -191,6 +191,7 @@ def w8a8_fp8_matmul(
                 "and that the `kernels` package is installed and up to date (`pip install -U kernels`)."
             )
         else:
+            # 3-6x faster than Triton
             A_2d = A.view(-1, A.shape[-1])
             As_2d = As.view(-1, As.shape[-1])
             output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
