@@ -13,6 +13,7 @@
 # limitations under the License.
 """PIL Image processor class for Qwen2-VL."""
 
+import math
 from collections.abc import Iterable
 
 import numpy as np
@@ -26,13 +27,62 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_qwen2_vl import Qwen2VLImageProcessorKwargs, smart_resize
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.qwen2_vl.image_processing_qwen2_vl.Qwen2VLImageProcessorKwargs
+class Qwen2VLImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+
+
+# Adapted from transformers.models.qwen2_vl.image_processing_qwen2_vl.smart_resize
+def smart_resize(
+    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
+):
+    """Rescales the image so that the following conditions are met:
+
+    1. Both dimensions (height and width) are divisible by 'factor'.
+
+    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
+
+    3. The aspect ratio of the image is maintained as closely as possible.
+
+    """
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
+
+
 @auto_docstring
 class Qwen2VLImageProcessorPil(PilBackend):
     do_resize = True
@@ -95,7 +145,7 @@ class Qwen2VLImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
