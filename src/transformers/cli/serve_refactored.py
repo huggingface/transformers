@@ -42,39 +42,30 @@ logger = logging.get_logger(__name__)
 class Serve:
     def __init__(
         self,
-        # TODO: maybe rename it to model ?
         force_model: Annotated[str | None, typer.Argument(help="Model to preload and use for all requests.")] = None,
         # Model options
-        device: Annotated[str, typer.Option(help="Device for inference; defaults to 'auto'.")] = "auto",
-        dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
+        continuous_batching: Annotated[
+            bool, typer.Option(help="Enable continuous batching with paged attention for higher throughput.")
+        ] = False,
         attn_implementation: Annotated[
             str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
         ] = None,
+        compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
         quantization: Annotated[
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
         ] = None,
+        device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
+        dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
         trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
         model_timeout: Annotated[
-            int, typer.Option(help="Seconds before idle model is unloaded. Ignored when model is set.")
+            int, typer.Option(help="Seconds before idle model is unloaded. Ignored when force_model is set.")
         ] = 300,
         # Server options
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
         enable_cors: Annotated[bool, typer.Option(help="Enable permissive CORS.")] = False,
-        log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "info",
+        log_level: Annotated[str, typer.Option(help="Logging level (e.g. 'info', 'warning').")] = "warning",
         default_seed: Annotated[int | None, typer.Option(help="Default torch seed.")] = None,
-        compile: Annotated[
-            bool,
-            typer.Option(
-                help="Enable static cache + torch.compile for faster decode (~2.6x). First request triggers compilation (~30s)."
-            ),
-        ] = False,
-        continuous_batching: Annotated[
-            bool,
-            typer.Option(
-                help="Enable continuous batching with paged attention for higher throughput on concurrent requests."
-            ),
-        ] = False,
         non_blocking: Annotated[
             bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
         ] = False,
@@ -99,11 +90,7 @@ class Serve:
         transformers_logger = logging.get_logger("transformers")
         transformers_logger.setLevel(logging.log_levels[log_level.lower()])
 
-        # Preloaded models should never be auto-unloaded
-        if force_model:
-            model_timeout = -1
-
-        model_manager = ModelManager(
+        self._model_manager = ModelManager(
             device=device,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
@@ -112,27 +99,22 @@ class Serve:
             model_timeout=model_timeout,
             force_model=force_model,
         )
-        self._model_manager = model_manager
-        self._generation_state = GenerationState(continuous_batching=continuous_batching)
+        self._generation_state = GenerationState(continuous_batching=continuous_batching, compile=compile)
 
         self._chat_handler = ChatCompletionHandler(
-            model_manager=model_manager,
+            model_manager=self._model_manager,
             generation_state=self._generation_state,
-            force_model=force_model,
-            compile=compile,
         )
 
         self._response_handler = ResponseHandler(
-            model_manager=model_manager,
+            model_manager=self._model_manager,
             generation_state=self._generation_state,
-            force_model=force_model,
-            compile=compile,
         )
 
-        self._transcription_handler = TranscriptionHandler(model_manager, self._generation_state)
+        self._transcription_handler = TranscriptionHandler(self._model_manager, self._generation_state)
 
         app = build_server(
-            model_manager,
+            self._model_manager,
             self._chat_handler,
             response_handler=self._response_handler,
             transcription_handler=self._transcription_handler,

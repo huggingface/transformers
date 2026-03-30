@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
     from transformers.generation.continuous_batching.continuous_api import ContinuousBatchingManager
     from transformers.generation.continuous_batching.requests import GenerationOutput
+    from transformers.generation.continuous_batching.scheduler import Scheduler
 
     from .model_manager import ModelManager
 
@@ -130,7 +131,7 @@ class ToolCallParser:
     # Sentinel: token was consumed by the parser but produced no output.
     CONSUMED = object()
 
-    def feed(self, text: str):
+    def feed(self, text: str) -> object | dict | None:
         """Feed a text chunk (streaming).
 
         Returns:
@@ -210,18 +211,20 @@ class DownloadAggregator:
         self.bars: dict[int, tuple[int, int | None]] = {}
         self.last_emitted_current: int | None = None
 
-    def register(self, bar_id: int, total: int | None):
+    def register(self, bar_id: int, total: int | None) -> None:
+        """Register a new download bar with its total byte count."""
         self.bars[bar_id] = (0, total)
         self._emit()
 
-    def update(self, bar_id: int, current: int, total: int | None):
+    def update(self, bar_id: int, current: int, total: int | None) -> None:
+        """Update a bar's current byte count and emit aggregate progress."""
         self.bars[bar_id] = (current, total)
         self._emit()
 
-    def close(self, bar_id: int):
+    def close(self, bar_id: int) -> None:
         pass  # keep the bar so totals remain correct
 
-    def _emit(self):
+    def _emit(self) -> None:
         agg_current = sum(c for c, _ in self.bars.values())
         if agg_current == self.last_emitted_current:
             return
@@ -238,7 +241,7 @@ class DownloadAggregator:
         )
 
 
-def make_progress_tqdm_class(callback: Callable, model_id: str):
+def make_progress_tqdm_class(callback: Callable, model_id: str) -> type:
     """Create a tqdm subclass that routes progress to a callback.
 
     Bars with ``unit="B"`` are download bars — aggregated via ``DownloadAggregator``.
@@ -422,12 +425,14 @@ class CBStreamer:
 
 
 def set_torch_seed(seed: int) -> None:
+    """Set the PyTorch random seed for reproducible generation."""
     import torch
 
     torch.manual_seed(seed)
 
 
 def reset_torch_cache() -> None:
+    """Empty the CUDA cache if a GPU is available."""
     import torch
 
     if torch.cuda.is_available():
@@ -446,7 +451,7 @@ class InferenceThread:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def _run(self):
+    def _run(self) -> None:
         while True:
             fn, args, kwargs, future, loop = self._queue.get()
             try:
@@ -490,8 +495,8 @@ class BaseGenerateManager(ABC):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         inputs: dict,
         gen_config: "GenerationConfig",
-        request_id: str | None = None,
-    ):
+        request_id: str,
+    ) -> tuple[asyncio.Queue, "DirectStreamer | CBStreamer"]:
         """Start streaming generation.
 
         Args:
@@ -499,7 +504,7 @@ class BaseGenerateManager(ABC):
             processor: The processor or tokenizer for decoding.
             inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
             gen_config (`GenerationConfig`): Generation parameters.
-            request_id (`str`, *optional*): Unique request identifier.
+            request_id (`str`): Unique request identifier.
 
         Returns:
             `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
@@ -514,8 +519,8 @@ class BaseGenerateManager(ABC):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         inputs: dict,
         gen_config: "GenerationConfig",
-        request_id: str | None = None,
-    ):
+        request_id: str,
+    ) -> tuple[str, int, list[int]]:
         """Run generation to completion.
 
         Args:
@@ -523,14 +528,14 @@ class BaseGenerateManager(ABC):
             processor: The processor or tokenizer for decoding.
             inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
             gen_config (`GenerationConfig`): Generation parameters.
-            request_id (`str`, *optional*): Unique request identifier.
+            request_id (`str`): Unique request identifier.
 
         Returns:
             `tuple[str, int, list[int]]`: ``(text, input_len, generated_ids)``.
         """
 
     @abstractmethod
-    def stop(self):
+    def stop(self) -> None:
         """Stop the generation manager and free resources."""
 
 
@@ -546,14 +551,15 @@ class GenerateManager(BaseGenerateManager):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         inputs: dict,
         gen_config: "GenerationConfig",
-        request_id: str | None = None,
-    ):
+        request_id: str,
+    ) -> tuple[asyncio.Queue, DirectStreamer]:
+        """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
-        def _run():
+        def _run() -> None:
             try:
                 model.generate(**gen_kwargs)
             except _GenerationCancelled:
@@ -570,8 +576,9 @@ class GenerateManager(BaseGenerateManager):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         inputs: dict,
         gen_config: "GenerationConfig",
-        request_id: str | None = None,
-    ):
+        request_id: str,
+    ) -> tuple[str, int, "torch.Tensor"]:
+        """Run generation to completion via ``model.generate()`` on the inference thread."""
         sequences = await self.async_submit(
             model.generate, **inputs, generation_config=gen_config, tokenizer=processor
         )
@@ -580,15 +587,15 @@ class GenerateManager(BaseGenerateManager):
         text = processor.decode(generated_ids, skip_special_tokens=True)
         return text, input_len, generated_ids
 
-    def submit(self, fn, *args, **kwargs):
+    def submit(self, fn: Callable, *args, **kwargs) -> Future:
         """Submit a callable to the inference thread. Returns a blocking Future."""
         return self._thread.submit(fn, *args, **kwargs)
 
-    def async_submit(self, fn, *args, **kwargs):
+    def async_submit(self, fn: Callable, *args, **kwargs) -> asyncio.Future:
         """Submit a callable to the inference thread. Returns an awaitable asyncio.Future."""
         return self._thread.async_submit(fn, *args, **kwargs)
 
-    def stop(self):
+    def stop(self) -> None:
         pass  # inference thread is a daemon
 
 
@@ -610,7 +617,7 @@ class CBGenerateManager(BaseGenerateManager):
     def __init__(self):
         self._cb = None
 
-    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig"):
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
         """Initialize the CB manager on first call with the request's generation config.
 
         .. todo:: Remove when CB supports per-request generation config.
@@ -621,11 +628,8 @@ class CBGenerateManager(BaseGenerateManager):
         """
         if self._cb is not None:
             return
-        from transformers import LogitsProcessorList
 
         self._cb = model.init_continuous_batching(generation_config=gen_config)
-        # TODO: logits processors should be fixed in CB and correctly applied
-        self._cb.logit_processor = LogitsProcessorList()
         self._cb.start()
 
     def generate_streaming(
@@ -634,8 +638,9 @@ class CBGenerateManager(BaseGenerateManager):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         inputs: dict,
         gen_config: "GenerationConfig",
-        request_id: str | None = None,
-    ):
+        request_id: str,
+    ) -> tuple[asyncio.Queue, CBStreamer]:
+        """Start streaming CB generation. Registers a per-request output handler."""
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
@@ -643,15 +648,14 @@ class CBGenerateManager(BaseGenerateManager):
         request_id = self._cb.add_request(
             input_ids,
             request_id=request_id,
-            max_new_tokens=gen_config.max_new_tokens,
             streaming=True,
+            max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
         streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
 
-        # Register a direct callback: the dispatcher calls this on the event loop
-        # with each GenerationOutput. This decodes tokens and pushes text straight
-        # to the SSE text_queue — no intermediate async queue or coroutine needed.
+        # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
+        # This decodes tokens and pushes text straight to the SSE text_queue
         def _on_output(output):
             try:
                 streamer.put(output)
@@ -669,18 +673,13 @@ class CBGenerateManager(BaseGenerateManager):
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
         inputs: dict,
         gen_config: "GenerationConfig",
-        request_id: str | None = None,
-    ):
-        """Non-streaming CB generation, fully async (no per-request thread).
-
-        Registers a handler that resolves an asyncio.Future when the result arrives.
-        No per-request queue, no polling — just one ``await`` per request.
-        """
+        request_id: str,
+    ) -> tuple[str, int, list[int]]:
+        """Run non-streaming CB generation. Registers a handler that resolves an asyncio.Future on completion."""
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
 
         # Register future BEFORE add_request to avoid race with fast completion
-        request_id = request_id or f"cb_{id(inputs)}"
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
@@ -705,11 +704,11 @@ class CBGenerateManager(BaseGenerateManager):
         return text, input_len, generated_ids
 
     @property
-    def scheduler(self):
+    def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
         return self._cb.batch_processor.scheduler
 
-    def stop(self):
+    def stop(self) -> None:
         if self._cb is not None:
             self._cb.stop(block=True, timeout=2)
 
@@ -728,8 +727,9 @@ class GenerationState:
             sequential ``model.generate()`` calls.
     """
 
-    def __init__(self, continuous_batching: bool = False):
+    def __init__(self, continuous_batching: bool = False, compile: bool = False):
         self._continuous_batching = continuous_batching
+        self._compile = compile
         self._generate_managers: dict[str, GenerateManager] = {}
         self._cb_manager: CBGenerateManager | None = None
         self._cb_model_id: str | None = None
@@ -754,7 +754,7 @@ class GenerationState:
             )
         return can
 
-    def get_manager(self, model_id: str, use_cb: bool) -> BaseGenerateManager:
+    def get_manager(self, model_id: str, use_cb: bool = False) -> BaseGenerateManager:
         """Return a per-model generation manager, lazily created on first request.
 
         Args:
@@ -777,7 +777,7 @@ class GenerationState:
             self._generate_managers[model_id] = GenerateManager()
         return self._generate_managers[model_id]
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Stop any active generation managers."""
         if self._cb_manager is not None:
             self._cb_manager.stop()
@@ -795,23 +795,31 @@ class BaseHandler:
             Handles model loading, caching, and lifecycle.
         generation_state (`GenerationState`):
             Shared state managing per-model generation managers.
-        force_model (`str`, *optional*):
-            If set, override the ``model`` field in every request with this model ID.
-        compile (`bool`, *optional*, defaults to `False`):
-            Enable ``torch.compile`` with static cache for faster decode.
     """
+
+    _valid_params_class: type | None = None
+    _unused_fields: set[str] = set()
 
     def __init__(
         self,
         model_manager: "ModelManager",
         generation_state: GenerationState,
-        force_model: str | None = None,
-        compile: bool = False,
     ):
         self.model_manager = model_manager
         self.generation_state = generation_state
-        self.force_model = force_model
-        self._compile = compile
+
+    def _validate_request(self, body: dict) -> None:
+        """Validate request fields against the handler's params class and unused fields."""
+        from fastapi import HTTPException
+
+        input_keys = set(body.keys())
+        if self._valid_params_class is not None:
+            unexpected = input_keys - self._valid_params_class.__mutable_keys__
+            if unexpected:
+                raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
+        unused = input_keys & self._unused_fields
+        if unused:
+            logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
 
     @staticmethod
     def chunk_to_sse(chunk: "str | pydantic.BaseModel") -> str:
@@ -820,20 +828,22 @@ class BaseHandler:
             return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    def _resolve_model(self, body: dict):
+    def _resolve_model(self, body: dict) -> tuple[str, "PreTrainedModel", "ProcessorMixin | PreTrainedTokenizerFast"]:
         """Apply force_model, load model + processor.
 
         Returns ``(model_id, model, processor)``.
         """
-        if self.force_model is not None:
-            body["model"] = self.force_model
+        if self.model_manager.force_model is not None:
+            body["model"] = self.model_manager.force_model
 
         model_id = self.model_manager.process_model_name(body["model"])
         model, processor = self.model_manager.load_model_and_processor(model_id)
 
         return model_id, model, processor
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
+    def _build_generation_config(
+        self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False
+    ) -> "GenerationConfig":
         """Build a GenerationConfig from shared params (temperature, top_p, seed, generation_config JSON).
 
         Subclasses should call ``super()._build_generation_config(...)`` then apply
@@ -870,12 +880,14 @@ class BaseHandler:
             set_torch_seed(body["seed"])
 
         # --compile flag: use static cache + torch.compile for faster decode
-        if self._compile and generation_config.cache_implementation is None:
+        if self.generation_state._compile and generation_config.cache_implementation is None:
             generation_config.cache_implementation = "static"
 
         # CB manages its own paged KV cache
         if use_cb:
             generation_config.use_cache = False
+
+        # TODO: add prefix caching for the non-CB path (reuse KV cache across multi-turn conversations)
 
         return generation_config
 

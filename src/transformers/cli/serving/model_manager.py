@@ -27,7 +27,7 @@ from huggingface_hub import scan_cache_dir
 from tqdm import tqdm
 
 import transformers
-from transformers import AutoTokenizer, BitsAndBytesConfig, PreTrainedTokenizerBase
+from transformers import BitsAndBytesConfig, PreTrainedTokenizerBase
 
 from ...utils import logging
 from .utils import Modality, make_progress_tqdm_class, reset_torch_cache
@@ -41,12 +41,13 @@ logger = logging.get_logger(__name__)
 
 
 class TimedModel:
-    """Wraps a model + processor and auto-deletes them after a period of inactivity.
+    """Wraps a model + processor and auto-unloads them after a period of inactivity.
 
     Args:
         model: The loaded model.
-        timeout_seconds: Seconds of inactivity before auto-deletion. Use -1 to disable.
+        timeout_seconds: Seconds of inactivity before auto-unload. Use -1 to disable.
         processor: The associated processor or tokenizer.
+        on_unload: Optional callback invoked after the model is unloaded from memory.
     """
 
     def __init__(
@@ -54,11 +55,13 @@ class TimedModel:
         model: "PreTrainedModel",
         timeout_seconds: int,
         processor: "ProcessorMixin | PreTrainedTokenizerFast | None" = None,
+        on_unload: "Callable | None" = None,
     ):
         self.model = model
         self._name_or_path = str(model.name_or_path)
         self.processor = processor
         self.timeout_seconds = timeout_seconds
+        self._on_unload = on_unload
         self._timer = threading.Timer(self.timeout_seconds, self._timeout_reached)
         self._timer.start()
 
@@ -78,15 +81,13 @@ class TimedModel:
             gc.collect()
             reset_torch_cache()
             self._timer.cancel()
+            if self._on_unload is not None:
+                self._on_unload()
 
     def _timeout_reached(self) -> None:
         if self.timeout_seconds > 0:
             self.delete_model()
             logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds}s of inactivity")
-
-    def is_deleted(self) -> bool:
-        """Check if the model has been deleted (by timeout or manually)."""
-        return not hasattr(self, "model") or self.model is None
 
 
 class ModelManager:
@@ -115,13 +116,6 @@ class ModelManager:
         model_timeout: int = 300,
         force_model: str | None = None,
     ):
-        self.device = device
-        self.dtype = dtype
-        self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
-        self.quantization = quantization
-        self.model_timeout = model_timeout
-
         self.loaded_models: dict[str, TimedModel] = {}
 
         # Thread-safety for concurrent load_model_and_processor calls
@@ -132,8 +126,49 @@ class ModelManager:
         self._loading_subscribers: dict[str, list[asyncio.Queue[str | None]]] = {}
         self._loading_tasks: dict[str, asyncio.Task] = {}
 
+        # Convert numeric device strings (e.g. "0") to int so device_map works correctly
+        self.device = int(device) if device.isdigit() else device
+        self.dtype = self._resolve_dtype(dtype)
+        self.trust_remote_code = trust_remote_code
+        self.attn_implementation = attn_implementation
+        self.quantization = quantization
+        self.model_timeout = model_timeout
+        self.force_model = force_model
+
+        self._validate_args()
+
+        # Preloaded models should never be auto-unloaded
+        if force_model is not None:
+            self.model_timeout = -1
+
+        # Preload the forced model after all state is initialized
         if force_model is not None:
             self.load_model_and_processor(self.process_model_name(force_model))
+
+    @staticmethod
+    def _resolve_dtype(dtype: str | None):
+        import torch
+
+        if dtype in ("auto", None):
+            return dtype
+        resolved = getattr(torch, dtype, None)
+        if not isinstance(resolved, torch.dtype):
+            raise ValueError(
+                f"Unsupported dtype: '{dtype}'. Must be 'auto' or a valid torch dtype (e.g. 'float16', 'bfloat16')."
+            )
+        return resolved
+
+    def _validate_args(self):
+        if self.quantization is not None and self.quantization not in ("bnb-4bit", "bnb-8bit"):
+            raise ValueError(
+                f"Unsupported quantization method: '{self.quantization}'. Must be 'bnb-4bit' or 'bnb-8bit'."
+            )
+        VALID_ATTN_IMPLEMENTATIONS = {"eager", "sdpa", "flash_attention_2", "flash_attention_3", "flex_attention"}
+        if self.attn_implementation is not None and self.attn_implementation not in VALID_ATTN_IMPLEMENTATIONS:
+            raise ValueError(
+                f"Unsupported attention implementation: '{self.attn_implementation}'. "
+                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS}."
+            )
 
     @staticmethod
     def process_model_name(model_id: str) -> str:
@@ -155,7 +190,7 @@ class ModelManager:
         return None
 
     def _load_processor(self, model_id_and_revision: str) -> "ProcessorMixin | PreTrainedTokenizerFast":
-        """Load a processor, trying AutoProcessor first then AutoTokenizer.
+        """Load a processor for the given model.
 
         Args:
             model_id_and_revision: Model ID in ``'model_id@revision'`` format.
@@ -163,15 +198,7 @@ class ModelManager:
         from transformers import AutoProcessor
 
         model_id, revision = model_id_and_revision.split("@", 1)
-        try:
-            return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
-        except OSError:
-            try:
-                return AutoTokenizer.from_pretrained(
-                    model_id, revision=revision, trust_remote_code=self.trust_remote_code
-                )
-            except OSError:
-                raise OSError(f"Failed to load processor for {model_id} with AutoProcessor and AutoTokenizer.")
+        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
         self, model_id_and_revision: str, tqdm_class: type | None = None, progress_callback: Callable | None = None
@@ -181,22 +208,19 @@ class ModelManager:
         Args:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
             tqdm_class (*optional*): tqdm subclass for progress bars during ``from_pretrained``.
-            progress_callback (`callable`, *optional*): Called with progress dicts during loading.
+            progress_callback (`Callable`, *optional*): Called with progress dicts during loading.
 
         Returns:
             `PreTrainedModel`: The loaded model.
         """
-        import torch
-
         from transformers import AutoConfig
 
         model_id, revision = model_id_and_revision.split("@", 1)
 
-        dtype = self.dtype if self.dtype in ["auto", None] else getattr(torch, self.dtype)
         model_kwargs = {
             "revision": revision,
             "attn_implementation": self.attn_implementation,
-            "dtype": dtype,
+            "dtype": self.dtype,
             "device_map": self.device,
             "trust_remote_code": self.trust_remote_code,
             "quantization_config": self.get_quantization_config(),
@@ -207,6 +231,7 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
         architecture = getattr(transformers, config.architectures[0])
+
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
@@ -228,10 +253,7 @@ class ModelManager:
             lock = self._model_locks.setdefault(model_id_and_revision, threading.Lock())
 
         with lock:
-            if (
-                model_id_and_revision not in self.loaded_models
-                or self.loaded_models[model_id_and_revision].is_deleted()
-            ):
+            if model_id_and_revision not in self.loaded_models:
                 if progress_callback is not None:
                     progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "processor"})
                 processor = self._load_processor(model_id_and_revision)
@@ -239,7 +261,10 @@ class ModelManager:
                     model_id_and_revision, tqdm_class=tqdm_class, progress_callback=progress_callback
                 )
                 self.loaded_models[model_id_and_revision] = TimedModel(
-                    model, timeout_seconds=self.model_timeout, processor=processor
+                    model,
+                    timeout_seconds=self.model_timeout,
+                    processor=processor,
+                    on_unload=lambda key=model_id_and_revision: self.loaded_models.pop(key, None),
                 )
                 if progress_callback is not None:
                     progress_callback({"status": "ready", "model": model_id_and_revision, "cached": False})
@@ -269,7 +294,7 @@ class ModelManager:
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         # Case 1: already cached
-        if mid in self.loaded_models and not self.loaded_models[mid].is_deleted():
+        if mid in self.loaded_models:
             self.loaded_models[mid].reset_timer()
             yield f"data: {json.dumps({'status': 'ready', 'model': mid, 'cached': True})}\n\n"
             return
@@ -339,9 +364,8 @@ class ModelManager:
 
     def shutdown(self) -> None:
         """Delete all loaded models and free resources."""
-        for timed in self.loaded_models.values():
+        for timed in list(self.loaded_models.values()):
             timed.delete_model()
-        self.loaded_models.clear()
 
     @staticmethod
     def get_model_modality(

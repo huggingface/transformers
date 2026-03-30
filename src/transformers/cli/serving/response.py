@@ -43,6 +43,7 @@ from openai.types.responses import (
     ResponseTextDeltaEvent,
     ResponseTextDoneEvent,
 )
+from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
 from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
 from ...utils import logging
@@ -60,6 +61,11 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
+
+
+class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
+    generation_config: str
+
 
 UNUSED_RESPONSE_FIELDS = {
     "background",
@@ -80,6 +86,9 @@ UNUSED_RESPONSE_FIELDS = {
 
 class ResponseHandler(BaseHandler):
     """Handler for the ``/v1/responses`` endpoint."""
+
+    _valid_params_class = TransformersResponseCreateParamsStreaming
+    _unused_fields = UNUSED_RESPONSE_FIELDS
 
     # ----- entry point -----
 
@@ -106,25 +115,16 @@ class ResponseHandler(BaseHandler):
         messages = self._input_to_messages(body)
         processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
 
-        if use_cb:
-            # CB handles device placement internally — don't create tensors or move
-            # anything to CUDA here. Pass plain token ID lists only.
-            inputs = processor.apply_chat_template(
-                processor_inputs,
-                add_generation_prompt=True,
-                tools=body.get("tools"),
-                return_dict=True,
-                tokenize=True,
-            )
-        else:
-            inputs = processor.apply_chat_template(
-                processor_inputs,
-                add_generation_prompt=True,
-                tools=body.get("tools"),
-                return_tensors="pt",
-                return_dict=True,
-                tokenize=True,
-            ).to(model.device)
+        inputs = processor.apply_chat_template(
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=body.get("tools"),
+            return_tensors=None if use_cb else "pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        if not use_cb:
+            inputs = inputs.to(model.device)
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
@@ -213,6 +213,7 @@ class ResponseHandler(BaseHandler):
         """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
         queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
         input_ids = inputs["input_ids"]
+        # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
         parser = ToolCallParser(tool_format) if tool_format else None
 
@@ -458,14 +459,9 @@ class ResponseHandler(BaseHandler):
             model, processor, inputs, gen_config, request_id=request_id
         )
 
-        created_at = time.time()
-        resp_id = f"resp_{request_id}"
-        msg_id = f"msg_{request_id}"
-        output_tokens = len(generated_ids)
-
         output_items = [
             ResponseOutputMessage(
-                id=msg_id,
+                id=f"msg_{request_id}",
                 type="message",
                 status="completed",
                 role="assistant",
@@ -491,10 +487,10 @@ class ResponseHandler(BaseHandler):
                         )
                     )
 
-        usage = compute_usage(input_len, output_tokens)
+        usage = compute_usage(input_len, len(generated_ids))
         response = Response(
-            id=resp_id,
-            created_at=created_at,
+            id=f"resp_{request_id}",
+            created_at=time.time(),
             status="completed",
             model=model_id,
             output=output_items,
@@ -508,12 +504,6 @@ class ResponseHandler(BaseHandler):
         return JSONResponse(response.model_dump(exclude_none=True))
 
     # ----- helpers -----
-
-    def _validate_request(self, body: dict) -> None:
-        """Validate a Responses API request."""
-        unused = set(body.keys()) & UNUSED_RESPONSE_FIELDS
-        if unused:
-            raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
     def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
         """Apply Responses API params (``max_output_tokens``) on top of the base generation config."""

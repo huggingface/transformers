@@ -22,7 +22,6 @@ import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
 from openai.types.chat.chat_completion import Choice
@@ -85,6 +84,9 @@ class ChatCompletionHandler(BaseHandler):
     Supports both streaming (SSE) and non-streaming (JSON) responses.
     """
 
+    _valid_params_class = TransformersCompletionCreateParamsStreaming
+    _unused_fields = UNUSED_CHAT_COMPLETION_FIELDS
+
     # ----- entry point -----
 
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
@@ -99,37 +101,22 @@ class ChatCompletionHandler(BaseHandler):
         """
         self._validate_request(body)
 
-        messages = body["messages"]
-
-        # HACK: tiny-agents sends requests ending with assistant message — skip
-        if messages and messages[-1]["role"] == "assistant":
-            return JSONResponse({}, status_code=200)
-
         model_id, model, processor = self._resolve_model(body)
         modality = self.model_manager.get_model_modality(model, processor=processor)
         use_cb = self.generation_state.use_continuous_batching(model, modality)
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-        processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
+        processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
 
-        if use_cb:
-            # CB handles device placement internally — don't create tensors or move
-            # anything to CUDA here. Pass plain token ID lists only.
-            inputs = processor.apply_chat_template(
-                processor_inputs,
-                add_generation_prompt=True,
-                tools=body.get("tools"),
-                return_dict=True,
-                tokenize=True,
-            )
-        else:
-            inputs = processor.apply_chat_template(
-                processor_inputs,
-                add_generation_prompt=True,
-                tools=body.get("tools"),
-                return_tensors="pt",
-                return_dict=True,
-                tokenize=True,
-            ).to(model.device)
+        inputs = processor.apply_chat_template(
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=body.get("tools"),
+            return_tensors=None if use_cb else "pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        if not use_cb:
+            inputs = inputs.to(model.device)
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
@@ -182,6 +169,7 @@ class ChatCompletionHandler(BaseHandler):
         """Stream tokens as SSE via DirectStreamer."""
         queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
         input_ids = inputs["input_ids"]
+        # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
         parser = ToolCallParser(tool_format) if tool_format else None
 
@@ -303,17 +291,6 @@ class ChatCompletionHandler(BaseHandler):
         )
 
     # ----- helpers -----
-
-    def _validate_request(self, body: dict) -> None:
-        """Validate a chat completion request. Raises HTTPException if invalid."""
-        input_keys = set(body.keys())
-        unexpected = input_keys - TransformersCompletionCreateParamsStreaming.__mutable_keys__
-        if unexpected:
-            raise HTTPException(status_code=422, detail=f"Unexpected keys in the request: {unexpected}")
-
-        unused = input_keys & UNUSED_CHAT_COMPLETION_FIELDS
-        if unused:
-            raise HTTPException(status_code=422, detail=f"Unsupported fields in the request: {unused}")
 
     def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
         """Apply Chat Completions params (``max_tokens``, ``frequency_penalty``, ``logit_bias``,
