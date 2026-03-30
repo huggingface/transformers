@@ -585,6 +585,10 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
+        self.image_ids = [getattr(self, "image_token_id", None)]
+        self.video_ids = [getattr(self, "video_token_id", None)]
+        self.audio_ids = [getattr(self, "audio_token_id", None)]
+
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
             proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
@@ -1641,6 +1645,20 @@ class ProcessorMixin(PushToHubMixin):
         valid_kwargs = {k: processor_config[k] for k in valid_keys} if valid_keys else {}
 
         return unused_kwargs, valid_kwargs
+
+    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
+        # We have to iterate for each list separately because inputs
+        # might be non-padded lists and we can't cast numpy on that!
+        # Then cast numpy as each input for faster indexing
+        mm_token_type_ids = []
+        for tokenizer_input in input_ids:
+            tokenizer_input = np.array(tokenizer_input)
+            mm_token_types = np.zeros_like(tokenizer_input)
+            mm_token_types[np.isin(tokenizer_input, self.image_ids)] = 1
+            mm_token_types[np.isin(tokenizer_input, self.video_ids)] = 2
+            mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
+            mm_token_type_ids.append(mm_token_types.tolist())
+        return mm_token_type_ids
 
     def apply_chat_template(
         self,

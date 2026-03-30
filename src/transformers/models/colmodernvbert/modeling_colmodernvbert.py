@@ -104,6 +104,8 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
+    base_model_prefix = "vlm"
+
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.config = config
@@ -151,37 +153,6 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             attentions=vlm_output.attentions,
             image_hidden_states=vlm_output.image_hidden_states,
         )
-
-    def get_input_embeddings(self):
-        return self.vlm.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.vlm.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.vlm.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.vlm.set_output_embeddings(new_embeddings)
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        model_embeds = self.vlm.resize_token_embeddings(
-            new_num_tokens=new_num_tokens,
-            pad_to_multiple_of=pad_to_multiple_of,
-            mean_resizing=mean_resizing,
-        )
-
-        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
-        self.vlm.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-
-        return model_embeds
 
 
 __all__ = ["ColModernVBertForRetrieval", "ColModernVBertPreTrainedModel"]

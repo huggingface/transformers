@@ -35,21 +35,24 @@ from ...image_utils import (
     SizeDict,
     make_nested_list_of_images,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_smolvlm import (
-    MAX_IMAGE_SIZE,
-    SmolVLMImageProcessorKwargs,
-    _resize_output_size_rescale_to_max_len,
-    _resize_output_size_scale_below_upper_bound,
-    get_max_height_width,
-    get_num_channels,
-    get_resize_output_image_size,
-)
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
+    """
+
+    do_image_splitting: bool
+    max_image_size: dict[str, int]
+    return_row_col_info: bool
 
 
 def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
@@ -58,6 +61,129 @@ def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndar
     mask = np.zeros(output_size, dtype=np.int64)
     mask[:h, :w] = 1
     return mask
+
+
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm.MAX_IMAGE_SIZE
+MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
+
+
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm._resize_output_size_rescale_to_max_len
+def _resize_output_size_rescale_to_max_len(
+    height: int, width: int, min_len: int | None = 1, max_len: int | None = None
+) -> tuple[int, int]:
+    """
+    Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
+    Args:
+        height (`int`):
+            Height of the input image.
+        width (`int`):
+            Width of the input image.
+        min_len (`int`, *optional*, defaults to 1):
+            Minimum size of the output image.
+        max_len (`int`, *optional*, defaults to the maximum size of the image):
+            Maximum size of the output image.
+    Returns:
+        The output size of the image after resizing.
+    """
+    max_len = max(height, width) if max_len is None else max_len
+    aspect_ratio = width / height
+
+    if width >= height:
+        width = max_len
+        height = int(width / aspect_ratio)
+        if height % 2 != 0:
+            height += 1
+    elif height > width:
+        height = max_len
+        width = int(height * aspect_ratio)
+        if width % 2 != 0:
+            width += 1
+
+    # Avoid resizing to a size smaller than min_len
+    height = max(height, min_len)
+    width = max(width, min_len)
+    return height, width
+
+
+# Adapted from transformers.models.smolvlm.image_processing_smolvlm._resize_output_size_scale_below_upper_bound
+def _resize_output_size_scale_below_upper_bound(
+    height: int, width: int, max_len: dict[str, int] | None = None
+) -> tuple[int, int]:
+    """
+    Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
+    Args:
+        height (`int`):
+            Height of the input image.
+        width (`int`):
+            Width of the input image.
+        max_len (`Dict[str, int]`, *optional*, defaults to the maximum size of the image):
+            Defines the maximum dimensions of the image.
+    Returns:
+        The output size of the image after resizing.
+    """
+    max_len = max(height, width) if max_len is None else max_len
+
+    aspect_ratio = width / height
+    if width >= height and width > max_len:
+        width = max_len
+        height = int(width / aspect_ratio)
+    elif height > width and height > max_len:
+        height = max_len
+        width = int(height * aspect_ratio)
+
+    # Avoid resizing to a size smaller than 1
+    height = max(height, 1)
+    width = max(width, 1)
+    return height, width
+
+
+def get_max_height_width(images_list: list[list[np.ndarray]]) -> tuple[int, int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+    image_sizes = []
+    for images in images_list:
+        for image in images:
+            image_sizes.append(image.shape[-2:])
+
+    max_height = max(size[0] for size in image_sizes)
+    max_width = max(size[1] for size in image_sizes)
+    return (max_height, max_width)
+
+
+def get_num_channels(images_list: list[list[np.ndarray]]) -> int:
+    """
+    Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
+    """
+    for images in images_list:
+        if images:
+            return images[0].shape[0]
+
+    raise ValueError("No images found in the batch.")
+
+
+def get_resize_output_image_size(
+    image: np.ndarray,
+    resolution_max_side: int,
+) -> tuple[int, int]:
+    """
+    Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
+    Args:
+        image (`np.ndarray`):
+            Image to resize.
+        resolution_max_side (`int`):
+            The longest edge of the image will be resized to this value. The shortest edge will be resized to keep the
+            input aspect ratio.
+    Returns:
+        The output size of the image after resizing.
+    """
+    height, width = image.shape[-2:]
+
+    # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
+    height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=resolution_max_side)
+    # Find the output size when scaling the image to be below the MAX_IMAGE_SIZE
+    height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=MAX_IMAGE_SIZE)
+    return height, width
 
 
 @auto_docstring
@@ -107,7 +233,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         max_image_size: dict[str, int],
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """Split an image into patches (mirrors TorchvisionBackend.split_images). Images are always CHW."""
         num_channels, height, width = image.shape
@@ -142,7 +268,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         vision_encoder_max_size: int,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
     ):
         """Resize images to be multiples of vision_encoder_max_size. Images are always CHW."""
         height, width = image.shape[-2:]
@@ -196,7 +322,7 @@ class SmolVLMImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
