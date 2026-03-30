@@ -11,489 +11,479 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert EfficientSAM3 LiteText checkpoints to Hugging Face format.
-
-URL: https://github.com/SimonZeng7108/efficientsam3.
-
-To run this script:
-
-```bash
-python src/transformers/models/sam3_lite_text/convert_sam3_lite_text_to_hf.py \
-    --output_dir . \
-    --original_repo_path /Users/nielsrogge/Documents/python_projecten/efficientsam3
-```
-"""
+"""Convert EfficientSAM3 LiteText checkpoints to Hugging Face format."""
 
 import argparse
-import importlib.util
-import json
+import gc
 import os
-import sys
-import types
-from pathlib import Path
 
 import regex as re
 import torch
-from huggingface_hub import HfApi, hf_hub_download, list_repo_files
-from huggingface_hub.errors import HfHubHTTPError
+from huggingface_hub import hf_hub_download
 
-from transformers import Sam3LiteTextConfig, Sam3LiteTextModel
-from transformers.models.sam3.convert_sam3_to_hf import convert_old_keys_to_new_keys
-from transformers.models.sam3_lite_text.configuration_sam3_lite_text import (
-    Sam3LiteTextVisionConfig,
-    Sam3LiteTextViTConfig,
-)
+from transformers import CLIPTokenizerFast, Sam3ImageProcessorFast, Sam3Processor
+from transformers.models.sam3_lite_text.configuration_sam3_lite_text import Sam3LiteTextConfig, Sam3LiteTextTextConfig
+from transformers.models.sam3_lite_text.modeling_sam3_lite_text import Sam3LiteTextModel
+from transformers.utils import logging
 
 
-TEXT_KEY_MAPPING = {
-    r"^backbone\.language_backbone\.encoder\.embedding_layer\.": r"text_encoder.token_embedding.",
-    r"^backbone\.language_backbone\.encoder\.positional_embedding\.pos_embed\.pos_embed$": r"text_encoder.position_embedding.position_embedding",
-    r"^backbone\.language_backbone\.encoder\.final_layer_norm\.": r"text_encoder.final_layer_norm.",
-    r"^backbone\.language_backbone\.encoder\.projection_layer$": r"text_encoder.projection",
-    r"^backbone\.language_backbone\.projector\.": r"text_projection.",
-    # RepMixer blocks (0 and 5)
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.layer_scale$": r"text_encoder.layers.0.layer_scale",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.token_mixer\.layer_scale$": r"text_encoder.layers.0.token_mixer.layer_scale",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.token_mixer\.norm\.rbr_skip\.": r"text_encoder.layers.0.token_mixer.norm.rbr_skip.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.token_mixer\.mixer\.rbr_skip\.": r"text_encoder.layers.0.token_mixer.mixer.rbr_skip.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.token_mixer\.mixer\.rbr_conv\.0\.conv\.": r"text_encoder.layers.0.token_mixer.mixer.rbr_conv.0.0.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.token_mixer\.mixer\.rbr_conv\.0\.bn\.": r"text_encoder.layers.0.token_mixer.mixer.rbr_conv.0.1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.convffn\.conv\.conv\.": r"text_encoder.layers.0.convffn.conv.0.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.convffn\.conv\.bn\.": r"text_encoder.layers.0.convffn.conv.1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.convffn\.fc1\.": r"text_encoder.layers.0.convffn.fc1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.0\.convffn\.fc2\.": r"text_encoder.layers.0.convffn.fc2.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.layer_scale$": r"text_encoder.layers.5.layer_scale",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.token_mixer\.layer_scale$": r"text_encoder.layers.5.token_mixer.layer_scale",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.token_mixer\.norm\.rbr_skip\.": r"text_encoder.layers.5.token_mixer.norm.rbr_skip.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.token_mixer\.mixer\.rbr_skip\.": r"text_encoder.layers.5.token_mixer.mixer.rbr_skip.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.token_mixer\.mixer\.rbr_conv\.0\.conv\.": r"text_encoder.layers.5.token_mixer.mixer.rbr_conv.0.0.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.token_mixer\.mixer\.rbr_conv\.0\.bn\.": r"text_encoder.layers.5.token_mixer.mixer.rbr_conv.0.1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.convffn\.conv\.conv\.": r"text_encoder.layers.5.convffn.conv.0.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.convffn\.conv\.bn\.": r"text_encoder.layers.5.convffn.conv.1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.convffn\.fc1\.": r"text_encoder.layers.5.convffn.fc1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.5\.convffn\.fc2\.": r"text_encoder.layers.5.convffn.fc2.",
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
+
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Strip the "detector." prefix that wraps all components
+    r"^detector\.":                                                          r"",
+
+    # ============================================================================
+    # Vision Encoder - ViT Backbone
+    # ============================================================================
+    r"^backbone\.vision_backbone\.trunk\.":                                  r"vision_encoder.backbone.",
+    r"^vision_encoder\.backbone\.pos_embed":                                 r"vision_encoder.backbone.embeddings.position_embeddings",
+    r"^vision_encoder\.backbone\.patch_embed\.proj\.":                       r"vision_encoder.backbone.embeddings.patch_embeddings.projection.",
+    r"^vision_encoder\.backbone\.ln_pre\.":                                  r"vision_encoder.backbone.layer_norm.",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.norm1\.":                    r"vision_encoder.backbone.layers.\1.layer_norm1.",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.norm2\.":                    r"vision_encoder.backbone.layers.\1.layer_norm2.",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.attn\.qkv\.":               r"vision_encoder.backbone.layers.\1.attention.qkv.",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.attn\.proj\.":              r"vision_encoder.backbone.layers.\1.attention.o_proj.",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.attn\.freqs_cis":           r"vision_encoder.backbone.layers.\1.rotary_emb.rope_embeddings",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.mlp\.fc1\.":                r"vision_encoder.backbone.layers.\1.mlp.fc1.",
+    r"^vision_encoder\.backbone\.blocks\.(\d+)\.mlp\.fc2\.":                r"vision_encoder.backbone.layers.\1.mlp.fc2.",
+
+    # Vision Encoder - FPN Neck
+    r"^backbone\.vision_backbone\.neck\.fpn\.(\d+)\.":                      r"vision_encoder.neck.fpn_layers.\1.",
+    r"^backbone\.vision_backbone\.convs\.(\d+)\.dconv_2x2_0\.":             r"vision_encoder.neck.fpn_layers.\1.scale_layers.0.",
+    r"^backbone\.vision_backbone\.convs\.(\d+)\.dconv_2x2_1\.":             r"vision_encoder.neck.fpn_layers.\1.scale_layers.2.",
+    r"^backbone\.vision_backbone\.convs\.(\d+)\.dconv_2x2\.":               r"vision_encoder.neck.fpn_layers.\1.scale_layers.0.",
+    r"^backbone\.vision_backbone\.convs\.(\d+)\.maxpool_2x2\.":             r"vision_encoder.neck.fpn_layers.\1.scale_layers.0.",
+    r"^backbone\.vision_backbone\.convs\.(\d+)\.conv_1x1\.":                r"vision_encoder.neck.fpn_layers.\1.proj1.",
+    r"^backbone\.vision_backbone\.convs\.(\d+)\.conv_3x3\.":                r"vision_encoder.neck.fpn_layers.\1.proj2.",
+
+    # ============================================================================
+    # Text Encoder - LiteText (MobileCLIP student)
+    # ============================================================================
+    # Embeddings
+    r"^backbone\.language_backbone\.encoder\.embedding_layer\.":            r"text_encoder.embeddings.token_embedding.",
+    r"^backbone\.language_backbone\.encoder\.positional_embedding\.pos_embed\.pos_embed$": r"text_encoder.embeddings.position_embedding.position_embedding",
+    r"^backbone\.language_backbone\.encoder\.final_layer_norm\.":           r"text_encoder.final_layer_norm.",
+    r"^backbone\.language_backbone\.encoder\.projection_layer$":            r"text_encoder.projection",
+    # text_projection: projects from text hidden-dim to DETR hidden-dim
+    r"^backbone\.language_backbone\.projector\.":                           r"text_projection.",
+    # RepMixer blocks (layer 0 and the last layer in the mct variant)
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.layer_scale$": r"text_encoder.layers.\1.layer_scale",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.layer_scale$": r"text_encoder.layers.\1.token_mixer.layer_scale",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.norm\.rbr_skip\.": r"text_encoder.layers.\1.token_mixer.norm.rbr_skip.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_skip\.": r"text_encoder.layers.\1.token_mixer.mixer.rbr_skip.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_conv\.0\.conv\.": r"text_encoder.layers.\1.token_mixer.mixer.rbr_conv.0.0.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_conv\.0\.bn\.": r"text_encoder.layers.\1.token_mixer.mixer.rbr_conv.0.1.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.conv\.conv\.": r"text_encoder.layers.\1.convffn.conv.0.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.conv\.bn\.": r"text_encoder.layers.\1.convffn.conv.1.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.fc1\.": r"text_encoder.layers.\1.convffn.fc1.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.fc2\.": r"text_encoder.layers.\1.convffn.fc2.",
+    # Standard transformer layers (pre-norm MHA + FFN)
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_mha\.0\.": r"text_encoder.layers.\1.layer_norm1.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_mha\.1\.qkv_proj\.": r"text_encoder.layers.\1.self_attn.in_proj_",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_mha\.1\.out_proj\.": r"text_encoder.layers.\1.self_attn.out_proj.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_ffn\.0\.": r"text_encoder.layers.\1.layer_norm2.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_ffn\.1\.": r"text_encoder.layers.\1.mlp.fc1.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_ffn\.4\.": r"text_encoder.layers.\1.mlp.fc2.",
+
+    # ============================================================================
+    # Geometry Encoder
+    # ============================================================================
+    r"^geometry_encoder\.encode\.(\d+)\.cross_attn_image\.out_proj\.":     r"geometry_encoder.layers.\1.cross_attn.o_proj.",
+    r"^geometry_encoder\.encode\.(\d+)\.cross_attn_image\.":               r"geometry_encoder.layers.\1.cross_attn.",
+    r"^geometry_encoder\.encode\.(\d+)\.self_attn\.out_proj\.":            r"geometry_encoder.layers.\1.self_attn.o_proj.",
+    r"^geometry_encoder\.encode\.(\d+)\.self_attn\.":                      r"geometry_encoder.layers.\1.self_attn.",
+    r"^geometry_encoder\.encode\.(\d+)\.linear1\.":                        r"geometry_encoder.layers.\1.mlp.fc1.",
+    r"^geometry_encoder\.encode\.(\d+)\.linear2\.":                        r"geometry_encoder.layers.\1.mlp.fc2.",
+    r"^geometry_encoder\.encode\.(\d+)\.norm1\.":                          r"geometry_encoder.layers.\1.layer_norm1.",
+    r"^geometry_encoder\.encode\.(\d+)\.norm2\.":                          r"geometry_encoder.layers.\1.layer_norm2.",
+    r"^geometry_encoder\.encode\.(\d+)\.norm3\.":                          r"geometry_encoder.layers.\1.layer_norm3.",
+    r"^geometry_encoder\.img_pre_norm\.":                                   r"geometry_encoder.vision_layer_norm.",
+    r"^geometry_encoder\.norm\.":                                           r"geometry_encoder.prompt_layer_norm.",
+    r"^geometry_encoder\.encode_norm\.":                                    r"geometry_encoder.output_layer_norm.",
+
+    # ============================================================================
+    # DETR Encoder
+    # ============================================================================
+    r"^transformer\.encoder\.layers\.(\d+)\.cross_attn_image\.out_proj\.":  r"detr_encoder.layers.\1.cross_attn.o_proj.",
+    r"^transformer\.encoder\.layers\.(\d+)\.cross_attn_image\.":            r"detr_encoder.layers.\1.cross_attn.",
+    r"^transformer\.encoder\.layers\.(\d+)\.self_attn\.out_proj\.":         r"detr_encoder.layers.\1.self_attn.o_proj.",
+    r"^transformer\.encoder\.layers\.(\d+)\.self_attn\.":                   r"detr_encoder.layers.\1.self_attn.",
+    r"^transformer\.encoder\.layers\.(\d+)\.cross_attn\.out_proj\.":        r"detr_encoder.layers.\1.cross_attn.o_proj.",
+    r"^transformer\.encoder\.layers\.(\d+)\.cross_attn\.":                  r"detr_encoder.layers.\1.cross_attn.",
+    r"^transformer\.encoder\.layers\.(\d+)\.linear1\.":                     r"detr_encoder.layers.\1.mlp.fc1.",
+    r"^transformer\.encoder\.layers\.(\d+)\.linear2\.":                     r"detr_encoder.layers.\1.mlp.fc2.",
+    r"^transformer\.encoder\.layers\.(\d+)\.norm1\.":                       r"detr_encoder.layers.\1.layer_norm1.",
+    r"^transformer\.encoder\.layers\.(\d+)\.norm2\.":                       r"detr_encoder.layers.\1.layer_norm2.",
+    r"^transformer\.encoder\.layers\.(\d+)\.norm3\.":                       r"detr_encoder.layers.\1.layer_norm3.",
+
+    # ============================================================================
+    # DETR Decoder
+    # ============================================================================
+    r"^transformer\.decoder\.query_embed\.":                                r"detr_decoder.query_embed.",
+    r"^transformer\.decoder\.reference_points\.":                           r"detr_decoder.reference_points.",
+    r"^transformer\.decoder\.instance_query_embed\.":                       r"detr_decoder.instance_query_embed.",
+    r"^transformer\.decoder\.instance_reference_points\.":                  r"detr_decoder.instance_reference_points.",
+    r"^transformer\.decoder\.presence_token\.":                             r"detr_decoder.presence_token.",
+    r"^transformer\.decoder\.presence_token_head\.layers\.0\.":             r"detr_decoder.presence_head.layer1.",
+    r"^transformer\.decoder\.presence_token_head\.layers\.1\.":             r"detr_decoder.presence_head.layer2.",
+    r"^transformer\.decoder\.presence_token_head\.layers\.2\.":             r"detr_decoder.presence_head.layer3.",
+    r"^transformer\.decoder\.presence_token_out_norm\.":                    r"detr_decoder.presence_layer_norm.",
+    r"^transformer\.decoder\.norm\.":                                       r"detr_decoder.output_layer_norm.",
+    r"^transformer\.decoder\.bbox_embed\.layers\.0\.":                      r"detr_decoder.box_head.layer1.",
+    r"^transformer\.decoder\.bbox_embed\.layers\.1\.":                      r"detr_decoder.box_head.layer2.",
+    r"^transformer\.decoder\.bbox_embed\.layers\.2\.":                      r"detr_decoder.box_head.layer3.",
+    r"^transformer\.decoder\.instance_bbox_embed\.layers\.0\.":             r"detr_decoder.instance_box_head.layer1.",
+    r"^transformer\.decoder\.instance_bbox_embed\.layers\.1\.":             r"detr_decoder.instance_box_head.layer2.",
+    r"^transformer\.decoder\.instance_bbox_embed\.layers\.2\.":             r"detr_decoder.instance_box_head.layer3.",
+    r"^transformer\.decoder\.ref_point_head\.layers\.0\.":                  r"detr_decoder.ref_point_head.layer1.",
+    r"^transformer\.decoder\.ref_point_head\.layers\.1\.":                  r"detr_decoder.ref_point_head.layer2.",
+    r"^transformer\.decoder\.boxRPB_embed_x\.layers\.0\.":                  r"detr_decoder.box_rpb_embed_x.layer1.",
+    r"^transformer\.decoder\.boxRPB_embed_x\.layers\.1\.":                  r"detr_decoder.box_rpb_embed_x.layer2.",
+    r"^transformer\.decoder\.boxRPB_embed_y\.layers\.0\.":                  r"detr_decoder.box_rpb_embed_y.layer1.",
+    r"^transformer\.decoder\.boxRPB_embed_y\.layers\.1\.":                  r"detr_decoder.box_rpb_embed_y.layer2.",
+    r"^transformer\.decoder\.layers\.(\d+)\.self_attn\.out_proj\.":         r"detr_decoder.layers.\1.self_attn.o_proj.",
+    r"^transformer\.decoder\.layers\.(\d+)\.self_attn\.":                   r"detr_decoder.layers.\1.self_attn.",
+    r"^transformer\.decoder\.layers\.(\d+)\.ca_text\.out_proj\.":           r"detr_decoder.layers.\1.text_cross_attn.o_proj.",
+    r"^transformer\.decoder\.layers\.(\d+)\.ca_text\.":                     r"detr_decoder.layers.\1.text_cross_attn.",
+    r"^transformer\.decoder\.layers\.(\d+)\.cross_attn\.out_proj\.":        r"detr_decoder.layers.\1.vision_cross_attn.o_proj.",
+    r"^transformer\.decoder\.layers\.(\d+)\.cross_attn\.":                  r"detr_decoder.layers.\1.vision_cross_attn.",
+    r"^transformer\.decoder\.layers\.(\d+)\.linear1\.":                     r"detr_decoder.layers.\1.mlp.fc1.",
+    r"^transformer\.decoder\.layers\.(\d+)\.linear2\.":                     r"detr_decoder.layers.\1.mlp.fc2.",
+    r"^transformer\.decoder\.layers\.(\d+)\.norm1\.":                       r"detr_decoder.layers.\1.vision_cross_attn_layer_norm.",
+    r"^transformer\.decoder\.layers\.(\d+)\.catext_norm\.":                 r"detr_decoder.layers.\1.text_cross_attn_layer_norm.",
+    r"^transformer\.decoder\.layers\.(\d+)\.norm2\.":                       r"detr_decoder.layers.\1.self_attn_layer_norm.",
+    r"^transformer\.decoder\.layers\.(\d+)\.norm3\.":                       r"detr_decoder.layers.\1.mlp_layer_norm.",
+
+    # ============================================================================
+    # Dot Product Scoring
+    # ============================================================================
+    r"^dot_prod_scoring\.prompt_mlp\.layers\.0\.":                          r"dot_product_scoring.text_mlp.layer1.",
+    r"^dot_prod_scoring\.prompt_mlp\.layers\.1\.":                          r"dot_product_scoring.text_mlp.layer2.",
+    r"^dot_prod_scoring\.prompt_mlp\.out_norm\.":                           r"dot_product_scoring.text_mlp_out_norm.",
+    r"^dot_prod_scoring\.prompt_proj\.":                                    r"dot_product_scoring.text_proj.",
+    r"^dot_prod_scoring\.hs_proj\.":                                        r"dot_product_scoring.query_proj.",
+
+    # ============================================================================
+    # Mask Decoder
+    # ============================================================================
+    r"^segmentation_head\.pixel_decoder\.conv_layers\.(\d+)\.":             r"mask_decoder.pixel_decoder.conv_layers.\1.",
+    r"^segmentation_head\.pixel_decoder\.norms\.(\d+)\.":                   r"mask_decoder.pixel_decoder.norms.\1.",
+    r"^segmentation_head\.mask_embed\.layers\.(\d+)\.":                     r"mask_decoder.mask_embedder.layers.\1.",
+    r"^segmentation_head\.mask_predictor\.mask_embed\.layers\.(\d+)\.":     r"mask_decoder.mask_embedder.layers.\1.",
+    r"^segmentation_head\.instance_seg_head\.":                             r"mask_decoder.instance_projection.",
+    r"^segmentation_head\.semantic_seg_head\.":                             r"mask_decoder.semantic_projection.",
+    r"^segmentation_head\.cross_attend_prompt\.out_proj\.":                 r"mask_decoder.prompt_cross_attn.o_proj.",
+    r"^segmentation_head\.cross_attend_prompt\.":                           r"mask_decoder.prompt_cross_attn.",
+    r"^segmentation_head\.cross_attn_norm\.":                               r"mask_decoder.prompt_cross_attn_norm.",
 }
-
-for i in range(12):
-    TEXT_KEY_MAPPING.update(
-        {
-            rf"^backbone\.language_backbone\.encoder\.transformer\.{i}\.pre_norm_mha\.0\.": rf"text_encoder.layers.{i}.layer_norm1.",
-            rf"^backbone\.language_backbone\.encoder\.transformer\.{i}\.pre_norm_mha\.1\.qkv_proj\.": rf"text_encoder.layers.{i}.self_attn.in_proj_",
-            rf"^backbone\.language_backbone\.encoder\.transformer\.{i}\.pre_norm_mha\.1\.out_proj\.": rf"text_encoder.layers.{i}.self_attn.out_proj.",
-            rf"^backbone\.language_backbone\.encoder\.transformer\.{i}\.pre_norm_ffn\.0\.": rf"text_encoder.layers.{i}.layer_norm2.",
-            rf"^backbone\.language_backbone\.encoder\.transformer\.{i}\.pre_norm_ffn\.1\.": rf"text_encoder.layers.{i}.fc1.",
-            rf"^backbone\.language_backbone\.encoder\.transformer\.{i}\.pre_norm_ffn\.4\.": rf"text_encoder.layers.{i}.fc2.",
-        }
-    )
+# fmt: on
 
 
-def split_qkv_for_sam3_lite_text(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    vision_keys_to_split = [key for key in state_dict.keys() if ".attention.qkv." in key]
-    for key in vision_keys_to_split:
+def convert_old_keys_to_new_keys(state_dict_keys: list[str]) -> dict[str, str]:
+    """
+    Convert original SAM3 LiteText checkpoint keys to HuggingFace format.
+
+    Applies all regex patterns in `ORIGINAL_TO_CONVERTED_KEY_MAPPING` at once
+    using a multiline bulk-substitution.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            new_text = re.sub(pattern, replacement, new_text, flags=re.MULTILINE)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
+
+
+def split_qkv(state_dict: dict) -> dict:
+    """Split combined QKV projections into separate Q, K, V projections."""
+    # Vision backbone: .attention.qkv.* → .attention.{q,k,v}_proj.*
+    for key in [k for k in state_dict if ".attention.qkv." in k]:
         qkv = state_dict.pop(key)
         q, k, v = torch.chunk(qkv, 3, dim=0)
         state_dict[key.replace(".qkv.", ".q_proj.")] = q
         state_dict[key.replace(".qkv.", ".k_proj.")] = k
         state_dict[key.replace(".qkv.", ".v_proj.")] = v
 
-    in_proj_keys_to_split = [key for key in state_dict.keys() if ".in_proj_" in key]
-    for key in in_proj_keys_to_split:
+    # Text encoder & attention layers: .in_proj_weight/bias → .{q,k,v}_proj.*
+    for key in [k for k in state_dict if ".in_proj_" in k]:
         in_proj = state_dict.pop(key)
         q, k, v = torch.chunk(in_proj, 3, dim=0)
         if key.endswith("in_proj_weight"):
-            base_key = key.replace("in_proj_weight", "")
-            state_dict[base_key + "q_proj.weight"] = q
-            state_dict[base_key + "k_proj.weight"] = k
-            state_dict[base_key + "v_proj.weight"] = v
+            base = key.replace("in_proj_weight", "")
+            state_dict[base + "q_proj.weight"] = q
+            state_dict[base + "k_proj.weight"] = k
+            state_dict[base + "v_proj.weight"] = v
         elif key.endswith("in_proj_bias"):
-            base_key = key.replace("in_proj_bias", "")
-            state_dict[base_key + "q_proj.bias"] = q
-            state_dict[base_key + "k_proj.bias"] = k
-            state_dict[base_key + "v_proj.bias"] = v
+            base = key.replace("in_proj_bias", "")
+            state_dict[base + "q_proj.bias"] = q
+            state_dict[base + "k_proj.bias"] = k
+            state_dict[base + "v_proj.bias"] = v
 
     return state_dict
 
 
-def summarize_checkpoint_components(state_dict: dict[str, torch.Tensor]) -> dict[str, int]:
-    component_prefixes = {
-        "vision_backbone": "detector.backbone.vision_backbone.",
-        "text_backbone": "detector.backbone.language_backbone.",
-        "geometry_encoder": "detector.geometry_encoder.",
-        "detr_encoder": "detector.transformer.encoder.",
-        "detr_decoder": "detector.transformer.decoder.",
-        "mask_decoder": "detector.segmentation_head.",
-    }
-    return {
-        name: sum(1 for key in state_dict if key.startswith(prefix)) for name, prefix in component_prefixes.items()
-    }
-
-
-def load_original_state_dict(checkpoint_path: str):
+def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
+    """Load the original EfficientSAM3 LiteText checkpoint."""
+    print(f"Loading original checkpoint from {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
     if "model" in checkpoint:
-        checkpoint = checkpoint["model"]
-    return checkpoint
+        state_dict = checkpoint["model"]
+    elif "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    else:
+        state_dict = checkpoint
+    print(f"Loaded {len(state_dict)} keys from checkpoint")
+    return state_dict
 
 
-def _convert_text_keys(key: str) -> str:
-    new_key = key
-    for pat, rep in TEXT_KEY_MAPPING.items():
-        new_key = re.sub(pat, rep, new_key)
-    return new_key
-
-
-def convert_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    state_dict = {re.sub(r"^detector\.", "", k): v for k, v in state_dict.items() if k.startswith("detector.")}
-
-    # Convert non-text weights via SAM3 converter.
-    non_text = {
-        k: v
-        for k, v in state_dict.items()
-        if not k.startswith("backbone.language_backbone.") and not k.startswith("backbone.vision_backbone.sam2_convs.")
-    }
-    key_mapping = convert_old_keys_to_new_keys(list(non_text.keys()))
-    converted = {new_k: non_text[old_k] for old_k, new_k in key_mapping.items()}
-
-    # Convert LiteText (MobileCLIP student) encoder.
-    text = {k: v for k, v in state_dict.items() if k.startswith("backbone.language_backbone.")}
-    for old_k, tensor in text.items():
-        if "num_batches_tracked" in old_k:
-            continue
-        new_k = _convert_text_keys(old_k)
-        if new_k == old_k:
-            continue
-        converted[new_k] = tensor
-
-    converted = split_qkv_for_sam3_lite_text(converted)
-    print(
-        "Converted key counts:",
-        {
-            "vision_encoder": sum(1 for key in converted if key.startswith("vision_encoder.")),
-            "text_encoder": sum(1 for key in converted if key.startswith("text_encoder.")),
-            "geometry_encoder": sum(1 for key in converted if key.startswith("geometry_encoder.")),
-            "detr_encoder": sum(1 for key in converted if key.startswith("detr_encoder.")),
-            "detr_decoder": sum(1 for key in converted if key.startswith("detr_decoder.")),
-            "mask_decoder": sum(1 for key in converted if key.startswith("mask_decoder.")),
-        },
-    )
-
-    if "vision_encoder.backbone.embeddings.position_embeddings" in converted:
-        pos = converted["vision_encoder.backbone.embeddings.position_embeddings"]
-        if pos.shape[1] == 577:
-            converted["vision_encoder.backbone.embeddings.position_embeddings"] = pos[:, 1:, :]
-    # HF models compute rope table and don't load from checkpoint
-    for k in list(converted.keys()):
-        if k.endswith("rotary_emb.rope_embeddings"):
-            converted.pop(k)
-    return converted
-
-
-def _infer_text_architecture_from_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, int | str]:
-    text_prefix = "detector.backbone.language_backbone.encoder."
-
-    hidden_size = state_dict[f"{text_prefix}embedding_layer.weight"].shape[1]
-    context_length = state_dict[f"{text_prefix}positional_embedding.pos_embed.pos_embed"].shape[2]
-
-    has_repmixer = any(f"{text_prefix}transformer.0.token_mixer" in key for key in state_dict)
-    if has_repmixer:
-        model_name = "mct"
+def _infer_text_config(state_dict: dict[str, torch.Tensor]) -> Sam3LiteTextTextConfig:
+    """Infer LiteText encoder hyper-parameters from the raw checkpoint."""
+    prefix = "detector.backbone.language_backbone.encoder."
+    hidden_size = state_dict[f"{prefix}embedding_layer.weight"].shape[1]
+    context_length = state_dict[f"{prefix}positional_embedding.pos_embed.pos_embed"].shape[2]
+    use_repmixer_blocks = any(f"{prefix}transformer.0.token_mixer" in k for k in state_dict)
+    if use_repmixer_blocks:
         num_hidden_layers = 6
     else:
-        model_name = "base"
         layer_ids = {
-            int(key.split("transformer.")[1].split(".")[0])
-            for key in state_dict
-            if f"{text_prefix}transformer." in key and ".pre_norm_mha." in key
+            int(k.split("transformer.")[1].split(".")[0])
+            for k in state_dict
+            if f"{prefix}transformer." in k and ".pre_norm_mha." in k
         }
         num_hidden_layers = max(layer_ids) + 1
 
-    return {
-        "hidden_size": hidden_size,
-        "intermediate_size": hidden_size * 4,
-        "num_hidden_layers": num_hidden_layers,
-        "num_attention_heads": hidden_size // 64,
-        "max_position_embeddings": context_length,
-        "projection_dim": hidden_size,
-        "model_name": model_name,
-    }
+    return Sam3LiteTextTextConfig(
+        vocab_size=49408,
+        hidden_size=hidden_size,
+        intermediate_size=hidden_size * 4,
+        num_hidden_layers=num_hidden_layers,
+        num_attention_heads=hidden_size // 64,
+        max_position_embeddings=context_length,
+        projection_dim=hidden_size,
+        use_repmixer_blocks=use_repmixer_blocks,
+    )
 
 
-def _build_config(state_dict: dict[str, torch.Tensor]) -> Sam3LiteTextConfig:
-    text_arch = _infer_text_architecture_from_state_dict(state_dict)
-    config = Sam3LiteTextConfig(vision_config=Sam3LiteTextVisionConfig(backbone_config=Sam3LiteTextViTConfig()))
-    for key, value in text_arch.items():
-        setattr(config.text_config, key, value)
+def get_sam3_lite_text_config(state_dict: dict[str, torch.Tensor]) -> Sam3LiteTextConfig:
+    """Build a Sam3LiteTextConfig inferred from the raw checkpoint."""
+    text_config = _infer_text_config(state_dict)
+    config = Sam3LiteTextConfig()
+    config.text_config = text_config
     return config
 
 
-def _default_hub_model_id(checkpoint_name: str) -> str:
-    token = os.environ.get("HF_TOKEN")
-    try:
-        username = HfApi().whoami(token=token)["name"]
-    except (HfHubHTTPError, KeyError) as exc:
-        raise ValueError(
-            "Could not infer Hub username from HF_TOKEN. Provide --hub_model_id explicitly or set a valid HF_TOKEN."
-        ) from exc
-    return f"{username}/{checkpoint_name}"
-
-
-def get_litetext_checkpoint_filenames(repo_id: str) -> list[str]:
-    files = list_repo_files(repo_id)
-    return sorted([f for f in files if f.startswith("sam3_litetext/") and f.endswith(".pt")])
-
-
-def convert_all_checkpoints(
-    repo_id: str,
-    output_dir: str,
-    original_repo_path: str | None = None,
-    debug_intermediates: bool = False,
-    push_to_hub: bool = False,
-):
-    filenames = get_litetext_checkpoint_filenames(repo_id)
-    print(f"Found {len(filenames)} sam3_litetext checkpoints in {repo_id}")
-
-    for filename in filenames:
-        ckpt_path = hf_hub_download(repo_id, filename)
-        ckpt_name = Path(filename).stem
-        ckpt_output = Path(output_dir) / ckpt_name
-        print(f"\n=== Converting {filename} -> {ckpt_output} ===")
-        try:
-            hub_model_id = _default_hub_model_id(ckpt_name) if push_to_hub else None
-            convert_checkpoint(
-                ckpt_path,
-                str(ckpt_output),
-                original_repo_path=original_repo_path,
-                debug_intermediates=debug_intermediates,
-                push_to_hub=push_to_hub,
-                hub_model_id=hub_model_id,
-            )
-            print(f"[OK] {filename}")
-        except Exception as exc:
-            print(f"[FAILED] {filename}: {exc}")
-
-
-def _debug_compare_text_intermediates(original, model, input_ids: torch.Tensor):
-    with torch.no_grad():
-        original_hidden = original.encoder.forward_embedding(input_ids)
-        hf_hidden = model.text_encoder.token_embedding(input_ids)
-        hf_hidden = hf_hidden + model.text_encoder.position_embedding(input_ids.shape[1]).to(hf_hidden.dtype)
-        hf_hidden = model.text_encoder.embedding_dropout(hf_hidden)
-        print("Embed max abs diff:", (original_hidden - hf_hidden).abs().max().item())
-
-        for idx, original_layer in enumerate(original.encoder.transformer):
-            original_hidden = original_layer(original_hidden, key_padding_mask=None, attn_mask=None)
-
-            if idx in model.text_encoder.repmixer_indexes:
-                hf_hidden = (
-                    model.text_encoder.layers[idx](hf_hidden.permute(0, 2, 1).unsqueeze(2)).squeeze(2).permute(0, 2, 1)
-                )
-            else:
-                hf_hidden, _ = model.text_encoder.layers[idx](hf_hidden)
-
-            print(f"Layer {idx} max abs diff:", (original_hidden - hf_hidden).abs().max().item())
-
-        original_hidden = original.encoder.final_layer_norm(original_hidden)
-        hf_hidden = model.text_encoder.final_layer_norm(hf_hidden)
-        print("Final LN max abs diff:", (original_hidden - hf_hidden).abs().max().item())
-
-
-def _load_original_text_student_encoder(repo_path: str):
-    """Load TextStudentEncoder without triggering the full sam3 import chain (which requires triton)."""
-    sam3_package_root = Path(repo_path) / "sam3" / "sam3"
-    if not sam3_package_root.exists():
-        raise FileNotFoundError(f"Could not locate sam3 package at {sam3_package_root}")
-
-    def _ensure_package(module_name: str, module_path: Path):
-        if module_name in sys.modules:
-            return
-        module = types.ModuleType(module_name)
-        module.__path__ = [str(module_path)]
-        sys.modules[module_name] = module
-
-    def _load_module(module_name: str, module_path: Path):
-        if module_name in sys.modules:
-            return sys.modules[module_name]
-        spec = importlib.util.spec_from_file_location(module_name, module_path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Could not create module spec for {module_name} from {module_path}")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        return module
-
-    _ensure_package("sam3", sam3_package_root)
-    _ensure_package("sam3.backbones", sam3_package_root / "backbones")
-    _ensure_package("sam3.model", sam3_package_root / "model")
-    _load_module("sam3.backbones.mobile_clip", sam3_package_root / "backbones" / "mobile_clip.py")
-    _load_module("sam3.model.tokenizer_ve", sam3_package_root / "model" / "tokenizer_ve.py")
-    text_encoder_module = _load_module(
-        "sam3.model.text_encoder_student", sam3_package_root / "model" / "text_encoder_student.py"
-    )
-    return text_encoder_module.TextStudentEncoder
-
-
-def verify_text_outputs(
-    model: Sam3LiteTextModel, checkpoint_path: str, repo_path: str, debug_intermediates: bool = False
-):
-    try:
-        TextStudentEncoder = _load_original_text_student_encoder(repo_path)
-    except ModuleNotFoundError as exc:
-        print(f"Skipping text verification: missing dependency `{exc.name}` in original repo environment.")
-        return
-
-    original_sd = load_original_state_dict(checkpoint_path)
-    text_arch = _infer_text_architecture_from_state_dict(original_sd)
-    student_cfg = {
-        "dim": text_arch["hidden_size"],
-        "model_name": text_arch["model_name"],
-        "vocab_size": 49408,
-        "n_transformer_layers": text_arch["num_hidden_layers"] - 2
-        if text_arch["model_name"] == "mct"
-        else text_arch["num_hidden_layers"],
-        "n_heads_per_layer": text_arch["num_attention_heads"],
-        "ffn_multiplier_per_layer": 4.0,
-        "context_length": text_arch["max_position_embeddings"],
-        "causal_masking": False,
-        "norm_layer": "layer_norm_fp32",
-        "no_scale_embedding": False,
-        "no_pos_embedding": False,
-        "embed_dropout": 0.0,
-    }
-    original = TextStudentEncoder(student_cfg, context_length=text_arch["max_position_embeddings"], output_dim=256)
-    expected_original_keys = set(original.state_dict().keys())
-
-    orig_text = {}
-    for key, value in original_sd.items():
-        if not key.startswith("detector.backbone.language_backbone."):
-            continue
-        if "num_batches_tracked" in key:
-            continue
-
-        base_key = key.replace("detector.backbone.language_backbone.", "")
-
-        candidate_keys = [
-            base_key,
-            f"tensor_runner.{base_key}",
-            base_key.replace(".qkv_proj.", ".attn.in_proj_").replace(".out_proj.", ".attn.out_proj."),
-            f"tensor_runner.{base_key.replace('.qkv_proj.', '.attn.in_proj_').replace('.out_proj.', '.attn.out_proj.')}",
-        ]
-
-        matched_any = False
-        for candidate in candidate_keys:
-            if candidate in expected_original_keys:
-                orig_text[candidate] = value
-                matched_any = True
-        if not matched_any and base_key.startswith(("encoder.", "projector.")):
-            orig_text[base_key] = value
-
-    missing, unexpected = original.load_state_dict(orig_text, strict=False)
-    print("Original load missing:", len(missing), "unexpected:", len(unexpected))
-    original.eval()
-
-    model.eval()
-    sequence_length = text_arch["max_position_embeddings"]
-    input_ids = torch.tensor([[49406, 320, 1125, 49407] + [0] * (sequence_length - 4)], dtype=torch.long)
-    if debug_intermediates:
-        _debug_compare_text_intermediates(original, model, input_ids)
-
-    with torch.no_grad():
-        # original uses internal tokenizer path; we run internal tensor path for exact dummy ids
-        input_embeds = original.encoder.forward_embedding(input_ids)
-        original_memory = original.encoder(input_embeds, return_all_tokens=True, input_is_embeddings=True)
-        original_memory = original.projector(original_memory)
-        hf_out = model.get_text_features(input_ids=input_ids).pooler_output
-    print("Original text sample:", original_memory[0, 0, :8])
-    print("HF text sample:", hf_out[0, 0, :8])
-    print("Max abs diff:", (original_memory - hf_out).abs().max().item())
-
-
-def convert_checkpoint(
+def convert_sam3_lite_text_checkpoint(
     checkpoint_path: str,
-    output_dir: str,
-    original_repo_path: str | None = None,
-    debug_intermediates: bool = False,
+    output_path: str,
+    config: Sam3LiteTextConfig | None = None,
     push_to_hub: bool = False,
-    hub_model_id: str | None = None,
+    repo_id: str | None = None,
 ):
-    state_dict = load_original_state_dict(checkpoint_path)
-    component_counts = summarize_checkpoint_components(state_dict)
-    print("Checkpoint component counts:", component_counts)
+    """
+    Convert an EfficientSAM3 LiteText checkpoint to HuggingFace format.
 
-    converted = convert_state_dict(state_dict)
+    Args:
+        checkpoint_path: Path to the original `.pt` checkpoint file.
+        output_path: Directory where the converted model will be saved.
+        config: Optional pre-built `Sam3LiteTextConfig` (defaults to auto-inferred).
+        push_to_hub: Whether to push the model to the Hugging Face Hub.
+        repo_id: Hub repository ID (required when ``push_to_hub=True``).
+    """
+    os.makedirs(output_path, exist_ok=True)
 
-    config = _build_config(state_dict)
+    # Load original checkpoint
+    state_dict_old = load_original_state_dict(checkpoint_path)
+
+    # Build config from checkpoint
+    if config is None:
+        config = get_sam3_lite_text_config(state_dict_old)
+
+    config.architectures = ["Sam3LiteTextModel"]
+    config.save_pretrained(output_path)
+    print("Model config saved successfully")
+
+    # Convert keys
+    print("Converting checkpoint keys...")
+    all_keys = list(state_dict_old.keys())
+    key_mapping = convert_old_keys_to_new_keys(all_keys)
+
+    state_dict_new = {}
+    for old_key in all_keys:
+        new_key = key_mapping.get(old_key, old_key)
+        # num_batches_tracked from BatchNorm is not needed
+        if "num_batches_tracked" in new_key:
+            continue
+        # Drop keys whose names were not transformed (unrecognised / legacy keys)
+        if new_key == old_key:
+            continue
+        # Strip the first position (cls token) from ViT position embeddings
+        if new_key == "vision_encoder.backbone.embeddings.position_embeddings":
+            state_dict_new[new_key] = state_dict_old[old_key][:, 1:, :]
+        else:
+            state_dict_new[new_key] = state_dict_old[old_key]
+
+    del state_dict_old
+    gc.collect()
+
+    # Split combined QKV projections
+    print("Splitting QKV projections...")
+    state_dict_new = split_qkv(state_dict_new)
+
+    # HF models compute the RoPE table on the fly
+    for k in list(state_dict_new.keys()):
+        if k.endswith("rotary_emb.rope_embeddings"):
+            state_dict_new.pop(k)
+
+    print(
+        "Converted key counts:",
+        {
+            prefix: sum(1 for k in state_dict_new if k.startswith(prefix))
+            for prefix in (
+                "vision_encoder.",
+                "text_encoder.",
+                "geometry_encoder.",
+                "detr_encoder.",
+                "detr_decoder.",
+                "mask_decoder.",
+            )
+        },
+    )
+
+    # Load weights into HF model
+    print("Loading weights into Sam3LiteTextModel...")
     model = Sam3LiteTextModel(config)
-    missing, unexpected = model.load_state_dict(converted, strict=False)
-    print("Missing:", len(missing), "Unexpected:", len(unexpected))
-    if missing:
-        print("Sample missing:", missing[:20])
-    if unexpected:
-        print("Sample unexpected:", unexpected[:20])
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict_new, strict=False)
 
-    if original_repo_path is not None:
-        verify_text_outputs(model, checkpoint_path, original_repo_path, debug_intermediates=debug_intermediates)
+    if missing_keys:
+        logger.warning(f"Missing keys ({len(missing_keys)}):")
+        for key in missing_keys:
+            logger.warning(f"  - {key}")
 
-    out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), out / "pytorch_model.bin")
-    with (out / "config.json").open("w") as f:
-        json.dump(config.to_dict(), f, indent=2)
+    if unexpected_keys:
+        logger.warning(f"Unexpected keys ({len(unexpected_keys)}):")
+        for key in unexpected_keys:
+            logger.warning(f"  - {key}")
+
+    # Save model
+    print(f"Saving converted model to {output_path}")
+    model.save_pretrained(output_path)
+
+    # Save processor
+    print("Creating and saving processor...")
+    image_processor = Sam3ImageProcessorFast()
+    tokenizer = CLIPTokenizerFast.from_pretrained(
+        "openai/clip-vit-base-patch32",
+        max_length=config.text_config.max_position_embeddings,
+        model_max_length=config.text_config.max_position_embeddings,
+    )
+    processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
+    processor.save_pretrained(output_path)
 
     if push_to_hub:
-        if hub_model_id is None:
-            ckpt_name = Path(checkpoint_path).stem
-            hub_model_id = _default_hub_model_id(ckpt_name)
-        print(f"Pushing converted checkpoint to Hub: {hub_model_id}")
-        model.push_to_hub(hub_model_id)
+        if repo_id is None:
+            raise ValueError("repo_id must be provided when push_to_hub=True")
+        print(f"Pushing model to Hub: {repo_id}")
+        model.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
+
+    print("Conversion complete!")
+
+    # Cleanup and verify
+    del state_dict_new, model
+    gc.collect()
+
+    print("\nVerifying converted checkpoint can be loaded...")
+    try:
+        model = Sam3LiteTextModel.from_pretrained(output_path)
+        param_count = sum(p.numel() for p in model.parameters())
+        print(f"Successfully loaded model with {param_count:,} parameters")
+        del model
+        gc.collect()
+    except Exception as e:
+        print(f"Failed to reload model: {e}")
+
+    print("\n" + "=" * 80)
+    print("Conversion finished!")
+    print("=" * 80)
+    print(f"Output directory: {output_path}")
+    print("\nTo use the model:")
+    print(">>> from transformers import Sam3LiteTextModel, Sam3Processor")
+    print(f">>> model = Sam3LiteTextModel.from_pretrained('{output_path}')")
+    print("=" * 80)
+
+
+MODEL_VARIANTS = {
+    "s0": "sam3_litetext/efficient_sam3_image_encoder_mobileclip_s0_ctx16.pt",
+    "s1": "sam3_litetext/efficient_sam3_image_encoder_mobileclip_s1_ctx16.pt",
+    "l": "sam3_litetext/efficient_sam3_image_encoder_mobileclip2_l_ctx16.pt",
+}
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", type=str, default=None)
-    parser.add_argument("--output_dir", type=str, required=True)
-    parser.add_argument("--repo_id", type=str, default="Simon7108528/EfficientSAM3")
+    parser = argparse.ArgumentParser(description="Convert EfficientSAM3 LiteText checkpoint to HuggingFace format")
     parser.add_argument(
-        "--filename", type=str, default="sam3_litetext/efficient_sam3_image_encoder_mobileclip_s0_ctx16.pt"
+        "--model_variant",
+        type=str,
+        choices=list(MODEL_VARIANTS),
+        default=None,
+        help="Model variant to download and convert: 's0' (MobileCLIP-S0, 42M), 's1' (MobileCLIP-S1, 63M), "
+        "or 'l' (MobileCLIP2-L, 124M). Takes precedence over --filename when set.",
     )
-    parser.add_argument("--original_repo_path", type=str, default=None)
-    parser.add_argument("--debug_intermediates", action="store_true")
     parser.add_argument(
-        "--convert_all", action="store_true", help="Convert every LiteText checkpoint in the source repo."
+        "--checkpoint_path",
+        type=str,
+        default=None,
+        help="Path to the original .pt checkpoint file. If omitted, the checkpoint is downloaded from the Hub.",
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        required=True,
+        help="Directory where the converted checkpoint will be saved.",
+    )
+    parser.add_argument(
+        "--repo_id",
+        type=str,
+        default="Simon7108528/EfficientSAM3",
+        help="Hub repository ID to download the checkpoint from (used when --checkpoint_path is not provided).",
+    )
+    parser.add_argument(
+        "--filename",
+        type=str,
+        default="sam3_litetext/efficient_sam3_image_encoder_mobileclip_s0_ctx16.pt",
+        help="Filename within the Hub repository to download (ignored when --model_variant is set).",
     )
     parser.add_argument(
         "--push_to_hub",
         action="store_true",
-        help="Push converted checkpoints to the Hugging Face Hub (defaults to <HF_TOKEN username>/<checkpoint_stem>).",
+        help="Whether to push the converted model to the Hugging Face Hub.",
     )
     parser.add_argument(
         "--hub_model_id",
         type=str,
         default=None,
-        help="Explicit Hub destination for single-checkpoint conversion (ignored when --convert_all is used).",
+        help="Hub repository ID to push to (e.g. 'my-org/sam3-litetext-s0').",
     )
     args = parser.parse_args()
 
-    if args.convert_all:
-        convert_all_checkpoints(
-            repo_id=args.repo_id,
-            output_dir=args.output_dir,
-            original_repo_path=args.original_repo_path,
-            debug_intermediates=args.debug_intermediates,
-            push_to_hub=args.push_to_hub,
-        )
-    else:
-        checkpoint_path = args.checkpoint_path
-        if checkpoint_path is None:
-            checkpoint_path = hf_hub_download(args.repo_id, args.filename)
+    filename = MODEL_VARIANTS[args.model_variant] if args.model_variant else args.filename
 
-        convert_checkpoint(
-            checkpoint_path,
-            args.output_dir,
-            args.original_repo_path,
-            debug_intermediates=args.debug_intermediates,
-            push_to_hub=args.push_to_hub,
-            hub_model_id=args.hub_model_id,
-        )
+    checkpoint_path = args.checkpoint_path
+    if checkpoint_path is None:
+        print(f"Downloading checkpoint {filename} from {args.repo_id}...")
+        checkpoint_path = hf_hub_download(args.repo_id, filename)
+
+    convert_sam3_lite_text_checkpoint(
+        checkpoint_path=checkpoint_path,
+        output_path=args.output_path,
+        push_to_hub=args.push_to_hub,
+        repo_id=args.hub_model_id,
+    )
 
 
 if __name__ == "__main__":

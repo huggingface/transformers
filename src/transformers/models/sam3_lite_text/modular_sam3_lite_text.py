@@ -12,70 +12,188 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils.generic import TransformersKwargs
+from ...utils import auto_docstring
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..sam3.configuration_sam3 import (
-    Sam3Config,
     Sam3DETRDecoderConfig,
     Sam3DETREncoderConfig,
     Sam3GeometryEncoderConfig,
     Sam3MaskDecoderConfig,
-    Sam3VisionConfig,
-    Sam3ViTConfig,
 )
-from ..sam3.modeling_sam3 import (
-    Sam3Attention,
-    Sam3DecoderMLP,
-    Sam3DetrDecoder,
-    Sam3DetrDecoderLayer,
-    Sam3DETRDecoderOutput,
-    Sam3DetrEncoder,
-    Sam3DetrEncoderLayer,
-    Sam3DETREncoderOutput,
-    Sam3DotProductScoring,
-    Sam3FPNLayer,
-    Sam3GeometryEncoder,
-    Sam3GeometryEncoderLayer,
-    Sam3GeometryEncoderOutput,
-    Sam3ImageSegmentationOutput,
-    Sam3MaskDecoder,
-    Sam3MaskDecoderOutput,
-    Sam3MaskEmbedder,
-    Sam3MLP,
-    Sam3Model,
-    Sam3PixelDecoder,
-    Sam3PreTrainedModel,
-    Sam3SinePositionEmbedding,
-    Sam3VisionEncoderOutput,
-    Sam3VisionModel,
-    Sam3VisionNeck,
-    Sam3ViTEmbeddings,
-    Sam3ViTLayer,
-    Sam3ViTLayerScale,
-    Sam3ViTModel,
-    Sam3ViTPatchEmbeddings,
-    Sam3ViTRoPEAttention,
-    Sam3ViTRotaryEmbedding,
-)
+from ..sam3.modeling_sam3 import Sam3Model
+from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoderLayer, SiglipMLP
+
+
+@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@strict
+class Sam3LiteTextGeometryEncoderConfig(Sam3GeometryEncoderConfig):
+    pass
+
+
+@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@strict
+class Sam3LiteTextDETREncoderConfig(Sam3DETREncoderConfig):
+    pass
+
+
+@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@strict
+class Sam3LiteTextDETRDecoderConfig(Sam3DETRDecoderConfig):
+    pass
+
+
+@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@strict
+class Sam3LiteTextMaskDecoderConfig(Sam3MaskDecoderConfig):
+    pass
+
+
+@auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
+@strict
+class Sam3LiteTextTextConfig(PreTrainedConfig):
+    r"""
+    use_repmixer_blocks (`bool`, *optional*, defaults to `True`):
+        Whether to use RepMixer blocks (MobileCLIP-style) for the first and last encoder layers.
+        When `False`, all layers are standard Transformer encoder layers.
+    """
+
+    model_type = "sam3_lite_text_text_model"
+
+    vocab_size: int = 49408
+    hidden_size: int = 512
+    intermediate_size: int = 2048
+    projection_dim: int = 512
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 8
+    max_position_embeddings: int = 77
+    hidden_act: str = "gelu"
+    layer_norm_eps: float = 1e-5
+    attention_dropout: float = 0.0
+    use_repmixer_blocks: bool = True
+
+
+@auto_docstring(checkpoint="facebook/sam3_lite_text")
+@strict
+class Sam3LiteTextConfig(PreTrainedConfig):
+    r"""
+    geometry_encoder_config (`dict` or `Sam3LiteTextGeometryEncoderConfig`, *optional*):
+        Configuration for the geometry encoder.
+    detr_encoder_config (`dict` or `Sam3LiteTextDETREncoderConfig`, *optional*):
+        Configuration for the DETR encoder.
+    detr_decoder_config (`dict` or `Sam3LiteTextDETRDecoderConfig`, *optional*):
+        Configuration for the DETR decoder.
+    mask_decoder_config (`dict` or `Sam3LiteTextMaskDecoderConfig`, *optional*):
+        Configuration for the mask decoder.
+
+    Example:
+    ```python
+    >>> from transformers import Sam3LiteTextConfig, Sam3LiteTextModel
+
+    >>> # Initializing a SAM3_LITE_TEXT configuration
+    >>> configuration = Sam3LiteTextConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = Sam3LiteTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "sam3_lite_text"
+    is_composition = True
+    sub_configs = {
+        "vision_config": AutoConfig,
+        "text_config": Sam3LiteTextTextConfig,
+        "geometry_encoder_config": Sam3LiteTextGeometryEncoderConfig,
+        "detr_encoder_config": Sam3LiteTextDETREncoderConfig,
+        "detr_decoder_config": Sam3LiteTextDETRDecoderConfig,
+        "mask_decoder_config": Sam3LiteTextMaskDecoderConfig,
+    }
+
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    geometry_encoder_config: dict | PreTrainedConfig | None = None
+    detr_encoder_config: dict | PreTrainedConfig | None = None
+    detr_decoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+
+    def __post_init__(self, **kwargs):
+        if self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["sam3_vision_model"]()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = CONFIG_MAPPING["sam3_vision_model"](**self.vision_config)
+
+        if self.text_config is None:
+            self.text_config = Sam3LiteTextTextConfig()
+        if isinstance(self.text_config, dict):
+            self.text_config = Sam3LiteTextTextConfig(**self.text_config)
+
+        if self.geometry_encoder_config is None:
+            self.geometry_encoder_config = Sam3LiteTextGeometryEncoderConfig()
+        if isinstance(self.geometry_encoder_config, dict):
+            self.geometry_encoder_config = Sam3LiteTextGeometryEncoderConfig(**self.geometry_encoder_config)
+
+        if self.detr_encoder_config is None:
+            self.detr_encoder_config = Sam3LiteTextDETREncoderConfig()
+        if isinstance(self.detr_encoder_config, dict):
+            self.detr_encoder_config = Sam3LiteTextDETREncoderConfig(**self.detr_encoder_config)
+
+        if self.detr_decoder_config is None:
+            self.detr_decoder_config = Sam3LiteTextDETRDecoderConfig()
+        if isinstance(self.detr_decoder_config, dict):
+            self.detr_decoder_config = Sam3LiteTextDETRDecoderConfig(**self.detr_decoder_config)
+
+        if self.mask_decoder_config is None:
+            self.mask_decoder_config = Sam3LiteTextMaskDecoderConfig()
+        if isinstance(self.mask_decoder_config, dict):
+            self.mask_decoder_config = Sam3LiteTextMaskDecoderConfig(**self.mask_decoder_config)
+
+        super().__post_init__(**kwargs)
+
+    @property
+    def image_size(self):
+        """Image size for the SAM3_LITE_TEXT model."""
+        return self.vision_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to vision config."""
+        self.vision_config.image_size = value
 
 
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
-    pass
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Full sequence of hidden states from the text encoder.
+    pooler_output (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+        EOT-pooled output projected to `projection_dim` via the internal CLIP-style projection.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of hidden states at each layer, returned when `output_hidden_states=True`.
+    attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of attention weights at each transformer layer, returned when `output_attentions=True`.
+    """
 
 
 class Sam3LiteTextTextPositionEmbedding(nn.Module):
+    """Learnable positional embedding with bilinear interpolation for variable sequence lengths."""
+
     def __init__(self, max_position_embeddings: int, hidden_size: int):
         super().__init__()
         self.position_embedding = nn.Parameter(torch.empty(1, 1, max_position_embeddings, hidden_size))
@@ -92,6 +210,8 @@ class Sam3LiteTextTextPositionEmbedding(nn.Module):
 
 
 class Sam3LiteTextRepMixer(nn.Module):
+    """Re-parameterisable depthwise-conv token mixer operating on 1D sequence data."""
+
     def __init__(self, hidden_size: int, kernel_size: int = 11):
         super().__init__()
         self.norm = Sam3LiteTextMobileOneBlock(hidden_size, kernel_size=kernel_size, use_conv_branch=False)
@@ -103,6 +223,8 @@ class Sam3LiteTextRepMixer(nn.Module):
 
 
 class Sam3LiteTextMobileOneBlock(nn.Module):
+    """Multi-branch depthwise conv block with BN-skip and optional conv branch."""
+
     def __init__(self, hidden_size: int, kernel_size: int = 3, use_conv_branch: bool = True):
         super().__init__()
         self.rbr_skip = nn.BatchNorm2d(hidden_size)
@@ -131,6 +253,8 @@ class Sam3LiteTextMobileOneBlock(nn.Module):
 
 
 class Sam3LiteTextRepMixerBlock(nn.Module):
+    """Full token-mixing block: RepMixer (depthwise conv) + ConvFFN with layer scale."""
+
     def __init__(self, hidden_size: int, intermediate_size: int):
         super().__init__()
         self.layer_scale = nn.Parameter(1e-5 * torch.ones((hidden_size, 1, 1)), requires_grad=True)
@@ -143,6 +267,8 @@ class Sam3LiteTextRepMixerBlock(nn.Module):
 
 
 class Sam3LiteTextConvFFN(nn.Module):
+    """Convolutional feed-forward network: depthwise conv + two pointwise projections."""
+
     def __init__(self, hidden_size: int, intermediate_size: int, kernel_size: int = 3):
         super().__init__()
         self.conv = nn.Sequential(
@@ -168,164 +294,117 @@ class Sam3LiteTextConvFFN(nn.Module):
         return hidden_states
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
+class Sam3LiteTextTextAttention(SiglipAttention):
+    pass
 
 
-class Sam3LiteTextTextEncoderAttention(nn.Module):
-    def __init__(self, config):
+class Sam3LiteTextTextMLP(SiglipMLP):
+    pass
+
+
+class Sam3LiteTextTextEncoderLayer(SiglipEncoderLayer):
+    def __init__(self, config: Sam3LiteTextTextConfig):
+        super().__init__(config)
+        self.self_attn = Sam3LiteTextTextAttention(config)
+        self.mlp = Sam3LiteTextTextMLP(config)
+
+
+class Sam3LiteTextTextEmbeddings(nn.Module):
+    """Token embedding + interpolatable positional embedding for the text encoder."""
+
+    def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scale = self.head_dim**-0.5
-        self.dropout = getattr(config, "attention_dropout", 0.0)
-        self.is_causal = False
+        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.position_embedding = Sam3LiteTextTextPositionEmbedding(config.max_position_embeddings, config.hidden_size)
 
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, seq_length, embed_dim = hidden_states.shape
-
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
+    def forward(self, input_ids: torch.LongTensor) -> torch.Tensor:
+        hidden_states = self.token_embedding(input_ids)
+        hidden_states = hidden_states + self.position_embedding(input_ids.shape[1]).to(hidden_states.dtype)
+        return hidden_states
 
 
-class Sam3LiteTextTransformerLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.self_attn = Sam3LiteTextTextEncoderAttention(config)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.act = nn.GELU()
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+@auto_docstring
+class Sam3LiteTextPreTrainedModel(PreTrainedModel):
+    config_class = Sam3LiteTextConfig
+    base_model_prefix = "sam3_lite_text"
+    main_input_name = "pixel_values"
+    input_modalities = ["image", "text"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
-    def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(hidden_states, **kwargs)
-        hidden_states = residual + hidden_states
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.fc2(self.act(self.fc1(hidden_states)))
-        return residual + hidden_states, attn_weights
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Sam3LiteTextTextPositionEmbedding):
+            nn.init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
+        elif isinstance(module, Sam3LiteTextTextModel):
+            nn.init.normal_(module.projection, std=module.config.hidden_size**-0.5)
 
 
-class Sam3LiteTextTextEncoder(nn.Module):
-    def __init__(self, config: "Sam3LiteTextConfig"):
-        super().__init__()
-        text_config = config.text_config
-        self.config = text_config
-        self.token_embedding = nn.Embedding(text_config.vocab_size, text_config.hidden_size)
-        self.position_embedding = Sam3LiteTextTextPositionEmbedding(
-            text_config.max_position_embeddings, text_config.hidden_size
-        )
-        self.embedding_dropout = nn.Dropout(0.0)
-        self.model_name = getattr(text_config, "model_name", "mct")
-        if self.model_name == "mct":
-            num_transformer_layers = text_config.num_hidden_layers - 2
+@auto_docstring(
+    custom_intro="""
+    MobileCLIP MCT text encoder used in EfficientSAM3 LiteText.
+
+    When `config.use_repmixer_blocks` is `True`, the first and last layers are
+    `Sam3LiteTextRepMixerBlock` modules; the rest are standard `Sam3LiteTextTextEncoderLayer` layers.
+"""
+)
+class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
+    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
+    _no_split_modules = ["Sam3LiteTextTextEmbeddings", "Sam3LiteTextTextEncoderLayer", "Sam3LiteTextRepMixerBlock"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Sam3LiteTextTextEncoderLayer,
+        "attentions": Sam3LiteTextTextAttention,
+    }
+
+    def __init__(self, config: Sam3LiteTextTextConfig):
+        super().__init__(config)
+        self.embeddings = Sam3LiteTextTextEmbeddings(config)
+        if config.use_repmixer_blocks:
+            num_transformer_layers = config.num_hidden_layers - 2
             self.layers = nn.ModuleList(
-                [Sam3LiteTextRepMixerBlock(text_config.hidden_size, text_config.intermediate_size)]
-                + [Sam3LiteTextTransformerLayer(text_config) for _ in range(num_transformer_layers)]
-                + [Sam3LiteTextRepMixerBlock(text_config.hidden_size, text_config.intermediate_size)]
+                [Sam3LiteTextRepMixerBlock(config.hidden_size, config.intermediate_size)]
+                + [Sam3LiteTextTextEncoderLayer(config) for _ in range(num_transformer_layers)]
+                + [Sam3LiteTextRepMixerBlock(config.hidden_size, config.intermediate_size)]
             )
-            self.repmixer_indexes = (0, text_config.num_hidden_layers - 1)
+            self.repmixer_layer_indices = frozenset({0, config.num_hidden_layers - 1})
         else:
             self.layers = nn.ModuleList(
-                [Sam3LiteTextTransformerLayer(text_config) for _ in range(text_config.num_hidden_layers)]
+                [Sam3LiteTextTextEncoderLayer(config) for _ in range(config.num_hidden_layers)]
             )
-            self.repmixer_indexes = ()
-        self.final_layer_norm = nn.LayerNorm(text_config.hidden_size)
-        self.projection = nn.Parameter(torch.empty(text_config.hidden_size, text_config.projection_dim))
+            self.repmixer_layer_indices = frozenset()
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.projection = nn.Parameter(torch.empty(config.hidden_size, config.projection_dim))
+        self.post_init()
 
-    def forward(self, input_ids: torch.LongTensor, **kwargs) -> Sam3LiteTextTextEncoderOutput:
-        output_attentions = kwargs.pop("output_attentions", getattr(self.config, "output_attentions", False))
-        output_hidden_states = kwargs.pop("output_hidden_states", getattr(self.config, "output_hidden_states", False))
-        attention_mask = kwargs.pop("attention_mask", None)
-        kwargs.pop("return_dict", None)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Sam3LiteTextTextEncoderOutput:
+        hidden_states = self.embeddings(input_ids)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        hidden_states = self.token_embedding(input_ids)
-        seq_len = hidden_states.shape[1]
-        hidden_states = hidden_states + self.position_embedding(seq_len).to(hidden_states.dtype)
-        hidden_states = self.embedding_dropout(hidden_states)
-
-        # Convert 2D attention mask to 4D for attention layers
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(self.config, hidden_states, attention_mask)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         for idx, layer in enumerate(self.layers):
-            if idx in self.repmixer_indexes:
+            if idx in self.repmixer_layer_indices:
                 hidden_states = hidden_states.permute(0, 2, 1).unsqueeze(2)
                 hidden_states = layer(hidden_states)
                 hidden_states = hidden_states.squeeze(2).permute(0, 2, 1)
             else:
-                hidden_states, attn_weights = layer(hidden_states, attention_mask=attention_mask, **kwargs)
-                if output_attentions:
-                    all_attentions = all_attentions + (attn_weights,)
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -336,208 +415,24 @@ class Sam3LiteTextTextEncoder(nn.Module):
         return Sam3LiteTextTextEncoderOutput(
             last_hidden_state=hidden_states,
             pooler_output=pooled,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
         )
-
-
-class Sam3LiteTextViTConfig(Sam3ViTConfig):
-    pass
-
-
-class Sam3LiteTextVisionConfig(Sam3VisionConfig):
-    def __init__(
-        self,
-        backbone_config=None,
-        fpn_hidden_size=256,
-        backbone_feature_sizes=None,
-        scale_factors=None,
-        hidden_act="gelu",
-        layer_norm_eps=1e-6,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        if isinstance(backbone_config, dict):
-            backbone_config = Sam3LiteTextViTConfig(**{k: v for k, v in backbone_config.items() if k != "model_type"})
-        elif backbone_config is None:
-            backbone_config = Sam3LiteTextViTConfig()
-        super().__init__(
-            backbone_config=backbone_config,
-            fpn_hidden_size=fpn_hidden_size,
-            backbone_feature_sizes=backbone_feature_sizes,
-            scale_factors=scale_factors,
-            hidden_act=hidden_act,
-            layer_norm_eps=layer_norm_eps,
-            initializer_range=initializer_range,
-            **kwargs,
-        )
-
-
-class Sam3LiteTextGeometryEncoderConfig(Sam3GeometryEncoderConfig):
-    pass
-
-
-class Sam3LiteTextDETREncoderConfig(Sam3DETREncoderConfig):
-    pass
-
-
-class Sam3LiteTextDETRDecoderConfig(Sam3DETRDecoderConfig):
-    pass
-
-
-class Sam3LiteTextMaskDecoderConfig(Sam3MaskDecoderConfig):
-    pass
-
-
-class Sam3LiteTextConfig(Sam3Config):
-    pass
-
-
-class Sam3LiteTextVisionEncoderOutput(Sam3VisionEncoderOutput):
-    pass
-
-
-class Sam3LiteTextGeometryEncoderOutput(Sam3GeometryEncoderOutput):
-    pass
-
-
-class Sam3LiteTextDETREncoderOutput(Sam3DETREncoderOutput):
-    pass
-
-
-class Sam3LiteTextDETRDecoderOutput(Sam3DETRDecoderOutput):
-    pass
-
-
-class Sam3LiteTextMaskDecoderOutput(Sam3MaskDecoderOutput):
-    pass
-
-
-class Sam3LiteTextImageSegmentationOutput(Sam3ImageSegmentationOutput):
-    pass
-
-
-class Sam3LiteTextMLP(Sam3MLP):
-    pass
-
-
-class Sam3LiteTextAttention(Sam3Attention):
-    pass
-
-
-class Sam3LiteTextViTRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    pass
-
-
-class Sam3LiteTextViTRoPEAttention(Sam3ViTRoPEAttention):
-    pass
-
-
-class Sam3LiteTextViTPatchEmbeddings(Sam3ViTPatchEmbeddings):
-    pass
-
-
-class Sam3LiteTextViTEmbeddings(Sam3ViTEmbeddings):
-    pass
-
-
-class Sam3LiteTextViTLayerScale(Sam3ViTLayerScale):
-    pass
-
-
-class Sam3LiteTextViTLayer(Sam3ViTLayer):
-    pass
-
-
-class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, Sam3LiteTextTextPositionEmbedding):
-            nn.init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
-        elif isinstance(module, Sam3LiteTextTextEncoder):
-            nn.init.normal_(module.projection, std=module.config.hidden_size**-0.5)
-
-
-class Sam3LiteTextViTModel(Sam3ViTModel):
-    pass
-
-
-class Sam3LiteTextSinePositionEmbedding(Sam3SinePositionEmbedding):
-    pass
-
-
-class Sam3LiteTextFPNLayer(Sam3FPNLayer):
-    pass
-
-
-class Sam3LiteTextVisionNeck(Sam3VisionNeck):
-    pass
-
-
-class Sam3LiteTextVisionModel(Sam3VisionModel):
-    pass
-
-
-class Sam3LiteTextGeometryEncoderLayer(Sam3GeometryEncoderLayer):
-    pass
-
-
-class Sam3LiteTextGeometryEncoder(Sam3GeometryEncoder):
-    pass
-
-
-class Sam3LiteTextDetrEncoderLayer(Sam3DetrEncoderLayer):
-    pass
-
-
-class Sam3LiteTextDetrEncoder(Sam3DetrEncoder):
-    pass
-
-
-class Sam3LiteTextDecoderMLP(Sam3DecoderMLP):
-    pass
-
-
-class Sam3LiteTextDetrDecoderLayer(Sam3DetrDecoderLayer):
-    pass
-
-
-class Sam3LiteTextDetrDecoder(Sam3DetrDecoder):
-    pass
-
-
-class Sam3LiteTextDotProductScoring(Sam3DotProductScoring):
-    pass
-
-
-class Sam3LiteTextMaskEmbedder(Sam3MaskEmbedder):
-    pass
-
-
-class Sam3LiteTextPixelDecoder(Sam3PixelDecoder):
-    pass
-
-
-class Sam3LiteTextMaskDecoder(Sam3MaskDecoder):
-    pass
 
 
 class Sam3LiteTextModel(Sam3Model):
-    def __init__(self, config: "Sam3LiteTextConfig"):
+    def __init__(self, config: Sam3LiteTextConfig):
         super().__init__(config)
-        self.text_encoder = Sam3LiteTextTextEncoder(config)
+        self.text_encoder = Sam3LiteTextTextModel(config.text_config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config)
 
 
 __all__ = [
     "Sam3LiteTextConfig",
-    "Sam3LiteTextViTConfig",
-    "Sam3LiteTextVisionConfig",
+    "Sam3LiteTextTextConfig",
     "Sam3LiteTextGeometryEncoderConfig",
     "Sam3LiteTextDETREncoderConfig",
     "Sam3LiteTextDETRDecoderConfig",
     "Sam3LiteTextMaskDecoderConfig",
     "Sam3LiteTextModel",
-    "Sam3LiteTextVisionModel",
-    "Sam3LiteTextViTModel",
     "Sam3LiteTextPreTrainedModel",
+    "Sam3LiteTextTextModel",
 ]

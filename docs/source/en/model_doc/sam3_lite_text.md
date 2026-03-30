@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-12 and added to Hugging Face Transformers on 2026-03-01.*
+*This model was released on 2026-02-12 and added to Hugging Face Transformers on 2026-03-30.*
 
 # SAM3-LiteText
 
@@ -44,7 +44,7 @@ The text encoder architecture is based on [MobileCLIP](https://huggingface.co/pa
 | SAM3-LiteText-S1-16 | MobileCLIP-S1 | 63.53M | ~82% |
 | SAM3-LiteText-L-16 | MobileCLIP2-L | 123.80M | ~65% |
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
+This model was contributed by [nielsr](https://huggingface.co/nielsr) and [yonigozlan](https://huggingface.co/yonigozlan).
 The original code can be found [here](https://github.com/SimonZeng7108/efficientsam3/tree/sam3_litetext).
 
 ## Usage
@@ -84,13 +84,9 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 
 [[autodoc]] Sam3LiteTextConfig
 
-## Sam3LiteTextViTConfig
+## Sam3LiteTextTextConfig
 
-[[autodoc]] Sam3LiteTextViTConfig
-
-## Sam3LiteTextVisionConfig
-
-[[autodoc]] Sam3LiteTextVisionConfig
+[[autodoc]] Sam3LiteTextTextConfig
 
 ## Sam3LiteTextGeometryEncoderConfig
 
@@ -108,19 +104,14 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 
 [[autodoc]] Sam3LiteTextMaskDecoderConfig
 
+## Sam3LiteTextTextModel
+
+[[autodoc]] Sam3LiteTextTextModel
+    - forward
+
 ## Sam3LiteTextModel
 
 [[autodoc]] Sam3LiteTextModel
-    - forward
-
-## Sam3LiteTextVisionModel
-
-[[autodoc]] Sam3LiteTextVisionModel
-    - forward
-
-## Sam3LiteTextViTModel
-
-[[autodoc]] Sam3LiteTextViTModel
     - forward
 
 ## Sam3LiteTextPreTrainedModel

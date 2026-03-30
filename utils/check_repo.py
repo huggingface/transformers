@@ -178,7 +178,6 @@ IGNORE_NON_TESTED = (
         "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
         "Sam3ViTModel",  # Building part of bigger (tested) model.
         "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
-        "Sam3LiteTextViTModel",  # Building part of bigger (tested) model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
@@ -262,6 +261,7 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+        "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
     ]
 )
 

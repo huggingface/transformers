@@ -273,7 +273,7 @@ def box_cxcywh_to_xyxy(x):
 
 
 class Sam3MLP(nn.Module):
-    def __init__(self, config: Sam3ViTConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
