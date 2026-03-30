@@ -16,8 +16,6 @@
 import math
 
 import numpy as np
-import torch
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
@@ -32,15 +30,13 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
-from .image_processing_eomt import (
-    EomtImageProcessorKwargs,
-    compute_segments,
-    get_target_size,
-    remove_low_and_no_objects,
-)
+
+
+if is_torch_available():
+    import torch
 
 
 # Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
@@ -81,8 +77,140 @@ def convert_segmentation_map_to_binary_masks(
     return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
+# Adapted from transformers.models.eomt.image_processing_eomt.check_segment_validity
+def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
+    # Get the mask associated with the k class
+    mask_k = mask_labels == k
+    mask_k_area = mask_k.sum()
+
+    # Compute the area of all the stuff in query k
+    original_mask = mask_probs[k] >= mask_threshold
+    original_area = original_mask.sum()
+
+    final_mask = mask_k & original_mask
+    final_mask_area = final_mask.sum()
+
+    mask_exists = mask_k_area > 0 and original_area > 0 and final_mask_area > 0
+
+    if mask_exists:
+        area_ratio = mask_k_area / original_area
+        if not area_ratio.item() > overlap_mask_area_threshold:
+            mask_exists = False
+
+    return mask_exists, final_mask
+
+
+# Adapted from transformers.models.eomt.image_processing_eomt.EomtImageProcessorKwargs
+class EomtImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_split_image (`bool`, *optional*, defaults to `self.do_split_image`):
+        Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+        input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
+        Otherwise, the input images will be padded to the target size.
+    ignore_index (`int`, *optional*, defaults to `self.ignore_index`):
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
+    """
+
+    do_split_image: bool
+    ignore_index: int | None
+
+
+# Adapted from transformers.models.eomt.image_processing_eomt.compute_segments
+def compute_segments(
+    mask_probs,
+    pred_scores,
+    pred_labels,
+    stuff_classes,
+    mask_threshold: float = 0.5,
+    overlap_mask_area_threshold: float = 0.8,
+    target_size: tuple[int, int] | None = None,
+):
+    height = mask_probs.shape[1] if target_size is None else target_size[0]
+    width = mask_probs.shape[2] if target_size is None else target_size[1]
+
+    segmentation = torch.zeros((height, width), dtype=torch.long, device=mask_probs.device) - 1
+    segments: list[dict] = []
+
+    # Compute per-pixel assignment based on weighted mask scores
+    mask_probs = mask_probs.sigmoid()
+    mask_labels = (pred_scores[:, None, None] * mask_probs).argmax(0)
+
+    # Keep track of instances of each class
+    current_segment_id = 0
+    stuff_memory_list: dict[str, int] = {}
+
+    for k in range(pred_labels.shape[0]):
+        pred_class = pred_labels[k].item()
+
+        # Check if mask exists and large enough to be a segment
+        mask_exists, final_mask = check_segment_validity(
+            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
+        )
+
+        if not mask_exists:
+            continue
+
+        if stuff_classes and pred_class in stuff_classes:
+            if pred_class in stuff_memory_list:
+                segmentation[final_mask] = stuff_memory_list[pred_class]
+                continue
+            else:
+                stuff_memory_list[pred_class] = current_segment_id
+
+        segmentation[final_mask] = current_segment_id
+        segment_score = round(pred_scores[k].item(), 6)
+        segments.append(
+            {
+                "id": current_segment_id,
+                "label_id": pred_class,
+                "score": segment_score,
+            }
+        )
+        current_segment_id += 1
+    return segmentation, segments
+
+
+# Adapted from transformers.models.eomt.image_processing_eomt.get_target_size
+def get_target_size(size_dict: dict[str, int]) -> tuple[int, int]:
+    """Returns the height and width from a size dict."""
+    target_height = size_dict["shortest_edge"]
+    target_width = size_dict["longest_edge"] or target_height
+
+    return target_height, target_width
+
+
+# Adapted from transformers.models.eomt.image_processing_eomt.remove_low_and_no_objects
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+
+    Args:
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+    Returns:
+        `tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
+
+
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("torch",))
 class EomtImageProcessorPil(PilBackend):
     valid_kwargs = EomtImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -153,7 +281,7 @@ class EomtImageProcessorPil(PilBackend):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: list[torch.Tensor] | None = None,
+        segmentation_maps: "list[torch.Tensor] | None" = None,
         instance_id_to_semantic_id: dict[int, int] | None = None,
         **kwargs: Unpack[EomtImageProcessorKwargs],
     ) -> BatchFeature:
@@ -246,7 +374,7 @@ class EomtImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -293,11 +421,11 @@ class EomtImageProcessorPil(PilBackend):
 
     def merge_image_patches(
         self,
-        segmentation_logits: torch.Tensor,
+        segmentation_logits: "torch.Tensor",
         patch_offsets: list[tuple[int, int, int]],
         target_sizes: list[tuple[int, int]],
         size: dict[str, int],
-    ) -> list[torch.Tensor]:
+    ) -> "list[torch.Tensor]":
         """
         Reconstructs full-size semantic segmentation logits from patch predictions.
 
@@ -346,8 +474,8 @@ class EomtImageProcessorPil(PilBackend):
         return reconstructed_logits
 
     def unpad_image(
-        self, segmentation_logits: torch.Tensor, target_sizes: list[tuple[int, int]], size: dict[str, int]
-    ) -> list[torch.Tensor]:
+        self, segmentation_logits: "torch.Tensor", target_sizes: list[tuple[int, int]], size: dict[str, int]
+    ) -> "list[torch.Tensor]":
         """Restores panoptic segmentation logits to their original image resolutions."""
 
         resized_logits = []
