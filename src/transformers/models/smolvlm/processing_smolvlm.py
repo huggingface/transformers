@@ -26,13 +26,13 @@ from ...utils import auto_docstring, is_num2words_available, logging
 from ...video_utils import VideoInput
 
 
-# Copied from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
 DEFAULT_VIDEO_INTRO = (
     "You are provided the following series of {frame_count} frames from a {video_duration} [H:MM:SS] video.\n"
 )
-# Copied from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_MEDIA_OUTTRO
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_MEDIA_OUTTRO
 DEFAULT_MEDIA_OUTTRO = "\n\n"
-# Copied from transformers.models.smolvlm.video_processing_smolvlm.FRAME_TIMESTAMP_MESSAGE
+# Adapted from transformers.models.smolvlm.video_processing_smolvlm.FRAME_TIMESTAMP_MESSAGE
 FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 
 if TYPE_CHECKING:
