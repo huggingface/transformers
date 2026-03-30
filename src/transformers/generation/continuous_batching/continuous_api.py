@@ -571,8 +571,8 @@ class ContinuousBatchProcessor:
         In async mode, both IO pairs are warmed up since each has its own graph buffer and static tensors."""
 
         warmup_times = {"varlen_warmup_time": 0.0, "decode_warmup_times": []}
-        if not self.use_cuda_graph:
-            logger.info("CUDA graphs disabled, skipping warmup.")
+        if not self._pad_inputs:
+            logger.info("CUDA graphs and compile are disabled, skipping warmup.")
             return warmup_times
 
         num_query_tokens = num_query_tokens if num_query_tokens > 0 else self.max_batch_tokens
