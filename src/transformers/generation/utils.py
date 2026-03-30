@@ -688,7 +688,11 @@ class GenerationMixin(ContinuousMixin):
                 break
 
         if "inputs_embeds" in model_kwargs:
-            return torch.ones((batch_size, 0), dtype=torch.long, device=self.device if self.device.type !="meta" else model_kwargs["inputs_embeds"].device)
+            return torch.ones(
+                (batch_size, 0),
+                dtype=torch.long,
+                device=self.device if self.device.type != "meta" else model_kwargs["inputs_embeds"].device,
+            )
 
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
