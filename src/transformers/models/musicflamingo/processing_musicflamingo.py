@@ -104,9 +104,9 @@ class MusicFlamingoProcessor(ProcessorMixin):
     def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
         audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
         audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
+        audio_token_pattern = re.compile(re.escape(self.audio_token))
         for i, audio_length in enumerate(audio_tokens_lengths):
-            text[i] = re.sub(
-                re.escape(self.audio_token),
+            text[i] = audio_token_pattern.sub(
                 self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
                 text[i],
             )
