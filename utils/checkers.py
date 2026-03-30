@@ -20,9 +20,32 @@ Usage:
     python utils/checkers.py copies,doc_toc --keep-going
     python utils/checkers.py all
     python utils/checkers.py all --fix
+
+Plugin system
+-------------
+Each checker module declares a ``CHECKER_CONFIG`` dict (extracted via ``ast.literal_eval``,
+no import needed). See any ``check_*.py`` file for the schema.
+
+Cache semantics of ``file_globs``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``file_globs`` lists the file patterns whose content is hashed to decide whether a checker
+can be skipped. **Not all globs are exact reflections of the checker's runtime behaviour.**
+
+* Some checkers introspect the live ``transformers`` module (``check_repo``,
+  ``check_config_docstrings``, ``check_config_attributes``, ``update_metadata``), so their
+  globs are necessarily *approximations* of the true dependency set.
+* Some checkers over-approximate (``check_dummies``, ``check_doctest_list``): any change
+  inside the broad glob forces a re-run even if the checker wouldn't look at that file.
+  This is safe—just less cache-efficient.
+* Some checkers rely on external state (network, git history, installed packages) that
+  cannot be captured by file globs at all (``add_dates``, ``imports``).
+
+Each ``CHECKER_CONFIG`` that is an approximation has an inline comment explaining the
+gap. When in doubt, use ``--no-cache`` to force a full run.
 """
 
 import argparse
+import ast
 import hashlib
 import itertools
 import json
@@ -32,6 +55,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 from collections import deque
 from pathlib import Path
 
@@ -40,37 +64,77 @@ UTILS_DIR = Path(__file__).parent
 REPO_ROOT = UTILS_DIR.parent
 CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
 
-# Each checker maps to (label, script_path, extra_check_args, extra_fix_args).
-# When fix_args is None, the checker has no fix mode.
-# Custom checkers use None instead of the tuple.
-CHECKERS = {
-    "copies": ("Copied code consistency", "check_copies.py", [], ["--fix_and_overwrite"]),
-    "modular_conversion": ("Modular file conversions", "check_modular_conversion.py", [], ["--fix_and_overwrite"]),
-    "doc_toc": ("Documentation table of contents", "check_doc_toc.py", [], ["--fix_and_overwrite"]),
-    "docstrings": ("Docstring formatting", "check_docstrings.py", [], ["--fix_and_overwrite"]),
-    "dummies": ("Dummy objects", "check_dummies.py", [], ["--fix_and_overwrite"]),
-    "pipeline_typing": ("Pipeline type hints", "check_pipeline_typing.py", [], ["--fix_and_overwrite"]),
-    "doctest_list": ("Doctest list", "check_doctest_list.py", [], ["--fix_and_overwrite"]),
-    "repo": ("Repository structure", "check_repo.py", [], None),
-    "inits": ("Init files", "check_inits.py", [], None),
-    "config_docstrings": ("Config docstrings", "check_config_docstrings.py", [], None),
-    "config_attributes": ("Config attributes", "check_config_attributes.py", [], None),
-    "init_isort": ("Import ordering", "custom_init_isort.py", ["--check_only"], []),
-    "auto_mappings": ("Auto mappings", "sort_auto_mappings.py", ["--check_only"], []),
-    "update_metadata": ("Model metadata", "update_metadata.py", ["--check-only"], []),
-    "add_dates": ("Model dates", "add_dates.py", ["--check-only"], []),
-    "types": (
-        "Type annotations",
-        "check_types.py",
-        [
-            "src/transformers/_typing.py",
-            "src/transformers/utils",
-            "src/transformers/generation",
-            "src/transformers/quantizers",
-        ],
-        None,
-    ),
-    "modeling_structure": ("Modeling file structure", "check_modeling_structure.py", [], None),
+# Required keys in each module's CHECKER_CONFIG dict.
+_CHECKER_CONFIG_KEYS = {"name", "label", "file_globs", "check_args", "fix_args"}
+
+
+def _discover_checkers() -> tuple[dict, dict]:
+    """Scan utils/*.py for CHECKER_CONFIG dicts using AST (no imports).
+
+    Each checker module may define a top-level ``CHECKER_CONFIG`` dict with
+    keys: name, label, file_globs, check_args, fix_args.
+
+    Returns (checkers_dict, file_globs_dict) matching the shapes of
+    the old CHECKERS and CHECKER_FILE_GLOBS registries.
+    """
+    checkers = {}
+    file_globs = {}
+
+    for py_file in sorted(UTILS_DIR.glob("*.py")):
+        if py_file.name == Path(__file__).name:
+            continue
+
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        except SyntaxError:
+            continue
+
+        config = None
+        for node in ast.iter_child_nodes(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "CHECKER_CONFIG"
+            ):
+                try:
+                    config = ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    pass
+                break
+
+        if config is None:
+            continue
+
+        missing = _CHECKER_CONFIG_KEYS - set(config)
+        if missing:
+            warnings.warn(
+                f"CHECKER_CONFIG in {py_file.name} is missing keys: {', '.join(sorted(missing))}. Skipping.",
+                stacklevel=1,
+            )
+            continue
+
+        name = config["name"]
+        if name in checkers:
+            warnings.warn(
+                f"Duplicate checker name {name!r} in {py_file.name}, already defined by {checkers[name][1]}",
+                stacklevel=1,
+            )
+
+        checkers[name] = (
+            config["label"],
+            py_file.name,
+            config["check_args"],
+            config["fix_args"],
+        )
+        if config["file_globs"] is not None:
+            file_globs[name] = config["file_globs"]
+
+    return checkers, file_globs
+
+
+# Inline checkers have no separate script file; they use custom runner functions below.
+_INLINE_CHECKERS = {
     "deps_table": ("Dependency versions table", None, None, None),
     "imports": ("Public imports", None, None, None),
     "import_complexity": ("Import complexity", "check_import_complexity.py", [], None),
@@ -78,35 +142,13 @@ CHECKERS = {
     "ruff_format": ("Ruff formatting", None, None, None),
 }
 
-# File glob patterns that each checker depends on.
-# If all matched files are unchanged since the last clean run, the checker is skipped.
-# Checkers not listed here are always run.
-CHECKER_FILE_GLOBS = {
-    "copies": ["src/transformers/models/**/*.py"],
-    "modular_conversion": ["src/transformers/models/**/modular_*.py"],
-    "docstrings": ["src/transformers/models/**/modeling_*.py", "src/transformers/models/**/modular_*.py"],
-    "doc_toc": ["docs/**/*.md"],
-    "dummies": ["src/transformers/**/*.py"],
-    "inits": ["src/transformers/**/__init__.py"],
-    "init_isort": ["src/transformers/**/__init__.py"],
-    "config_docstrings": ["src/transformers/models/**/configuration_*.py"],
-    "config_attributes": ["src/transformers/models/**/configuration_*.py"],
-    "modeling_structure": ["src/transformers/models/**/modeling_*.py"],
-    "auto_mappings": [
-        "src/transformers/models/auto/*.py",
-    ],
-    "repo": [
-        "src/transformers/models/**/*.py",
-        "src/transformers/models/auto/*.py",
-        "tests/models/**/test_modeling_*.py",
-        "docs/**/*.md",
-    ],
+_INLINE_FILE_GLOBS = {
+    # Also generates/checks src/transformers/dependency_versions_table.py.
+    "deps_table": ["setup.py", "pyproject.toml", "src/transformers/dependency_versions_table.py"],
+    # Approximate: runs `from transformers import *` at runtime; depends on the full
+    # Python environment, not just these files. Broad globs used as a safe upper bound.
     "imports": ["src/transformers/**/__init__.py", "src/transformers/**/*.py"],
-    "pipeline_typing": ["src/transformers/pipelines/__init__.py"],
-    "doctest_list": ["src/transformers/**/*.py", "docs/**/*.md"],
-    "update_metadata": ["src/transformers/models/**/*.py", "docs/**/*.md"],
-    "add_dates": ["src/transformers/models/**/__init__.py"],
-    "deps_table": ["setup.py", "pyproject.toml"],
+    # Approximate: ruff applies its own ignore rules from pyproject.toml at runtime.
     "ruff_check": [
         "examples/**/*.py",
         "tests/**/*.py",
@@ -129,13 +171,13 @@ CHECKER_FILE_GLOBS = {
         "setup.py",
         "conftest.py",
     ],
-    "types": [
-        "src/transformers/_typing.py",
-        "src/transformers/utils/**/*.py",
-        "src/transformers/generation/**/*.py",
-        "src/transformers/quantizers/**/*.py",
-    ],
 }
+
+# Build the registries: discovered modules + inline custom runners.
+_discovered_checkers, _discovered_globs = _discover_checkers()
+
+CHECKERS = {**_discovered_checkers, **_INLINE_CHECKERS}
+CHECKER_FILE_GLOBS = {**_discovered_globs, **_INLINE_FILE_GLOBS}
 
 
 def get_checker_cache_globs(checker_name: str) -> list[str] | None:

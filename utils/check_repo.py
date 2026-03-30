@@ -50,6 +50,22 @@ from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP, _VLM_COMMON_MODE
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "repo",
+    "label": "Repository structure",
+    # Approximate: the checker also introspects the live transformers module at runtime
+    # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
+    "file_globs": [
+        "src/transformers/models/**/*.py",
+        "src/transformers/models/auto/*.py",
+        "src/transformers/**/__init__.py",
+        "tests/**/test_modeling_*.py",
+        "docs/**/*.md",
+    ],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
