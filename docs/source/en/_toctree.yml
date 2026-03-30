@@ -1314,6 +1314,10 @@
         title: Qwen3VL
       - local: model_doc/qwen3_vl_moe
         title: Qwen3VLMoe
+      - local: model_doc/sam3_1
+        title: SAM 3.1
+      - local: model_doc/sam3_1_video
+        title: SAM 3.1 Video
       - local: model_doc/sam3
         title: SAM3
       - local: model_doc/sam3_video
