@@ -110,8 +110,7 @@ class MusicFlamingoModelTester:
             text_config=self.text_config,
             audio_config=self.audio_config,
             audio_token_id=self.audio_token_id,
-            audio_rotary_dim=8,
-            rope_parameters={"rope_type": "default", "rope_theta": 2048},
+            rope_parameters={"rope_type": "default", "rope_theta": 2048, "partial_rotary_factor": 0.5},
         )
 
     def prepare_config_and_inputs(self):
