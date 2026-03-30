@@ -116,7 +116,7 @@ class OutputRouter:
                     callbacks.append((callback, output))
                 else:
                     self.output_queue.put(output)
-        if callbacks:
+        if callbacks and loop is not None:
 
             def _run_batch(batch=callbacks):
                 for cb, out in batch:
