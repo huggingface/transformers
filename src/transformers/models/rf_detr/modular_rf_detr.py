@@ -20,12 +20,10 @@ from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_int
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
-from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayer
 from ..dinov2.configuration_dinov2 import Dinov2Config
@@ -36,6 +34,7 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2Layer,
     Dinov2PreTrainedModel,
 )
+from ..lw_detr.configuration_lw_detr import LwDetrConfig
 from ..lw_detr.modeling_lw_detr import (
     LwDetrC2FLayer,
     LwDetrConvEncoder,
@@ -73,6 +72,7 @@ class RfDetrDinov2Config(Dinov2Config):
         Whether to use mask_token in embeddings.
     num_windows (`int`, *optional*, defaults to 4):
         Number of windows to use for windowed attention. If 1, no windowed attention is used.
+
     Example:
 
     ```python
@@ -105,7 +105,7 @@ class RfDetrDinov2Config(Dinov2Config):
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
 @strict(accept_kwargs=True)
-class RfDetrConfig(PreTrainedConfig):
+class RfDetrConfig(LwDetrConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):
         Expansion factor for hidden dimensions in the projector layers.
@@ -153,6 +153,7 @@ class RfDetrConfig(PreTrainedConfig):
         Relative weight of the DICE/F-1 loss in the instance segmentation loss.
     segmentation_head_activation_function (`str`, *optional*, defaults to `"gelu"`):
         The non-linear activation function in the segmentation head. Supported values are `"relu"`, `"silu"`, `"gelu"`.
+
     Examples:
 
     ```python
@@ -169,52 +170,20 @@ class RfDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "rf_detr"
-    sub_configs = {"backbone_config": AutoConfig}
 
-    # backbone
-    backbone_config: dict | PreTrainedConfig | None = None
-    # projector
-    hidden_expansion: float = 0.5
-    c2f_num_blocks: int = 3
-    activation_function: str = "silu"
     layer_norm_eps: float = 1e-5
-    # decoder
-    d_model: int = 256
     dropout: float = 0.1
-    decoder_ffn_dim: int = 2048
-    decoder_n_points: int = 4
-    decoder_layers: int = 3
-    decoder_self_attention_heads: int = 8
-    decoder_cross_attention_heads: int = 16
-    decoder_activation_function: str = "relu"
-    # model
-    num_queries: int = 300
     num_feature_levels: int = 1
-    attention_bias: bool = True
-    attention_dropout: float = 0.0
-    activation_dropout: float = 0.0
-    group_detr: int = 13
-    init_std: float = 0.02
-    disable_custom_kernels: bool = True
-    # loss
-    class_cost: int | float = 2
-    bbox_cost: int | float = 5
-    giou_cost: int | float = 2
-    class_loss_coefficient: int | float = 1
     mask_loss_coefficient: int | float = 1
-    dice_loss_coefficient: int | float = 1
-    bbox_loss_coefficient: int | float = 5
-    giou_loss_coefficient: int | float = 2
-    eos_coefficient: float = 0.1
-    focal_alpha: float = 0.25
-    auxiliary_loss: bool = True
     mask_point_sample_ratio: int = 16
-    # segmentation
     mask_downsample_ratio: int = 4
     mask_class_loss_coefficient: int | float = 5.0
     mask_dice_loss_coefficient: int | float = 5.0
     segmentation_head_activation_function: str = "gelu"
     intermediate_size: int = 1024
+
+    batch_norm_eps = AttributeError("batch_norm_eps is replaced by layer_norm_eps in RfDetrConfig.")
+    projector_scale_factors = AttributeError("RfDetr only uses a single scale layer instead of multiple scale layers.")
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
@@ -229,8 +198,12 @@ class RfDetrConfig(PreTrainedConfig):
             },
             **kwargs,
         )
-        self.intermediate_size = self.d_model * 4
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        raise NotImplementedError(
+            "validate_architecture is not used in RfDetrConfig because it does not rely on multiple scale layers."
+        )
 
 
 class RfDetrDinov2Embeddings(Dinov2Embeddings):
@@ -885,7 +858,6 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
 
         Examples:
 

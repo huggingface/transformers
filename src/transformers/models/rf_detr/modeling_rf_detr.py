@@ -1791,7 +1791,6 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
-
         Examples:
 
         ```python
