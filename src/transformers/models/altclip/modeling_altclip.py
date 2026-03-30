@@ -696,7 +696,6 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
     config: AltCLIPVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["AltCLIPEncoderLayer"]
     _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: AltCLIPVisionConfig):

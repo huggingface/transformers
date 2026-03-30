@@ -720,8 +720,6 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
     ```"""
 
-    config: MetaClip2Config
-
     def __init__(self, config: MetaClip2Config):
         super().__init__(config)
 
@@ -941,7 +939,6 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["MetaClip2EncoderLayer"]
     _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: MetaClip2VisionConfig):

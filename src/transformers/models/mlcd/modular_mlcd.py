@@ -289,6 +289,7 @@ class MLCDEncoder(CLIPEncoder):
 class MLCDPreTrainedModel(PreTrainedModel):
     config: MLCDVisionConfig
     base_model_prefix = "vision_model"
+    _no_split_modules = ["MLCDEncoderLayer"]
     supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
     _supports_flash_attn = True

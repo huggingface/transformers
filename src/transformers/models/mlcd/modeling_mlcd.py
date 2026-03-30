@@ -400,6 +400,7 @@ class MLCDEncoder(nn.Module):
 class MLCDPreTrainedModel(PreTrainedModel):
     config: MLCDVisionConfig
     base_model_prefix = "vision_model"
+    _no_split_modules = ["MLCDEncoderLayer"]
     supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
     _supports_flash_attn = True
@@ -457,7 +458,6 @@ class MLCDVisionModel(MLCDPreTrainedModel):
     config: MLCDVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["MLCDEncoderLayer"]
     _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: MLCDVisionConfig):

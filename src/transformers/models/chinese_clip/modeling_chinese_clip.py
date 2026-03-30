@@ -644,7 +644,6 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["ChineseCLIPEncoderLayer"]
     _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: ChineseCLIPVisionConfig):
@@ -816,8 +815,6 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
-    config: ChineseCLIPConfig
-
     def __init__(self, config: ChineseCLIPConfig):
         super().__init__(config)
 

@@ -43,22 +43,28 @@ from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfi
 @auto_docstring
 class XCLIPOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
     logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The image embeddings obtained by applying the projection layer to the pooled output of [`XCLIPVisionModel`].
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for image-text similarity.
     logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The image embeddings obtained by applying the projection layer to the pooled output of [`XCLIPVisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`XCLIPTextModel`].
     vision_model_output (`BaseModelOutputWithPooling`):
         The output of the [`XCLIPVisionModel`].
+    logits_per_video (<fill_type>):
+        <fill_docstring>
+    video_embeds (<fill_type>):
+        <fill_docstring>
+    mit_output (<fill_type>):
+        <fill_docstring>
     """
 
     loss: torch.FloatTensor | None = None
