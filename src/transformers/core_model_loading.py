@@ -301,8 +301,9 @@ class Conv3dToLinear(ConversionOps):
     def __init__(self, get_patch_shape: Callable[[Any], tuple[int, int, tuple[int, int]]] | None = None):
         self._get_patch_shape = get_patch_shape
 
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    @staticmethod
+    def _get_target_pattern(
+        input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
     ) -> str:
         if len(input_dict) != 1:
             raise ValueError("Undefined Operation encountered!")
@@ -317,7 +318,7 @@ class Conv3dToLinear(ConversionOps):
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        target_pattern = self._get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
 
@@ -358,23 +359,11 @@ class LinearToConv3d(ConversionOps):
     def __init__(self, get_patch_shape: Callable[[Any], tuple[int, int, tuple[int, int]]] | None = None):
         self._get_patch_shape = get_patch_shape
 
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        return target_patterns[0]
-
     @torch.no_grad
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        target_pattern = Conv3dToLinear._get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
 

@@ -15,6 +15,7 @@
 
 import copy
 import gc
+import os
 import tempfile
 import unittest
 
@@ -29,7 +30,6 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.models.qwen2_vl.modeling_qwen2_vl import PatchEmbed
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -197,41 +197,49 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_patch_embed_linear_forward_matches_conv3d(self):
-        patch_embed = PatchEmbed(patch_size=2, temporal_patch_size=2, in_channels=3, embed_dim=8)
-        hidden_states = torch.randn(
-            5,
-            patch_embed.in_channels
-            * patch_embed.temporal_patch_size
-            * patch_embed.patch_size
-            * patch_embed.patch_size,
-        )
+    def test_from_pretrained_fusion_config_patch_embeddings(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = Qwen2VLForConditionalGeneration(config).eval()
 
-        actual = patch_embed(hidden_states)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            fused_model = Qwen2VLForConditionalGeneration.from_pretrained(
+                tmp_dir, fusion_config={"patch_embeddings": True}
+            )
 
-        reference_conv3d = torch.nn.Conv3d(
-            patch_embed.in_channels,
-            patch_embed.embed_dim,
-            kernel_size=[patch_embed.temporal_patch_size, patch_embed.patch_size, patch_embed.patch_size],
-            stride=[patch_embed.temporal_patch_size, patch_embed.patch_size, patch_embed.patch_size],
-            bias=patch_embed.linear_proj.bias is not None,
-        )
-        reference_conv3d.weight.data.copy_(patch_embed.linear_proj.weight.view_as(reference_conv3d.weight))
-        if patch_embed.linear_proj.bias is not None:
-            reference_conv3d.bias.data.copy_(patch_embed.linear_proj.bias)
+        self.assertIsInstance(model.model.visual.patch_embed.proj, torch.nn.Conv3d)
+        self.assertIsInstance(fused_model.model.visual.patch_embed.proj, torch.nn.Linear)
+        with torch.no_grad():
+            outputs = model.model.visual.patch_embed(pixel_values)
+            fused_outputs = fused_model.model.visual.patch_embed(pixel_values)
+        torch.testing.assert_close(outputs, fused_outputs)
 
-        reshaped_hidden_states = hidden_states.view(
-            -1,
-            patch_embed.in_channels,
-            patch_embed.temporal_patch_size,
-            patch_embed.patch_size,
-            patch_embed.patch_size,
-        )
-        expected = reference_conv3d(reshaped_hidden_states.to(dtype=patch_embed.linear_proj.weight.dtype)).view(
-            -1, patch_embed.embed_dim
-        )
+    def test_fused_model_save_pretrained_preserves_conv3d_checkpoint_format(self):
+        """
+        Test that the fused patch embedding can be saved and loaded correctly.
+        """
+        from safetensors.torch import load_file
 
-        torch.testing.assert_close(actual, expected)
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        model = Qwen2VLForConditionalGeneration(config).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            original_state_dict = load_file(os.path.join(tmp_dir, "model.safetensors"))
+            fused_model = Qwen2VLForConditionalGeneration.from_pretrained(
+                tmp_dir, fusion_config={"patch_embeddings": True}
+            )
+            fused_model.save_pretrained(tmp_dir)
+
+            state_dict = load_file(os.path.join(tmp_dir, "model.safetensors"))
+
+        self.assertIsInstance(fused_model.model.visual.patch_embed.proj, torch.nn.Linear)
+        self.assertIn("model.visual.patch_embed.proj.weight", state_dict)
+        self.assertEqual(state_dict["model.visual.patch_embed.proj.weight"].ndim, 5)
+        torch.testing.assert_close(
+            state_dict["model.visual.patch_embed.proj.weight"],
+            original_state_dict["model.visual.patch_embed.proj.weight"],
+        )
 
     def test_mismatching_num_image_tokens(self):
         """

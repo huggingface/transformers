@@ -222,12 +222,9 @@ class Qwen3VLVisionPatchEmbed(PatchEmbed):
         self.temporal_patch_size = config.temporal_patch_size
         self.in_channels = config.in_channels
         self.embed_dim = config.hidden_size
-        self.patch_volume = self.in_channels * self.temporal_patch_size * self.patch_size * self.patch_size
-        self.linear_proj = nn.Linear(
-            self.patch_volume,
-            self.embed_dim,
-            bias=True,
-        )
+
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
 
 
 class Qwen3VLVisionRotaryEmbedding(VisionRotaryEmbedding):

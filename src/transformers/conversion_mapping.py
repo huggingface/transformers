@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 from .core_model_loading import (
     Chunk,
     Concatenate,
-    Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
     Transpose,
@@ -49,9 +48,11 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe": "qwen2_moe",
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
+    "glm4v_moe": "qwen2_moe",
     "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
+    "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
@@ -78,13 +79,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "got_ocr2",
-    "qwen3_5": "qwen3_vl",
-    "qwen3_5_moe": "qwen3_vl",
-    "glm4v": "qwen3_vl",
-    "glm_ocr": "qwen3_vl",
-    "qwen3_omni_moe_vision_encoder": "qwen3_vl",
-    "glm4v_moe_vision": "qwen3_vl",
-    "glm4v_moe": "qwen3_omni_moe",
 }
 
 
@@ -536,27 +530,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.conv\.batch_norm", r".conv.norm"),
         WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
     ]
-
-    # convert conv3d to hf linear in patch_embed
-    # Add custom get_patch_shape if needed, see core_model_loading.LinearToConv3d.default_get_conv3d_patch_shape_from_config
-    conv3d_to_linear_mapping = [
-        WeightConverter(
-            source_patterns="patch_embed.proj.weight",
-            target_patterns="patch_embed.linear_proj.weight",
-            operations=[Conv3dToLinear()],
-        ),
-    ]
-    conv3d_to_linear_with_bias_mapping = [
-        WeightRenaming(
-            source_patterns="patch_embed.proj.bias",
-            target_patterns="patch_embed.linear_proj.bias",
-        ),
-    ] + conv3d_to_linear_mapping.copy()
-    mapping["qwen2_vl"] += conv3d_to_linear_mapping.copy()
-    mapping["qwen2_5_omni"] = conv3d_to_linear_mapping.copy()
-    mapping["qwen3_vl"] = conv3d_to_linear_with_bias_mapping.copy()
-    mapping["qwen3_vl_moe"] += conv3d_to_linear_with_bias_mapping.copy()
-    mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy() + conv3d_to_linear_with_bias_mapping.copy()
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

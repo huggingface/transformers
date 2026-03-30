@@ -44,6 +44,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionBlock,
     Glm4vVisionEmbeddings,
     Glm4vVisionModel,
+    Glm4vVisionPatchEmbed,
 )
 from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attention_forward
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
@@ -270,16 +271,15 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
         return attn_output
 
 
-class GlmImageVisionPatchEmbed(nn.Module):
+class GlmImageVisionPatchEmbed(Glm4vVisionPatchEmbed):
     def __init__(self, config: GlmImageVisionConfig) -> None:
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
+        super().__init__(config)
+
+        del self.temporal_patch_size
         kernel_size = [self.patch_size, self.patch_size]
         self.proj = nn.Conv2d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size)
 
-    def forward(self, hidden_states) -> torch.Tensor:
+    def forward(self, hidden_states):
         target_dtype = self.proj.weight.dtype
         hidden_states = hidden_states.view(-1, self.in_channels, self.patch_size, self.patch_size)
         hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)

@@ -1086,13 +1086,16 @@ class Qwen2_5_VisionPatchEmbed(nn.Module):
         self.temporal_patch_size = temporal_patch_size
         self.in_channels = in_channels
         self.embed_dim = embed_dim
-        self.patch_volume = in_channels * temporal_patch_size * patch_size * patch_size
-        self.linear_proj = nn.Linear(self.patch_volume, embed_dim, bias=False)
+
+        kernel_size = [temporal_patch_size, patch_size, patch_size]
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.linear_proj.weight.dtype
-        hidden_states = hidden_states.view(-1, self.patch_volume)
-        hidden_states = self.linear_proj(hidden_states.to(dtype=target_dtype))
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
         return hidden_states
 
 
