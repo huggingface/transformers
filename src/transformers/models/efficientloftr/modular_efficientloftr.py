@@ -1,10 +1,26 @@
-import torch
+from typing import TYPE_CHECKING
 
-from ...utils import TensorType
-from ...utils.import_utils import requires_backends
+from ...processing_utils import ImagesKwargs
+from ...utils import TensorType, is_torch_available
+from ...utils.import_utils import requires
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
 from ..superglue.image_processing_superglue import SuperGlueImageProcessor
-from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
+
+
+if is_torch_available():
+    import torch
+
+if TYPE_CHECKING:
+    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
+
+
+class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):
@@ -69,12 +85,13 @@ class EfficientLoFTRImageProcessor(SuperGlueImageProcessor):
 
 
 class EfficientLoFTRImageProcessorPil(SuperGlueImageProcessorPil):
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "EfficientLoFTRKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -91,7 +108,8 @@ class EfficientLoFTRImageProcessorPil(SuperGlueImageProcessorPil):
             `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
-        requires_backends(self, ["torch"])
+        import torch
+
         if outputs.matches.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):

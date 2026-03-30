@@ -65,6 +65,7 @@ else:
             ("clipseg", "CLIPSegProcessor"),
             ("clvp", "ClvpProcessor"),
             ("cohere2_vision", "Cohere2VisionProcessor"),
+            ("cohere_asr", "CohereAsrProcessor"),
             ("colmodernvbert", "ColModernVBertProcessor"),
             ("colpali", "ColPaliProcessor"),
             ("colqwen2", "ColQwen2Processor"),

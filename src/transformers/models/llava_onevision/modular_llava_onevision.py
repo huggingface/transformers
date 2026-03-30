@@ -34,7 +34,7 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
@@ -137,7 +137,7 @@ class LlavaOnevisionImageProcessor(LlavaNextImageProcessor):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -215,6 +215,17 @@ class LlavaOnevisionImageProcessor(LlavaNextImageProcessor):
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
             tensor_type=return_tensors,
         )
+
+
+class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    """
+
+    image_grid_pinpoints: list[list[int]]
 
 
 class LlavaOnevisionImageProcessorPil(LlavaNextImageProcessorPil):
@@ -298,7 +309,7 @@ class LlavaOnevisionImageProcessorPil(LlavaNextImageProcessorPil):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

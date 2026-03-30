@@ -1692,6 +1692,10 @@ def check_dependencies_and_create_import_node(
         class_file_type = find_file_type(class_name, new_name)
         # In this case, we need to remove it from the dependencies and create a new import instead
         if class_file_type != file_type:
+            # image_processing_pil and image_processing must never depend on each other.
+            # When a PIL class needs an image_processing class, inline it instead of importing.
+            if file_type == "image_processing_pil" and class_file_type == "image_processing":
+                continue
             corrected_dependencies.remove(class_name)
             import_statement = f"from .{class_file_type}_{new_name} import {class_name}"
             new_imports[class_name] = cst.parse_statement(import_statement)
@@ -1744,7 +1748,14 @@ def get_class_node_and_dependencies(
         # Remove all classes explicitly defined in modular from the dependencies. Otherwise, if a class is referenced
         # before its new modular definition, it may be wrongly imported from elsewhere as a dependency if it matches
         # another class from a modeling file after renaming, even though it would be added after anyway (leading to duplicates)
-        new_node_dependencies -= set(modular_mapper.classes.keys())
+        # Exception: for image_processing_pil files, image_processing modular classes must be inlined (not excluded),
+        # because these two files must never import from each other.
+        classes_to_exclude = set(modular_mapper.classes.keys())
+        if file_type == "image_processing_pil":
+            classes_to_exclude -= {
+                k for k in classes_to_exclude if find_file_type(k, model_name) == "image_processing"
+            }
+        new_node_dependencies -= classes_to_exclude
 
         # The node was modified -> look for all recursive dependencies of the new node
         all_dependencies_to_add = find_all_dependencies(
@@ -1755,7 +1766,13 @@ def get_class_node_and_dependencies(
 
         relative_dependency_order = mapper.compute_relative_order(all_dependencies_to_add)
         nodes_to_add = {
-            dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
+            dep: (
+                relative_dependency_order[dep],
+                # If this dependency is explicitly defined in the modular, prefer the modular's version.
+                # This prevents a renamed parent class from overriding a modular-defined class of the same name.
+                modular_mapper.global_nodes[dep] if dep in modular_mapper.classes else mapper.global_nodes[dep],
+            )
+            for dep in all_dependencies_to_add
         }
 
     # No transformers (modeling file) super class, just check functions and assignments dependencies
