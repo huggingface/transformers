@@ -1092,9 +1092,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         for i in range(num_image_tokens):
             # Set is_first_iteration=True to force using inputs_embeds instead of input_ids.
-            # Without this, prepare_inputs_for_generation would use input_ids (full prompt) in every
-            # iteration, causing the cache to overflow. We need it to use our prepared inputs_embeds
-            # which contains exactly 1 new token embedding per iteration.
+            # Without this, prepare_inputs_for_generation would use input_ids (the full prompt)
+            # instead of our prepared inputs_embeds (1 new token). This causes position_ids to be
+            # computed incorrectly based on cache length, leading to RoPE index out of bounds errors.
             model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, is_first_iteration=True, **model_kwargs
             )
