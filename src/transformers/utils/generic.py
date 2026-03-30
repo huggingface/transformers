@@ -993,7 +993,7 @@ class GeneralInterface(MutableMapping):
         return list(self.keys())
 
 
-def http_retry(
+def retry(
     max_retries=5,
     initial_delay=1.0,
     max_delay=30.0,

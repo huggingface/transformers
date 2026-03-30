@@ -2647,20 +2647,13 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
             If provided, the initial delay in seconds before the first retry.
             Subsequent retries use exponential backoff with jitter.
     """
-    from .utils.generic import http_retry
+    from .utils.generic import retry
 
-    return http_retry(
+    return retry(
         max_retries=max_attempts,
         initial_delay=wait_before_retry or 0,
         jitter=wait_before_retry is not None,
-        exceptions=(
-            httpx.HTTPError,
-            httpx.RequestError,
-            httpx.TimeoutException,
-            httpx.ReadTimeout,
-            httpx.ConnectError,
-            httpx.NetworkError,
-        ),
+        exceptions=(httpx.HTTPError,),
     )
 
 

@@ -33,7 +33,7 @@ from transformers.utils import (
     to_py_obj,
     transpose,
 )
-from transformers.utils.generic import http_retry
+from transformers.utils.generic import retry
 
 
 if is_torch_available():
@@ -353,9 +353,9 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
             )
 
 
-class HttpRetryTest(unittest.TestCase):
+class RetryTest(unittest.TestCase):
     def test_succeeds_on_first_attempt(self):
-        @http_retry(max_retries=3, exceptions=(ValueError,))
+        @retry(max_retries=3, exceptions=(ValueError,))
         def succeed():
             return "ok"
 
@@ -365,7 +365,7 @@ class HttpRetryTest(unittest.TestCase):
     def test_retries_then_succeeds(self, mock_sleep):
         call_count = 0
 
-        @http_retry(max_retries=3, initial_delay=1.0, jitter=False, exceptions=(ValueError,))
+        @retry(max_retries=3, initial_delay=1.0, jitter=False, exceptions=(ValueError,))
         def fail_twice():
             nonlocal call_count
             call_count += 1
@@ -379,7 +379,7 @@ class HttpRetryTest(unittest.TestCase):
 
     @patch("transformers.utils.generic.time.sleep")
     def test_raises_after_max_retries(self, mock_sleep):
-        @http_retry(max_retries=2, initial_delay=0.1, jitter=False, exceptions=(RuntimeError,))
+        @retry(max_retries=2, initial_delay=0.1, jitter=False, exceptions=(RuntimeError,))
         def always_fail():
             raise RuntimeError("permanent")
 
@@ -388,7 +388,7 @@ class HttpRetryTest(unittest.TestCase):
         self.assertEqual(mock_sleep.call_count, 1)
 
     def test_non_matching_exception_propagates_immediately(self):
-        @http_retry(max_retries=5, exceptions=(ValueError,))
+        @retry(max_retries=5, exceptions=(ValueError,))
         def raise_type_error():
             raise TypeError("wrong type")
 
@@ -399,7 +399,7 @@ class HttpRetryTest(unittest.TestCase):
     def test_exponential_backoff(self, mock_sleep):
         call_count = 0
 
-        @http_retry(max_retries=4, initial_delay=1.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
+        @retry(max_retries=4, initial_delay=1.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
         def fail_thrice():
             nonlocal call_count
             call_count += 1
@@ -415,7 +415,7 @@ class HttpRetryTest(unittest.TestCase):
     def test_max_delay_cap(self, mock_sleep):
         call_count = 0
 
-        @http_retry(max_retries=5, initial_delay=8.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
+        @retry(max_retries=5, initial_delay=8.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
         def fail_four():
             nonlocal call_count
             call_count += 1
@@ -429,7 +429,7 @@ class HttpRetryTest(unittest.TestCase):
         self.assertEqual(delays, [8.0, 10.0, 10.0, 10.0])
 
     def test_preserves_function_metadata(self):
-        @http_retry(exceptions=(ValueError,))
+        @retry(exceptions=(ValueError,))
         def my_func():
             """My docstring."""
             pass

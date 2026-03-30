@@ -37,7 +37,7 @@ from .utils import (
     is_torchcodec_available,
     requires_backends,
 )
-from .utils.generic import http_retry
+from .utils.generic import retry
 
 
 if TYPE_CHECKING:
@@ -58,7 +58,7 @@ if is_torchcodec_available():
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
 
-@http_retry(exceptions=(httpx.HTTPError,))
+@retry(exceptions=(httpx.HTTPError,))
 def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     """Fetch audio bytes from a URL with automatic retry and exponential backoff."""
     response = httpx.get(url, follow_redirects=True, timeout=timeout)
