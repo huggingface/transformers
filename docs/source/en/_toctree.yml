@@ -33,7 +33,7 @@
       - local: model_output_tracing
         title: Tracing model intermediate outputs
       - local: auto_docstring
-        title: Documenting a model
+        title: Auto-generating docstrings
       - local: testing
         title: Transformers model tests
       - local: pr_checks
