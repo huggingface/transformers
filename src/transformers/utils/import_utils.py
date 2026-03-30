@@ -2531,7 +2531,7 @@ def requires(*, backends=()):
             requires_backends(fun, applied_backends)
             return fun(*args, **kwargs)
 
-        wrapper.__backends = applied_backends # type: ignore [unresolved-attribute]
+        wrapper.__backends = applied_backends  # type: ignore [unresolved-attribute]
         return wrapper
 
     return inner_fn
