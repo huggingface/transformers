@@ -59,7 +59,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("musicgen", "EncodecFeatureExtractor"),
         ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
         ("omniasr_ctc", "OmniASRFeatureExtractor"),
-        ("omniasr_encoder", "OmniASRFeatureExtractor"),
+        ("omniasr", "OmniASRFeatureExtractor"),
         ("omniasr_llm", "OmniASRFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),

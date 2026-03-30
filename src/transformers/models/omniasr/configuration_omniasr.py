@@ -166,9 +166,9 @@ DEFAULT_LANGUAGE_MAPPING = {'aae_latn': 1, 'aal_latn': 2, 'abb_latn': 3, 'abi_la
 # fmt: on
 
 
-class OmniASREncoderConfig(PreTrainedConfig):
+class OmniASRConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`OmniASREncoderConfig`]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`OmniASRConfig`]. It is used to instantiate
     a `OmniASREncoder` model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
@@ -180,7 +180,7 @@ class OmniASREncoderConfig(PreTrainedConfig):
 
     """
 
-    model_type = "omniasr_encoder"
+    model_type = "omniasr"
 
     def __init__(
         self,
@@ -213,8 +213,7 @@ class OmniASREncoderConfig(PreTrainedConfig):
         first_pass_dropout_p=0.0, # TODO not used
         attention_dropout=0.0,
         hidden_dropout=0.1,
-        layerdrop=0.1, 
-        final_dropout=0.0, 
+        layerdrop=0.1,
         feat_proj_dropout=0.0,
         activation_dropout=0.1,
 
@@ -259,7 +258,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.attention_dropout = attention_dropout
-        self.final_dropout = final_dropout
         self.hidden_dropout = hidden_dropout
         self.layerdrop = layerdrop
         # Whether layer normalization is applied at the beginning of each layer or after each layer's residuation connection: https://github.com/facebookresearch/fairseq2/blob/a510a839e007d2b036185b7b4ca76074d287c67e/src/fairseq2/models/transformer/norm_order.py#L12
@@ -277,6 +275,9 @@ class OmniASREncoderConfig(PreTrainedConfig):
         self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
         
         self.initializer_range = initializer_range
+
+        # For modular with Wav2Vec2
+        self.do_stable_layer_norm = False
 
         # SpecAugment parameters
         self.apply_spec_augment = apply_spec_augment
@@ -304,7 +305,7 @@ class OmniASRCTCConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr_ctc"
-    sub_configs = {"encoder_config": OmniASREncoderConfig}
+    sub_configs = {"encoder_config": OmniASRConfig}
 
     def __init__(
         self,
@@ -319,9 +320,9 @@ class OmniASRCTCConfig(PreTrainedConfig):
     ):
         
         if isinstance(encoder_config, dict):
-            encoder_config = OmniASREncoderConfig(**encoder_config)
+            encoder_config = OmniASRConfig(**encoder_config)
         elif encoder_config is None:
-            encoder_config = OmniASREncoderConfig()
+            encoder_config = OmniASRConfig()
         self.encoder_config = encoder_config
 
         self.vocab_size = vocab_size
@@ -336,7 +337,7 @@ class OmniASRCTCConfig(PreTrainedConfig):
         )
 
     @classmethod
-    def from_encoder_config(cls, encoder_config: OmniASREncoderConfig, **kwargs):
+    def from_encoder_config(cls, encoder_config: OmniASRConfig, **kwargs):
         r"""
         Instantiate a [`OmniASRCTCConfig`] (or a derived class) from omniASR encoder model configuration.
 
@@ -369,7 +370,7 @@ class OmniASRLLMConfig(PreTrainedConfig):
     """
 
     model_type = "omniasr_llm"
-    sub_configs = {"encoder_config": OmniASREncoderConfig, "text_config": AutoConfig}
+    sub_configs = {"encoder_config": OmniASRConfig, "text_config": AutoConfig}
 
     # TODO change to omniasr vals
     # from other repo: https://github.com/harikc456/wav2vec2_llama_hf/blob/6153f04a7d3357d49601323fc1f7f4364bce6735/convert_to_hf.py#L237
@@ -410,9 +411,9 @@ class OmniASRLLMConfig(PreTrainedConfig):
     ):
         
         if isinstance(encoder_config, dict):
-            encoder_config = OmniASREncoderConfig(**encoder_config)
+            encoder_config = OmniASRConfig(**encoder_config)
         elif encoder_config is None:
-            encoder_config = OmniASREncoderConfig()
+            encoder_config = OmniASRConfig()
         self.encoder_config = encoder_config
 
         if isinstance(text_config, dict):
@@ -451,4 +452,4 @@ class OmniASRLLMConfig(PreTrainedConfig):
 
 
 
-__all__ = ["OmniASRCTCConfig", "OmniASRLLMConfig", "OmniASREncoderConfig"]
+__all__ = ["OmniASRCTCConfig", "OmniASRLLMConfig", "OmniASRConfig"]

@@ -83,7 +83,7 @@ from transformers import (
     LlamaConfig,
     OmniASRCTCConfig,
     OmniASRLLMConfig,
-    OmniASREncoderConfig,
+    OmniASRConfig,
     OmniASRForCTC,
     OmniASRForConditionalGeneration,
     OmniASRModel,
@@ -107,17 +107,19 @@ logger = logging.get_logger(__name__)
 encoder_convert_list = [
     # OmniASRFeatureEncoder
     ("encoder_frontend.feature_extractor.layers", "encoder.feature_extractor.conv_layers"),
-    ("encoder_frontend.post_extract_layer_norm", "encoder.feature_extractor.layer_norm"),
     # OmniASRFeatureProjection
+    ("encoder_frontend.post_extract_layer_norm", "encoder.feature_projection.layer_norm"),
     ("encoder_frontend.model_dim_proj", "encoder.feature_projection.projection"),
     # OmniASREncoder
     ("encoder_frontend.pos_encoder.conv", "encoder.encoder.pos_conv_embed.conv"),
     ("encoder.layers", "encoder.encoder.layers"),
-    ("self_attn.output_proj", "self_attn.out_proj"),
+    # Order matters: specific patterns before general ones
     ("self_attn_layer_norm", "layer_norm"),
+    ("self_attn.output_proj", "attention.out_proj"),
+    ("self_attn", "attention"),  # General mapping for all attention projections (k_proj, q_proj, v_proj)
     ("ffn_layer_norm", "final_layer_norm"),
-    ("inner_proj", "intermediate_dense"),
-    ("output_proj", "output_dense"),
+    ("ffn.inner_proj", "feed_forward.intermediate_dense"),
+    ("ffn.output_proj", "feed_forward.output_dense"),
     ("encoder.layer_norm", "encoder.encoder.layer_norm"),
 ]
 
@@ -392,7 +394,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     conv_dim, conv_kernel, conv_stride = zip(*original_config.encoder_config.feature_extractor_layer_descs)
     layer_norm_pre = original_config.encoder_config.norm_order == TransformerNormOrder.PRE
     feat_extract_norm = "layer" if original_config.encoder_config.feature_extractor_layer_norm_convs else "group"
-    encoder_config = OmniASREncoderConfig(
+    encoder_config = OmniASRConfig(
         # TODO clean up unused and make Transformers compatible
         max_seq_len=original_config.encoder_config.max_seq_len, 
         feature_dim=original_config.encoder_config.feature_dim, 
@@ -424,7 +426,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         intermediate_size=original_config.encoder_config.ffn_inner_dim,
         position_embeddings_type=original_config.encoder_config.pos_encoder_type, 
-        final_dropout=original_config.final_dropout_p,
+        # final_dropout=original_config.final_dropout_p,  # TODO 0 so remove?
         layerdrop=original_config.encoder_config.layer_drop_p,
         # NOTE (ebezzam) do we keep specaugment params?
         apply_spec_augment=original_config.use_masking,
@@ -506,7 +508,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         hf_model = OmniASRForConditionalGeneration(config)
     elif "W2V" in model_card:
         # TODO not working
-        config = OmniASREncoderConfig(
+        config = OmniASRConfig(
             **encoder_config.to_dict()
         )
         hf_model = OmniASRModel(config)
