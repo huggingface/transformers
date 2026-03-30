@@ -59,6 +59,7 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
 
     def __init__(self, parent):
         super().__init__(parent=parent)
+        self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
