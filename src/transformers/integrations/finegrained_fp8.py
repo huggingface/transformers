@@ -74,12 +74,6 @@ def _load_triton_kernel():
     _triton_available = False  # mark attempted before any early exit
 
     kernel = lazy_load_kernel("finegrained-fp8")
-
-    if kernel is None:
-        raise ImportError(
-            "finegrained-fp8 kernel could not be loaded. Install the `kernels` package (`pip install kernels`)."
-        )
-
     triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul")
     triton_fp8_act_quant = getattr(kernel, "fp8_act_quant")
     triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched")
@@ -137,12 +131,6 @@ def _load_deepgemm_kernel():
         )
 
     kernel = lazy_load_kernel("deep-gemm")
-    if kernel is None:
-        raise ImportError(
-            "DeepGEMM kernel could not be loaded. Install the `kernels` package "
-            "(`pip install kernels`) or set `experts_implementation` to a different strategy."
-        )
-
     deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt", None)
     deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
     deepgemm_per_token_cast_to_fp8 = (
