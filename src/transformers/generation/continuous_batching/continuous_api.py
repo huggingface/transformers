@@ -559,21 +559,20 @@ class ContinuousBatchProcessor:
             # underlying data. It's just a trick to use the same storage for both tensors.
             output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def warmup(
         self,
         model: nn.Module,
         logit_processor: LogitsProcessorList,
         num_cache_tokens: int = 0,
         num_query_tokens: int = 0,
-    ) -> dict[str, float]:
-        """Pre-capture CUDA graphs for varlen and decode paths by directly building model kwargs and capturing graphs.
-        In async mode, both IO pairs are warmed up since each has its own graph buffer and static tensors."""
+    ) -> None:
+        """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
+        pairs are warmed up since each has its own graph buffer and static tensors."""
 
-        warmup_times = {"varlen_warmup_time": 0.0, "decode_warmup_times": []}
         if not self._pad_inputs:
             logger.info("CUDA graphs and compile are disabled, skipping warmup.")
-            return warmup_times
+            return None
 
         num_query_tokens = num_query_tokens if num_query_tokens > 0 else self.max_batch_tokens
         num_cache_tokens = num_cache_tokens if num_cache_tokens > 0 else self.cache.block_size * num_query_tokens
@@ -603,15 +602,17 @@ class ContinuousBatchProcessor:
                 carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
                 forward_fn = self._compiled_varlen or self._forward_process_and_sample
                 forward_fn_args = (model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
-                self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
-                warmup_times["varlen_warmup_time"] += perf_counter() - start
+                if self.use_cuda_graph:
+                    self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
+                else:
+                    with torch.cuda.stream(compute_stream):
+                        forward_fn(*forward_fn_args)
+                logger.info(f"Varlen warmup completed in {perf_counter() - start:.2f}s")
             except Exception as e:
                 logger.warning(f"Failed to warm up varlen path: {e}")
-                warmup_times["varlen_warmup_time"] = -1.0
             finally:
                 for fs in future_states:
                     self.cache.free_blocks(fs.state.request_id)
-            logger.info(f"Varlen warmup completed in {warmup_times['varlen_warmup_time']:.2f}s")
 
             # Exit here if the decode fast path is not available
             if self.cache.max_blocks_per_request == 0:
@@ -620,35 +621,37 @@ class ContinuousBatchProcessor:
             # --- Decode fast path ---
             logger.info("Warming up decode fast path...")
             q_interval = self.q_padding_interval_size  # shorthand to avoid overly long lines
+            decode_graphs = 0
+            start = perf_counter()
             for num_requests in range(q_interval, self.max_batch_tokens + 1, q_interval):
                 future_states = create_warmup_future_states(
-                    num_requests, RequestStatus.DECODING, 0, num_cache_tokens, self.cache
+                    num_requests, RequestStatus.DECODING, 1, self.cache.block_size, self.cache
                 )
                 if not future_states:
                     continue
                 try:
-                    start = perf_counter()
                     padded_q = pad_to_interval(len(future_states), q_interval, self.max_batch_tokens)
                     self.inputs_and_outputs.prepare_batch_tensors(future_states, True, padded_q, 0)
                     batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
                     carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
                     forward_fn = self._compiled_decode or self._forward_process_and_sample
                     forward_fn_args = (model, batch_data, logit_processor, carry_over_ids, prev_output_ids, output_ids)
-                    self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
-                    warmup_times["decode_warmup_times"].append(perf_counter() - start)
+                    if self.use_cuda_graph:
+                        self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
+                    else:
+                        with torch.cuda.stream(compute_stream):
+                            forward_fn(*forward_fn_args)
+                    decode_graphs += 1
                 except Exception as e:
                     logger.warning(f"Failed to warm up decode path for {num_requests} requests: {e}")
-                    warmup_times["decode_warmup_times"].append(-1.0)
                 finally:
                     for fs in future_states:
                         self.cache.free_blocks(fs.state.request_id)
-            logger.info(f"Decode warmup completed ({len(warmup_times['decode_warmup_times'])} graphs).")
+            logger.info(f"Decode warmup completed ({decode_graphs} graphs) in {perf_counter() - start:.2f}s.")
 
         # If using async batching, reset to pair 0 for the generation loop
         if self.use_async_batching:
             self.inputs_and_outputs.current_pair = 0
-
-        return warmup_times
 
 
 # Manager Class (User Interface)
@@ -729,15 +732,12 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def warmup(self, num_cache_tokens: int = 0, num_query_tokens: int = 0) -> dict[str, float]:
+    def warmup(self, num_cache_tokens: int = 0, num_query_tokens: int = 0) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
-        processor if not already done. Returns a dict with timing keys 'varlen_warmup_time' and 'decode_warmup_time'."""
-        # Create the batch processor if it doesn't exist
+        processor if not already done."""
         if self.batch_processor is None:
             self.batch_processor = self._create_batch_processor()
-
-        # Delegate to the processor's warmup method
-        return self.batch_processor.warmup(self.model, self.logit_processor, num_cache_tokens, num_query_tokens)
+        self.batch_processor.warmup(self.model, self.logit_processor, num_cache_tokens, num_query_tokens)
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def stop(self, block: bool = True, timeout: float | None = None, keep_for_next_session: bool = False) -> None:

@@ -177,7 +177,7 @@ def create_warmup_future_states(
     future_states = []
     for req_id in request_ids:
         state = RequestState(request_id=req_id, initial_tokens=[0] * total_tokens, max_new_tokens=1)
-        state._status = status
+        state._status = status  # bypass the property setter to avoid the lifecycle side effects
         state.tokens_to_process = [0] * num_query_tokens
         state.position_offset = num_cache_tokens
         # Stop if allocation fails for any request
