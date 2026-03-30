@@ -2425,7 +2425,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_codes = (
             torch.stack([hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None], dim=1)
             .transpose(1, 2)
-            .to(self.code2wav.device)
+            .to(talker_result.hidden_states[-1][-1].device)
         )
         talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
 
