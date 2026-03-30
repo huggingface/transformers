@@ -17,7 +17,7 @@ import triton
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_kernels_available, is_torch_available, logging
 from .hub_kernels import get_kernel
@@ -752,3 +752,7 @@ class Fp8Dequantize(ConversionOps):
         return {
             full_layer_name: dequantized.reshape(quantized.shape),
         }
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return _IdentityOp()

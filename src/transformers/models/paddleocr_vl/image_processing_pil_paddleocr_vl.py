@@ -23,6 +23,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Iterable
 
 import numpy as np
@@ -30,17 +31,59 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from ...utils.import_utils import requires
-from .image_processing_paddleocr_vl import PaddleOCRVLImageProcessorKwargs, smart_resize
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+def smart_resize(
+    height: int,
+    width: int,
+    factor: int = 28,
+    min_pixels: int = 384 * 384,
+    max_pixels: int = 1536 * 1536,
+):
+    if height < factor:
+        width = round((width * factor) / height)
+        height = factor
+
+    if width < factor:
+        height = round((height * factor) / width)
+        width = factor
+
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    if h_bar * w_bar > max_pixels:
+        beta = math.sqrt((height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+    return h_bar, w_bar
+
+
 @auto_docstring
 class PaddleOCRVLImageProcessorPil(PilBackend):
     do_resize = True
@@ -103,7 +146,7 @@ class PaddleOCRVLImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
