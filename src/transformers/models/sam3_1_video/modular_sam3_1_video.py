@@ -23,9 +23,11 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING
 from ..sam2.modeling_sam2 import Sam2LayerNorm
 from ..sam2_video.modeling_sam2_video import Sam2VideoTwoWayTransformer
@@ -97,6 +99,37 @@ class Sam3_1FPNLayer(Sam3FPNLayer):
 
 class Sam3_1SinePositionEmbedding(Sam3SinePositionEmbedding):
     pass
+
+
+@auto_docstring
+@requires(backends=("torch", "torchvision"))
+class Sam31PreTrainedModel(PreTrainedModel):
+    config_class = Sam31Config
+    base_model_prefix = "sam3_1"
+    main_input_name = "pixel_values"
+    input_modalities = ["image", "text"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if hasattr(module, "position_embeddings"):
+            init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        elif hasattr(module, "rope_embeddings_cos") and hasattr(module, "rope_embeddings_sin"):
+            end_x, end_y = module.end_x, module.end_y
+            dim = module.dim
+            freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+            x_positions = (flattened_indices % end_x) * module.scale
+            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
+            freqs_x = torch.outer(x_positions, freqs).float()
+            freqs_y = torch.outer(y_positions, freqs).float()
+            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
 
 
 class Sam3_1ViTModel(Sam3ViTModel):
@@ -1612,4 +1645,10 @@ class Sam3_1VideoModel(Sam3_1VideoPreTrainedModel):
         )
 
 
-__all__ = ["Sam3_1VideoConfig", "Sam3_1VideoModel", "Sam3_1VideoPreTrainedModel", "Sam3_1ViTModel"]
+__all__ = [
+    "Sam31PreTrainedModel",
+    "Sam3_1VideoConfig",
+    "Sam3_1VideoModel",
+    "Sam3_1VideoPreTrainedModel",
+    "Sam3_1ViTModel",
+]
