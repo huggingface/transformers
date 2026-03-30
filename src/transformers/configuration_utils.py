@@ -224,7 +224,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # Common attributes for all models
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
-    dtype: Union[str, "torch.dtype"] | None = None
+    # NOTE: annotated as Any (rather than Union[str, "torch.dtype"] | None) so that pydantic can
+    # build a schema for classes that include PreTrainedConfig as a field without needing torch
+    # in the resolution namespace. The runtime type is still Union[str, torch.dtype] | None.
+    # See https://github.com/huggingface/transformers/issues/45070
+    dtype: Any = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 
