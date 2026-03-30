@@ -25,17 +25,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-from .image_processing_beit import BeitImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
+from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
+# Adapted from transformers.models.beit.image_processing_beit.BeitImageProcessorKwargs
+class BeitImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+    do_reduce_labels: bool
 
 
 @auto_docstring
@@ -127,7 +131,7 @@ class BeitImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -155,6 +159,7 @@ class BeitImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps.
@@ -171,8 +176,8 @@ class BeitImageProcessorPil(PilBackend):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post_process_semantic_segmentation")
+        import torch
+        import torch.nn.functional as F
 
         logits = outputs.logits
 

@@ -335,7 +335,7 @@ class ModernVBertPredictionHead(ModernBertPredictionHead):
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embeddings.tok_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
 
         self.vocab_size = config.text_config.vocab_size

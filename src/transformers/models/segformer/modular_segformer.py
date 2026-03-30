@@ -39,13 +39,25 @@ from ...image_utils import (
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import eager_attention_forward
 from .configuration_segformer import SegformerConfig
+
+
+class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
 
 
 class SegformerImageProcessor(BeitImageProcessor):
@@ -115,7 +127,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -155,6 +167,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         return processed_images
 
 
+@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -221,7 +234,7 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
         self,
         images: list["np.ndarray"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
