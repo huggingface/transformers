@@ -215,6 +215,8 @@ class EsmConfig(PreTrainedConfig):
     is_decoder: bool | None = False
     add_cross_attention: bool | None = False
     tie_word_embeddings: bool = True
+    bos_token_id: int | None = None
+    eos_token_id: int | list[int] | None = 2
 
     def __post_init__(self, **kwargs):
         if self.is_folding_model:
