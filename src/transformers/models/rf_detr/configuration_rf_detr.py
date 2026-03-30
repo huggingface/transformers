@@ -208,6 +208,7 @@ class RfDetrConfig(PreTrainedConfig):
     mask_class_loss_coefficient: int | float = 5.0
     mask_dice_loss_coefficient: int | float = 5.0
     segmentation_head_activation_function: str = "gelu"
+    intermediate_size: int = 1024
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

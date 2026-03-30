@@ -14,8 +14,10 @@
 """Convert RF-DETR checkpoints to transformers format."""
 
 import argparse
+import json
 
 import torch
+from huggingface_hub import hf_hub_download
 
 from transformers import (
     DetrImageProcessor,
@@ -98,6 +100,7 @@ BASE_MODEL_CONFIG = {
     "decoder_cross_attention_heads": 16,
     "decoder_n_points": 2,
     "projector_scale_factors": [1.0],
+    "intermediate_size": 1024,
 }
 
 # Model specs: model_name -> overrides of BASE_MODEL_CONFIG (at least decoder_layers)
@@ -151,6 +154,12 @@ def get_model_config(model_name: str):
         config["num_labels"] = 366
     else:
         config["num_labels"] = 91
+        repo_id = "huggingface/label-files"
+        filename = "coco-detection-id2label.json"
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = {int(k): v for k, v in id2label.items()}
+        config["id2label"] = id2label
+        config["label2id"] = {v: k for k, v in id2label.items()}
 
     return config
 
