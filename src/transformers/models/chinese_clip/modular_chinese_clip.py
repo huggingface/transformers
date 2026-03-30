@@ -18,7 +18,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
 )
@@ -353,11 +353,10 @@ class ChineseCLIPTextModel(CLIPTextModel):
             inputs_embeds=inputs_embeds,
         )
 
-        attention_mask = create_causal_mask(
+        attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
         )
 
         encoder_outputs = self.encoder(

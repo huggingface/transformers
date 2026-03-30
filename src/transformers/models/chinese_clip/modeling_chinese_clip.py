@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -769,11 +769,10 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        attention_mask = create_causal_mask(
+        attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=None,
         )
 
         encoder_outputs = self.encoder(

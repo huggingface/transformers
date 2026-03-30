@@ -535,7 +535,7 @@ class AltCLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "BAAI/AltCLIP"
-        model = AltCLIPModel.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
+        model = AltCLIPModel.from_pretrained(model_name).to(torch_device)
         processor = AltCLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
