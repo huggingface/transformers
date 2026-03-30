@@ -290,7 +290,7 @@ class Deimv2RepNCSPELAN5(nn.Module):
     """
     Rep(VGG) N(etwork) CSP (Cross Stage Partial) ELAN (Efficient Layer Aggregation Network) block.
     Similar to DFineRepNCSPELAN4 but without intermediate convolutions between CSP branches,
-    resulting in a simpler 4-way concatenation (split + 2 CSP branches) instead of D-FINE's
+    resulting in a simpler 4-way concatenation (2 split halves + 2 CSP branches) instead of D-FINE's
     4-branch design with interleaved convolutions.
     """
 
