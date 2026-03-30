@@ -564,8 +564,8 @@ class ContinuousBatchProcessor:
         self,
         model: nn.Module,
         logit_processor: LogitsProcessorList,
-        num_cache_tokens: int = 0,
         num_query_tokens: int = 0,
+        num_cache_tokens: int = 0,
     ) -> None:
         """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
         pairs are warmed up since each has its own graph buffer and static tensors."""
@@ -623,7 +623,9 @@ class ContinuousBatchProcessor:
             q_interval = self.q_padding_interval_size  # shorthand to avoid overly long lines
             decode_graphs = 0
             start = perf_counter()
-            for num_requests in range(q_interval, self.max_batch_tokens + 1, q_interval):
+            # If N requests reach decoding stage, then the number of query tokens is going to start at N and decrease to
+            # 0 as all request finish. So we warmup for all intervals between 0 and N.
+            for num_requests in range(0, num_query_tokens + q_interval, q_interval):
                 future_states = create_warmup_future_states(
                     num_requests, RequestStatus.DECODING, 1, self.cache.block_size, self.cache
                 )
@@ -733,12 +735,12 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def warmup(self, num_cache_tokens: int = 0, num_query_tokens: int = 0) -> None:
+    def warmup(self, num_query_tokens: int = 0, num_cache_tokens: int = 0) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
         if self.batch_processor is None:
             self.batch_processor = self._create_batch_processor()
-        self.batch_processor.warmup(self.model, self.logit_processor, num_cache_tokens, num_query_tokens)
+        self.batch_processor.warmup(self.model, self.logit_processor, num_query_tokens, num_cache_tokens)
         self.warmed_up = True
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
@@ -1101,25 +1103,26 @@ class ContinuousMixin:
         timeout: float | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         persistent_manager: bool = False,
-        warmup: bool = True,
+        warmup_requests: int | None = 0,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
         """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
         `init_continuous_batching`, except for:
             - block: whether to block the thread when stopping the manager. Default is True.
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
+            - warmup_query_tokens: the number of expected requests for which to warmup. 0 is auto, None is no warmup.
         """
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
             **deprecated_kwargs,
         )
-        if warmup and not manager.warmed_up:
+        if not (warmup_requests is None or manager.warmed_up):
             # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
-            print("Warming up for coninuous batching...")
+            logger.warning("Warming up for coninuous batching...")
             start = perf_counter()
-            manager.warmup()
-            print(f"Warming up completed in {perf_counter() - start:.2f}s.")
+            manager.warmup(num_query_tokens=warmup_requests, num_cache_tokens=0)
+            logger.info(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
             yield manager
@@ -1195,7 +1198,7 @@ class ContinuousMixin:
             block=True,
             timeout=5,
             persistent_manager=persistent_manager,
-            warmup=warmup,
+            warmup_requests=len(inputs) if warmup else None,
             **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])

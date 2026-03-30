@@ -15,7 +15,6 @@ import argparse
 import contextlib
 import json
 import os
-import time
 from itertools import cycle
 
 import datasets
@@ -27,6 +26,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatching
 from transformers.generation import GenerationConfig
 from transformers.generation.continuous_batching.requests import logger
 
+
+# TODO: this file is now mostly used for benchmarking, remodel it in consequence.
 
 def generate_without_cb(
     model_id: str, sliding_window: int, attn_impl: str, batched_inputs: list[int], generation_config: GenerationConfig
@@ -92,27 +93,14 @@ def batch_generate(
     expected_outputs: list[str] | None = None,
 ) -> tuple[float, float]:
 
-    # Warmup the model
-    print("\nWarming up the model...")
-    start_time_warmup = time.time()
-    model.generate_batch(
-        inputs=simple_batch_inputs[:1],
-        generation_config=generation_config,
-        continuous_batching_config=cb_config,
-        persistent_manager=True,
-        warmup=True,
-    )
-    print(f"Warmup took: {time.time() - start_time_warmup:.2f} seconds.\n")
-
     # Actual batch generation
-    start_time_simple = time.time()
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
         continuous_batching_config=cb_config,
     )
-    end_time_simple = time.time()
-    print(f"Batch generation took: {end_time_simple - start_time_simple:.2f} seconds")
+    generation_start = min(out.created_time for out in batch_outputs.values())
+    generation_end = max(out.lifespan[1] for out in batch_outputs.values())
 
     if displayed_samples >= 0:
         print("Done with batch generation.")
@@ -150,7 +138,7 @@ def batch_generate(
             print(f"Request {i} matches" if matches else f"Request {i} does NOT match!")
 
     # Compute stats and maybe print them
-    gen_time = end_time_simple - start_time_simple
+    gen_time = generation_end - generation_start
     tok_per_sec = token_count / gen_time
     if displayed_samples >= 0:
         print("-" * 20)
