@@ -53,7 +53,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[docs]
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e ".[docs]"
 
       - name: Show installed libraries and their versions
         working-directory: /transformers
