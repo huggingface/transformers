@@ -32,13 +32,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    """
+
+    image_grid_pinpoints: list[list[int]]
+
+
 @auto_docstring
 class LlavaOnevisionImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
@@ -165,7 +173,7 @@ class LlavaOnevisionImageProcessorPil(PilBackend):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

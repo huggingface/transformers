@@ -32,13 +32,20 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
+
+    min_size: int
+
+
 @auto_docstring
 class DeepseekVLImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC

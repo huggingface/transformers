@@ -33,16 +33,9 @@ from ...image_utils import (
     get_max_height_width,
     validate_annotations,
 )
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_vision_available,
-    requires_backends,
-)
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
 from ...utils.import_utils import requires
-from .image_processing_yolos import YolosImageProcessorKwargs
 
 
 if is_vision_available():
@@ -50,6 +43,22 @@ if is_vision_available():
 if is_torch_available():
     import torch
     from torch import nn
+
+
+# Adapted from transformers.models.yolos.image_processing_yolos.YolosImageProcessorKwargs
+class YolosImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the YOLOS model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    """
+
+    format: str | AnnotationFormat
+    do_convert_annotations: bool
+
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -280,7 +289,6 @@ def get_size_with_aspect_ratio_yolos(
     return (oh, ow)
 
 
-@requires(backends=("vision", "torch", "torchvision"))
 @auto_docstring
 class YolosImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
@@ -577,7 +585,7 @@ class YolosImageProcessorPil(PilBackend):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -695,7 +703,7 @@ class YolosImageProcessorPil(PilBackend):
             ]
         return encoded_inputs
 
-    @requires(backends=("vision", "torch"))
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None
     ):

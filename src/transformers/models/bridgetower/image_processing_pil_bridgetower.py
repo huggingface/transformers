@@ -20,16 +20,57 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
+    ChannelDimension,
     PILImageResampling,
     SizeDict,
+    get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_bridgetower import BridgeTowerImageProcessorKwargs, get_resize_output_image_size
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
+class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size by which to make sure both the height and width can be divided.
+    """
+
+    size_divisor: int
+
+
+# adapted from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
+def get_resize_output_image_size(
+    input_image: np.ndarray,
+    shorter: int = 800,
+    longer: int = 1333,
+    size_divisor: int = 32,
+) -> tuple[int, int]:
+    """Get output image size after resizing with size_divisor."""
+    input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
+
+    min_size, max_size = shorter, longer
+    scale = min_size / min(input_height, input_width)
+
+    if input_height < input_width:
+        new_height = min_size
+        new_width = scale * input_width
+    else:
+        new_height = scale * input_height
+        new_width = min_size
+
+    if max(new_height, new_width) > max_size:
+        scale = max_size / max(new_height, new_width)
+        new_height = scale * new_height
+        new_width = scale * new_width
+
+    new_height, new_width = int(new_height + 0.5), int(new_width + 0.5)
+    new_height = new_height // size_divisor * size_divisor
+    new_width = new_width // size_divisor * size_divisor
+
+    return new_height, new_width
+
+
 @auto_docstring
 class BridgeTowerImageProcessorPil(PilBackend):
     """PIL backend for BridgeTower with custom resize and center_crop."""
@@ -57,7 +98,7 @@ class BridgeTowerImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         size_divisor: int = 32,
         **kwargs,
     ) -> np.ndarray:
@@ -82,7 +123,7 @@ class BridgeTowerImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

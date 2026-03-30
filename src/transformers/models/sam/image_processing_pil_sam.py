@@ -17,12 +17,9 @@ import math
 from collections.abc import Iterable
 from copy import deepcopy
 from itertools import product
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
-import torch
-import torch.nn.functional as F
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -35,14 +32,19 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
 from ...utils.import_utils import requires
-from .image_processing_sam import SamImageProcessorKwargs
 
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
+
+if TYPE_CHECKING:
+    import torch
 
 
 def get_resize_output_image_size(
@@ -62,8 +64,22 @@ def get_resize_output_image_size(
     return (new_height, new_width)
 
 
+# Adapted from transformers.models.sam.image_processing_sam.SamImageProcessorKwargs
+class SamImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    mask_size (`dict[str, int]`, *optional*):
+        The size `{"longest_edge": int}` to resize the segmentation maps to.
+    mask_pad_size (`dict[str, int]`, *optional*):
+        The size `{"height": int, "width": int}` to pad the segmentation maps to. Must be larger than any segmentation
+        map size provided for preprocessing.
+    """
+
+    mask_size: dict[str, int]
+    mask_pad_size: dict[str, int]
+
+
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("torch",))
 class SamImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -131,7 +147,7 @@ class SamImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -144,7 +160,7 @@ class SamImageProcessorPil(PilBackend):
                 Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
                 edge of the image will be resized to the specified size, while the other edge will be resized to
                 maintain the aspect ratio.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
+            resample (`PILImageResampling | int | None`, *optional*):
                 Resampling filter to use when resizing the image.
 
         Returns:
@@ -165,7 +181,7 @@ class SamImageProcessorPil(PilBackend):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         return_tensors: str | TensorType | None,
-        device: Union[str, "torch.device"] | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -213,7 +229,7 @@ class SamImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -410,6 +426,9 @@ class SamImageProcessorPil(PilBackend):
         """
         if not is_torch_available():
             raise ImportError("PyTorch is required for post_process_masks")
+        import torch
+        import torch.nn.functional as F
+
         pad_size = self.pad_size if pad_size is None else pad_size
         target_image_size = (pad_size["height"], pad_size["width"])
         if isinstance(original_sizes, (torch.Tensor, np.ndarray)):
@@ -716,6 +735,8 @@ def _post_process_for_mask_generation(rle_masks, iou_scores, mask_boxes, amg_cro
     """
     if not is_torch_available():
         raise ImportError("PyTorch is required for post_process_for_mask_generation")
+
+    import torch
     from torchvision.ops.boxes import batched_nms
 
     keep_by_nms = batched_nms(
