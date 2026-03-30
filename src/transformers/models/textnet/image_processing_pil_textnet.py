@@ -27,13 +27,20 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_textnet import TextNetImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.textnet.image_processing_textnet.TextNetImageProcessorKwargs
+class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        Ensures height and width are rounded to a multiple of this value after resizing.
+    """
+
+    size_divisor: int
+
+
 @auto_docstring
 class TextNetImageProcessorPil(PilBackend):
     """PIL backend for TextNet with size_divisor resize."""
@@ -64,7 +71,7 @@ class TextNetImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         size_divisor: int = 32,
         **kwargs,
     ) -> np.ndarray:
@@ -95,7 +102,7 @@ class TextNetImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

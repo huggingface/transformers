@@ -24,13 +24,20 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
-from .image_processing_swin2sr import Swin2SRImageProcessorKwargs
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+# Adapted from transformers.models.swin2sr.image_processing_swin2sr.Swin2SRImageProcessorKwargs
+class Swin2SRImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+        The size to make the height and width divisible by when padding.
+    """
+
+    size_divisor: int
+
+
 @auto_docstring
 class Swin2SRImageProcessorPil(PilBackend):
     """PIL backend for Swin2SR with custom pad."""
@@ -81,7 +88,7 @@ class Swin2SRImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
