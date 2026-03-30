@@ -124,6 +124,9 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(max_graphs)
+        # The trash index is a valid cache position in the extra padding zone, used as a sentinel for padded slots.
+        # The cache allocates 2 extra blocks; this index points to the second-to-last page in that zone.
+        self._trash_index = cache.cache_shape[0] - 2
         # Setup static tensors and compute stream
         self._setup_static_tensors()
         self._reset_static_tensors(full_reset=True)
@@ -204,10 +207,10 @@ class ContinuousBatchingIOs:
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = torch.empty(
-            (num_groups, max_batch_tokens), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_groups, max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
         self.read_index_storage = torch.empty(
-            (num_groups, num_pages + max_batch_tokens), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_groups, num_pages + max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -271,15 +274,15 @@ class ContinuousBatchingIOs:
         # If this is a full reset, we reset every tensors
         if full_reset:
             self.block_table[:, :q_len].fill_(-1)
-            self.write_index_storage[:, :q_len].fill_(-2)  # -1 is used to let the cache where new states go
-            self.read_index_storage[:, : q_len + kv_len].fill_(-2)  # same
+            self.write_index_storage[:, :q_len].fill_(self._trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
             self.block_table[:, :q_len].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
-            self.write_index_storage[:, :q_len].fill_(-2)  # -1 is used to let the cache where new states go
-            self.read_index_storage[:, : q_len + kv_len].fill_(-2)  # same
+            self.write_index_storage[:, :q_len].fill_(self._trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
 
     def reset(self) -> None:
         """Reset all relevant states for a new generation loop."""
@@ -423,9 +426,10 @@ class ContinuousBatchingIOs:
 
         # If we are not using the block table, we populate the read and write indices
         if not self.use_block_table:
+            to_index_tensor = partial(torch.tensor, dtype=torch.int64, device=self.device)
             for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
-                self.read_index_storage[i, : len(group_read_indices)] = to_tensor(group_read_indices)
-                self.write_index_storage[i, : len(group_write_indices)] = to_tensor(group_write_indices)
+                self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
+                self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_read_sizes[i] = len(group_read_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
 
