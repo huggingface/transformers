@@ -430,50 +430,60 @@ def fp8_grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
-def _build_contiguous_layout(expert_ids_sorted: torch.Tensor, num_experts: int, alignment: int) -> tuple:
+def _build_deepgemm_contiguous_layout(expert_ids_sorted: torch.Tensor, num_experts: int, alignment: int) -> tuple:
     """Build a TMA-aligned contiguous layout for DeepGEMM grouped GEMM.
 
+    DeepGEMM requires M-dimension alignment per expert for TMA. This computes
+    the mapping from sorted token positions to padded row positions, and the
+    layout tensor that DeepGEMM uses to identify expert boundaries.
+
     Returns:
-        row_map: (num_tokens,) mapping from sorted token index to padded row index
-        grouped_layout: (total_rows,) per-row expert id on Hopper, (num_experts,) cumulative counts on Blackwell
-        total_rows: total number of rows including alignment padding
+        sorted_to_padded: (num_tokens,) index map from sorted position to padded row
+        grouped_layout: expert layout tensor (format depends on GPU architecture)
+        total_padded_rows: total number of rows including alignment padding
     """
     device = expert_ids_sorted.device
     num_tokens = expert_ids_sorted.size(0)
     tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
     aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
     # Upper bound avoids GPU→CPU sync; padding rows are skipped by DeepGEMM.
-    total_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
+    total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
 
     padding_per_expert = aligned_tokens_per_expert - tokens_per_expert
     cumulative_padding = padding_per_expert.cumsum(0) - padding_per_expert
-    row_map = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
+    sorted_to_padded = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
 
-    if torch.cuda.get_device_capability(device)[0] >= 10:  # Blackwell (SM100+) supports psum layout
-        # Blackwell: compact (num_experts,) cumulative actual token counts
+    if torch.cuda.get_device_capability(device)[0] >= 10:  # Blackwell (SM100+)
         grouped_layout = tokens_per_expert.cumsum(0).int()
     else:
-        # Hopper: full (total_rows,) per-row expert id, -1 for padding
-        grouped_layout = torch.full((total_rows,), -1, device=device, dtype=torch.int32)
-        grouped_layout[row_map] = expert_ids_sorted.int()
+        # Hopper: per-row expert id, -1 for padding rows
+        grouped_layout = torch.full((total_padded_rows,), -1, device=device, dtype=torch.int32)
+        grouped_layout[sorted_to_padded] = expert_ids_sorted.int()
 
-    return row_map, grouped_layout, total_rows
+    return sorted_to_padded, grouped_layout, total_padded_rows
 
 
-def _pad_for_contiguous_layout(
-    x: torch.Tensor, scales: torch.Tensor, row_map: torch.Tensor, total_rows: int
+def _pad_to_deepgemm_contiguous_layout(
+    hidden_states: torch.Tensor,
+    scales: torch.Tensor,
+    sorted_to_padded: torch.Tensor,
+    total_padded_rows: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Scatter FP8 activations and scales into the padded contiguous layout."""
-    a_padded = torch.zeros(total_rows, x.shape[1], device=x.device, dtype=x.dtype)
-    a_padded[row_map] = x
-    sf_padded = torch.zeros(total_rows, scales.shape[1], device=x.device, dtype=torch.float32)
-    sf_padded[row_map] = scales
-    return a_padded, sf_padded
+    """Pad sorted hidden states and scales into the TMA-aligned contiguous layout."""
+    hidden_padded = torch.zeros(
+        total_padded_rows, hidden_states.shape[1], device=hidden_states.device, dtype=hidden_states.dtype
+    )
+    hidden_padded[sorted_to_padded] = hidden_states
+    scales_padded = torch.zeros(total_padded_rows, scales.shape[1], device=hidden_states.device, dtype=torch.float32)
+    scales_padded[sorted_to_padded] = scales
+    return hidden_padded, scales_padded
 
 
-def _unpad_from_contiguous_layout(x: torch.Tensor, row_map: torch.Tensor) -> torch.Tensor:
-    """Gather real rows back from the padded contiguous layout."""
-    return x[row_map]
+def _unpad_from_deepgemm_contiguous_layout(
+    hidden_states_padded: torch.Tensor, sorted_to_padded: torch.Tensor
+) -> torch.Tensor:
+    """Remove padding rows from the TMA-aligned contiguous layout."""
+    return hidden_states_padded[sorted_to_padded]
 
 
 def fp8_deepgemm_experts_forward(
@@ -517,7 +527,7 @@ def fp8_deepgemm_experts_forward(
     selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Build TMA-aligned contiguous layout for DeepGEMM
-    row_map, grouped_layout, total_rows = _build_contiguous_layout(
+    sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
         expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT
     )
 
@@ -525,8 +535,8 @@ def fp8_deepgemm_experts_forward(
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
     act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
-    act_fp8, act_scales = _pad_for_contiguous_layout(act_fp8, act_scales, row_map, total_rows)
-    proj_out = torch.zeros(total_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    act_fp8, act_scales = _pad_to_deepgemm_contiguous_layout(act_fp8, act_scales, sorted_to_padded, total_padded_rows)
+    proj_out = torch.zeros(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     deepgemm_grouped_fp8_matmul(
         (act_fp8, act_scales), (w_up, ws_up), proj_out, grouped_layout, use_psum_layout=use_psum_layout
@@ -542,13 +552,13 @@ def fp8_deepgemm_experts_forward(
     w_down = self.down_proj
     ws_down = self.down_proj_scale_inv
     proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
-    proj_out = torch.zeros(total_rows, hidden_dim, device=device, dtype=torch.bfloat16)
+    proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm_grouped_fp8_matmul(
         (proj_fp8, proj_scales), (w_down, ws_down), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
     # Remove padding rows
-    proj_out = _unpad_from_contiguous_layout(proj_out, row_map)
+    proj_out = _unpad_from_deepgemm_contiguous_layout(proj_out, sorted_to_padded)
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
