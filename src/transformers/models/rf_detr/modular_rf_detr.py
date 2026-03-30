@@ -364,7 +364,7 @@ class RfDetrDinov2Layer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before the attention
