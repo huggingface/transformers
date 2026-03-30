@@ -36,9 +36,7 @@ import argparse
 import ast
 import enum
 import glob
-import hashlib
 import inspect
-import json
 import operator as op
 import os
 import re
@@ -385,26 +383,6 @@ MATH_OPERATORS = {
     ast.BitXor: op.xor,
     ast.USub: op.neg,
 }
-
-_DISK_CACHE_PATH = Path(__file__).parent / ".check_docstrings_cache.json"
-
-
-def _content_hash(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _load_disk_cache() -> dict[str, str]:
-    try:
-        return json.loads(_DISK_CACHE_PATH.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {}
-
-
-def _save_disk_cache(cache: dict[str, str]) -> None:
-    try:
-        _DISK_CACHE_PATH.write_text(json.dumps(cache, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    except OSError:
-        pass
 
 
 def _get_auto_docstring_names(file_path: str, cache: dict[str, set[str]] | None = None) -> set[str]:
@@ -1964,7 +1942,7 @@ def update_file_with_new_docstrings(
     )
 
 
-def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None, use_cache: bool = True):
+def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are decorated with `@auto_docstrings`.
     This function orchestrates the process by finding relevant files, scanning for decorators,
@@ -2196,8 +2174,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
     )
-    parser.add_argument("--no-cache", action="store_true", help="Ignore the disk cache and re-check every file.")
     args = parser.parse_args()
     auto_docstring_cache: dict[str, set[str]] = {}
-    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache, use_cache=not args.no_cache)
+    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
     check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
