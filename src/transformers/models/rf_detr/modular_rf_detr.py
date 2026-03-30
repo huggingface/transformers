@@ -608,7 +608,7 @@ class RfDetrModel(LwDetrModel):
         super().__init__(config)
         self.d_model = config.d_model
 
-    def gen_topk_proposals(
+    def generate_topk_proposals(
         self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, invalid_mask: Tensor, topk: int
     ) -> tuple[Tensor, Tensor, Tensor]:
         """
@@ -730,8 +730,8 @@ class RfDetrModel(LwDetrModel):
             (batch_size, topk * group_detr, self.config.d_model), device=self.device, dtype=output_proposals.dtype
         )
         for group_id in range(group_detr):
-            object_query_undetach, group_topk_coords_logits, topk_coords_logits_undetach = self.gen_topk_proposals(
-                group_id, object_query_embedding, output_proposals, invalid_mask, topk
+            object_query_undetach, group_topk_coords_logits, topk_coords_logits_undetach = (
+                self.generate_topk_proposals(group_id, object_query_embedding, output_proposals, invalid_mask, topk)
             )
             topk_coords_logits[:, group_id * topk : (group_id + 1) * topk] = group_topk_coords_logits
             enc_outputs_coord_logits[:, group_id * topk : (group_id + 1) * topk] = topk_coords_logits_undetach
