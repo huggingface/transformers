@@ -170,8 +170,8 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
         config.max_position_embeddings = 64
         model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
 
-        padded_input_ids = torch.tensor([[0, 0, 1, 2, 3], [0, 0, 0, 4, 5]], device=torch_device)
-        attention_mask = torch.tensor([[0, 0, 1, 1, 1], [0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device)
+        padded_input_ids = torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device)
+        attention_mask = torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device)
         position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
 
         features = [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}]

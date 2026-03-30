@@ -1394,7 +1394,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
-        self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx", "cu_seqlens"}
+        self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
         self._py_int_keys = {"max_length_q", "max_length_k"}
 
     def __call__(self, features, return_tensors=None, separator_id=None):

@@ -69,6 +69,7 @@ from .integrations import (
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
+from .utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
@@ -83,7 +84,6 @@ from .utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
-    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
@@ -95,7 +95,6 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
-    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
