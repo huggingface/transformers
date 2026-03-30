@@ -101,6 +101,7 @@ def batch_generate(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
         continuous_batching_config=cb_config,
+        warmup=True,
     )
     end_time_simple = time.time()
     if displayed_samples >= 0:
@@ -326,19 +327,6 @@ if __name__ == "__main__":
         os.makedirs("runs/cb", exist_ok=True)
         attn = args.attn.replace("|", "_").replace("/", "_")
         args.output_file = f"runs/cb/{attn}_{args.samples}_{args.cuda_graph}.json"
-
-    # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
-    if logger.level > logging.DEBUG:
-        gen_cfg = deepcopy(generation_cfg)
-        gen_cfg.max_new_tokens = min(gen_cfg.max_new_tokens, args.block_size + 1)
-        batch_generate(
-            model,
-            batched_inputs,
-            gen_cfg,
-            cb_config,
-            tokenizer,
-            displayed_samples=-1,
-        )
 
     if args.profile is not None:
         cm = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True)

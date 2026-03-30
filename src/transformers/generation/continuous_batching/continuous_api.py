@@ -1113,7 +1113,11 @@ class ContinuousMixin:
             **deprecated_kwargs,
         )
         if warmup:
+            # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
+            print("Warming up for coninuous batching...")
+            start = perf_counter()
             manager.warmup()
+            print(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
             yield manager
