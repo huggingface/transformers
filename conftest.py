@@ -15,24 +15,54 @@
 # tests directory-specific settings - this file is run automatically
 # by pytest before any tests are run
 
-import doctest
 import os
-import sys
-import warnings
-from os.path import abspath, dirname, join
 
-import _pytest
-import pytest
 
-from transformers.testing_utils import (
+# TEMP: force empty HF cache for AMD CI cold-cache timing test
+os.environ["HF_HOME"] = "/tmp/hf_empty_cache"
+
+
+def pytest_sessionstart(session):
+    """Log cache state at session start to verify empty-cache CI runs."""
+    hf_home = os.environ.get("HF_HOME", "not set")
+    hub_cache = os.path.join(hf_home, "hub") if hf_home != "not set" else None
+    print(f"\n{'=' * 60}")
+    print("EMPTY CACHE CHECK")
+    print(f"{'=' * 60}")
+    print(f"HF_HOME = {hf_home}")
+    print(f"HF_HOME exists: {os.path.exists(hf_home)}")
+    if os.path.exists(hf_home):
+        contents = os.listdir(hf_home)
+        print(f"HF_HOME contents: {contents}")
+    else:
+        print("HF_HOME directory does not exist yet (cache is empty)")
+    if hub_cache and os.path.exists(hub_cache):
+        models = [d for d in os.listdir(hub_cache) if d.startswith("models--")]
+        datasets = [d for d in os.listdir(hub_cache) if d.startswith("datasets--")]
+        print(f"Cached models ({len(models)}): {models}")
+        print(f"Cached datasets ({len(datasets)}): {datasets}")
+    else:
+        print("Hub cache does not exist yet (no models/datasets cached)")
+    print(f"{'=' * 60}\n")
+
+
+import doctest  # noqa: E402
+import sys  # noqa: E402
+import warnings  # noqa: E402
+from os.path import abspath, dirname, join  # noqa: E402
+
+import _pytest  # noqa: E402
+import pytest  # noqa: E402
+
+from transformers.testing_utils import (  # noqa: E402
     HfDoctestModule,
     HfDocTestParser,
     is_torch_available,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
 )
-from transformers.utils import enable_tf32
-from transformers.utils.network_logging import register_network_debug_plugin
+from transformers.utils import enable_tf32  # noqa: E402
+from transformers.utils.network_logging import register_network_debug_plugin  # noqa: E402
 
 
 NOT_DEVICE_TESTS = {
