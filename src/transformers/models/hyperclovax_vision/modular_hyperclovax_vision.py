@@ -19,11 +19,21 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForSequenceClassification
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.modeling_auto import AutoModel
-from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteForCausalLM, GraniteModel
+from ..granite.modeling_granite import (
+    GraniteAttention,
+    GraniteDecoderLayer,
+    GraniteForCausalLM,
+    GraniteModel,
+    GraniteRMSNorm,
+)
 from ..llama.modeling_llama import LlamaPreTrainedModel
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model
 from .configuration_hyperclovax_vision import HCXVisionConfig, HyperClovaXConfig
@@ -36,8 +46,76 @@ class HyperClovaXAttention(GraniteAttention):
     pass
 
 
-class HyperClovaXDecoderLayer(GraniteDecoderLayer):
+class HyperClovaXRMSNorm(GraniteRMSNorm):
     pass
+
+
+class HyperClovaXDecoderLayer(GraniteDecoderLayer):
+    def __init__(self, config: HyperClovaXConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.use_post_norm = getattr(config, "use_post_norm", False)
+        if self.use_post_norm:  # Peri-LN (post-norm)
+            self.post_norm1 = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_norm2 = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*):
+                attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
+                query_sequence_length, key_sequence_length)` if default attention is used.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        if self.use_post_norm:  # Peri-LN
+            hidden_states = self.post_norm1(hidden_states)
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+
+        if self.use_post_norm:  # Peri-LN
+            hidden_states = self.post_norm2(hidden_states)
+
+        hidden_states = residual + hidden_states * self.residual_multiplier
+
+        return hidden_states
 
 
 @auto_docstring
@@ -45,13 +123,25 @@ class HCXVisionPreTrainedModel(LlamaPreTrainedModel):
     config: HCXVisionConfig
     _no_split_modules = ["HyperClovaXDecoderLayer"]
     input_modalities = ("image", "video", "text")
-    _can_record_outputs = {"hidden_states": HyperClovaXDecoderLayer, "attentions": HyperClovaXAttention}
+    _can_record_outputs = {
+        "hidden_states": HyperClovaXDecoderLayer,
+        "attentions": HyperClovaXAttention,
+    }
 
 
 @auto_docstring
 class HyperClovaXModel(GraniteModel):
     config_class = HyperClovaXConfig
     input_modalities = ("text",)
+
+    def __init__(self, config: HyperClovaXConfig):
+        super().__init__(config)
+
+        self.layers = nn.ModuleList(
+            [HyperClovaXDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
+        self.post_init()
 
 
 @auto_docstring
@@ -60,19 +150,26 @@ class HyperClovaXForCausalLM(GraniteForCausalLM):
     config_class = HyperClovaXConfig
     input_modalities = ("text",)
 
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = HyperClovaXModel(config)
+
 
 @auto_docstring
 class HCXVisionModel(VideoLlama3Model):
     config: HCXVisionConfig
     _no_split_modules = ["HyperClovaXDecoderLayer"]
-    _can_record_outputs = {"hidden_states": HyperClovaXDecoderLayer, "attentions": HyperClovaXAttention}
+    _can_record_outputs = {
+        "hidden_states": HyperClovaXDecoderLayer,
+        "attentions": HyperClovaXAttention,
+    }
 
     def __init__(self, config: HCXVisionConfig):
         super().__init__(config)
 
         self.vision_model = AutoModel.from_config(config.vision_config)
 
-        self.projector = nn.Linear(config.vision_output_size, config.text_hidden_size)
+        self.projector = nn.Linear(config.vision_config.out_hidden_size, config.text_config.hidden_size)
 
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
@@ -83,7 +180,6 @@ class HCXVisionModel(VideoLlama3Model):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -94,12 +190,7 @@ class HCXVisionModel(VideoLlama3Model):
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
         """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
-            **kwargs,
-        )
+        return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -107,7 +198,6 @@ class HCXVisionModel(VideoLlama3Model):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -141,7 +231,7 @@ class HCXVisionModel(VideoLlama3Model):
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
-            In the input token sequence, each image position should contain `config.img_start_id`.
+            In the input token sequence, each image position should contain `config.image_token_id`.
         pixel_values_videos (`torch.FloatTensor`, *optional*):
             Pixel values of input videos, with the same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -157,7 +247,7 @@ class HCXVisionModel(VideoLlama3Model):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes=None).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -165,9 +255,7 @@ class HCXVisionModel(VideoLlama3Model):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_merge_sizes=None
-            ).pooler_output
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -253,7 +341,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -312,7 +399,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs[0]
@@ -339,7 +425,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -354,7 +439,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,

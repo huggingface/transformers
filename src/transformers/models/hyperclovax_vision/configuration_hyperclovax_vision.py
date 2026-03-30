@@ -59,48 +59,26 @@ class HyperClovaXConfig(GraniteConfig):
     """
 
     model_type = "hyperclovax"
-
-    rope_theta: float | int = 10000.0
-    rope_scaling: dict | None = None
-    head_dim: int | None = None
-
-    def __post_init__(self, **kwargs):
-        self.rope_theta = float(self.rope_theta)
-        # Convert legacy flat rope_theta / rope_scaling to rope_parameters dict
-        # so that GraniteRotaryEmbedding can consume it.
-        if self.rope_parameters is None:
-            rope_params: dict = {"rope_type": "default", "rope_theta": self.rope_theta}
-            if self.rope_scaling is not None:
-                rope_params.update(self.rope_scaling)
-            self.rope_parameters = rope_params
-
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
-
-        super().__post_init__(**kwargs)
+    use_post_norm: bool = False  # Peri-LN (post-norm)
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 @strict(accept_kwargs=True)
 class HCXVisionConfig(PreTrainedConfig):
     r"""
-    Configuration for [`HCXVisionForConditionalGeneration`].  Combines a
-    [`HyperClovaXConfig`] text backbone with a vision encoder config and a
-    single-linear multimodal projector.
-
-    Args:
-        text_config (`dict` or [`HyperClovaXConfig`], *optional*):
-            Configuration for the LLM backbone.  Defaults to
-            [`HyperClovaXConfig`].
-        vision_config (`dict` or config, *optional*):
-            Configuration for the vision encoder.  Defaults to
-            [`Qwen2_5_VLVisionConfig`].
-        img_start_id (`int`, *optional*, defaults to 128060):
-            Token ID used as a placeholder for image patches in the input
-            sequence.
-        video_start_id (`int`, *optional*, defaults to 128061):
-            Token ID used as a placeholder for video patches in the input
-            sequence.
+    text_config (`dict` or [`HyperClovaXConfig`], *optional*):
+        Configuration for the LLM backbone.  Defaults to [`HyperClovaXConfig`].
+    vision_config (`dict` or config, *optional*):
+        Configuration for the vision encoder.  Defaults to
+        [`Qwen2_5_VLVisionConfig`].
+    image_token_id (`int`, *optional*):
+        Token ID used as a placeholder for image patches in the input
+        sequence. Falls back to ``img_start_id`` for backward compatibility
+        with older checkpoints.
+    video_token_id (`int`, *optional*):
+        Token ID used as a placeholder for video patches in the input
+        sequence. Falls back to ``video_start_id`` for backward
+        compatibility with older checkpoints.
 
     ```python
     >>> from transformers import HCXVisionConfig, HCXVisionForConditionalGeneration
@@ -116,23 +94,22 @@ class HCXVisionConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "hyperclovax_vlm"
+    model_type = "hyperclovax_vision"
     sub_configs = {"text_config": HyperClovaXConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    img_start_id: int = 128060
-    video_start_id: int = 128061
+    image_token_id: int | None = None
+    video_token_id: int | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            model_type = self.vision_config.get("model_type", "qwen2_5_vl_image")
-            # "qwen2_5_vl" refers to the full VL model; we only need the vision encoder
-            model_type = "qwen2_5_vl_image" if model_type == "qwen2_5_vl" else model_type
+            model_type = self.vision_config.get("model_type", "qwen2_5_vl_vision")
+            model_type = "qwen2_5_vl_vision" if model_type == "qwen2_5_vl" else model_type
             self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["qwen2_5_vl_image"]()
+            self.vision_config = CONFIG_MAPPING["qwen2_5_vl_vision"]()
 
         if isinstance(self.text_config, dict):
             model_type = self.text_config.get("model_type", "hyperclovax")
@@ -140,18 +117,10 @@ class HCXVisionConfig(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = HyperClovaXConfig()
 
-        self.image_token_id = self.img_start_id
-        self.video_token_id = self.video_start_id
-
-        self.initializer_range = self.text_config.initializer_range
-
-        self.vision_output_size = self.vision_config.out_hidden_size
-        self.text_hidden_size = self.text_config.hidden_size
-
-        # Accept old hub configs that used model_type="vlm"
-        # if kwargs.get("model_type") == "vlm":
-        #     kwargs["model_type"] = "hyperclovax"
-
+        if self.image_token_id is None:
+            self.image_token_id = kwargs.pop("img_start_id", 128060)
+        if self.video_token_id is None:
+            self.video_token_id = kwargs.pop("video_start_id", 128061)
         super().__post_init__(**kwargs)
 
 

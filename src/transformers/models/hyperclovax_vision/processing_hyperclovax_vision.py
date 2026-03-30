@@ -4,10 +4,11 @@ from typing_extensions import Unpack
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessingKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 class HCXVisionV2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -21,16 +22,7 @@ class HCXVisionV2ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-class HCXVisionV2Processor(ProcessorMixin):
-    image_processor_class = "Qwen2VLImageProcessorFast"
-    video_processor_class = "Qwen2VLVideoProcessor"
-    tokenizer_class = (
-        "GPT2Tokenizer",
-        "GPT2TokenizerFast",
-        "PreTrainedTokenizer",
-        "PreTrainedTokenizerFast",
-    )
-
+class HCXVisionV2Processor(Qwen2VLProcessor):
     def __init__(
         self,
         image_processor=None,
@@ -39,8 +31,8 @@ class HCXVisionV2Processor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
-        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.image_token = "<|IMAGE_PAD|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|VIDEO_PAD|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.image_token_id = (
             tokenizer.image_token_id
             if getattr(tokenizer, "image_token_id", None)
@@ -132,94 +124,7 @@ class HCXVisionV2Processor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
-        return BatchFeature(
-            data={**text_inputs, **image_inputs, **videos_inputs},
-            tensor_type=return_tensors,
-        )
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
-        """
-        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
-        Args:
-            image_sizes (`list[list[int]]`, *optional*):
-                The input sizes formatted as (height, width) per each image.
-            video_sizes (`list[list[int]]`, *optional*):
-                The input sizes formatted as (num_frames, height, width) per each video.
-        Returns:
-            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
-            input modalities, along with other useful data.
-        """
-
-        vision_data = {}
-        if image_sizes is not None:
-            images_kwargs = HCXVisionV2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
-            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
-
-            num_image_patches = [
-                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
-                for image_size in image_sizes
-            ]
-            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
-            vision_data.update(
-                {
-                    "num_image_tokens": num_image_tokens,
-                    "num_image_patches": num_image_patches,
-                }
-            )
-
-        if video_sizes is not None:
-            videos_kwargs = HCXVisionV2ProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
-            num_video_patches = [
-                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
-                for video_size in video_sizes
-            ]
-            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
-            vision_data["num_video_tokens"] = num_video_tokens
-
-        return MultiModalData(**vision_data)
-
-    def post_process_image_text_to_text(
-        self,
-        generated_outputs,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False,
-        **kwargs,
-    ):
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
-
-        Returns:
-            `list[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        video_processor_input_names = self.video_processor.model_input_names
-        names_from_processor = list(
-            dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names)
-        )
-        return names_from_processor
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
 
 __all__ = ["HCXVisionV2Processor"]

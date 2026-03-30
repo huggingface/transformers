@@ -80,6 +80,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "got_ocr2",
+    "vlm": "hyperclovax_vision",
 }
 
 
@@ -398,12 +399,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model.language_model.model", target_patterns="model"),
             WeightRenaming(source_patterns=r"model.language_model.lm_head", target_patterns="lm_head"),
         ],
-        "vlm": [
-            WeightRenaming("mm_projector", "projector"),
-            WeightRenaming("language_model.model", "language_model"),
-            WeightRenaming("language_model.lm_head", "lm_head"),
-        ],
-        "hyperclovax_vlm": [
+        "hyperclovax_vision": [
             WeightRenaming("mm_projector", "projector"),
             WeightRenaming("language_model.model", "language_model"),
             WeightRenaming("language_model.lm_head", "lm_head"),
@@ -518,35 +514,7 @@ def register_checkpoint_conversion_mapping(
 
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
-VLMS = [
-    "aria",
-    "ayavision",
-    "colpali",
-    "emu3",
-    "fuyu",
-    "gotocr2",
-    "gemma3",
-    "hyperclovax",
-    "internvl",
-    "llava",  # all llava prefixed models fall under this check
-    "mistral3",
-    "mllama",
-    "paligemma",
-    "shieldgemma2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "videollava",
-    "vipllava",
-    "sam3_video",
-    "sam3",
-    "sam3_tracker",
-    "sam3_tracker_video",
-    "paddleocrvl",
-    # NOTE: Slightly different from `model_type` (to follow naming conventions in vllm/sglang)
-    "ernie4_5_vlmoe",
-    "ernie4_5_vl_moe",  # BC alias
-    "detr",
-]
+VLMS = ["detr"]
 
 
 def get_model_conversion_mapping(

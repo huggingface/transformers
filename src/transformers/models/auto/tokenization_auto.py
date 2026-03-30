@@ -154,6 +154,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
+        ("hyperclovax_vision", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),

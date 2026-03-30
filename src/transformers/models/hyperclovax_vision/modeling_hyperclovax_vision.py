@@ -227,6 +227,11 @@ class HyperClovaXDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.residual_multiplier = config.residual_multiplier
 
+        self.use_post_norm = getattr(config, "use_post_norm", False)
+        if self.use_post_norm:  # Peri-LN (post-norm)
+            self.post_norm1 = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_norm2 = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -270,11 +275,17 @@ class HyperClovaXDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             **kwargs,
         )
+        if self.use_post_norm:  # Peri-LN
+            hidden_states = self.post_norm1(hidden_states)
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+
+        if self.use_post_norm:  # Peri-LN
+            hidden_states = self.post_norm2(hidden_states)
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         return hidden_states
@@ -293,7 +304,10 @@ class HCXVisionPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {"hidden_states": HyperClovaXDecoderLayer, "attentions": HyperClovaXAttention}
+    _can_record_outputs = {
+        "hidden_states": HyperClovaXDecoderLayer,
+        "attentions": HyperClovaXAttention,
+    }
     input_modalities = ("image", "video", "text")
 
 
@@ -392,6 +406,7 @@ class HyperClovaXModel(HyperClovaXPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
         self.layers = nn.ModuleList(
             [HyperClovaXDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -547,14 +562,17 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
     _can_compile_fullgraph = False
     config: HCXVisionConfig
     _no_split_modules = ["HyperClovaXDecoderLayer"]
-    _can_record_outputs = {"hidden_states": HyperClovaXDecoderLayer, "attentions": HyperClovaXAttention}
+    _can_record_outputs = {
+        "hidden_states": HyperClovaXDecoderLayer,
+        "attentions": HyperClovaXAttention,
+    }
 
     def __init__(self, config: HCXVisionConfig):
         super().__init__(config)
 
         self.vision_model = AutoModel.from_config(config.vision_config)
 
-        self.projector = nn.Linear(config.vision_output_size, config.text_hidden_size)
+        self.projector = nn.Linear(config.vision_config.out_hidden_size, config.text_config.hidden_size)
 
         self.language_model = AutoModel.from_config(config.text_config)
 
@@ -572,7 +590,6 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
-        video_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -580,15 +597,8 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
         """
-        return self.get_image_features(
-            pixel_values=pixel_values_videos,
-            image_grid_thw=video_grid_thw,
-            image_merge_sizes=video_merge_sizes,
-            **kwargs,
-        )
+        return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -596,7 +606,6 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
-        image_merge_sizes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -671,7 +680,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel values of input images after preprocessing by [`Qwen2VLImageProcessor`].
             A 2D tensor of shape `(total_num_patches, channels * patch_size^2 * temporal_patch_size)`.
-            In the input token sequence, each image position should contain `config.img_start_id`.
+            In the input token sequence, each image position should contain `config.image_token_id`.
         pixel_values_videos (`torch.FloatTensor`, *optional*):
             Pixel values of input videos, with the same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -687,7 +696,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, image_merge_sizes=None).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -695,9 +704,7 @@ class HCXVisionModel(HCXVisionPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_merge_sizes=None
-            ).pooler_output
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -783,7 +790,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -842,7 +848,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = outputs[0]
@@ -869,7 +874,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        cache_position=None,
         position_ids=None,
         use_cache=True,
         pixel_values=None,
@@ -884,7 +888,6 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
             position_ids=position_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
