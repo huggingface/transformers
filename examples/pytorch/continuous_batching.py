@@ -14,10 +14,8 @@
 import argparse
 import contextlib
 import json
-import logging
 import os
 import time
-from copy import deepcopy
 from itertools import cycle
 
 import datasets
