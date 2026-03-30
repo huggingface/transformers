@@ -691,6 +691,8 @@ class GenerationMixin(ContinuousMixin):
             return torch.ones(
                 (batch_size, 0),
                 dtype=torch.long,
+                # Use the device of the existing tensor to avoid any potential `meta` device isssue.
+                # See PR #44848. (Previously, it used `self.device`.)
                 device=self.device if self.device.type != "meta" else model_kwargs["inputs_embeds"].device,
             )
 

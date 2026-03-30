@@ -914,6 +914,9 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
         self.assertFalse(torch.isnan(output[1]).any().item())
 
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we need to keep
+    # the loaded model (without FA) in `cls.model`. If this test is not run first, when loading the flash attention
+    # model here, there is already a previous loaded model `cls.model` and we will get GPU OOM.
     @run_first
     @slow
     @require_flash_attn
