@@ -341,6 +341,67 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=False):
         super().test_reverse_loading_mapping(check_keys_were_modified)
 
+    @require_torch
+    def test_router_logits_are_raw_logits_not_probabilities(self):
+        r"""
+        Test that router_logits returned by the model are raw logits, not already-softmaxed probabilities.
+        This is critical for the load_balancing_loss function which expects raw logits and applies softmax itself.
+
+        If router_logits were already softmaxed, load_balancing_loss would apply softmax again (double softmax),
+        flattening the routing distribution and producing ineffective gradients for load balancing.
+
+        See: https://github.com/huggingface/transformers/issues/45120
+        """
+        from transformers import set_seed
+
+        set_seed(42)
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.num_experts = 4
+        config.text_config.num_experts_per_tok = 2
+        config.text_config.output_router_logits = True
+
+        model = Qwen3VLMoeForConditionalGeneration(config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            outputs = model(**input_dict, output_router_logits=True)
+
+        if outputs.router_logits is None:
+            self.skipTest("Router logits not available for this test configuration")
+
+        router_logits = outputs.router_logits[0]  # Shape: (seq_len, num_experts)
+
+        # CRITICAL ASSERTION: router_logits should be raw logits, not probabilities
+        # Raw logits can have arbitrary ranges and negative values
+        # Probabilities must sum to 1.0 per token and are always in [0, 1]
+
+        # Check that NOT all rows sum to ~1.0 (which would indicate softmaxed probabilities)
+        row_sums = router_logits.sum(dim=-1)
+
+        # If these were probabilities, row_sums would all be very close to 1.0
+        # If these are raw logits, row_sums will have high variance
+        # We verify that at least some rows have sums significantly different from 1.0
+        deviation_from_one = torch.abs(row_sums - 1.0)
+        avg_deviation = deviation_from_one.mean().item()
+
+        # Average deviation should be substantial (> 0.1) to indicate these are not probabilities
+        self.assertGreater(
+            avg_deviation,
+            0.1,
+            msg=f"router_logits appear to be probabilities (avg deviation from sum=1.0 is {avg_deviation}). "
+            f"Expected raw logits with more variance. Row sums: {row_sums[:5]}"
+        )
+
+        # Additional check: raw logits should contain negative values
+        min_value = router_logits.min().item()
+        self.assertLess(
+            min_value,
+            -0.1,
+            msg=f"router_logits should contain negative values (raw logits). "
+            f"Min value: {min_value}. If all values were in [0, 1], these would be probabilities."
+        )
+
 
 @require_torch
 class Qwen3VLMoeIntegrationTest(unittest.TestCase):
