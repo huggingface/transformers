@@ -16,14 +16,16 @@ rendered properly in your Markdown viewer.
 
 # Continuous batching
 
-Continuous batching maximizes GPU utilization by dynamically rescheduling the batch at every generation step. As requests finish, new ones join immediately so you don't need to wait for the whole batch to complete. The GPU stays full and throughput stays high.
+Continuous batching maximizes GPU utilization by dynamically rescheduling the batch at every generation step. As requests finish, new ones join immediately instead of waiting for the whole batch to complete. The GPU stays full and throughput stays high.
 
 > [!TIP]
 > For production deployments, use [transformers serve](./serve-cli/serving_optims#continuous-batching). It builds on [`ContinuousBatchingManager`] and exposes an OpenAI-compatible HTTP endpoint.
 
 ## generate_batch
 
-Continuous batching is supported through [`~ContinuousMixin.generate_batch`]. Pass a list of tokenized prompts and get back results for all of them when they're done. `generate_batch` handles scheduling internally and blocks until all requests are complete. For serving and streaming use cases, use [`ContinuousBatchingManager`] directly to manage requests.
+Continuous batching is supported through [`~ContinuousMixin.generate_batch`]. Pass a list of tokenized prompts and get back results for all of them when they're done. `generate_batch` handles scheduling internally and blocks until all requests are complete.
+
+For serving and streaming use cases, use [ContinuousBatchingManager](#continuousbatchingmanager) directly to manage requests.
 
 ```py
 import torch
@@ -32,7 +34,7 @@ from transformers.generation import ContinuousBatchingConfig, GenerationConfig
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-4B",
-    attn_implementation="paged|flash_attention_2",
+    attn_implementation="flash_attention_2",
     device_map="cuda",
     dtype=torch.bfloat16,
 )
@@ -60,7 +62,7 @@ for request_id, output in outputs.items():
 
 ## ContinuousBatchingManager
 
-[`ContinuousBatchingManager`] runs a background thread and lets you submit requests and retrieve results independently. Every iteration checks for finished requests and schedules new ones to join the batch. This is useful for streaming, real-time serving, or submitting requests as they arrive.
+[`ContinuousBatchingManager`] runs a background thread and lets you submit requests and retrieve results independently. Every generation step, it checks for finished requests and schedules new ones to join the batch. This is useful for streaming, real-time serving, or submitting requests as they arrive.
 
 Use [`~ContinuousMixin.continuous_batching_context_manager`] to start and stop the manager safely. The example below contains variable length inputs. As soon as the shortest prompt is complete, it leaves the batch while the longer prompts continue generating. With static batching, you'd have to pad them all to the same length. Continuous batching frees up the completed prompt so you can start processing the next prompt immediately.
 
@@ -110,9 +112,7 @@ manager.stop()
 manager.add_request(input_ids=input_ids, request_id="my_request")
 ```
 
-[`~ContinuousBatchingManager.add_requests`] submits a batch at once. It sorts inputs automatically to maximize prefix cache hits.
-
-It sorts inputs automatically to maximize prefix cache hits when block sharing is enabled.
+[`~ContinuousBatchingManager.add_requests`] submits a batch at once. It sorts inputs automatically to maximize prefix cache hits when block sharing is enabled.
 
 ```py
 manager.add_requests(inputs=inputs)
@@ -181,7 +181,7 @@ from transformers.generation import ContinuousBatchingConfig
 cb_config = ContinuousBatchingConfig(
     max_memory_percent=0.8,  # fraction of free GPU memory to use for the KV cache
     block_size=256,          # KV cache block size in tokens
-    scheduler="fifo",        # "fifo" or "prefill_first"
+    scheduler_type="fifo",        # "fifo" or "prefill_first"
 )
 
 outputs = model.generate_batch(
@@ -191,9 +191,9 @@ outputs = model.generate_batch(
 )
 ```
 
-## Log probabilities
+### Log probabilities
 
-ContinuousBatching returns each generated token's log probability when `return_logprobs=True`. This is useful for RL where logprobs are an input to some of the training loops.
+[`ContinuousBatchingConfig`] returns each generated token's log probability when `return_logprobs=True`. This is useful for RL where logprobs are an input to some of the training loops.
 
 ```py
 cb_config = ContinuousBatchingConfig(return_logprobs=True)
@@ -227,7 +227,7 @@ cb_config = ContinuousBatchingConfig(
 
 ### Async batching
 
-Async batching overlaps CPU scheduling of the next batch with GPU computation of the current one. It requires CUDA graphs and roughly doubles the VRAM usage.
+Async batching overlaps CPU scheduling of the next batch with GPU computation of the current one. It requires CUDA graphs and roughly doubles the VRAM used for input tensors.
 
 ```py
 cb_config = ContinuousBatchingConfig(
@@ -248,7 +248,7 @@ cb_config = ContinuousBatchingConfig(
 
 ## Paged attention
 
-Continuous batching requires a paged attention backend. Set `attn_implementation` when loading the model.
+Continuous batching requires a paged attention backend. Set `attn_implementation` when loading the model. If you load a model with a non-paged backend (`"flash_attention_2"`), the `"paged|"` prefix is added automatically when continuous batching starts.
 
 | Backend | `attn_implementation` | Requirements |
 |---|---|---|

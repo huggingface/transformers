@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Continuous batching architecture
 
-Traditional batching processes a fixed group of requests together and waits for every one to finish before starting the next group. Even if the shorter requests are completed, each batch is only as fast as the longest request in it. This causes the GPU to idle between batches.
+Traditional batching processes a fixed group of requests together and waits for the slowest one to finish before starting the next group. This causes the GPU to idle between batches.
 
 With continuous batching, at every generation step, the scheduler checks for finished requests and replaces them immediately with waiting ones. Short requests are kicked out as soon as they're done, and the GPU stays occupied the entire time. The result is significantly higher throughput and lower average latency.
 
@@ -58,7 +58,7 @@ Chunked (same prompt split and interleave with decode)
   Req C  [→ dec]     · idle ·   [→ dec]    · idle ·
 ```
 
-When a new request's prompt exceeds the available token budget, the scheduler processes as many tokens as possible and holds the rest. On subsequent steps, it continues from where it left off, interleaving prefill work with ongoing decode steps. This keeps the batch productive and reduces time-to-first-token for other requests.
+When a new request's prompt exceeds the available token budget (set by `max_batch_tokens` in [`ContinuousBatchingConfig`]), the scheduler processes as many tokens as possible and holds the rest. On subsequent steps, it continues from where it left off, interleaving prefill work with ongoing decode steps. This keeps the batch productive and reduces time-to-first-token for other requests.
 
 ## Scheduler
 
@@ -78,7 +78,7 @@ The scheduler decides which requests join each forward pass based on two budgets
 Set the scheduler in [`ContinuousBatchingConfig`].
 
 ```py
-cb_config = ContinuousBatchingConfig(scheduler="prefill_first")
+cb_config = ContinuousBatchingConfig(scheduler_type="prefill_first")
 ```
 
 ## CUDA graphs
@@ -122,4 +122,4 @@ When the cache has space again, the request resumes from where it left off with 
 ## Next steps
 
 - The [Continuous batching blog post](https://huggingface.co/blog/continuous_batching) covers KV caching, chunked prefill, and dynamic scheduling with performance benchmark numbers.
-- For practical usage examples of how to use continuous batching, see the [Continuous batching](./continuous_batching) doc.
+- For usage examples, see the [Continuous batching](./continuous_batching) doc.
