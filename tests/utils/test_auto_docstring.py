@@ -16,6 +16,7 @@ Tests for auto_docstring decorator and check_auto_docstrings function.
 """
 
 import importlib
+import inspect
 import os
 import statistics
 import sys
@@ -24,6 +25,7 @@ import textwrap
 import time
 import unittest
 from pathlib import Path
+from typing import Optional
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -38,6 +40,7 @@ from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, Proces
 from transformers.testing_utils import require_torch
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from transformers.utils.auto_docstring import (
+    _process_kwargs_parameters,
     auto_docstring,
 )
 from transformers.utils.import_utils import is_torch_available
@@ -678,11 +681,6 @@ Args:
 
         See: https://github.com/huggingface/transformers/issues/45103
         """
-        import inspect
-        from typing import Optional
-
-        from transformers.utils.auto_docstring import _process_kwargs_parameters
-
         # Case 1: string annotation that resolves successfully via get_type_hints().
         # Inject CustomKwargs and Optional into the function's globals so get_type_hints() can find them.
         # (get_type_hints resolves against func.__globals__, i.e. the module scope, not the local test scope.)
