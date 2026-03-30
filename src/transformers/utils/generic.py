@@ -44,23 +44,11 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-_is_torch_available = is_torch_available()
+_is_torch_available = False
+if is_torch_available():
+    _is_torch_available = True
+
 _registered_model_output_types: set[type[Any]] = set()
-
-
-def _get_torch():
-    if not _is_torch_available:
-        return None
-
-    import torch
-
-    return torch
-
-
-def _get_model_addition_debugger_context():
-    from ..model_debugging_utils import model_addition_debugger_context
-
-    return model_addition_debugger_context
 
 
 def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
@@ -163,7 +151,8 @@ def is_torch_tensor(x) -> bool:
     if not _is_torch_available:
         return False
 
-    torch = _get_torch()
+    import torch
+
     return isinstance(x, torch.Tensor)
 
 
@@ -174,7 +163,8 @@ def is_torch_device(x) -> bool:
     if not _is_torch_available:
         return False
 
-    torch = _get_torch()
+    import torch
+
     return isinstance(x, torch.device)
 
 
@@ -185,7 +175,8 @@ def is_torch_dtype(x) -> bool:
     if not _is_torch_available:
         return False
 
-    torch = _get_torch()
+    import torch
+
     if isinstance(x, str):
         if hasattr(torch, x):
             x = getattr(torch, x)
@@ -230,9 +221,10 @@ def maybe_autocast(
     Which makes graph splitting in `torch.compile` more flexible as it removes the
     requirement that partition IDs be monotonically increasing.
     """
-    torch = _get_torch()
-    if torch is None:
+    if not _is_torch_available:
         raise ImportError("`maybe_autocast` requires PyTorch to be installed.")
+
+    import torch
 
     if device_type == "meta":
         return nullcontext()
@@ -677,7 +669,8 @@ def torch_int(x):
     if not _is_torch_available:
         return int(x)
 
-    torch = _get_torch()
+    import torch
+
     return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
@@ -688,7 +681,8 @@ def torch_float(x):
     if not _is_torch_available:
         return int(x)
 
-    torch = _get_torch()
+    import torch
+
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
@@ -948,7 +942,8 @@ def merge_with_config_defaults(func):
         # Call the original forward with the updated kwargs/config
         try:
             if kwargs.get("debug_io", False):
-                model_addition_debugger_context = _get_model_addition_debugger_context()
+                from ..model_debugging_utils import model_addition_debugger_context
+
                 with model_addition_debugger_context(
                     self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
                 ):
