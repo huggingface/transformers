@@ -24,6 +24,7 @@ from transformers import (
     Qwen3VLMoeForConditionalGeneration,
     Qwen3VLMoeModel,
     is_torch_available,
+    set_seed,
 )
 from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
@@ -352,8 +353,6 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
 
         See: https://github.com/huggingface/transformers/issues/45120
         """
-        from transformers import set_seed
-
         set_seed(42)
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_config.num_experts = 4
