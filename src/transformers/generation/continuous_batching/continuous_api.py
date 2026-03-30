@@ -101,6 +101,27 @@ class OutputRouter:
         else:
             self.output_queue.put(output)
 
+    def deliver_batch(self, outputs: list[GenerationOutput]) -> None:
+        """Route a batch of outputs, using a single ``call_soon_threadsafe`` to minimize cross-thread overhead.
+
+        Outputs without a registered handler fall back to the shared ``output_queue``.
+        """
+        callbacks: list[tuple[Callable, GenerationOutput]] = []
+        loop = None
+        with self._lock:
+            for output in outputs:
+                entry = self.result_handlers.get(output.request_id)
+                if entry is not None:
+                    callback, loop = entry
+                    callbacks.append((callback, output))
+                else:
+                    self.output_queue.put(output)
+        if callbacks:
+            def _run_batch(batch=callbacks):
+                for cb, out in batch:
+                    cb(out)
+            loop.call_soon_threadsafe(_run_batch)
+
 
 # Continuous Batch Processor (Internal Logic)
 @attach_tracer()
@@ -357,6 +378,7 @@ class ContinuousBatchProcessor:
         """Update request states based on generated tokens."""
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
+        pending_outputs = []
         for future_state in requests_in_batch:
             state = future_state.state
             # Early return if the request is finished
@@ -387,10 +409,13 @@ class ContinuousBatchProcessor:
                     self.scheduler.finish_request(state.request_id)
                     self.scheduler.block_new_requests = False
                 if state.streaming or state.status == RequestStatus.FINISHED:
-                    self.output_router.deliver(state.to_generation_output())
+                    pending_outputs.append(state.to_generation_output())
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING:
                 self.cache.mark_shareable_blocks_as_complete(state, future_state.complete_blocks)
+
+        if pending_outputs:
+            self.output_router.deliver_batch(pending_outputs)
 
         # If some requests need to be forked, we do it now
         copy_source, copy_destination = [], []
