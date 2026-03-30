@@ -1,0 +1,134 @@
+name: PR - doctest via comment
+
+on:
+  issue_comment:
+    types:
+      - created
+    branches-ignore:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-doctest') || startsWith(github.event.comment.body, 'run doctest') || startsWith(github.event.comment.body, 'run_doctest') }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade", "yonigozlan"]'), github.actor) && (startsWith(github.event.comment.body, 'run-doctest') || startsWith(github.event.comment.body, 'run doctest') || startsWith(github.event.comment.body, 'run_doctest')) }}
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  check-timestamps:
+    name: Check timestamps (security check)
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    steps:
+      - name: Verify merge commit timestamp is older than the comment timestamp
+        env:
+          COMMENT_DATE: ${{ github.event.comment.created_at }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+        run: |
+          COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+          echo "COMMENT_DATE: $COMMENT_DATE"
+          echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+          if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+            echo "Last commit on the pull request is newer than the issue comment triggering this run. Abort."
+            exit 1
+          fi
+
+  create_run:
+    name: Create run
+    needs: [get-pr-number, get-pr-info, check-timestamps]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    permissions:
+      statuses: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Create run status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/statuses/${{ needs.get-pr-info.outputs.PR_HEAD_SHA }} \
+            -f "target_url=$GITHUB_RUN_URL" \
+            -f "state=pending" \
+            -f "description=Custom doctest job" \
+            -f "context=custom-doctests"
+
+  reply_to_comment:
+    name: Reply to the comment
+    if: ${{ needs.create_run.result == 'success' }}
+    needs: [get-pr-number, create_run]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
+            -f "body=[Running doctests for this pull request...](${{ env.GITHUB_RUN_URL }})"
+
+  doctests:
+    name: Doctests
+    needs: [get-pr-number, get-pr-info, check-timestamps]
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' }}
+    uses: ./.github/workflows/doctests_runner.yml
+    with:
+      commit_sha: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+      checkout_ref: refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
+    secrets: inherit
+
+  update_run_status:
+    name: Update check run status
+    needs: [get-pr-info, create_run, doctests]
+    permissions:
+      statuses: write
+    if: ${{ always() && needs.create_run.result == 'success' }}
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      STATUS_OK: ${{ contains(fromJSON('["success"]'), needs.doctests.result) }}
+    steps:
+      - name: Compute final status
+        run: |
+          echo "${{ needs.doctests.result }}"
+          echo "$STATUS_OK"
+          if [ "$STATUS_OK" = "true" ]; then
+            echo "STATUS=success" >> $GITHUB_ENV
+          else
+            echo "STATUS=failure" >> $GITHUB_ENV
+          fi
+
+      - name: Update PR commit status
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            repos/${{ github.repository }}/statuses/${{ needs.get-pr-info.outputs.PR_HEAD_SHA }} \
+            -f "target_url=$GITHUB_RUN_URL" \
+            -f "state=${{ env.STATUS }}" \
+            -f "description=Custom doctest job" \
+            -f "context=custom-doctests"
