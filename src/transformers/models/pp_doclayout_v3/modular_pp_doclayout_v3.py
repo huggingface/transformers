@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -38,7 +39,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     is_cv2_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
@@ -59,9 +59,6 @@ from ..rt_detr.modeling_rt_detr import (
     inverse_sigmoid,
 )
 
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 if is_cv2_available():
     import cv2

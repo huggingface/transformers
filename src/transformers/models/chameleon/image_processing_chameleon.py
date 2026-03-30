@@ -15,6 +15,8 @@
 
 import numpy as np
 import PIL.Image
+import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import (
@@ -23,14 +25,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import auto_docstring, is_torch_available, is_torchvision_available, logging
+from ...utils import auto_docstring, logging
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 logger = logging.get_logger(__name__)
 
