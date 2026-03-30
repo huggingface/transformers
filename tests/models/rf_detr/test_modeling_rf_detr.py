@@ -112,6 +112,10 @@ class RfDetrModelTester:
         self.attention_dropout = attention_dropout
         self.attn_implementation = attn_implementation
 
+        self.num_hidden_layers = decoder_layers
+        self.seq_length = num_queries
+        self.hidden_size = d_model
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
@@ -218,6 +222,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     is_encoder_decoder = False
     test_missing_keys = False
+    test_resize_embeddings = False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -357,42 +362,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             check_attention_outputs(inputs_dict, config, model_class)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_hidden_states = self.model_tester.decoder_layers + 1
-            self.assertEqual(len(hidden_states), expected_num_hidden_states)
-
-            for i in range(expected_num_hidden_states):
-                self.assertListEqual(
-                    list(hidden_states[i].shape),
-                    [
-                        self.model_tester.batch_size,
-                        self.model_tester.num_queries,
-                        self.model_tester.d_model,
-                    ],
-                )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = False
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
