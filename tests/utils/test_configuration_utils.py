@@ -359,3 +359,38 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+    def test_pretrained_config_signature_preserved(self):
+        """Test that PreTrainedConfig subclass __init__ signatures are preserved for type checkers.
+        
+        Regression test for issue #45071: v5.4.0 breaks PretrainedConfig type checking.
+        
+        When wrap_init_to_accept_kwargs wraps the dataclass-generated __init__, it should
+        preserve the original signature so type checkers like mypy can properly recognize
+        config parameters.
+        """
+        import inspect
+
+        # Test with BertConfig which has multiple parameters
+        sig = inspect.signature(BertConfig.__init__)
+        params = list(sig.parameters.keys())
+
+        # Verify that common config parameters are in the signature
+        self.assertIn("self", params)
+        self.assertIn("vocab_size", params)
+        self.assertIn("hidden_size", params)
+        self.assertIn("num_hidden_layers", params)
+
+        # Verify that the signature is not just (*args, **kwargs)
+        # by checking that we have more than just 'self' and 'kwargs'
+        self.assertGreater(len(params), 2, "Signature should have concrete parameters, not just *args/**kwargs")
+
+        # Test that we can instantiate with the documented parameters
+        config = BertConfig(vocab_size=30522, hidden_size=768, num_hidden_layers=12)
+        self.assertEqual(config.vocab_size, 30522)
+        self.assertEqual(config.hidden_size, 768)
+        self.assertEqual(config.num_hidden_layers, 12)
+
+        # Test that we can still pass extra kwargs for backward compatibility
+        config_with_extra = BertConfig(vocab_size=30522, extra_kwarg_for_bc="should_be_handled")
+        self.assertEqual(config_with_extra.vocab_size, 30522)

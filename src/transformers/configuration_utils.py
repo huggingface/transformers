@@ -15,6 +15,7 @@
 """Configuration base class and utilities."""
 
 import copy
+import inspect
 import json
 import math
 import os
@@ -74,6 +75,7 @@ ALLOWED_LAYER_TYPES = (
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
 def wrap_init_to_accept_kwargs(cls: dataclass):
     original_init = cls.__init__
+    original_signature = inspect.signature(original_init)
 
     @wraps(original_init)
     def __init__(self, *args, **kwargs: Any) -> None:
@@ -107,6 +109,8 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
 
         self.__post_init__(**additional_kwargs)
 
+    # Preserve the original signature for type checkers
+    __init__.__signature__ = original_signature
     cls.__init__ = __init__
     return cls
 
