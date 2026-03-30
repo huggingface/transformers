@@ -14,7 +14,6 @@
 
 """TRF014: `trust_remote_code` should never be used in native model integrations."""
 
-
 import ast
 from pathlib import Path
 
