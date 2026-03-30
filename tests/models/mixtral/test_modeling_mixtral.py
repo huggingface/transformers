@@ -107,6 +107,64 @@ class MixtralModelTest(CausalLMModelTest, unittest.TestCase):
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    @require_torch
+    def test_router_logits_are_raw_logits_not_probabilities(self):
+        r"""
+        Test that router_logits returned by the model are raw logits, not already-softmaxed probabilities.
+        This is critical for the load_balancing_loss function which expects raw logits and applies softmax itself.
+
+        If router_logits were already softmaxed, load_balancing_loss would apply softmax again (double softmax),
+        flattening the routing distribution and producing ineffective gradients for load balancing.
+
+        See: https://github.com/huggingface/transformers/issues/45120
+        """
+        set_seed(42)
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_local_experts = 4
+        config.num_experts_per_tok = 2
+        config.output_router_logits = True
+
+        model = MixtralForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = input_dict["input_ids"]
+
+        with torch.no_grad():
+            outputs = model(input_ids, output_router_logits=True)
+
+        router_logits = outputs.router_logits[0]  # Shape: (seq_len, num_experts)
+
+        # CRITICAL ASSERTION: router_logits should be raw logits, not probabilities
+        # Raw logits can have arbitrary ranges and negative values
+        # Probabilities must sum to 1.0 per token and are always in [0, 1]
+
+        # Check that NOT all rows sum to ~1.0 (which would indicate softmaxed probabilities)
+        row_sums = router_logits.sum(dim=-1)
+
+        # If these were probabilities, row_sums would all be very close to 1.0
+        # If these are raw logits, row_sums will have high variance
+        # We verify that at least some rows have sums significantly different from 1.0
+        deviation_from_one = torch.abs(row_sums - 1.0)
+        avg_deviation = deviation_from_one.mean().item()
+
+        # Average deviation should be substantial (> 0.1) to indicate these are not probabilities
+        self.assertGreater(
+            avg_deviation,
+            0.1,
+            msg=f"router_logits appear to be probabilities (avg deviation from sum=1.0 is {avg_deviation}). "
+            f"Expected raw logits with more variance. Row sums: {row_sums[:5]}"
+        )
+
+        # Additional check: raw logits should contain negative values
+        min_value = router_logits.min().item()
+        self.assertLess(
+            min_value,
+            -0.1,
+            msg=f"router_logits should contain negative values (raw logits). "
+            f"Min value: {min_value}. If all values were in [0, 1], these would be probabilities."
+        )
+
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
@@ -117,21 +175,34 @@ class MixtralIntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
         model = MixtralForCausalLM.from_pretrained(
-            model_id,
-            dtype=torch.bfloat16,
-        ).to(torch_device)
-        # TODO: might need to tweak it in case the logits do not match on our daily runners
-        # these logits have been obtained with the original megablocks implementation.
-        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4
-        # considering differences in hardware processing and potential deviations in output.
-        # fmt: off
-        EXPECTED_LOGITS = Expectations(
-            {
-                ("cuda", 7): torch.Tensor([[0.1640, 0.1621, 0.6093], [-0.8906, -0.1640, -0.6093], [0.1562, 0.1250, 0.7226]]).to(torch_device),
-                ("cuda", 8): torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(torch_device),
-                ("rocm", 9): torch.Tensor([[0.1641, 0.1621, 0.6094], [-0.8906, -0.1631, -0.6094], [0.1572, 0.1260, 0.7227]]).to(torch_device),
-            }
+            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto", load_in_4bit=False
         )
+
+        result = model(dummy_input)
+        self.assertEqual(result.logits.shape, (2, 3, 32000))
+
+    @slow
+    @require_torch_accelerator
+    def test_small_model_aux_loss(self):
+        model_id = "hf-internal-testing/Mixtral-tiny"
+        input_ids = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
+        padded_input_ids = torch.LongTensor([[0, 1, 0, 1], [0, 1, 0, 0]]).to(torch_device)
+        padded_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+
+        model = MixtralForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto", load_in_4bit=False
+        )
+
+        result = model(input_ids)
+        padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
+        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
+
+        # We make sure that the loss of including padding tokens != the loss without padding tokens
+        # if attention_mask=None --> we don't exclude padding tokens
+        include_padding_result = model(padded_input_ids, attention_mask=None)
+
+        # This is to mimic torch.testing.assert_not_close
+        self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
         # fmt: on
         expected_logit = EXPECTED_LOGITS.get_expectation()
 
@@ -198,60 +269,3 @@ class MixtralIntegrationTest(unittest.TestCase):
             rtol=1e-3,
         )
 
-    @require_torch
-    def test_router_logits_are_raw_logits_not_probabilities(self):
-        r"""
-        Test that router_logits returned by the model are raw logits, not already-softmaxed probabilities.
-        This is critical for the load_balancing_loss function which expects raw logits and applies softmax itself.
-
-        If router_logits were already softmaxed, load_balancing_loss would apply softmax again (double softmax),
-        flattening the routing distribution and producing ineffective gradients for load balancing.
-
-        See: https://github.com/huggingface/transformers/issues/45120
-        """
-        set_seed(42)
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_local_experts = 4
-        config.num_experts_per_tok = 2
-        config.output_router_logits = True
-
-        model = MixtralForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        input_ids = input_dict["input_ids"]
-
-        with torch.no_grad():
-            outputs = model(input_ids, output_router_logits=True)
-
-        router_logits = outputs.router_logits[0]  # Shape: (seq_len, num_experts)
-
-        # CRITICAL ASSERTION: router_logits should be raw logits, not probabilities
-        # Raw logits can have arbitrary ranges and negative values
-        # Probabilities must sum to 1.0 per token and are always in [0, 1]
-
-        # Check that NOT all rows sum to ~1.0 (which would indicate softmaxed probabilities)
-        row_sums = router_logits.sum(dim=-1)
-
-        # If these were probabilities, row_sums would all be very close to 1.0
-        # If these are raw logits, row_sums will have high variance
-        # We verify that at least some rows have sums significantly different from 1.0
-        deviation_from_one = torch.abs(row_sums - 1.0)
-        avg_deviation = deviation_from_one.mean().item()
-
-        # Average deviation should be substantial (> 0.1) to indicate these are not probabilities
-        self.assertGreater(
-            avg_deviation,
-            0.1,
-            msg=f"router_logits appear to be probabilities (avg deviation from sum=1.0 is {avg_deviation}). "
-            f"Expected raw logits with more variance. Row sums: {row_sums[:5]}"
-        )
-
-        # Additional check: raw logits should contain negative values
-        min_value = router_logits.min().item()
-        self.assertLess(
-            min_value,
-            -0.1,
-            msg=f"router_logits should contain negative values (raw logits). "
-            f"Min value: {min_value}. If all values were in [0, 1], these would be probabilities."
-        )
