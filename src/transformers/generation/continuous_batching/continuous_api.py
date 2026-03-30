@@ -17,7 +17,7 @@ import gc
 import queue
 import threading
 from abc import abstractmethod
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager, nullcontext
 from math import ceil
 from time import perf_counter
@@ -88,7 +88,7 @@ class OutputRouter:
 
     def __init__(self) -> None:
         self.output_queue = queue.Queue()
-        self.result_handlers: dict[str, tuple[callable, asyncio.AbstractEventLoop]] = {}
+        self.result_handlers: dict[str, tuple[Callable, asyncio.AbstractEventLoop]] = {}
         self._lock = threading.Lock()
 
     def deliver(self, output: GenerationOutput) -> None:
@@ -833,7 +833,7 @@ class ContinuousBatchingManager:
                 if result.is_finished():
                     return
 
-    def register_result_handler(self, request_id: str, callback: callable) -> None:
+    def register_result_handler(self, request_id: str, callback: Callable) -> None:
         """Register a callback for result delivery (streaming or non-streaming).
 
         The callback is invoked on the event loop via ``call_soon_threadsafe``
