@@ -561,7 +561,35 @@ class Serve:
         self,
         continuous_batching: Annotated[
             bool | None,
-            typer.Option(help="Whether to use continuous batching for chat completions."),
+            typer.Option(help="Whether to use continuous batching for chat completions. Configure with --cb-* flags."),
+        ] = None,
+        cb_block_size: Annotated[
+            int | None,
+            typer.Option(help="Size of each KV cache block in tokens for continuous batching. Default: 256."),
+        ] = None,
+        cb_num_blocks: Annotated[
+            int | None,
+            typer.Option(
+                help="Number of blocks in KV cache for continuous batching. Default: auto-inferred from GPU memory."
+            ),
+        ] = None,
+        cb_max_batch_tokens: Annotated[
+            int | None,
+            typer.Option(
+                help="Maximum number of tokens in a batch for continuous batching. Default: auto-inferred from GPU memory."
+            ),
+        ] = None,
+        cb_max_memory_percent: Annotated[
+            float | None,
+            typer.Option(
+                help="Maximum percentage of free GPU memory to use for KV cache in continuous batching (0.0-1.0). Default: 0.8."
+            ),
+        ] = None,
+        cb_use_cuda_graph: Annotated[
+            bool | None,
+            typer.Option(
+                help="Enable CUDA graphs for continuous batching performance. Default: auto-inferred based on attention implementation."
+            ),
         ] = None,
         device: Annotated[
             str,
@@ -636,6 +664,13 @@ class Serve:
         self.input_validation = input_validation
         self.force_model = force_model
         self.non_blocking = non_blocking
+
+        # Continuous batching configuration arguments
+        self.cb_block_size = cb_block_size
+        self.cb_num_blocks = cb_num_blocks
+        self.cb_max_batch_tokens = cb_max_batch_tokens
+        self.cb_max_memory_percent = cb_max_memory_percent
+        self.cb_use_cuda_graph = cb_use_cuda_graph
 
         # Seed
         if default_seed is not None:
@@ -1134,8 +1169,26 @@ class Serve:
         )
 
         if self.running_continuous_batching_manager is None:
+            from transformers import ContinuousBatchingConfig
+
+            # Build continuous batching config from CLI arguments
+            cb_config_kwargs = {}
+            if self.cb_block_size is not None:
+                cb_config_kwargs["block_size"] = self.cb_block_size
+            if self.cb_num_blocks is not None:
+                cb_config_kwargs["num_blocks"] = self.cb_num_blocks
+            if self.cb_max_batch_tokens is not None:
+                cb_config_kwargs["max_batch_tokens"] = self.cb_max_batch_tokens
+            if self.cb_max_memory_percent is not None:
+                cb_config_kwargs["max_memory_percent"] = self.cb_max_memory_percent
+            if self.cb_use_cuda_graph is not None:
+                cb_config_kwargs["use_cuda_graph"] = self.cb_use_cuda_graph
+
+            cb_config = ContinuousBatchingConfig(**cb_config_kwargs) if cb_config_kwargs else None
+
             self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config
+                generation_config=generation_config,
+                continuous_batching_config=cb_config,
             )
 
             # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb

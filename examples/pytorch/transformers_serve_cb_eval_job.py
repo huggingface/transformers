@@ -3,7 +3,7 @@
 #     "inspect-ai",
 #     "inspect-evals",
 #     "huggingface-hub",
-#     "transformers[serving] @ git+https://github.com/huggingface/transformers.git@main",
+#     "transformers[serving] @ git+https://github.com/NathanHB/transformers.git@fix-continuous-batching-json-response",
 #     "openai>=2.26.0",
 #     "torchvision",
 #     "kernels",
@@ -94,6 +94,37 @@ def main():
         help="Output directory for bundled logs (will be prefixed with 'hf/', default: SaylorTwift/transformers-CB)",
     )
 
+    # Continuous batching configuration arguments
+    parser.add_argument(
+        "--cb-block-size",
+        type=int,
+        default=256,
+        help="KV cache block size in tokens for continuous batching (default: 256)",
+    )
+    parser.add_argument(
+        "--cb-num-blocks",
+        type=int,
+        default=None,
+        help="Number of KV cache blocks for continuous batching (default: auto-calculated)",
+    )
+    parser.add_argument(
+        "--cb-max-batch-tokens",
+        type=int,
+        default=None,
+        help="Maximum tokens per batch for continuous batching (default: auto-calculated)",
+    )
+    parser.add_argument(
+        "--cb-max-memory-percent",
+        type=float,
+        default=0.8,
+        help="Maximum GPU memory percentage to use for KV cache (0.0-1.0, default: 0.8)",
+    )
+    parser.add_argument(
+        "--cb-use-cuda-graph",
+        action="store_true",
+        help="Enable CUDA graphs for continuous batching performance",
+    )
+
     args = parser.parse_args()
 
     server_process = None
@@ -108,11 +139,31 @@ def main():
     if not args.no_continuous_batching:
         serve_cmd.append("--continuous-batching")
 
+        # Add continuous batching configuration arguments
+        serve_cmd.extend(["--cb-block-size", str(args.cb_block_size)])
+
+        if args.cb_num_blocks is not None:
+            serve_cmd.extend(["--cb-num-blocks", str(args.cb_num_blocks)])
+
+        if args.cb_max_batch_tokens is not None:
+            serve_cmd.extend(["--cb-max-batch-tokens", str(args.cb_max_batch_tokens)])
+
+        serve_cmd.extend(["--cb-max-memory-percent", str(args.cb_max_memory_percent)])
+
+        if args.cb_use_cuda_graph:
+            serve_cmd.append("--cb-use-cuda-graph")
+
     # Always use sdpa attention implementation
     serve_cmd.extend(["--attn-implementation", "kernels-community/flash-attn2"])
 
     print("Starting transformers serve with continuous batching...")
     print(f"Model: {args.model}")
+    if not args.no_continuous_batching:
+        print(f"CB Block Size: {args.cb_block_size}")
+        print(f"CB Num Blocks: {args.cb_num_blocks if args.cb_num_blocks else 'auto'}")
+        print(f"CB Max Batch Tokens: {args.cb_max_batch_tokens if args.cb_max_batch_tokens else 'auto'}")
+        print(f"CB Max Memory: {args.cb_max_memory_percent * 100}%")
+        print(f"CB CUDA Graph: {args.cb_use_cuda_graph}")
     print(f"Command: {' '.join(serve_cmd)}")
     print("=" * 70)
     print("SERVER OUTPUT:")
