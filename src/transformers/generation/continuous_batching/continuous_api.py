@@ -628,7 +628,7 @@ class ContinuousBatchProcessor:
             start = perf_counter()
             # If N requests reach decoding stage, then the number of query tokens is going to start at N and decrease to
             # 0 as all request finish. So we warmup for all intervals between 0 and N.
-            for num_requests in range(0, num_query_tokens + q_interval, q_interval):
+            for num_requests in range(q_interval, num_query_tokens + q_interval, q_interval):
                 future_states = create_warmup_future_states(
                     num_requests, RequestStatus.DECODING, 1, self.cache.block_size, self.cache
                 )

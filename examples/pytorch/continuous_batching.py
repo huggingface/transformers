@@ -29,6 +29,7 @@ from transformers.generation.continuous_batching.requests import logger
 
 # TODO: this file is now mostly used for benchmarking, remodel it in consequence.
 
+
 def generate_without_cb(
     model_id: str, sliding_window: int, attn_impl: str, batched_inputs: list[int], generation_config: GenerationConfig
 ) -> dict[str, str]:
@@ -92,7 +93,6 @@ def batch_generate(
     output_file: str | None = None,
     expected_outputs: list[str] | None = None,
 ) -> tuple[float, float]:
-
     # Actual batch generation
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
