@@ -263,6 +263,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
         if hasattr(self, "rope_parameters"):
             kwargs = self.convert_rope_params_to_dict(**kwargs)
+        elif kwargs.get("rope_scaling") and kwargs.get("rope_theta"):
+            logger.warning(
+                f"{self.__class__.__name__} got `key=rope_scaling` in kwargs but hasn't set it as attribute. "
+                "For RoPE standardization you need to set `self.rope_parameters` in model's config. "
+            )
+            kwargs = self.convert_rope_params_to_dict(**kwargs)
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
         for parameter_name in GenerationConfig._get_default_generation_params().keys():
@@ -759,6 +765,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # timm models are not saved with the model_type in the config file
         if "model_type" not in config_dict and is_timm_config_dict(config_dict):
             config_dict["model_type"] = "timm_wrapper"
+
+        # Some checkpoints may contain the wrong model_type in the config file.
+        # Allow the user to override it but warn them that it might not work.
+        if "model_type" in kwargs and config_dict["model_type"] != kwargs["model_type"]:
+            logger.warning(
+                f"{configuration_file} has 'model_type={config_dict['model_type']}' but you overrode "
+                f"it with 'model_type={kwargs['model_type']}'. This may lead to unexpected behavior."
+            )
+            config_dict["model_type"] = kwargs["model_type"]
 
         return config_dict, kwargs
 
