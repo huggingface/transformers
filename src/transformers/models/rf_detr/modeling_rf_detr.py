@@ -1138,7 +1138,7 @@ class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
@@ -1679,7 +1679,7 @@ class RfDetrObjectDetectionOutput(ModelOutput):
         `pred_boxes`) for each decoder layer.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
@@ -1771,6 +1771,7 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
 
         Examples:
 
@@ -1910,9 +1911,9 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
         `pred_boxes`) for each decoder layer.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, d_model)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
@@ -1975,8 +1976,8 @@ class RfDetrSegmentationMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)

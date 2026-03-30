@@ -66,9 +66,9 @@ class RfDetrDinov2Config(Dinov2Config):
     apply_layernorm (`bool`, *optional*, defaults to `True`):
         Whether to apply layer normalization to the feature maps in case the model is used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-        Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+        Whether to reshape the feature maps to 4D tensors of shape `(batch_size, d_model, height, width)` in
         case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-        seq_len, hidden_size)`.
+        seq_len, d_model)`.
     use_mask_token (`bool`, *optional*, defaults to `True`):
         Whether to use mask_token in embeddings.
     num_windows (`int`, *optional*, defaults to 4):
@@ -170,7 +170,6 @@ class RfDetrConfig(PreTrainedConfig):
 
     model_type = "rf_detr"
     sub_configs = {"backbone_config": AutoConfig}
-    attribute_map = {"hidden_size": "d_model"}
 
     # backbone
     backbone_config: dict | PreTrainedConfig | None = None
@@ -563,7 +562,7 @@ class RfDetrModelOutput(LwDetrModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
@@ -798,7 +797,7 @@ class RfDetrObjectDetectionOutput(LwDetrObjectDetectionOutput):
         `pred_boxes`) for each decoder layer.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
@@ -997,9 +996,9 @@ class RfDetrInstanceSegmentationOutput(ModelOutput):
         `pred_boxes`) for each decoder layer.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, d_model)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
@@ -1053,6 +1052,8 @@ class RfDetrSegmentationMLP(CLIPMLP):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
         self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
+        self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
 
 
 class RfDetrSegmentationMLPBlock(nn.Module):

@@ -38,9 +38,9 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     apply_layernorm (`bool`, *optional*, defaults to `True`):
         Whether to apply layer normalization to the feature maps in case the model is used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-        Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+        Whether to reshape the feature maps to 4D tensors of shape `(batch_size, d_model, height, width)` in
         case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-        seq_len, hidden_size)`.
+        seq_len, d_model)`.
     use_mask_token (`bool`, *optional*, defaults to `True`):
         Whether to use mask_token in embeddings.
     num_windows (`int`, *optional*, defaults to 4):
@@ -164,7 +164,6 @@ class RfDetrConfig(PreTrainedConfig):
 
     model_type = "rf_detr"
     sub_configs = {"backbone_config": AutoConfig}
-    attribute_map = {"hidden_size": "d_model"}
 
     # backbone
     backbone_config: dict | PreTrainedConfig | None = None
