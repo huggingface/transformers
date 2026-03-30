@@ -686,6 +686,7 @@ class ContinuousBatchingManager:
         self.model = model.eval()
         self.generation_config = generation_config
         self.continuous_batching_config = continuous_batching_config
+        self.warmed_up = False  # Set to True after warmup is completed. Usefull for persistent managers.
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
 
@@ -738,6 +739,7 @@ class ContinuousBatchingManager:
         if self.batch_processor is None:
             self.batch_processor = self._create_batch_processor()
         self.batch_processor.warmup(self.model, self.logit_processor, num_cache_tokens, num_query_tokens)
+        self.warmed_up = True
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
     def stop(self, block: bool = True, timeout: float | None = None, keep_for_next_session: bool = False) -> None:
@@ -1112,7 +1114,7 @@ class ContinuousMixin:
             continuous_batching_config=continuous_batching_config,
             **deprecated_kwargs,
         )
-        if warmup:
+        if warmup and not manager.warmed_up:
             # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
             print("Warming up for coninuous batching...")
             start = perf_counter()

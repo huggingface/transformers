@@ -91,17 +91,29 @@ def batch_generate(
     output_file: str | None = None,
     expected_outputs: list[str] | None = None,
 ) -> tuple[float, float]:
+
+    # Warmup the model
+    print("\nWarming up the model...")
+    start_time_warmup = time.time()
+    model.generate_batch(
+        inputs=simple_batch_inputs[:1],
+        generation_config=generation_config,
+        continuous_batching_config=cb_config,
+        persistent_manager=True,
+        warmup=True,
+    )
+    print(f"Warmup took: {time.time() - start_time_warmup:.2f} seconds.\n")
+
     # Actual batch generation
-    if displayed_samples >= 0:
-        print("--- Running CB Generation Example ---")
     start_time_simple = time.time()
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
         continuous_batching_config=cb_config,
-        warmup=True,
     )
     end_time_simple = time.time()
+    print(f"Batch generation took: {end_time_simple - start_time_simple:.2f} seconds")
+
     if displayed_samples >= 0:
         print("Done with batch generation.")
 
