@@ -409,7 +409,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         # Difference from Dinov2, when the layer is not a window block, we need to unpartition the hidden states before the attention
@@ -564,6 +564,7 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
+        # Like Dinov2, we need to output the hidden states to extract the layers for the stages
         kwargs["output_hidden_states"] = True
 
         embedding_output = self.embeddings(pixel_values)
