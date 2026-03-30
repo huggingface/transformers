@@ -13,6 +13,56 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Setup
+```
+pip install omnilingual-asr
+pip install sentencepiece
+pip install -e .
+
+# - macOS (Apple Silicon)
+brew install libsndfile
+
+# - DGX
+python -m pip uninstall -y torch torchvision torchaudio
+python -m pip install \
+  torch==2.8.0+cu128 \
+  torchvision==0.23.0+cu128 \
+  torchaudio==2.8.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install fairseq2 \
+  --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
+python -m pip install --upgrade huggingface_hub
+```
+
+See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
+
+Example conversion:
+```python
+# -- CTC-variant v2
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_CTC_300M_v2 \
+    --repo_id bezzam/omniasr-ctc-300m-v2
+
+# -- LLM-variant v2
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+--model_card omniASR_LLM_300M_v2 \
+--repo_id bezzam/omniasr-llm-300m-v2
+
+
+## release v1
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_CTC_300M \
+    --repo_id bezzam/omniasr-ctc-300m
+
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_W2V_300M \
+    --repo_id bezzam/omniasr-w2v-300m
+```
+
+Original model checkpoints are saved under:  ~/.cache/fairseq2/assets/
+"""
+
 import argparse
 import json
 import os
@@ -42,10 +92,10 @@ from transformers import (
     SeamlessM4TTokenizer,
     Wav2Vec2FeatureExtractor,
     OmniASRFeatureExtractor,
-    Wav2Vec2Processor,
     LasrTokenizer,
     logging,
 )
+from transformers.models.omniasr.processing_omniasr import OmniASRProcessor
 from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
@@ -53,6 +103,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+# TODO change to state dict mapping like in newer models
 encoder_convert_list = [
     # OmniASRFeatureEncoder
     ("encoder_frontend.feature_extractor.layers", "encoder.feature_extractor.conv_layers"),
@@ -107,7 +158,6 @@ def _convert_model(
     decoder_convert_list=None,
     verbose=False
 ):
-    # import pudb; pudb.set_trace()
     """
     ValueError: 1 extra keys found: {'lang_embeddings.weight'}
     """
@@ -139,6 +189,25 @@ def _convert_model(
                         print("Converting key:", new_key, " to ", new_key.replace(old_layer_name, new_layer_name))
                     new_key = new_key.replace(old_layer_name, new_layer_name)
             state_dict[new_key] = state_dict.pop(k)
+        
+        # Rearrange Q/K projection weights for RoPE compatibility (interleaved -> half-split)
+        # Based on convert_pe_audio_video_to_hf.py and convert_perception_lm_weights_to_hf.py
+        num_heads = 8
+        num_key_value_heads = 8
+        head_dim = 512
+        for k in list(state_dict.keys()):
+            # Only permute decoder Q/K weights, not encoder weights
+            if "language_model.model.layers" in k and ".self_attn.q_proj.weight" in k:
+                weight = state_dict[k]
+                state_dict[k] = weight.view(num_heads, head_dim // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+                if verbose:
+                    print(f"Permuted {k} for RoPE: {weight.shape} -> {state_dict[k].shape}")
+            elif "language_model.model.layers" in k and ".self_attn.k_proj.weight" in k:
+                weight = state_dict[k]
+                dim1, dim2 = weight.shape
+                state_dict[k] = weight.view(num_key_value_heads, head_dim // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+                if verbose:
+                    print(f"Permuted {k} for RoPE: {weight.shape} -> {state_dict[k].shape}")
 
     # Pad lm_head weight if needed: the original final_proj has vocab_size outputs
     # but LlamaForCausalLM creates lm_head with vocab_size + num_special_tokens.
@@ -409,10 +478,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             num_key_value_heads=original_config_llm.llama_config.num_key_value_heads,
             tie_word_embeddings=original_config_llm.llama_config.tied_embeddings,
             rope_theta=10000.0,
-            # -- unused params from original config
-            # use_scaled_rope=False, 
-            # rope_scale=LLaMARoPEScaleConfig(factor=8.0, frequency_factors=(1.0, 4.0), 
-            # LLaMAConfig(rope_theta=10000.0, original_context_length=8192), dropout_p=0.1, init_std=None, init_std_scale='layer', shard_embed_dim=True)
+            rms_norm_eps=1e-5,
         )
 
         # TODO: adding special tokens?
@@ -432,11 +498,9 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
             num_special_tokens=original_config_llm.n_special_tokens,
             language_mapping=original_model.lang_mapping,
             language_embedding_probability=original_config_llm.lang_embeddings_p,
-            # TODO : bug from their side? https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L360
-            # they overwtite the ASR config which sets vocab size to 9812 instead to that of tokenizer (10288)
-            # and vocab size used from ASr model: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L261
-            language_token_id=9218,
-            # language_token_id=original_tokenizer.vocab_info.size  # NOTE should be this? otherwise overwiting actual 9218 -> original_tokenizer._model.index_to_token(9218) = 'ր'
+            # LID marker is the first reserved special token, i.e. the base
+            # vocabulary size before adding extra syntax tokens.
+            language_token_id=original_config_llm.llama_config.vocab_size,
         )
         hf_model = OmniASRForConditionalGeneration(config)
     elif "W2V" in model_card:
@@ -522,7 +586,10 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     # tokenizer = SeamlessM4TTokenizer(vocab_file=vocab_file) # leads to empty transcript
 
     # -- create processor
-    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+    language_mapping = None
+    if "LLM" in model_card:
+        language_mapping = original_model.lang_mapping
+    processor = OmniASRProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer, language_mapping=language_mapping)
 
     # 5) Upload to hub
     if repo_id:
@@ -538,60 +605,6 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     # TODO try loading model
 
-
-"""
-Reproducible usage
-------------------
-
-Setup
-```
-pip install omnilingual-asr
-pip install sentencepiece
-pip install -e .
-
-# - macOS (Apple Silicon)
-brew install libsndfile
-
-# - DGX
-python -m pip uninstall -y torch torchvision torchaudio
-python -m pip install \
-  torch==2.8.0+cu128 \
-  torchvision==0.23.0+cu128 \
-  torchaudio==2.8.0 \
-  --index-url https://download.pytorch.org/whl/cu128
-python -m pip install fairseq2 \
-  --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
-python -m pip install --upgrade huggingface_hub
-```
-
-See here for available models: https://github.com/facebookresearch/omnilingual-asr?tab=readme-ov-file#model-architectures
-
-Example conversion:
-```python
-# -- CTC-variant v2
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_CTC_300M_v2 \
-    --repo_id bezzam/omniasr-ctc-300m-v2
-
-# -- LLM-variant v2
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
---model_card omniASR_LLM_300M_v2 \
---repo_id bezzam/omniasr-llm-300m-v2
-
-
-## release v1
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_CTC_300M \
-    --repo_id bezzam/omniasr-ctc-300m
-
-    
-python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
-    --model_card omniASR_W2V_300M \
-    --repo_id bezzam/omniasr-w2v-300m
-```
-
-Original model checkpoints are saved under:  ~/.cache/fairseq2/assets/
-"""
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_card", default=None, type=str, help="Name of original model in omnilingual-asr")
