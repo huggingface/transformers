@@ -54,11 +54,41 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     tests = os.getcwd()
-    model_tests = os.listdir(os.path.join(tests, "models"))
-    d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
-    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
-    d1.remove("models")
-    d = d2 + d1
+
+    # TEMP: hardcoded model list for empty-cache AMD CI test
+    _HARDCODED_MODELS = [
+        "auto",
+        "bert",
+        "gpt2",
+        "t5",
+        "modernbert",
+        "vit",
+        "clip",
+        "detr",
+        "table_transformer",
+        "got_ocr2",
+        "whisper",
+        "wav2vec2",
+        "qwen2_audio",
+        "csm",
+        "llama",
+        "gemma3",
+        "qwen2",
+        "mistral3",
+        "qwen2_5_vl",
+        "llava",
+        "smolvlm",
+        "internvl",
+        "gemma3n",
+        "qwen2_5_omni",
+    ]
+    d = []
+    for x in _HARDCODED_MODELS:
+        if os.path.isdir(x):
+            d.append(x)
+        if os.path.isdir(f"models/{x}"):
+            d.append(f"models/{x}")
+    d = sorted(d)
 
     if args.subdirs != "":
         model_tests = ast.literal_eval(args.subdirs)
