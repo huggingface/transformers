@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Documenting a model
+# Auto-generating docstrings
 
 The `@auto_docstring` decorator generates consistent docstrings for model classes and methods. It pulls in standard argument descriptions automatically, so you only write documentation for new or custom arguments. When [adding a new model](./modular_transformers), skip the boilerplate and focus on what's new.
 
