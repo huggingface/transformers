@@ -728,14 +728,48 @@ class Serve:
         async def audio_transcriptions(request: Request):
             # Parses the multipart/form-data request into the request format used by other endpoints
             async with request.form() as form:
+                file_field = form["file"]
+                # Validate file size to prevent resource exhaustion via oversized uploads (max 25 MB)
+                _MAX_AUDIO_FILE_SIZE_BYTES = 25 * 1024 * 1024
+                if file_field.size is not None and file_field.size > _MAX_AUDIO_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Uploaded file exceeds the maximum allowed size of 25 MB.",
+                    )
+                # Validate MIME type to reject non-audio files and prevent malicious uploads
+                _ALLOWED_AUDIO_CONTENT_TYPES = {
+                    "audio/mpeg",
+                    "audio/mp3",
+                    "audio/wav",
+                    "audio/x-wav",
+                    "audio/ogg",
+                    "audio/flac",
+                    "audio/aac",
+                    "audio/mp4",
+                    "audio/x-m4a",
+                    "audio/webm",
+                    "audio/basic",
+                }
+                if file_field.content_type and file_field.content_type not in _ALLOWED_AUDIO_CONTENT_TYPES:
+                    raise HTTPException(
+                        status_code=415,
+                        detail=f"Unsupported media type '{file_field.content_type}'. Only audio files are accepted.",
+                    )
+                file_content = await file_field.read()
+                # Re-check size after reading in case the size was not available upfront
+                if len(file_content) > _MAX_AUDIO_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Uploaded file exceeds the maximum allowed size of 25 MB.",
+                    )
                 parsed_request = TransformersTranscriptionCreateParams(
-                    file=await form["file"].read(),
+                    file=file_content,
                     model=form["model"],
                     # TODO: add other fields
                 )
                 logger.debug(
-                    f"Received file: {form['file'].filename}; MIME type: {form['file'].content_type}; "
-                    f"size: {form['file'].size / 1024:.2f} KiB"
+                    f"Received file: {file_field.filename}; MIME type: {file_field.content_type}; "
+                    f"size: {file_field.size / 1024:.2f} KiB"
                 )
             self.validate_transcription_request(request=parsed_request)
 
@@ -756,6 +790,25 @@ class Serve:
             model = body.get("model")
             if model is None:
                 raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
+
+            # Validate that the model identifier is a safe HuggingFace model ID.
+            # This prevents loading arbitrary local pickle files which could lead to
+            # remote code execution via malicious deserialization payloads.
+            # A valid HuggingFace model ID consists of alphanumeric characters, hyphens,
+            # underscores, and dots, optionally prefixed by a namespace and an @revision.
+            # Local file paths (absolute or relative) and path traversal sequences are rejected.
+            if not isinstance(model, str):
+                raise HTTPException(status_code=422, detail="Invalid model identifier: must be a string.")
+            import re
+            _VALID_MODEL_ID_RE = re.compile(
+                r"^[a-zA-Z0-9][a-zA-Z0-9._-]*(/[a-zA-Z0-9][a-zA-Z0-9._-]*)?(@[a-zA-Z0-9._-]+)?$"
+            )
+            if not _VALID_MODEL_ID_RE.match(model):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid model identifier: only HuggingFace model IDs are allowed "
+                    "(e.g. 'username/model-name'). Local file paths and path traversal are not permitted.",
+                )
 
             model_id_and_revision = self.process_model_name(model)
 
