@@ -575,7 +575,10 @@ class ContinuousBatchProcessor:
             return None
 
         num_query_tokens = num_query_tokens if num_query_tokens > 0 else self.max_batch_tokens
+        num_query_tokens = min(num_query_tokens, self.max_batch_tokens)
         num_cache_tokens = num_cache_tokens if num_cache_tokens > 0 else self.cache.block_size * num_query_tokens
+        num_cache_tokens = min(num_cache_tokens, self.cache.num_blocks * self.cache.block_size)
+
         num_pages = self.cache.num_blocks * self.cache.block_size
         compute_stream = self.inputs_and_outputs.compute_stream
 
