@@ -100,7 +100,6 @@ class VideoPrismTextConfig(SiglipTextConfig):
     initializer_range: float = 0.02
     attn_logit_softcapping: float = 50.0
     attention_dropout = AttributeError()
-    projection_size = AttributeError()
 
 
 @auto_docstring(
