@@ -529,7 +529,7 @@ class PilBackend(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
+        resample: "PILImageResampling | None" = None,
         reducing_gap: int | None = None,
         **kwargs,
     ) -> np.ndarray:
@@ -628,7 +628,7 @@ class PilBackend(BaseImageProcessor):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

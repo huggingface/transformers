@@ -4071,7 +4071,10 @@ def _process_example_section(
         else:
             # Check if the model is in a pipeline to get an example
             for name_model_list_for_task in MODELS_TO_PIPELINE:
-                model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                try:
+                    model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                except (ImportError, AttributeError):
+                    continue
                 if class_name in model_list_for_task.values():
                     pipeline_name = MODELS_TO_PIPELINE[name_model_list_for_task]
                     example_annotation = PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS[pipeline_name].format(
