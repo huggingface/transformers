@@ -16,25 +16,29 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
+from PIL import Image, ImageDraw
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, PILImageResampling, SizeDict, to_numpy_array
+from ...image_utils import (
+    ImageInput,
+    ImageType,
+    PILImageResampling,
+    SizeDict,
+    get_image_type,
+    is_pil_image,
+    is_valid_image,
+    to_numpy_array,
+)
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-from .image_processing_superglue import validate_and_format_image_pairs
 
 
 if TYPE_CHECKING:
+    import torch
+
     from .modeling_superglue import SuperGlueKeypointMatchingOutput
-
-if is_vision_available():
-    import PIL
-    from PIL import Image, ImageDraw
-
-import torch
-from torchvision.transforms.v2 import functional as tvF
 
 
 def is_grayscale(image: np.ndarray):
@@ -64,11 +68,40 @@ def convert_to_grayscale(image: ImageInput) -> ImageInput:
         gray_image = np.stack([gray_image] * 3, axis=0)
         return gray_image
 
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     image = image.convert("L")
     return image
+
+
+# Adapted from transformers.models.superglue.image_processing_superglue.validate_and_format_image_pairs
+def validate_and_format_image_pairs(images: ImageInput):
+    error_message = (
+        "Input images must be a one of the following :",
+        " - A pair of PIL images.",
+        " - A pair of 3D arrays.",
+        " - A list of pairs of PIL images.",
+        " - A list of pairs of 3D arrays.",
+    )
+
+    def _is_valid_image(image):
+        """images is a PIL Image or a 3D array."""
+        return is_pil_image(image) or (
+            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+        )
+
+    if isinstance(images, list):
+        if len(images) == 2 and all((_is_valid_image(image)) for image in images):
+            return images
+        if all(
+            isinstance(image_pair, list)
+            and len(image_pair) == 2
+            and all(_is_valid_image(image) for image in image_pair)
+            for image_pair in images
+        ):
+            return [image for image_pair in images for image in image_pair]
+    raise ValueError(error_message)
 
 
 class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
@@ -81,7 +114,6 @@ class SuperGlueImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
 class SuperGlueImageProcessorPil(PilBackend):
     valid_kwargs = SuperGlueImageProcessorKwargs
     resample = PILImageResampling.BILINEAR
@@ -110,7 +142,7 @@ class SuperGlueImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         return_tensors: str | TensorType | None,
@@ -137,12 +169,13 @@ class SuperGlueImageProcessorPil(PilBackend):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "SuperGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperGlueKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -159,6 +192,8 @@ class SuperGlueImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in the first and second image
             of the pair, the matching scores and the matching indices.
         """
+        import torch
+
         if outputs.mask.shape[0] != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
         if not all(len(target_size) == 2 for target_size in target_sizes):
@@ -206,7 +241,7 @@ class SuperGlueImageProcessorPil(PilBackend):
         return results
 
     def visualize_keypoint_matching(
-        self, images: ImageInput, keypoint_matching_output: list[dict[str, torch.Tensor]]
+        self, images: ImageInput, keypoint_matching_output: list[dict[str, "torch.Tensor"]]
     ) -> list["Image.Image"]:
         """
         Plots the image pairs side by side with the detected keypoints as well as the matching between them.

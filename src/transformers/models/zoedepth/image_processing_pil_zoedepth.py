@@ -13,6 +13,8 @@
 # limitations under the License.
 """Image processor class for ZoeDepth."""
 
+import math
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
@@ -30,25 +32,84 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available, requires_backends
 from ...utils.import_utils import requires
-from .image_processing_zoedepth import ZoeDepthImageProcessorKwargs, get_resize_output_image_size
 
 
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
-import torch
-from torch import nn
-
+if is_torch_available():
+    import torch
+    from torch import nn
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
+# Adapted from transformers.models.zoedepth.image_processing_zoedepth.ZoeDepthImageProcessorKwargs
+class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
+        If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
+        for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
+        within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
+        size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
+        Can be overridden by `keep_aspect_ratio` in `preprocess`.
+    ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
+        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
+        the height and width to the nearest multiple of this value.
+        Works both with and without `keep_aspect_ratio` being set to `True`.
+        Can be overridden by `ensure_multiple_of` in `preprocess`.
+    """
+
+    keep_aspect_ratio: bool
+    ensure_multiple_of: int
+
+
+# Adapted from transformers.models.zoedepth.image_processing_zoedepth.get_resize_output_image_size
+def get_resize_output_image_size(
+    input_image: "torch.Tensor | np.ndarray",
+    output_size: int | Iterable[int],
+    keep_aspect_ratio: bool,
+    multiple: int,
+    input_data_format: str | ChannelDimension | None = None,
+) -> tuple[int, int]:
+    def constrain_to_multiple_of(val, multiple, min_val=0):
+        x = (np.round(val / multiple) * multiple).astype(int)
+
+        if x < min_val:
+            x = math.ceil(val / multiple) * multiple
+
+        return x
+
+    output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
+
+    input_height, input_width = get_image_size(input_image, input_data_format)
+    output_height, output_width = output_size
+
+    # determine new height and width
+    scale_height = output_height / input_height
+    scale_width = output_width / input_width
+
+    if keep_aspect_ratio:
+        # scale as little as possible
+        if abs(1 - scale_width) < abs(1 - scale_height):
+            # fit width
+            scale_height = scale_width
+        else:
+            # fit height
+            scale_width = scale_height
+
+    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
+
+    return (new_height, new_width)
+
+
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("torch",))
 class ZoeDepthImageProcessorPil(PilBackend):
     valid_kwargs = ZoeDepthImageProcessorKwargs
     do_pad = True
@@ -146,7 +207,7 @@ class ZoeDepthImageProcessorPil(PilBackend):
         size: SizeDict,
         keep_aspect_ratio: bool | None,
         ensure_multiple_of: int | None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float | None,
