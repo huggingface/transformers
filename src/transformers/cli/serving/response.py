@@ -22,31 +22,35 @@ import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-from openai.types.responses import (
-    Response,
-    ResponseCompletedEvent,
-    ResponseContentPartAddedEvent,
-    ResponseContentPartDoneEvent,
-    ResponseCreatedEvent,
-    ResponseError,
-    ResponseErrorEvent,
-    ResponseFailedEvent,
-    ResponseFunctionCallArgumentsDoneEvent,
-    ResponseFunctionToolCall,
-    ResponseInProgressEvent,
-    ResponseOutputItemAddedEvent,
-    ResponseOutputItemDoneEvent,
-    ResponseOutputMessage,
-    ResponseOutputText,
-    ResponseTextDeltaEvent,
-    ResponseTextDoneEvent,
-)
-from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
-from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
-
 from ...utils import logging
+from ...utils.import_utils import is_serve_available
+
+
+if is_serve_available():
+    from fastapi import HTTPException
+    from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types.responses import (
+        Response,
+        ResponseCompletedEvent,
+        ResponseContentPartAddedEvent,
+        ResponseContentPartDoneEvent,
+        ResponseCreatedEvent,
+        ResponseError,
+        ResponseErrorEvent,
+        ResponseFailedEvent,
+        ResponseFunctionCallArgumentsDoneEvent,
+        ResponseFunctionToolCall,
+        ResponseInProgressEvent,
+        ResponseOutputItemAddedEvent,
+        ResponseOutputItemDoneEvent,
+        ResponseOutputMessage,
+        ResponseOutputText,
+        ResponseTextDeltaEvent,
+        ResponseTextDoneEvent,
+    )
+    from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
+    from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
+
 from .utils import (
     BaseGenerateManager,
     BaseHandler,

@@ -12,36 +12,68 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Tests for the refactored serving layer (Phase 1: chat completions).
+Tests for the serving layer.
 
-Run: pytest tests/cli/test_serve_refactored.py -x -v
-Integration tests (need GPU): RUN_SLOW=1 pytest tests/cli/test_serve_refactored.py -x -v -k "Integration"
 """
 
 import asyncio
-import io
 import json
 import os
+import socket
 import time
 import unittest
 from unittest.mock import MagicMock
 
-from transformers.testing_utils import require_openai
-from transformers.utils.import_utils import is_openai_available, is_vision_available
+import httpx
+
+from transformers.cli.serve import Serve
+from transformers.cli.serving.chat_completion import ChatCompletionHandler
+from transformers.cli.serving.model_manager import ModelManager, TimedModel
+from transformers.cli.serving.response import ResponseHandler, compute_usage
+from transformers.cli.serving.server import build_server
+from transformers.cli.serving.transcription import TranscriptionHandler
+from transformers.cli.serving.utils import (
+    BaseHandler,
+    GenerationState,
+    Modality,
+    ToolCallParser,
+    detect_tool_format,
+)
+from transformers.testing_utils import require_serve, require_torch_accelerator, require_vision, slow
+from transformers.utils.import_utils import is_serve_available
 
 
-if is_openai_available():
+if is_serve_available():
+    from fastapi import HTTPException
     from openai import OpenAI
-
-run_slow = os.environ.get("RUN_SLOW", "0") == "1"
-
-
-# ---------------------------------------------------------------------------
-# 1. CLI tests — verify CLI args reach uvicorn
-# ---------------------------------------------------------------------------
+    from openai.types.responses import Response, ResponseCreatedEvent
 
 
-@require_openai
+def _find_free_port() -> int:
+    """Return a free TCP port on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
+        return s.getsockname()[1]
+
+
+def _start_serve(**kwargs) -> tuple["Serve", int]:
+    """Start a non-blocking Serve instance on a free port and wait until healthy.
+
+    Returns ``(serve, port)``.
+    """
+    port = _find_free_port()
+    serve = Serve(port=port, non_blocking=True, **kwargs)
+    for _ in range(30):
+        try:
+            if httpx.get(f"http://localhost:{port}/health", timeout=2).status_code == 200:
+                return serve, port
+        except Exception:  # noqa: S110
+            pass
+        time.sleep(1)
+    raise RuntimeError(f"Server on port {port} did not become healthy in time")
+
+
+@require_serve
 def test_host_port_blocking(cli):
     """CLI args --host and --port are passed to uvicorn.Config, and server.run() is called."""
     from unittest.mock import Mock, patch
@@ -63,15 +95,8 @@ def test_host_port_blocking(cli):
         server_instance.run.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# 2. Unit tests — message parsing
-# ---------------------------------------------------------------------------
-
-
 class TestProcessorInputsFromMessages(unittest.TestCase):
     def test_llm_string_content(self):
-        from transformers.cli.serving.utils import BaseHandler, Modality
-
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": "Hello"}]
@@ -79,8 +104,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result, [{"role": "user", "content": "Hello"}])
 
     def test_llm_list_content_text_only(self):
-        from transformers.cli.serving.utils import BaseHandler, Modality
-
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "A"}, {"type": "text", "text": "B"}]}]
@@ -88,8 +111,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result, [{"role": "user", "content": "A B"}])
 
     def test_vlm_string_content_wrapped(self):
-        from transformers.cli.serving.utils import BaseHandler, Modality
-
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [{"role": "user", "content": "Hello"}]
@@ -97,8 +118,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result, [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}])
 
     def test_vlm_text_and_image_url(self):
-        from transformers.cli.serving.utils import BaseHandler, Modality
-
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         messages = [
@@ -117,7 +136,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
 
     def test_llm_multi_turn_conversation(self):
         """Multi-turn conversation with string content should pass through as-is."""
-        from transformers.cli.serving.utils import BaseHandler, Modality
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -134,7 +152,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
 
     def test_llm_list_content_with_type(self):
         """LLM messages with typed content list should extract text and join."""
-        from transformers.cli.serving.utils import BaseHandler, Modality
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -144,12 +161,9 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
         self.assertEqual(result[0]["content"], "Hello world")
 
-    @unittest.skipUnless(is_vision_available(), "Requires PIL")
+    @require_vision
     def test_vlm_base64_image_creates_temp_file(self):
         """Base64 image URLs should be decoded and saved to a temp file."""
-        import os
-
-        from transformers.cli.serving.utils import BaseHandler, Modality
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -174,7 +188,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
 
     def test_vlm_multi_turn(self):
         """VLM multi-turn: string content should be wrapped in text type."""
-        from transformers.cli.serving.utils import BaseHandler, Modality
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -197,8 +210,6 @@ class TestGenerativeModelList(unittest.TestCase):
 
         from huggingface_hub import hf_hub_download
 
-        from transformers.cli.serving.model_manager import ModelManager
-
         with tempfile.TemporaryDirectory() as cache_dir:
             # Download config.json for a few models
             hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
@@ -211,17 +222,9 @@ class TestGenerativeModelList(unittest.TestCase):
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
 
 
-# ---------------------------------------------------------------------------
-# 2. Unit tests — generation config mapping
-# ---------------------------------------------------------------------------
-
-
-@require_openai
+@require_serve
 class TestBuildGenerationConfig(unittest.TestCase):
     def _make_handler(self):
-        from transformers.cli.serving.chat_completion import ChatCompletionHandler
-        from transformers.cli.serving.utils import GenerationState
-
         return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_max_tokens(self):
@@ -289,17 +292,9 @@ class TestBuildGenerationConfig(unittest.TestCase):
         self.assertEqual(result.max_new_tokens, 50)
 
 
-# ---------------------------------------------------------------------------
-# 3. Unit tests — validation
-# ---------------------------------------------------------------------------
-
-
-@require_openai
+@require_serve
 class TestValidation(unittest.TestCase):
     def _make_handler(self):
-        from transformers.cli.serving.chat_completion import ChatCompletionHandler
-        from transformers.cli.serving.utils import GenerationState
-
         return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_valid_request_passes(self):
@@ -308,92 +303,64 @@ class TestValidation(unittest.TestCase):
         handler._validate_request({"model": "x", "messages": [{"role": "user", "content": "hi"}], "stream": True})
 
     def test_unexpected_keys_rejected(self):
-        from fastapi import HTTPException
-
         handler = self._make_handler()
         with self.assertRaises(HTTPException) as ctx:
             handler._validate_request({"model": "x", "messages": [], "bogus_field": True})
         self.assertEqual(ctx.exception.status_code, 422)
         self.assertIn("bogus_field", ctx.exception.detail)
 
-    def test_unsupported_fields_rejected(self):
-        from fastapi import HTTPException
-
+    def test_unsupported_fields_warns(self):
         handler = self._make_handler()
-        with self.assertRaises(HTTPException) as ctx:
+        with self.assertLogs("transformers", level="WARNING") as cm:
             handler._validate_request({"model": "x", "messages": [], "audio": {}})
-        self.assertEqual(ctx.exception.status_code, 422)
-        self.assertIn("audio", ctx.exception.detail)
-
-
-# ---------------------------------------------------------------------------
-# 4. Unit tests — model manager
-# ---------------------------------------------------------------------------
+        self.assertTrue(any("audio" in msg for msg in cm.output))
 
 
 class TestModelManager(unittest.TestCase):
     def test_process_model_name_adds_main(self):
-        from transformers.cli.serving.model_manager import ModelManager
-
         self.assertEqual(ModelManager.process_model_name("org/model"), "org/model@main")
 
     def test_process_model_name_preserves_revision(self):
-        from transformers.cli.serving.model_manager import ModelManager
-
         self.assertEqual(ModelManager.process_model_name("org/model@dev"), "org/model@dev")
 
     def test_quantization_config_4bit(self):
-        from transformers.cli.serving.model_manager import ModelManager
-
         mm = ModelManager(quantization="bnb-4bit")
         cfg = mm.get_quantization_config()
         self.assertTrue(cfg.load_in_4bit)
 
     def test_quantization_config_8bit(self):
-        from transformers.cli.serving.model_manager import ModelManager
-
         mm = ModelManager(quantization="bnb-8bit")
         cfg = mm.get_quantization_config()
         self.assertTrue(cfg.load_in_8bit)
 
     def test_quantization_config_none(self):
-        from transformers.cli.serving.model_manager import ModelManager
-
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
 
 
 class TestTimedModel(unittest.TestCase):
     def test_delete_model(self):
-        from transformers.cli.serving.model_manager import TimedModel
-
         mock_model = MagicMock()
-        timed = TimedModel(mock_model, timeout_seconds=9999, processor=MagicMock())
-        self.assertFalse(timed.is_deleted())
+        deleted = []
+        timed = TimedModel(
+            mock_model, timeout_seconds=9999, processor=MagicMock(), on_unload=lambda: deleted.append(True)
+        )
+        self.assertIsNotNone(timed.model)
         timed.delete_model()
-        self.assertTrue(timed.is_deleted())
+        self.assertIsNone(timed.model)
+        self.assertEqual(len(deleted), 1)
 
     def test_timeout_zero_no_delete(self):
-        from transformers.cli.serving.model_manager import TimedModel
-
         mock_model = MagicMock()
         timed = TimedModel(mock_model, timeout_seconds=0, processor=MagicMock())
         timed._timeout_reached()
-        self.assertFalse(timed.is_deleted())
+        self.assertIsNotNone(timed.model)
         timed._timer.cancel()
 
 
-# ---------------------------------------------------------------------------
-# 5. Unit tests — SSE formatting
-# ---------------------------------------------------------------------------
-
-
-@require_openai
+@require_serve
 class TestChunkSSE(unittest.TestCase):
     def _make_handler(self):
-        from transformers.cli.serving.chat_completion import ChatCompletionHandler
-        from transformers.cli.serving.utils import GenerationState
-
         return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_build_chunk_sse_content(self):
@@ -418,61 +385,42 @@ class TestChunkSSE(unittest.TestCase):
         self.assertEqual(parsed["choices"][0]["finish_reason"], "stop")
 
     def test_chunk_to_sse_string_passthrough(self):
-        from transformers.cli.serving.utils import BaseHandler
-
         result = BaseHandler.chunk_to_sse("data: already formatted\n\n")
         self.assertEqual(result, "data: already formatted\n\n")
 
     def test_chunk_to_sse_wraps_plain_string(self):
-        from transformers.cli.serving.utils import BaseHandler
-
         result = BaseHandler.chunk_to_sse("hello")
         self.assertEqual(result, "data: hello\n\n")
-
-
-# ---------------------------------------------------------------------------
-# 6. Unit tests — tool parser
-# ---------------------------------------------------------------------------
 
 
 QWEN_TOOL_FORMAT = {"start": "<tool_call>", "end": "</tool_call>"}
 
 
-@require_openai
+@require_serve
 class TestToolParser(unittest.TestCase):
     def test_detect_tool_format_qwen(self):
-        from transformers.cli.serving.utils import detect_tool_format
-
         model = MagicMock()
         model.config.architectures = ["Qwen2ForCausalLM"]
         fmt = detect_tool_format(model)
         self.assertEqual(fmt, QWEN_TOOL_FORMAT)
 
     def test_detect_tool_format_unsupported(self):
-        from transformers.cli.serving.utils import detect_tool_format
-
         model = MagicMock()
         model.config.architectures = ["LlamaForCausalLM"]
         self.assertIsNone(detect_tool_format(model))
 
     def test_parser_start_token(self):
-        from transformers.cli.serving.utils import ToolCallParser
-
         parser = ToolCallParser(QWEN_TOOL_FORMAT)
         result = parser.feed("<tool_call>")
         self.assertIs(result, ToolCallParser.CONSUMED)
 
     def test_parser_end_token(self):
-        from transformers.cli.serving.utils import ToolCallParser
-
         parser = ToolCallParser(QWEN_TOOL_FORMAT)
         parser.feed("<tool_call>")
         result = parser.feed("</tool_call>")
         self.assertIs(result, ToolCallParser.CONSUMED)
 
     def test_parser_buffers_until_end(self):
-        from transformers.cli.serving.utils import ToolCallParser
-
         parser = ToolCallParser(QWEN_TOOL_FORMAT)
         parser.feed("<tool_call>")
         # Intermediate tokens are buffered
@@ -484,15 +432,12 @@ class TestToolParser(unittest.TestCase):
         self.assertEqual(result["name"], "my_tool")
 
     def test_parser_normal_text_returns_none(self):
-        from transformers.cli.serving.utils import ToolCallParser
-
         parser = ToolCallParser(QWEN_TOOL_FORMAT)
         result = parser.feed("Hello world")
         self.assertIsNone(result)
 
     def test_parser_full_flow(self):
         """Simulate a complete tool call token sequence."""
-        from transformers.cli.serving.utils import ToolCallParser
 
         parser = ToolCallParser(QWEN_TOOL_FORMAT)
         tool_calls = []
@@ -517,7 +462,6 @@ class TestToolParser(unittest.TestCase):
 
     def test_parse_tool_calls_from_text(self):
         """Non-streaming tool call parsing from complete text."""
-        from transformers.cli.serving.utils import ToolCallParser
 
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
         calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
@@ -528,14 +472,12 @@ class TestToolParser(unittest.TestCase):
 
     def test_parse_tool_calls_no_tool_call(self):
         """Non-streaming: normal text returns None."""
-        from transformers.cli.serving.utils import ToolCallParser
 
         calls = ToolCallParser.parse("Hello, how can I help?", QWEN_TOOL_FORMAT)
         self.assertIsNone(calls)
 
     def test_parse_multiple_tool_calls(self):
         """Non-streaming: multiple tool calls in one response."""
-        from transformers.cli.serving.utils import ToolCallParser
 
         text = (
             '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
@@ -551,7 +493,6 @@ class TestToolParser(unittest.TestCase):
 
     def test_feed_multiple_tool_calls(self):
         """Streaming: multiple tool calls emitted sequentially."""
-        from transformers.cli.serving.utils import ToolCallParser
 
         parser = ToolCallParser(QWEN_TOOL_FORMAT)
         tool_calls = []
@@ -576,21 +517,10 @@ class TestToolParser(unittest.TestCase):
         self.assertIn("London", tool_calls[1]["arguments"])
 
 
-# ---------------------------------------------------------------------------
-# 7. App-level tests with ASGI test client (no real model)
-# ---------------------------------------------------------------------------
-
-
-@require_openai
+@require_serve
 class TestAppRoutes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from transformers.cli.serving.chat_completion import ChatCompletionHandler
-        from transformers.cli.serving.model_manager import ModelManager
-        from transformers.cli.serving.response import ResponseHandler
-        from transformers.cli.serving.server import build_server
-        from transformers.cli.serving.transcription import TranscriptionHandler
-
         cls.model_manager = MagicMock(spec=ModelManager)
         cls.model_manager.get_gen_models.return_value = [
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
@@ -599,86 +529,48 @@ class TestAppRoutes(unittest.TestCase):
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
         cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler, cls.transcription_handler)
+        cls.transport = httpx.ASGITransport(app=cls.app)
 
-    def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        async with httpx.AsyncClient(transport=self.transport, base_url="http://test") as c:
+            return await c.request(method, path, **kwargs)
 
     def test_health(self):
-        from httpx import ASGITransport, AsyncClient
-
-        async def _test():
-            async with AsyncClient(transport=ASGITransport(app=self.app), base_url="http://test") as c:
-                resp = await c.get("/health")
-                self.assertEqual(resp.status_code, 200)
-                self.assertEqual(resp.json(), {"status": "ok"})
-
-        self._run(_test())
+        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/health"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"status": "ok"})
 
     def test_models_list(self):
-        from httpx import ASGITransport, AsyncClient
-
-        async def _test():
-            async with AsyncClient(transport=ASGITransport(app=self.app), base_url="http://test") as c:
-                resp = await c.get("/v1/models")
-                self.assertEqual(resp.status_code, 200)
-                data = resp.json()
-                self.assertEqual(data["object"], "list")
-                self.assertEqual(len(data["data"]), 1)
-
-        self._run(_test())
+        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/v1/models"))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["object"], "list")
+        self.assertEqual(len(data["data"]), 1)
 
     def test_request_id_generated(self):
-        from httpx import ASGITransport, AsyncClient
-
-        async def _test():
-            async with AsyncClient(transport=ASGITransport(app=self.app), base_url="http://test") as c:
-                resp = await c.get("/health")
-                self.assertIn("x-request-id", resp.headers)
-                self.assertEqual(len(resp.headers["x-request-id"]), 36)  # UUID length
-
-        self._run(_test())
+        resp = asyncio.get_event_loop().run_until_complete(self._request("GET", "/health"))
+        self.assertIn("x-request-id", resp.headers)
+        self.assertEqual(len(resp.headers["x-request-id"]), 36)  # UUID length
 
     def test_request_id_passthrough(self):
-        from httpx import ASGITransport, AsyncClient
-
-        async def _test():
-            async with AsyncClient(transport=ASGITransport(app=self.app), base_url="http://test") as c:
-                resp = await c.get("/health", headers={"x-request-id": "my-id"})
-                self.assertEqual(resp.headers["x-request-id"], "my-id")
-
-        self._run(_test())
+        resp = asyncio.get_event_loop().run_until_complete(
+            self._request("GET", "/health", headers={"x-request-id": "my-id"})
+        )
+        self.assertEqual(resp.headers["x-request-id"], "my-id")
 
 
-# ---------------------------------------------------------------------------
-# 7. Integration tests (need GPU + model)
-#    Only test what requires a real model. Everything else is above with mocks.
-# ---------------------------------------------------------------------------
-
-
-@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
-@require_openai
+@slow
+@require_serve
 class TestChatCompletion(unittest.TestCase):
     """Integration tests for /v1/chat/completions with a real model."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-    PORT = 8877
 
     @classmethod
     def setUpClass(cls):
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(port=cls.PORT, non_blocking=True)
-        import requests
-
-        for _ in range(30):
-            try:
-                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-
-        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
     @classmethod
     def tearDownClass(cls):
@@ -896,7 +788,7 @@ class TestChatCompletion(unittest.TestCase):
         results = [None, None]
 
         def request_in_thread(index):
-            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
             results[index] = client.chat.completions.create(model=self.MODEL, messages=prompts[index])
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -921,7 +813,7 @@ class TestChatCompletion(unittest.TestCase):
         results = [None, None]
 
         def stream_in_thread(index):
-            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
             text = ""
             for chunk in client.chat.completions.create(model=self.MODEL, messages=prompts[index], stream=True):
                 if chunk.choices[0].delta.content:
@@ -940,17 +832,16 @@ class TestChatCompletion(unittest.TestCase):
 
     def test_request_cancellation(self):
         """Closing a stream early doesn't crash and the server stays healthy."""
-        import requests as req
 
-        with req.post(
-            f"http://localhost:{self.PORT}/v1/chat/completions",
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/v1/chat/completions",
             json={
                 "model": self.MODEL,
                 "stream": True,
                 "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
                 "max_tokens": 500,
             },
-            stream=True,
             timeout=30,
         ) as resp:
             self.assertEqual(resp.status_code, 200)
@@ -969,17 +860,9 @@ class TestChatCompletion(unittest.TestCase):
         self.assertIsNotNone(resp.choices[0].message.content)
 
 
-# ---------------------------------------------------------------------------
-# 8. Unit tests — Response handler
-# ---------------------------------------------------------------------------
-
-
-@require_openai
+@require_serve
 class TestResponseInputConversion(unittest.TestCase):
     def _make_handler(self):
-        from transformers.cli.serving.response import ResponseHandler
-        from transformers.cli.serving.utils import GenerationState
-
         return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_string_input(self):
@@ -1023,21 +906,16 @@ class TestResponseInputConversion(unittest.TestCase):
         self.assertEqual(msgs, [{"role": "user", "content": "Test"}])
 
 
-@require_openai
+@require_serve
 class TestResponseValidation(unittest.TestCase):
     def _make_handler(self):
-        from transformers.cli.serving.response import ResponseHandler
-        from transformers.cli.serving.utils import GenerationState
-
         return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
-    def test_unsupported_fields_rejected(self):
-        from fastapi import HTTPException
-
+    def test_unsupported_fields_warns(self):
         handler = self._make_handler()
-        with self.assertRaises(HTTPException) as ctx:
+        with self.assertLogs("transformers", level="WARNING") as cm:
             handler._validate_request({"model": "x", "input": "hi", "previous_response_id": "abc"})
-        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertTrue(any("previous_response_id" in msg for msg in cm.output))
 
     def test_valid_request_passes(self):
         handler = self._make_handler()
@@ -1045,12 +923,9 @@ class TestResponseValidation(unittest.TestCase):
         handler._validate_request({"model": "x", "input": "hi"})
 
 
-@require_openai
+@require_serve
 class TestResponseGenerationConfig(unittest.TestCase):
     def _make_handler(self):
-        from transformers.cli.serving.response import ResponseHandler
-        from transformers.cli.serving.utils import GenerationState
-
         return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
 
     def test_max_output_tokens(self):
@@ -1066,11 +941,9 @@ class TestResponseGenerationConfig(unittest.TestCase):
         self.assertEqual(result.max_new_tokens, 1024)
 
 
-@require_openai
+@require_serve
 class TestResponseUsage(unittest.TestCase):
     def testcompute_usage(self):
-        from transformers.cli.serving.response import compute_usage
-
         usage = compute_usage(input_tokens=100, output_tokens=50)
         self.assertEqual(usage.input_tokens, 100)
         self.assertEqual(usage.output_tokens, 50)
@@ -1080,9 +953,6 @@ class TestResponseUsage(unittest.TestCase):
 
     def test_usage_in_completed_response(self):
         """Usage should serialize correctly inside a Response."""
-        from openai.types.responses import Response
-
-        from transformers.cli.serving.response import compute_usage
 
         usage = compute_usage(10, 5)
         response = Response(
@@ -1103,13 +973,9 @@ class TestResponseUsage(unittest.TestCase):
         self.assertEqual(dumped["usage"]["total_tokens"], 15)
 
 
-@require_openai
+@require_serve
 class TestResponseSSEFormat(unittest.TestCase):
     def test_sse_format(self):
-        from openai.types.responses import Response, ResponseCreatedEvent
-
-        from transformers.cli.serving.utils import BaseHandler
-
         event = ResponseCreatedEvent(
             type="response.created",
             sequence_number=0,
@@ -1134,35 +1000,18 @@ class TestResponseSSEFormat(unittest.TestCase):
         self.assertEqual(parsed["response"]["status"], "queued")
 
 
-# ---------------------------------------------------------------------------
-# 9. Integration tests — Responses API (need GPU + model)
-# ---------------------------------------------------------------------------
-
-
-@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
-@require_openai
+@slow
+@require_serve
 class TestResponsesIntegration(unittest.TestCase):
     """Integration tests for /v1/responses with a real model."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-    PORT = 8878
 
     @classmethod
     def setUpClass(cls):
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(port=cls.PORT, non_blocking=True)
-        import requests
-
-        for _ in range(30):
-            try:
-                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-
-        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
     @classmethod
     def tearDownClass(cls):
@@ -1346,7 +1195,7 @@ class TestResponsesIntegration(unittest.TestCase):
         results = [None, None]
 
         def request_in_thread(index):
-            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
             results[index] = client.responses.create(model=self.MODEL, input=inputs[index], stream=False)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -1368,7 +1217,7 @@ class TestResponsesIntegration(unittest.TestCase):
         results = [None, None]
 
         def stream_in_thread(index):
-            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
             results[index] = list(client.responses.create(model=self.MODEL, input=inputs[index], stream=True))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -1384,44 +1233,27 @@ class TestResponsesIntegration(unittest.TestCase):
             self.assertIn("response.completed", types, f"Request {i} missing completed event")
 
 
-# ---------------------------------------------------------------------------
-# 10. Integration tests — /load_model endpoint (need GPU + model)
-# ---------------------------------------------------------------------------
-
-
 def _parse_sse_events(response):
-    """Parse SSE lines from a streaming requests response into a list of dicts."""
+    """Parse SSE lines from a streaming httpx response into a list of dicts."""
     events = []
-    for line in response.iter_lines(decode_unicode=True):
+    for line in response.iter_lines():
         if not line or not line.startswith("data: "):
             continue
         events.append(json.loads(line[len("data: ") :]))
     return events
 
 
-@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
-@require_openai
+@slow
+@require_serve
 class TestLoadModel(unittest.TestCase):
     """Integration tests for POST /load_model SSE endpoint."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-    PORT = 8879
 
     @classmethod
     def setUpClass(cls):
-        import requests as req
-
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(port=cls.PORT, non_blocking=True)
-        for _ in range(30):
-            try:
-                if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-        cls.base_url = f"http://localhost:{cls.PORT}"
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
 
     @classmethod
     def tearDownClass(cls):
@@ -1432,10 +1264,8 @@ class TestLoadModel(unittest.TestCase):
         self.serve.reset_loaded_models()
 
     def _load_model(self, model: str):
-        import requests as req
-
-        resp = req.post(f"{self.base_url}/load_model", json={"model": model}, stream=True, timeout=120)
-        events = _parse_sse_events(resp)
+        with httpx.stream("POST", f"{self.base_url}/load_model", json={"model": model}, timeout=120) as resp:
+            events = _parse_sse_events(resp)
         return resp, events
 
     def test_load_model_fresh(self):
@@ -1479,9 +1309,8 @@ class TestLoadModel(unittest.TestCase):
 
     def test_load_model_missing_field(self):
         """POST /load_model with no model field returns 422."""
-        import requests as req
 
-        response = req.post(f"{self.base_url}/load_model", json={}, timeout=30)
+        response = httpx.post(f"{self.base_url}/load_model", json={}, timeout=30)
         self.assertEqual(response.status_code, 422)
 
     def test_load_model_event_schema(self):
@@ -1527,11 +1356,9 @@ class TestLoadModel(unittest.TestCase):
         results = [None, None]
 
         def load_in_thread(index):
-            import requests as req
-
-            resp = req.post(f"{self.base_url}/load_model", json={"model": self.MODEL}, stream=True, timeout=120)
-            events = _parse_sse_events(resp)
-            results[index] = (resp.status_code, events)
+            with httpx.stream("POST", f"{self.base_url}/load_model", json={"model": self.MODEL}, timeout=120) as resp:
+                events = _parse_sse_events(resp)
+                results[index] = (resp.status_code, events)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             futures = [pool.submit(load_in_thread, i) for i in range(2)]
@@ -1595,7 +1422,7 @@ class TestLoadModel(unittest.TestCase):
         """After /load_model completes, the model should be usable for inference."""
         self._load_model(self.MODEL)
 
-        client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+        client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
         resp = client.chat.completions.create(
             model=self.MODEL,
             messages=[{"role": "user", "content": "Say hi"}],
@@ -1622,7 +1449,7 @@ class TestLoadModel(unittest.TestCase):
         results = [None, None]
 
         def request_in_thread(index):
-            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
             results[index] = client.responses.create(model=self.MODEL, input=inputs[index], stream=False)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -1644,7 +1471,7 @@ class TestLoadModel(unittest.TestCase):
         results = [None, None]
 
         def stream_in_thread(index):
-            client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
             events = list(client.responses.create(model=self.MODEL, input=inputs[index], stream=True))
             results[index] = events
 
@@ -1661,60 +1488,23 @@ class TestLoadModel(unittest.TestCase):
             self.assertIn("response.completed", types, f"Request {i} missing completed event")
 
 
-# ---------------------------------------------------------------------------
-# 11. Integration tests — Transcription API (need GPU + model + librosa)
-# ---------------------------------------------------------------------------
-
-
-def _make_test_wav(duration: float = 2.0, sample_rate: int = 16000) -> bytes:
-    """Create a simple WAV file with a sine wave. Returns raw bytes."""
-    import wave
-
-    import numpy as np
-
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    audio = (np.sin(2 * np.pi * 440 * t) * 32767).astype(np.int16)
-    buf = io.BytesIO()
-    with wave.open(buf, "w") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(audio.tobytes())
-    return buf.getvalue()
-
-
-# ---------------------------------------------------------------------------
-# 12. Integration tests — VLM support (need GPU + model)
-# ---------------------------------------------------------------------------
-
-
 # Real image URL for VLM tests (person + dog on a beach)
 _DOG_IMAGE_URL = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
 
 
-@unittest.skipUnless(run_slow and is_vision_available(), "Set RUN_SLOW=1 and install torchvision + PIL")
-@require_openai
+@slow
+@require_vision
+@require_serve
 class TestVLM(unittest.TestCase):
     """Integration tests for VLM (vision-language model) support. Requires torchvision."""
 
     MODEL = "HuggingFaceTB/SmolVLM-256M-Instruct"
-    PORT = 8881
 
     @classmethod
     def setUpClass(cls):
-        import requests as req
-
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(port=cls.PORT, non_blocking=True)
-        for _ in range(60):
-            try:
-                if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
     @classmethod
     def tearDownClass(cls):
@@ -1766,29 +1556,17 @@ class TestVLM(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
-@require_openai
+@slow
+@require_serve
 class TestTranscription(unittest.TestCase):
     """Integration tests for POST /v1/audio/transcriptions with whisper-tiny."""
 
     MODEL = "openai/whisper-tiny"
-    PORT = 8880
 
     @classmethod
     def setUpClass(cls):
-        import requests as req
-
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(port=cls.PORT, non_blocking=True)
-        for _ in range(30):
-            try:
-                if req.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-        cls.base_url = f"http://localhost:{cls.PORT}"
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
 
     @classmethod
     def tearDownClass(cls):
@@ -1807,10 +1585,9 @@ class TestTranscription(unittest.TestCase):
 
     def test_transcription_returns_text(self):
         """POST /v1/audio/transcriptions with real speech returns meaningful transcription."""
-        import requests as req
 
         audio_bytes = self._get_audio_bytes()
-        resp = req.post(
+        resp = httpx.post(
             f"{self.base_url}/v1/audio/transcriptions",
             files={"file": ("mlk.flac", audio_bytes, "audio/flac")},
             data={"model": self.MODEL},
@@ -1826,7 +1603,7 @@ class TestTranscription(unittest.TestCase):
     def test_transcription_openai_client(self):
         """Transcription should work via the OpenAI Python client."""
         audio_bytes = self._get_audio_bytes()
-        client = OpenAI(base_url=f"http://localhost:{self.PORT}/v1", api_key="unused")
+        client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused")
         result = client.audio.transcriptions.create(
             model=self.MODEL,
             file=("mlk.flac", audio_bytes),
@@ -1836,22 +1613,21 @@ class TestTranscription(unittest.TestCase):
 
     def test_transcription_streaming(self):
         """Streaming transcription should yield text chunks via SSE."""
-        import requests as req
 
         audio_bytes = self._get_audio_bytes()
-        resp = req.post(
+        with httpx.stream(
+            "POST",
             f"{self.base_url}/v1/audio/transcriptions",
             files={"file": ("mlk.flac", audio_bytes, "audio/flac")},
             data={"model": self.MODEL, "stream": "true"},
-            stream=True,
             timeout=120,
-        )
-        self.assertEqual(resp.status_code, 200)
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
 
-        chunks = []
-        for line in resp.iter_lines(decode_unicode=True):
-            if line and line.startswith("data: "):
-                chunks.append(line[len("data: ") :])
+            chunks = []
+            for line in resp.iter_lines():
+                if line and line.startswith("data: "):
+                    chunks.append(line[len("data: ") :])
 
         self.assertGreater(len(chunks), 0, "No streaming chunks received")
         full_text = "".join(chunks)
@@ -1859,9 +1635,8 @@ class TestTranscription(unittest.TestCase):
 
     def test_transcription_missing_file(self):
         """POST without a file should fail."""
-        import requests as req
 
-        resp = req.post(
+        resp = httpx.post(
             f"{self.base_url}/v1/audio/transcriptions",
             data={"model": self.MODEL},
             timeout=30,
@@ -1869,43 +1644,25 @@ class TestTranscription(unittest.TestCase):
         self.assertNotEqual(resp.status_code, 200)
 
 
-# ---------------------------------------------------------------------------
-# Continuous Batching integration tests
-# ---------------------------------------------------------------------------
-
-
-@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
-@require_openai
+@slow
+@require_serve
+@require_torch_accelerator
 class TestContinuousBatchingChatCompletion(unittest.TestCase):
     """Integration tests for /v1/chat/completions with continuous batching."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-    PORT = 8891
 
     @classmethod
     def setUpClass(cls):
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(
+        cls.serve, port = _start_serve(
             force_model=cls.MODEL,
-            port=cls.PORT,
             device="cuda:0",
             continuous_batching=True,
             attn_implementation="sdpa",
             default_seed=42,
-            non_blocking=True,
         )
-        import requests
-
-        for _ in range(30):
-            try:
-                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-
-        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
     @classmethod
     def tearDownClass(cls):
@@ -1952,20 +1709,19 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
 
     def test_request_cancellation(self):
         """Opening a stream and closing it early triggers CB cancellation."""
-        import requests as req
 
         request_id = "test-cb-cancel"
 
         # Open a streaming request and close after a few chunks
-        with req.post(
-            f"http://localhost:{self.PORT}/v1/chat/completions",
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/v1/chat/completions",
             headers={"X-Request-ID": request_id},
             json={
                 "model": self.MODEL,
                 "stream": True,
                 "messages": [{"role": "user", "content": "Count slowly so I can cancel you."}],
             },
-            stream=True,
             timeout=30,
         ) as resp:
             self.assertEqual(resp.status_code, 200)
@@ -1997,38 +1753,25 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
         self.assertIsNotNone(resp.choices[0].message.content)
 
 
-@unittest.skipUnless(run_slow, "Set RUN_SLOW=1 to run integration tests")
-@require_openai
+@slow
+@require_serve
+@require_torch_accelerator
 class TestContinuousBatchingResponses(unittest.TestCase):
     """Integration tests for /v1/responses with continuous batching."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-    PORT = 8893
 
     @classmethod
     def setUpClass(cls):
-        from transformers.cli.serve_refactored import Serve
-
-        cls.serve = Serve(
+        cls.serve, port = _start_serve(
             force_model=cls.MODEL,
-            port=cls.PORT,
             device="cuda:0",
             continuous_batching=True,
             attn_implementation="sdpa",
             default_seed=42,
-            non_blocking=True,
         )
-        import requests
-
-        for _ in range(30):
-            try:
-                if requests.get(f"http://localhost:{cls.PORT}/health", timeout=1).status_code == 200:
-                    break
-            except Exception:
-                continue
-            time.sleep(2)
-
-        cls.client = OpenAI(base_url=f"http://localhost:{cls.PORT}/v1", api_key="unused")
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
 
     @classmethod
     def tearDownClass(cls):
@@ -2076,12 +1819,12 @@ class TestContinuousBatchingResponses(unittest.TestCase):
 
     def test_request_cancellation(self):
         """Opening a stream and closing it early triggers CB cancellation."""
-        import requests as req
 
         request_id = "test-cb-resp-cancel"
 
-        with req.post(
-            f"http://localhost:{self.PORT}/v1/responses",
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/v1/responses",
             headers={"X-Request-ID": request_id},
             json={
                 "model": self.MODEL,
@@ -2089,13 +1832,12 @@ class TestContinuousBatchingResponses(unittest.TestCase):
                 "input": "Count slowly so I can cancel you.",
                 "max_output_tokens": 500,
             },
-            stream=True,
             timeout=30,
         ) as resp:
             self.assertEqual(resp.status_code, 200)
             # Read enough data to ensure CB generation has started, then close.
             received = b""
-            for chunk in resp.iter_content(chunk_size=512):
+            for chunk in resp.iter_bytes(chunk_size=512):
                 received += chunk
                 if b"output_text.delta" in received:
                     break

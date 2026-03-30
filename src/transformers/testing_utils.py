@@ -140,6 +140,7 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_serve_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -1495,6 +1496,13 @@ def require_openai(test_case):
     Decorator marking a test that requires openai
     """
     return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
+
+
+def require_serve(test_case):
+    """
+    Decorator marking a test that requires the serving dependencies (fastapi, uvicorn, pydantic, openai).
+    """
+    return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
 def require_mistral_common(test_case):

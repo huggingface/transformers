@@ -18,11 +18,15 @@ FastAPI app factory.
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
-
 from ...utils import logging
+from ...utils.import_utils import is_serve_available
+
+
+if is_serve_available():
+    from fastapi import FastAPI, Request
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse, StreamingResponse
+
 from .chat_completion import ChatCompletionHandler
 from .model_manager import ModelManager
 from .response import ResponseHandler

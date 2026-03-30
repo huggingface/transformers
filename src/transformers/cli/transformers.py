@@ -18,7 +18,7 @@ from huggingface_hub import check_cli_update, typer_factory
 from transformers.cli.add_new_model_like import add_new_model_like
 from transformers.cli.chat import Chat
 from transformers.cli.download import download
-from transformers.cli.serve_refactored import Serve
+from transformers.cli.serve import Serve
 from transformers.cli.system import env, version
 
 

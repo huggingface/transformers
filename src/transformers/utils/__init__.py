@@ -198,6 +198,7 @@ from .import_utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_serve_available,
     is_sinq_available,
     is_sklearn_available,
     is_soundfile_available,

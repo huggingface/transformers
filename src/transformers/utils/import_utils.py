@@ -750,6 +750,11 @@ def is_openai_available() -> bool:
 
 
 @lru_cache
+def is_serve_available() -> bool:
+    return is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
+
+
+@lru_cache
 def is_pretty_midi_available() -> bool:
     return _is_package_available("pretty_midi")[0]
 

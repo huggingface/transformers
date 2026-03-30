@@ -22,15 +22,19 @@ import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from fastapi.responses import JSONResponse, StreamingResponse
-from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta, ChoiceDeltaToolCall
-from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
-from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
-from openai.types.completion_usage import CompletionUsage
-
 from ...utils import logging
+from ...utils.import_utils import is_serve_available
+
+
+if is_serve_available():
+    from fastapi.responses import JSONResponse, StreamingResponse
+    from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
+    from openai.types.chat.chat_completion import Choice
+    from openai.types.chat.chat_completion_chunk import ChatCompletionChunk, ChoiceDelta, ChoiceDeltaToolCall
+    from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
+    from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
+    from openai.types.completion_usage import CompletionUsage
+
 from .utils import (
     BaseGenerateManager,
     BaseHandler,

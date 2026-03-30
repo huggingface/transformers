@@ -22,19 +22,10 @@ from typing import Annotated
 import typer
 
 from transformers.utils import logging
-from transformers.utils.import_utils import (
-    is_fastapi_available,
-    is_openai_available,
-    is_pydantic_available,
-    is_uvicorn_available,
-)
+from transformers.utils.import_utils import is_serve_available
 
 from .serving.utils import set_torch_seed
 
-
-serve_dependencies_available = (
-    is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
-)
 
 logger = logging.get_logger(__name__)
 
@@ -70,7 +61,7 @@ class Serve:
             bool, typer.Option(hidden=True, help="Run server in a background thread. Used by tests.")
         ] = False,
     ) -> None:
-        if not serve_dependencies_available:
+        if not is_serve_available():
             raise ImportError("Missing dependencies for serving. Install with `pip install transformers[serving]`")
 
         import uvicorn
