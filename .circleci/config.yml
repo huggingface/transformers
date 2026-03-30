@@ -175,27 +175,34 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/installed.txt
             - run: make check-repository-consistency
-            - run:
-                name: "Test import with all backends (torch + PIL + torchvision)"
-                command: python -c "from transformers import *" || (echo '🚨 import failed with all backends. Fix unprotected imports!! 🚨'; exit 1)
-            - run:
-                name: "Test import with torch only (no PIL, no torchvision)"
-                command: |
-                    uv pip uninstall Pillow torchvision -q
-                    python -c "from transformers import *" || (echo '🚨 import failed with torch only (no PIL). Fix unprotected imports!! 🚨'; exit 1)
-                    uv pip install -e ".[quality]" -q
-            - run:
-                name: "Test import with PIL only (no torch, no torchvision)"
-                command: |
-                    uv pip uninstall torch torchvision torchaudio -q
-                    python -c "from transformers import *" || (echo '🚨 import failed with PIL only (no torch). Fix unprotected imports!! 🚨'; exit 1)
-                    uv pip install -e ".[quality]" -q
-            - run:
-                name: "Test import with torch + PIL, no torchvision"
-                command: |
-                    uv pip uninstall torchvision -q
-                    python -c "from transformers import *" || (echo '🚨 import failed with torch+PIL but no torchvision. Fix unprotected imports!! 🚨'; exit 1)
-                    uv pip install -e ".[quality]" -q
+
+    check_imports:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-consistency
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        parallelism: 1
+        steps:
+            - checkout
+            - run: apt-get update && apt-get install -y make
+            - run: uv pip install -e ".[quality]"
+            - run: make check-imports
+
+    check_modular:
+        working_directory: ~/transformers
+        docker:
+            - image: huggingface/transformers-consistency
+        resource_class: large
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        parallelism: 1
+        steps:
+            - checkout
+            - run: apt-get update && apt-get install -y make
+            - run: uv pip install -e ".[quality]"
+            - run: make check-modular
 
 
 workflows:
@@ -209,6 +216,8 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_imports
+            - check_modular
             - fetch_tests
 
     setup_and_quality_2:
@@ -219,6 +228,8 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_imports
+            - check_modular
             - fetch_tests:
                 # [reference] https://circleci.com/docs/contexts/
                 context:
@@ -230,4 +241,6 @@ workflows:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
+            - check_imports
+            - check_modular
             - fetch_all_tests
