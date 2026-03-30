@@ -36,7 +36,7 @@ from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
-@strict(accept_kwargs=True)
+@strict
 class MusicFlamingoConfig(AudioFlamingo3Config):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
