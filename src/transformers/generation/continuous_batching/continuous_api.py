@@ -1186,7 +1186,7 @@ class ContinuousMixin:
         for depr_key in deprecated_keys:
             if depr_key in kwargs:
                 deprecated_kwargs[depr_key] = kwargs.pop(depr_key)
-        # Extract max_new_tokens from kwargs, as it's the only expected kwarg
+        # Extract max_new_tokens from kwargs because it's the only expected kwarg
         max_new_tokens = kwargs.pop("max_new_tokens", None)
 
         # Compute the total number of requests
