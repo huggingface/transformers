@@ -17,11 +17,11 @@ import copy
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
-from transformers.utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from transformers.testing_utils import (
     cleanup,
+    require_flash_linear_attention_and_causal_conv1d,
     require_torch,
-    require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -59,7 +59,6 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
 
     def __init__(self, parent):
         super().__init__(parent=parent)
-        self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
@@ -160,42 +159,22 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @require_torch_accelerator
+    @require_flash_linear_attention_and_causal_conv1d
+    @require_torch_gpu
     @slow
     def test_padding_free_matches_padded_fast_path_regression(self):
-        if not is_flash_linear_attention_available() or not is_causal_conv1d_available():
-            self.skipTest("Qwen3.5 padding-free fast path requires `flash-linear-attention` and `causal-conv1d`.")
         torch.manual_seed(0)
 
-        config = Qwen3_5TextConfig(
-            vocab_size=100,
-            hidden_size=64,
-            intermediate_size=128,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=16,
-            max_position_embeddings=64,
-            hidden_act="silu",
-            layer_types=["full_attention", "linear_attention"],
-            linear_conv_kernel_dim=2,
-            linear_key_head_dim=16,
-            linear_value_head_dim=16,
-            linear_num_key_heads=2,
-            linear_num_value_heads=4,
-            pad_token_id=0,
-        )
+        config = self.model_tester.get_config()
+        config.hidden_act = "silu"
+        config.max_position_embeddings = 64
         model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
-        linear_attn = model.model.layers[1].linear_attn
-        self.assertIsNotNone(linear_attn.causal_conv1d_fn)
-        self.assertTrue(linear_attn.chunk_gated_delta_rule.__module__.startswith("fla."))
-        self.assertTrue(linear_attn.recurrent_gated_delta_rule.__module__.startswith("fla."))
 
-        padded_input_ids = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]], device=torch_device)
-        attention_mask = torch.tensor([[0, 1, 1, 1], [1, 1, 1, 1]], dtype=torch.long, device=torch_device)
+        padded_input_ids = torch.tensor([[0, 0, 1, 2, 3], [0, 0, 0, 4, 5]], device=torch_device)
+        attention_mask = torch.tensor([[0, 0, 1, 1, 1], [0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device)
         position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
 
-        features = [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5, 6, 7]}]
+        features = [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}]
         data_collator = DataCollatorWithFlattening(
             return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
         )

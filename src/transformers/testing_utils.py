@@ -83,6 +83,7 @@ from .utils import (
     is_av_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_causal_conv1d_available,
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
@@ -94,6 +95,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_linear_attention_available,
     is_flute_available,
     is_fouroversix_available,
     is_fp_quant_available,
@@ -700,6 +702,19 @@ def require_all_flash_attn(test_case):
             )
         ),
         "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
+def require_flash_linear_attention_and_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires both Flash Linear Attention and causal-conv1d.
+
+    These tests are skipped when either dependency isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available() and is_causal_conv1d_available(),
+        "test requires `flash-linear-attention` and `causal-conv1d`",
     )(test_case)
 
 
