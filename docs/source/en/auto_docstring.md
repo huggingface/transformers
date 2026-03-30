@@ -139,11 +139,11 @@ class MyModelConfig(PreTrainedConfig):
         Description of another model-specific parameter.
 
     ```python
-    >>> from transformers import MyModelConfig, MyModel
+    from transformers import MyModelConfig, MyModel
 
-    >>> configuration = MyModelConfig()
-    >>> model = MyModel(configuration)
-    >>> configuration = model.config
+    configuration = MyModelConfig()
+    model = MyModel(configuration)
+    configuration = model.config
     ```
     """
 
