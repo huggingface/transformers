@@ -139,7 +139,7 @@ def sample_points_using_uncertainty(
     logits: Tensor, num_points: int, oversample_ratio: int, importance_sample_ratio: float
 ) -> Tensor:
     """
-    Copied from Mask2FormerLoss.sample_points_using_uncertainty, this function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
+    This function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
     uncertainty is calculated for each point using the passed `uncertainty function` that takes points logit
     prediction as input.
 
