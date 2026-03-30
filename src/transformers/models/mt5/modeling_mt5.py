@@ -265,8 +265,10 @@ class MT5Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
 
+        q_input_shape = (batch_size, seq_length, -1, self.key_value_proj_dim)
+
         query_states = self.q(hidden_states)
-        query_states = query_states.view(batch_size, seq_length, -1, self.key_value_proj_dim).transpose(1, 2)
+        query_states = query_states.view(*q_input_shape).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
@@ -286,14 +288,11 @@ class MT5Attention(nn.Module):
             key_states = curr_past_key_values.layers[self.layer_idx].keys
             value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
+            kv_input_shape = (batch_size, current_states.shape[1], -1, self.key_value_proj_dim)
             key_states = self.k(current_states)
             value_states = self.v(current_states)
-            key_states = key_states.view(batch_size, current_states.shape[1], -1, self.key_value_proj_dim).transpose(
-                1, 2
-            )
-            value_states = value_states.view(
-                batch_size, current_states.shape[1], -1, self.key_value_proj_dim
-            ).transpose(1, 2)
+            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
+            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
