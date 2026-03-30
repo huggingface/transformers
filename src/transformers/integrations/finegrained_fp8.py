@@ -114,6 +114,12 @@ def _load_deepgemm_kernel():
 
     _deepgemm_available = False  # mark attempted before any early exit
 
+    # DeepGEMM requires CUDA and a compatible GPU
+    if not torch.cuda.is_available():
+        raise ImportError(
+            "DeepGEMM kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
+        )
+
     # DeepGEMM requires Hopper (SM90) or newer for FP8 WGMMA instructions
     major = torch.cuda.get_device_capability()[0]
     if major < 9:
@@ -122,7 +128,7 @@ def _load_deepgemm_kernel():
             f"has compute capability {major}.x. Use a different `experts_implementation`."
         )
 
-    # DeepGEMM JIT-compiles via NVRTC at runtime, requiring CUDA runtime ≥ 12.3.
+    # DeepGEMM requires CUDA runtime ≥ 12.3.
     cuda_major, cuda_minor = get_cuda_runtime_version()
     if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
         raise ImportError(
