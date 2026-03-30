@@ -117,9 +117,11 @@ class OutputRouter:
                 else:
                     self.output_queue.put(output)
         if callbacks:
+
             def _run_batch(batch=callbacks):
                 for cb, out in batch:
                     cb(out)
+
             loop.call_soon_threadsafe(_run_batch)
 
 
