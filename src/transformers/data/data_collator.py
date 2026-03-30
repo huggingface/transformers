@@ -1368,7 +1368,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - concatenates the entire mini batch into single long sequence of shape [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids` by default
-    - optionally returns the kwargs contained in FlashAttentionKwargs
+    - optionally returns the kwargs contained in FlashAttentionKwargs, plus `cu_seqlens` for FLA-style kernels
     - optionally returns seq_idx indicating which sequence each token belongs to
 
     <Tip warning={true}>
@@ -1394,7 +1394,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.return_seq_idx = return_seq_idx
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
-        self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
+        self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx", "cu_seqlens"}
         self._py_int_keys = {"max_length_q", "max_length_k"}
 
     def __call__(self, features, return_tensors=None, separator_id=None):
@@ -1435,7 +1435,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 max_length = max(max_length, len(input_ids))
 
         if self.return_flash_attn_kwargs:
-            batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = cu_seq_lens
+            batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = batch["cu_seqlens"] = cu_seq_lens
             batch["max_length_q"] = batch["max_length_k"] = max_length
 
         # FlashAttentionKwargs and seq_idx are expected to be int32s.

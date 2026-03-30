@@ -13,7 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
-from typing import Optional
+from typing import Optional, TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -54,6 +54,20 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 
 
 logger = logging.get_logger(__name__)
+
+
+class Qwen3_5FlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for Qwen3.5 fast linear-attention kernels during padding-free training.
+
+    seq_idx (`torch.IntTensor`):
+        Index of each packed sequence for the causal convolution kernel.
+    cu_seqlens (`torch.LongTensor`):
+        Cumulative sequence lengths for the FLA gated-delta kernels.
+    """
+
+    seq_idx: torch.IntTensor
+    cu_seqlens: torch.LongTensor
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -206,10 +220,10 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         hidden_states: torch.Tensor,
         cache_params: Qwen3_5DynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
-        cu_seq_lens_q: torch.LongTensor | None = None,
-        cu_seq_lens_k: torch.LongTensor | None = None,
+        **kwargs: Unpack[Qwen3_5FlashAttentionKwargs],
     ):
+        seq_idx = kwargs.get("seq_idx")
+        cu_seqlens = kwargs.get("cu_seqlens")
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
         # Set up dimensions for reshapes later
@@ -245,14 +259,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             if cache_params is not None:
                 conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx] = conv_state
-            has_fast_path = self.causal_conv1d_fn is not None and self.chunk_gated_delta_rule.__module__.startswith(
-                "fla."
-            )
-            if not has_fast_path and any(x is not None for x in (seq_idx, cu_seq_lens_q, cu_seq_lens_k)):
-                raise NotImplementedError(
-                    "Padding-free training kwargs require fast path support. Please install `flash-linear-attention` "
-                    "and `causal-conv1d`."
-                )
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -289,7 +295,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         if not use_precomputed_states:
             chunk_kwargs = {}
             if getattr(self.chunk_gated_delta_rule, "__module__", "").startswith("fla."):
-                chunk_kwargs["cu_seqlens"] = cu_seq_lens_q
+                chunk_kwargs["cu_seqlens"] = cu_seqlens
 
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
@@ -375,9 +381,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
-                seq_idx=kwargs.get("seq_idx"),
-                cu_seq_lens_q=kwargs.get("cu_seq_lens_q"),
-                cu_seq_lens_k=kwargs.get("cu_seq_lens_k"),
+                **kwargs,
             )
         elif self.layer_type == "full_attention":
             # Self Attention

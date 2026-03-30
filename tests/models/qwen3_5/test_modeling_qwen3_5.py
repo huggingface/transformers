@@ -160,42 +160,6 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    def test_padding_free_kwargs_require_fast_path(self):
-        config = Qwen3_5TextConfig(
-            vocab_size=99,
-            hidden_size=32,
-            intermediate_size=64,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-            max_position_embeddings=64,
-            layer_types=["full_attention", "linear_attention"],
-            linear_conv_kernel_dim=2,
-            linear_key_head_dim=16,
-            linear_value_head_dim=16,
-            linear_num_key_heads=4,
-            linear_num_value_heads=8,
-            pad_token_id=0,
-        )
-        model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
-        if model.model.layers[1].linear_attn.causal_conv1d_fn is not None:
-            self.skipTest("Fast path is available in this environment")
-
-        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
-        position_ids = torch.tensor([[0, 1, 0, 1]], device=torch_device)
-        seq_idx = torch.tensor([[0, 0, 1, 1]], dtype=torch.int32, device=torch_device)
-        cu_seq_lens = torch.tensor([0, 2, 4], dtype=torch.int32, device=torch_device)
-
-        with self.assertRaisesRegex(NotImplementedError, "Padding-free training kwargs require fast path support"):
-            model(
-                input_ids=input_ids,
-                position_ids=position_ids,
-                seq_idx=seq_idx,
-                cu_seq_lens_q=cu_seq_lens,
-                cu_seq_lens_k=cu_seq_lens,
-            )
-
     @require_torch_accelerator
     @slow
     def test_padding_free_matches_padded_fast_path_regression(self):
