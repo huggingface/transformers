@@ -1125,7 +1125,7 @@ class ContinuousMixin:
             logger.warning("Warming up for coninuous batching...")
             start = perf_counter()
             manager.warmup(num_query_tokens=warmup_requests, num_cache_tokens=0)
-            logger.info(f"Warming up completed in {perf_counter() - start:.2f}s.")
+            logger.warning(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
             yield manager
