@@ -1598,6 +1598,7 @@ class Trainer:
         self.state.epoch = 0
         start_time = time.time()
         self.initial_num_input_tokens_seen_for_session = self.state.num_input_tokens_seen
+        self._local_input_tokens_acc = None  # lazily initialized on-device accumulator
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
 
@@ -1720,7 +1721,9 @@ class Trainer:
                                 input_tokens = inputs[main_input_name].numel()
 
                             input_tokens = torch.tensor(input_tokens, device=self.args.device, dtype=torch.int64)
-                            self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
+                            if self._local_input_tokens_acc is None:
+                                self._local_input_tokens_acc = torch.zeros(1, device=self.args.device, dtype=torch.int64)
+                            self._local_input_tokens_acc += input_tokens
 
                     if rng_to_sync:
                         self._load_rng_state(resume_from_checkpoint)
@@ -1858,6 +1861,8 @@ class Trainer:
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             self._load_best_model()
 
+        # flush any remaining accumulated input token counts
+        self._flush_input_tokens_seen()
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
         effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
@@ -3026,6 +3031,7 @@ class Trainer:
 
         if self.hp_search_backend is None and trial is None:
             self.store_flos()
+            self._flush_input_tokens_seen()
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
@@ -3839,6 +3845,7 @@ class Trainer:
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
         if self.args.include_num_input_tokens_seen != "no":
+            self._flush_input_tokens_seen()
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
             if start_time is not None:
                 current_session_num_tokens = (
@@ -3849,6 +3856,16 @@ class Trainer:
         output = {**logs, "step": self.state.global_step}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+
+    def _flush_input_tokens_seen(self) -> None:
+        """Gather locally accumulated input token counts across ranks and update state."""
+        if self.args.include_num_input_tokens_seen == "no":
+            return
+        acc = getattr(self, "_local_input_tokens_acc", None)
+        if acc is None:
+            acc = torch.zeros(1, device=self.args.device, dtype=torch.int64)
+        self.state.num_input_tokens_seen += self.accelerator.gather(acc).sum().item()
+        self._local_input_tokens_acc = None  # lazily re-created on next accumulation
 
     def store_flos(self) -> None:
         """Store the number of floating-point operations that went into the model."""
