@@ -461,7 +461,6 @@ def eager_attention_forward(
 class VideoPrismSelfAttention(VivitSelfAttention):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__(config)
-        del self.is_causal
 
     def forward(
         self,
@@ -485,6 +484,7 @@ class VideoPrismSelfAttention(VivitSelfAttention):
             key,
             value,
             attention_mask,
+            is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=self.config.attn_logit_softcapping,
@@ -578,6 +578,7 @@ class VideoPrismTextEncoder(VivitEncoder):
         super().__init__(config)
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
+        self.is_causal = True
 
     def forward(
         self,
@@ -724,7 +725,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (self.dim**0.5))
         self.register_buffer("scale", scale)
-
+        self.is_causal = False
         self.pooling_attention_query = nn.Parameter(torch.zeros(1, 1, self.config.hidden_size))
         self.query = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
         self.key = nn.Linear(self.config.hidden_size, self.config.intermediate_size, bias=self.config.qkv_bias)
@@ -745,7 +746,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             self.query(query).view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
         )
         softplus = nn.functional.softplus(self.per_dim_scale)
-        scale = self.scale * softplus
+        scale = self.scale.to(query_layer.dtype) * softplus
         query_layer = query_layer * scale.expand(*query_layer.shape)
 
         key_layer = (
@@ -769,6 +770,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             key_layer,
             value_layer,
             attention_mask,
+            is_causal=self.is_causal,
             scaling=1.0,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=None,
@@ -815,7 +817,7 @@ class VideoPrismTextEmbeddings(nn.Module):
             inputs_embeds = self.token_embedding(input_ids)
 
         inputs_embeds *= self.config.hidden_size**0.5
-        position_embeddings = self.position_embedding[position_ids]
+        position_embeddings = self.position_embedding[position_ids].to(dtype=inputs_embeds.dtype)
         embeddings = inputs_embeds + position_embeddings
 
         return embeddings
