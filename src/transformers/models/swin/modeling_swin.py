@@ -177,10 +177,9 @@ class SwinEmbeddings(nn.Module):
         self.patch_grid = self.patch_embeddings.grid_size
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
 
-        if config.use_absolute_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.embed_dim))
-        else:
-            self.position_embeddings = None
+        self.position_embeddings = (
+            nn.Parameter(torch.zeros(1, num_patches, config.embed_dim)) if config.use_absolute_embeddings else None
+        )
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -268,6 +267,7 @@ class SwinPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def maybe_pad(self, pixel_values, height, width):
+        """Pad pixel_values to be divisible by patch_size if needed."""
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
             pixel_values = nn.functional.pad(pixel_values, pad_values)
@@ -324,17 +324,11 @@ class SwinPatchMerging(nn.Module):
         input_feature = input_feature.view(batch_size, height, width, num_channels)
         # pad input to be divisible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_0 = input_feature[:, 0::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_1 = input_feature[:, 1::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_2 = input_feature[:, 0::2, 1::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_3 = input_feature[:, 1::2, 1::2, :]
-        # batch_size height/2 width/2 4*num_channels
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+        # Interleave rows and columns to produce [batch_size, height/2*width/2, 4*num_channels]
+        input_feature = torch.cat(
+            [input_feature[:, row::2, col::2, :] for row in range(2) for col in range(2)], dim=-1
+        )
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)
 
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)
@@ -478,7 +472,6 @@ class SwinAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = nn.functional.dropout(attn_output, p=self.attention_dropout, training=self.training)
 
         return attn_output, attn_weights
 
@@ -489,13 +482,11 @@ class SwinMLP(nn.Module):
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(dim, int(config.mlp_ratio * dim))
         self.fc2 = nn.Linear(int(config.mlp_ratio * dim), dim)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states)
 
         return hidden_states
 
@@ -541,6 +532,7 @@ class SwinLayer(nn.Module):
         self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
@@ -619,6 +611,7 @@ class SwinLayer(nn.Module):
         )
 
         attention_output, attn_weights = self.attention(hidden_states_windows, attn_mask, **kwargs)
+        attention_output = self.dropout(attention_output)
 
         attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
         shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
@@ -629,8 +622,7 @@ class SwinLayer(nn.Module):
         else:
             attention_windows = shifted_windows
 
-        was_padded = pad_values[3] > 0 or pad_values[5] > 0
-        if was_padded:
+        if pad_values[3] > 0 or pad_values[5] > 0:
             attention_windows = attention_windows[:, :height, :width, :].contiguous()
 
         attention_windows = attention_windows.view(batch_size, height * width, channels)
@@ -640,7 +632,7 @@ class SwinLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = hidden_states + residual
+        hidden_states = self.dropout(hidden_states) + residual
 
         return hidden_states, attn_weights
 
@@ -673,11 +665,9 @@ class SwinStage(GradientCheckpointingLayer):
             ]
         )
 
-        # patch merging layer
-        if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
-        else:
-            self.downsample = None
+        self.downsample = (
+            downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm) if downsample is not None else None
+        )
 
     def forward(
         self,

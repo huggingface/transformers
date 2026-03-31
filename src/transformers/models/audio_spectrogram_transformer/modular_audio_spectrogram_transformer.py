@@ -18,14 +18,13 @@ from torch import nn
 
 from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..vit.modeling_vit import (
     ViTAttention,
-    ViTEncoder,
     ViTLayer,
     ViTMLP,
     ViTPreTrainedModel,
@@ -108,10 +107,6 @@ class ASTLayer(ViTLayer):
     pass
 
 
-class ASTEncoder(ViTEncoder):
-    pass
-
-
 class ASTPreTrainedModel(ViTPreTrainedModel):
     config: ASTConfig
     base_model_prefix = "audio_spectrogram_transformer"
@@ -146,7 +141,7 @@ class ASTModel(ASTPreTrainedModel):
         self.config = config
 
         self.embeddings = ASTEmbeddings(config)
-        self.encoder = ASTEncoder(config)
+        self.layers = nn.ModuleList([ASTLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -182,10 +177,10 @@ class ASTModel(ASTPreTrainedModel):
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask, **kwargs)
-
-        sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = embedding_output
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, **kwargs)
+        sequence_output = self.layernorm(hidden_states)
 
         pooled_output = (sequence_output[:, 0] + sequence_output[:, 1]) / 2
 

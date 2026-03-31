@@ -26,7 +26,6 @@ from ...utils.output_capturing import capture_outputs
 from ..vit.modeling_vit import (
     ViTAttention,
     ViTEmbeddings,
-    ViTEncoder,
     ViTLayer,
     ViTMLP,
     ViTPatchEmbeddings,
@@ -64,10 +63,6 @@ class ViTMSNLayer(ViTLayer):
     pass
 
 
-class ViTMSNEncoder(ViTEncoder):
-    pass
-
-
 class ViTMSNPreTrainedModel(ViTPreTrainedModel):
     base_model_prefix = "vit"
 
@@ -98,7 +93,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.embeddings = ViTMSNEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = ViTMSNEncoder(config)
+        self.layers = nn.ModuleList([ViTMSNLayer(config) for _ in range(config.num_hidden_layers)])
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
@@ -152,10 +147,10 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask, **kwargs)
-
-        sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = embedding_output
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, **kwargs)
+        sequence_output = self.layernorm(hidden_states)
 
         return BaseModelOutput(last_hidden_state=sequence_output)
 

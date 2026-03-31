@@ -38,7 +38,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "audio-spectrogram-transformer": "vit",
     "deit": "vit",
     "ijepa": "vit",
-    "pixio": "vit",
     "vit_mae": "vit",
     "vit_msn": "vit",
     "vivit": "vit",
@@ -93,6 +92,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "vit": [
+            WeightRenaming("encoder.layer", "layers"),
             WeightRenaming("attention.query", "q_proj"),
             WeightRenaming("attention.key", "k_proj"),
             WeightRenaming("attention.value", "v_proj"),
@@ -364,6 +364,17 @@ def _build_checkpoint_conversion_mapping():
                 operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
+        # MaskFormer embeds both a Swin backbone (model_type="swin") and a DETR decoder
+        # (model_type="detr") as submodules. Both get their mappings collected automatically, but
+        # the Swin reverse mapping "mlp.fc1 → intermediate.dense" would corrupt DETR decoder keys
+        # if it runs before the DETR reverse "layers.N.mlp.fc1 → layers.N.fc1".
+        # By adding a "maskformer"-level mapping with the DETR fc1 rename, it is collected first
+        # (model-level before submodule-level), so its reverse runs first and removes "mlp.fc1"
+        # from DETR decoder paths before the Swin reverse can match them.
+        "maskformer": [
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
         "detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("out_proj", "o_proj"),
@@ -535,7 +546,14 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["beit"] = mapping["vit"].copy()
     mapping["beit"] += [
-        WeightRenaming("attention.attention.relative_position_bias", "relative_position_bias"),
+        WeightRenaming("attention.attention.relative_position_bias.", "relative_position_bias."),
+        WeightRenaming("encoder.relative_position_bias", "shared_pos_bias"),
+    ]
+
+    mapping["pixio"] = mapping["vit"].copy()
+    mapping["pixio"] += [
+        WeightRenaming("norm1", "layernorm_before"),
+        WeightRenaming("norm2", "layernorm_after"),
     ]
 
     mapping["minimax_m2"] = mapping["mixtral"].copy()

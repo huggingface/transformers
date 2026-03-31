@@ -30,7 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
 from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
 from ..convnext.modeling_convnext import ConvNextLayerNorm
@@ -306,8 +306,8 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         "attentions": LwDetrViTAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module) -> None:
-        """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -318,8 +318,8 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
-            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            init.constant_(module.gamma_1, self.config.cae_init_values)
+            init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
@@ -576,6 +576,8 @@ class LwDetrConvEncoder(nn.Module):
 
 
 class LwDetrAttention(nn.Module):
+    """LW-DETR self-attention with group-DETR training technique."""
+
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -649,31 +651,7 @@ class LwDetrAttention(nn.Module):
 
 
 class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: torch.Tensor | None = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        return super().forward(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            **kwargs,
-        )
+    pass
 
 
 class LwDetrMLP(nn.Module):
@@ -765,6 +743,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -848,6 +827,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
     Args:
         config: LwDetrConfig
     """
+
+    _can_record_outputs = {
+        "hidden_states": LwDetrDecoderLayer,
+        "attentions": OutputRecorder(LwDetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(LwDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1),
+    }
 
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
@@ -966,7 +951,7 @@ class LwDetrModelOutput(ModelOutput):
 )
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
-        LwDetrPreTrainedModel.__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         # Create backbone + positional encoding
         self.backbone = LwDetrConvEncoder(config)

@@ -782,15 +782,8 @@ class Data2VecVisionPooler(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.layernorm is not None:
-            # Mean pool the final hidden states of the patch tokens
-            patch_tokens = hidden_states[:, 1:, :]
-            pooled_output = self.layernorm(patch_tokens.mean(1))
-        else:
-            # Pool by simply taking the final hidden state of the [CLS] token
-            pooled_output = hidden_states[:, 0]
-
-        return pooled_output
+        # Mean pool patch tokens with layernorm, or take the [CLS] token
+        return self.layernorm(hidden_states[:, 1:, :].mean(1)) if self.layernorm is not None else hidden_states[:, 0]
 
 
 @auto_docstring(

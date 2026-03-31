@@ -25,7 +25,6 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
-    BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
     MaskedLMOutput,
@@ -69,10 +68,7 @@ class BeitEmbeddings(ViTEmbeddings):
         nn.Module.__init__(self)
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        if config.use_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        else:
-            self.mask_token = None
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if config.use_mask_token else None
         self.patch_embeddings = BeitPatchEmbeddings(config)
         self.patch_size = config.patch_size
         num_patches = self.patch_embeddings.num_patches
@@ -94,8 +90,8 @@ class BeitEmbeddings(ViTEmbeddings):
         if bool_masked_pos is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
             # replace the masked visual tokens by mask_tokens
-            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1 - w) + mask_tokens * w
+            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1 - mask) + mask_tokens * mask
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
@@ -223,15 +219,14 @@ class BeitLayer(GradientCheckpointingLayer):
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = BeitMLP(config)
         init_values = config.layer_scale_init_value
-        if init_values > 0:
-            self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-            self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        else:
-            self.lambda_1, self.lambda_2 = None, None
-        # Create per-layer relative position bias if needed
-        self.has_relative_position_bias = config.use_relative_position_bias
-        if self.has_relative_position_bias:
-            self.relative_position_bias = BeitRelativePositionBias(config)
+        self.lambda_1 = (
+            nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else None
+        )
+        self.lambda_2 = (
+            nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else None
+        )
+        self.relative_position_bias = BeitRelativePositionBias(config) if config.use_relative_position_bias else None
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
@@ -241,15 +236,13 @@ class BeitLayer(GradientCheckpointingLayer):
         resolution: tuple[int, int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        # Compute per-layer relative position bias if present
-        layer_attention_mask = attention_mask
-        if self.has_relative_position_bias:
+        if self.relative_position_bias is not None:
             height, width = resolution
             window_size = (height // self.config.patch_size, width // self.config.patch_size)
             relative_position_bias = self.relative_position_bias(
                 window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
             )
-            layer_attention_mask = (
+            attention_mask = (
                 relative_position_bias + attention_mask if attention_mask is not None else relative_position_bias
             )
 
@@ -257,73 +250,22 @@ class BeitLayer(GradientCheckpointingLayer):
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states, _ = self.attention(
             hidden_states,
-            attention_mask=layer_attention_mask,
+            attention_mask=attention_mask,
             **kwargs,
         )
+        hidden_states = self.dropout(hidden_states)
         if self.lambda_1 is not None:
             hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path(hidden_states) + residual
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         if self.lambda_2 is not None:
             hidden_states = self.lambda_2 * hidden_states
         hidden_states = self.drop_path(hidden_states) + residual
 
         return hidden_states
-
-
-class BeitEncoder(nn.Module):
-    def __init__(self, config: BeitConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.has_relative_position_bias = config.use_shared_relative_position_bias
-        if self.has_relative_position_bias:
-            self.relative_position_bias = BeitRelativePositionBias(config)
-
-        self.layer = nn.ModuleList(
-            [
-                BeitLayer(config, drop_path_rate=r)
-                for r in [
-                    config.drop_path_rate * i / max(config.num_hidden_layers - 1, 1)
-                    for i in range(config.num_hidden_layers)
-                ]
-            ]
-        )
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        interpolate_pos_encoding: bool = False,
-        resolution: tuple[int, int] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
-        # Compute shared relative position bias once if enabled
-        encoder_attention_mask = attention_mask
-        if self.has_relative_position_bias:
-            height, width = resolution
-            window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            shared_relative_position_bias = self.relative_position_bias(
-                window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=hidden_states.shape[1]
-            )
-            encoder_attention_mask = (
-                shared_relative_position_bias + attention_mask
-                if attention_mask is not None
-                else shared_relative_position_bias
-            )
-
-        for layer_module in self.layer:
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask=encoder_attention_mask,
-                interpolate_pos_encoding=interpolate_pos_encoding,
-                resolution=resolution,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -372,7 +314,13 @@ class BeitModel(BeitPreTrainedModel):
         self.config = config
 
         self.embeddings = BeitEmbeddings(config)
-        self.encoder = BeitEncoder(config)
+        self.shared_position_bias = (
+            BeitRelativePositionBias(config) if config.use_shared_relative_position_bias else None
+        )
+        drop_path_rates = [
+            config.drop_path_rate * i / max(config.num_hidden_layers - 1, 1) for i in range(config.num_hidden_layers)
+        ]
+        self.layers = nn.ModuleList([BeitLayer(config, drop_path_rate=r) for r in drop_path_rates])
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -409,15 +357,28 @@ class BeitModel(BeitPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            resolution=resolution,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
+        if self.share_position_bias is not None:
+            height, width = resolution
+            window_size = (height // self.config.patch_size, width // self.config.patch_size)
+            shared_relative_position_bias = self.share_position_bias(
+                window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=embedding_output.shape[1]
+            )
+            attention_mask = (
+                shared_relative_position_bias + attention_mask
+                if attention_mask is not None
+                else shared_relative_position_bias
+            )
+
+        hidden_states = embedding_output
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                resolution=resolution,
+                **kwargs,
+            )
+        sequence_output = self.layernorm(hidden_states)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return BeitModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
@@ -431,15 +392,8 @@ class BeitPooler(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.layernorm is not None:
-            # Mean pool the final hidden states of the patch tokens
-            patch_tokens = hidden_states[:, 1:, :]
-            pooled_output = self.layernorm(patch_tokens.mean(1))
-        else:
-            # Pool by simply taking the final hidden state of the [CLS] token
-            pooled_output = hidden_states[:, 0]
-
-        return pooled_output
+        # Mean pool patch tokens with layernorm, or take the [CLS] token
+        return self.layernorm(hidden_states[:, 1:, :].mean(1)) if self.layernorm is not None else hidden_states[:, 0]
 
 
 @auto_docstring(

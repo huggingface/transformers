@@ -25,7 +25,6 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..vit.modeling_vit import (
     ViTAttention,
-    ViTEncoder,
     ViTLayer,
     ViTMLP,
     ViTPooler,
@@ -156,10 +155,6 @@ class VivitLayer(ViTLayer):
     pass
 
 
-class VivitEncoder(ViTEncoder):
-    pass
-
-
 class VivitPooler(ViTPooler):
     pass
 
@@ -204,7 +199,7 @@ class VivitModel(VivitPreTrainedModel):
         self.config = config
 
         self.embeddings = VivitEmbeddings(config)
-        self.encoder = VivitEncoder(config)
+        self.layers = nn.ModuleList([VivitLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = VivitPooler(config) if add_pooling_layer else None
@@ -306,9 +301,10 @@ class VivitModel(VivitPreTrainedModel):
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask, **kwargs)
-        sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = embedding_output
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, **kwargs)
+        sequence_output = self.layernorm(hidden_states)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)

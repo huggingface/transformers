@@ -21,14 +21,12 @@ from torch import nn
 
 from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..vit.modeling_vit import (
     ViTAttention,
-    ViTEncoder,
     ViTLayer,
     ViTMLP,
     ViTPatchEmbeddings,
@@ -329,10 +327,6 @@ class ViTMAELayer(ViTLayer):
     pass
 
 
-class ViTMAEEncoder(ViTEncoder):
-    pass
-
-
 class ViTMAEDecoder(nn.Module):
     def __init__(self, config: ViTMAEConfig, num_patches: int):
         super().__init__()
@@ -499,7 +493,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         self.config = config
 
         self.embeddings = ViTMAEEmbeddings(config)
-        self.encoder = ViTMAEEncoder(config)
+        self.layers = nn.ModuleList([ViTMAELayer(config) for _ in range(config.num_hidden_layers)])
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -558,9 +552,10 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask, **kwargs)
-        sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = embedding_output
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, **kwargs)
+        sequence_output = self.layernorm(hidden_states)
 
         return ViTMAEModelOutput(last_hidden_state=sequence_output, mask=mask, ids_restore=ids_restore)
 

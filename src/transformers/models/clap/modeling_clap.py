@@ -715,17 +715,11 @@ class ClapAudioPatchMerging(nn.Module):
         input_feature = input_feature.view(batch_size, height, width, num_channels)
         # pad input to be divisible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_0 = input_feature[:, 0::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_1 = input_feature[:, 1::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_2 = input_feature[:, 0::2, 1::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_3 = input_feature[:, 1::2, 1::2, :]
-        # batch_size height/2 width/2 4*num_channels
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+        # Interleave rows and columns to produce [batch_size, height/2*width/2, 4*num_channels]
+        input_feature = torch.cat(
+            [input_feature[:, row::2, col::2, :] for row in range(2) for col in range(2)], dim=-1
+        )
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)
 
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)

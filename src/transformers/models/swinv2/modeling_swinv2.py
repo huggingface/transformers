@@ -283,6 +283,7 @@ class Swinv2PatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def maybe_pad(self, pixel_values, height, width):
+        """Pad pixel_values to be divisible by patch_size if needed."""
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
             pixel_values = nn.functional.pad(pixel_values, pad_values)

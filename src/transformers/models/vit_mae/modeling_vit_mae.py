@@ -30,7 +30,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
@@ -365,7 +364,6 @@ class ViTMAEAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.attention_dropout = config.attention_probs_dropout_prob
-        self.hidden_dropout = config.hidden_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
@@ -404,7 +402,6 @@ class ViTMAEAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = nn.functional.dropout(attn_output, p=self.hidden_dropout, training=self.training)
 
         return attn_output, attn_weights
 
@@ -416,26 +413,23 @@ class ViTMAEMLP(nn.Module):
         self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states)
 
         return hidden_states
 
 
 class ViTMAELayer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the timm implementation."""
-
     def __init__(self, config: ViTMAEConfig):
         super().__init__()
         self.attention = ViTMAEAttention(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = ViTMAEMLP(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
@@ -446,33 +440,16 @@ class ViTMAELayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states, _ = self.attention(hidden_states, attention_mask, **kwargs)
-
+        hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + residual
+
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + residual
 
         return hidden_states
-
-
-class ViTMAEEncoder(nn.Module):
-    def __init__(self, config: ViTMAEConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([ViTMAELayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class ViTMAEDecoder(nn.Module):
@@ -641,7 +618,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         self.config = config
 
         self.embeddings = ViTMAEEmbeddings(config)
-        self.encoder = ViTMAEEncoder(config)
+        self.layers = nn.ModuleList([ViTMAELayer(config) for _ in range(config.num_hidden_layers)])
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -700,9 +677,10 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        encoder_outputs: BaseModelOutput = self.encoder(embedding_output, attention_mask, **kwargs)
-        sequence_output = encoder_outputs.last_hidden_state
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = embedding_output
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask, **kwargs)
+        sequence_output = self.layernorm(hidden_states)
 
         return ViTMAEModelOutput(last_hidden_state=sequence_output, mask=mask, ids_restore=ids_restore)
 

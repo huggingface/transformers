@@ -252,6 +252,7 @@ class DonutSwinPatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def maybe_pad(self, pixel_values, height, width):
+        """Pad pixel_values to be divisible by patch_size if needed."""
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
             pixel_values = nn.functional.pad(pixel_values, pad_values)
@@ -272,7 +273,7 @@ class DonutSwinPatchEmbeddings(nn.Module):
         return embeddings, output_dimensions
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging
+# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->DonutSwin
 class DonutSwinPatchMerging(nn.Module):
     """
     Patch Merging Layer.
@@ -309,17 +310,11 @@ class DonutSwinPatchMerging(nn.Module):
         input_feature = input_feature.view(batch_size, height, width, num_channels)
         # pad input to be divisible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_0 = input_feature[:, 0::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_1 = input_feature[:, 1::2, 0::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_2 = input_feature[:, 0::2, 1::2, :]
-        # [batch_size, height/2, width/2, num_channels]
-        input_feature_3 = input_feature[:, 1::2, 1::2, :]
-        # batch_size height/2 width/2 4*num_channels
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+        # Interleave rows and columns to produce [batch_size, height/2*width/2, 4*num_channels]
+        input_feature = torch.cat(
+            [input_feature[:, row::2, col::2, :] for row in range(2) for col in range(2)], dim=-1
+        )
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)
 
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)

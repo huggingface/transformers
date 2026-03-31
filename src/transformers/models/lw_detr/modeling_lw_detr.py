@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_lw_detr import LwDetrConfig, LwDetrViTConfig
 
 
@@ -88,7 +88,6 @@ class LwDetrViTAttention(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.attention_dropout = config.attention_probs_dropout_prob
-        self.hidden_dropout = config.hidden_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
@@ -128,7 +127,6 @@ class LwDetrViTAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = nn.functional.dropout(attn_output, p=self.hidden_dropout, training=self.training)
 
         return attn_output, attn_weights
 
@@ -319,8 +317,8 @@ class LwDetrViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
-            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            init.constant_(module.gamma_1, self.config.cae_init_values)
+            init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
@@ -623,6 +621,8 @@ class LwDetrConvEncoder(nn.Module):
 
 
 class LwDetrAttention(nn.Module):
+    """LW-DETR self-attention with group-DETR training technique."""
+
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -946,6 +946,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -1071,6 +1072,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
     Args:
         config: LwDetrConfig
     """
+
+    _can_record_outputs = {
+        "hidden_states": LwDetrDecoderLayer,
+        "attentions": OutputRecorder(LwDetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(LwDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1),
+    }
 
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
