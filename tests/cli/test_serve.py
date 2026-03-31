@@ -39,7 +39,14 @@ from transformers.cli.serving.utils import (
     ToolCallParser,
     detect_tool_format,
 )
-from transformers.testing_utils import require_librosa, require_serve, require_torch_accelerator, require_vision, slow
+from transformers.testing_utils import (
+    require_librosa,
+    require_multipart,
+    require_serve,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+)
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -1558,6 +1565,7 @@ class TestVLM(unittest.TestCase):
 
 @slow
 @require_librosa
+@require_multipart
 @require_serve
 class TestTranscription(unittest.TestCase):
     """Integration tests for POST /v1/audio/transcriptions with whisper-tiny."""

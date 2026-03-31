@@ -115,6 +115,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_multipart_available,
     is_natten_available,
     is_nltk_available,
     is_numba_available,
@@ -1413,6 +1414,13 @@ def require_librosa(test_case):
     Decorator marking a test that requires librosa
     """
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
+
+
+def require_multipart(test_case):
+    """
+    Decorator marking a test that requires python-multipart
+    """
+    return unittest.skipUnless(is_multipart_available(), "test requires python-multipart")(test_case)
 
 
 def require_liger_kernel(test_case):
