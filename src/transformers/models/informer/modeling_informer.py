@@ -456,7 +456,7 @@ class InformerProbSparseAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
-        src_len = key_value_states.shape[1] if key_value_states is not None else tgt_len
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
         kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
@@ -530,6 +530,7 @@ class InformerProbSparseAttention(nn.Module):
         # Use q_reduce to calculate attention weights
         attn_weights = torch.bmm(q_reduce, key_states.transpose(1, 2))
 
+        src_len = key_states.size(1)
         if attn_weights.size() != (bsz * self.num_heads, u, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, u, src_len)}, but is"

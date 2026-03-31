@@ -290,10 +290,11 @@ class MoonshineAttention(nn.Module):
         key_value_states: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        input_shape = hidden_states.shape[:-1]
+        bsz, q_len = hidden_states.shape[:-1]
 
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = (
+            self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+        )
 
         is_cross_attention = key_value_states is not None
         if past_key_values is not None:
@@ -313,12 +314,12 @@ class MoonshineAttention(nn.Module):
         else:
             key_states = (
                 self.k_proj(current_states)
-                .view(input_shape[0], -1, self.config.num_key_value_heads, self.head_dim)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
                 .transpose(1, 2)
             )
             value_states = (
                 self.v_proj(current_states)
-                .view(input_shape[0], -1, self.config.num_key_value_heads, self.head_dim)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
                 .transpose(1, 2)
             )
             if is_cross_attention and past_key_values is not None:
@@ -335,7 +336,7 @@ class MoonshineAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        is_causal = self.is_causal and attention_mask is None and input_shape[1] > 1
+        is_causal = self.is_causal and attention_mask is None and q_len > 1
 
         if self.head_dim_padding > 0:
             query_states = torch.nn.functional.pad(query_states, (0, self.head_dim_padding))
@@ -357,7 +358,7 @@ class MoonshineAttention(nn.Module):
         if self.head_dim_padding > 0:
             attn_output = attn_output[..., : -self.head_dim_padding]
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 

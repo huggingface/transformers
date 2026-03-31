@@ -196,12 +196,14 @@ class CohereAsrCrossAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ):
         # determine input shapes
-        input_shape = hidden_states.shape[:-1]
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = encoder_hidden_states.shape[1]
 
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
         if past_key_values is not None and is_updated:
@@ -209,9 +211,8 @@ class CohereAsrCrossAttention(nn.Module):
             key_states = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
             value_states = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
-            kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.head_dim)
-            key_states = self.k_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
-            value_states = self.v_proj(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+            key_states = self.k_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all states to the cache
@@ -235,7 +236,7 @@ class CohereAsrCrossAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 

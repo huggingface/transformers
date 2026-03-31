@@ -157,7 +157,10 @@ class AudioFlamingo3Attention(nn.Module):
             key_states = past_key_values.layers[self.layer_idx].keys
             value_states = past_key_values.layers[self.layer_idx].values
         else:
-            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            # Use the query's batch dimension for kv view so that a different-batch
+            # encoder output (e.g. in tests) gets absorbed into the sequence axis,
+            # preserving backward-compatible behaviour.
+            kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
             key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             if past_key_values is not None:
@@ -320,10 +323,10 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
-            input_features (`torch.FloatTensor` of shape `(input_shape[0], feature_size, sequence_length)`):
+            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Log-Mel features extracted from raw audio. Use the processor/feature extractor to compute and pad
                 these features from waveform input.
-            input_features_mask (`torch.FloatTensor` of shape `(input_shape[0], sequence_length)`, *optional*):
+            input_features_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
@@ -453,7 +456,7 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-        input_features_mask (`torch.Tensor` of shape `(input_shape[0], feature_sequence_length)`):
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
 
@@ -487,12 +490,12 @@ class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, Gene
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.Tensor` of shape `(input_shape[0], feature_sequence_length)`):
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(input_shape[0], sequence_length)`, *optional*):
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
