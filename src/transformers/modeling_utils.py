@@ -4867,15 +4867,7 @@ class AttentionInterface(GeneralInterface):
         "paged|eager": eager_paged_attention_forward,
     }
 
-    def get_interface(
-        self,
-        attn_implementation: str | None,
-        default: Callable,
-        # To determine if we can switch between SDPA and Varlen
-        attention_mask: torch.Tensor | None = None,
-        cu_seq_lens_q: torch.IntTensor | None = None,
-        **kwargs,
-    ) -> Callable:
+    def get_interface(self, attn_implementation: str | None, default: Callable) -> Callable:
         """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid."""
         if attn_implementation is None:
             logger.warning_once(
@@ -4887,9 +4879,6 @@ class AttentionInterface(GeneralInterface):
             raise KeyError(
                 f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
             )
-        elif attn_implementation == "sdpa" and is_flash_attn_torch_available():
-            if attention_mask is None and cu_seq_lens_q is not None:
-                return flash_attention_forward
 
         return super().get(attn_implementation, default)
 
