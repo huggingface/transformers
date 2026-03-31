@@ -31,14 +31,13 @@ from ...image_utils import (
     make_nested_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_vision_available
 
 
 if is_vision_available():
     from PIL import Image
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
