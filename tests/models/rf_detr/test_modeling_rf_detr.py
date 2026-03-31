@@ -610,15 +610,15 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # Check raw outputs from the model
-        expectations = Expectations({(None, None): expected_outputs["logits"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["logits"]})
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expectations = Expectations({(None, None): expected_outputs["boxes"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["boxes"]})
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        expectations = Expectations({(None, None): expected_outputs["loss"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["loss"]})
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         predicted_logits = outputs.logits.flatten()[:5]
@@ -635,11 +635,11 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_outputs = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations({(None, None): expected_outputs["post_process_labels"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_labels"]})
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({(None, None): expected_outputs["post_process_scores"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_scores"]})
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({(None, None): expected_outputs["post_process_boxes"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_boxes"]})
         expected_post_process_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         post_processed_labels = post_processed_outputs["labels"][:5]
@@ -670,15 +670,15 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # Check raw outputs from the model
-        expectations = Expectations({(None, None): expected_outputs["logits"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["logits"]})
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expectations = Expectations({(None, None): expected_outputs["boxes"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["boxes"]})
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        expectations = Expectations({(None, None): expected_outputs["pred_masks"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["pred_masks"]})
         expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_masks_shape = torch.Size(
             (
@@ -689,7 +689,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             )
         )
 
-        expectations = Expectations({(None, None): expected_outputs["loss"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["loss"]})
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         predicted_logits = outputs.logits.flatten()[:5]
@@ -709,9 +709,9 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_outputs = image_processor.post_process_instance_segmentation(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations({(None, None): expected_outputs["post_process_labels"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_labels"]})
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({(None, None): expected_outputs["post_process_scores"]})
+        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_scores"]})
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         post_processed_labels = [
