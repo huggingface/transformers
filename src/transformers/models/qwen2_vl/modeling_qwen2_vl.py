@@ -52,6 +52,7 @@ from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
 )
+from ...utils.import_utils import is_flash_attn_torch_available
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
 
@@ -409,10 +410,10 @@ class VisionAttention(nn.Module):
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward, None, None, cu_seqlens
         )
 
-        if is_flash_attention_requested(self.config):
+        if is_flash_attention_requested(self.config, allow_torch=is_flash_attn_torch_available()):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
