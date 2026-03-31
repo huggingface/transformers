@@ -62,6 +62,22 @@ from transformers.utils.auto_docstring import (
 )
 
 
+CHECKER_CONFIG = {
+    "name": "docstrings",
+    "label": "Docstring formatting",
+    # Approximate: at runtime the checker also introspects the live transformers module for
+    # @auto_docstring-decorated objects. These globs cover the files it reads via glob.glob().
+    "file_globs": [
+        "src/transformers/models/**/modeling_*.py",
+        "src/transformers/models/**/modular_*.py",
+        "src/transformers/models/**/configuration_*.py",
+        "src/transformers/models/**/processing_*.py",
+        "src/transformers/models/**/image_processing_*_fast.py",
+    ],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
 logger = logging.get_logger(__name__)
 
 
