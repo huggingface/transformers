@@ -97,7 +97,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     norm_topk_prob: bool = True
     routed_scaling_factor: float | None = 1.0
     output_router_logits: bool = False
-    router_aux_loss_coef: float = 0.0
     router_jitter_noise: float = 0.0
     moe_layer_freq: list | None = None
     add_swa_attention_sink_bias: bool = True
