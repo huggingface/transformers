@@ -297,7 +297,8 @@ class ContinuousBatchProcessorMetrics:
         decode_tokens = 0
         prefill_tokens = 0
 
-        for state in requests_in_batch:
+        for request in requests_in_batch:
+            state = request.state
             if state.status == RequestStatus.DECODING:
                 decode_tokens += 1
             elif state.status in [RequestStatus.PREFILLING, RequestStatus.PREFILLING_SPLIT]:

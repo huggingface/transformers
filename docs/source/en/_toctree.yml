@@ -91,6 +91,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: continuous_batching_architecture
+      title: Continuous batching architecture
     - local: paged_attention
       title: Paged attention
     - sections:
@@ -417,6 +419,8 @@
       title: Callbacks
     - local: main_classes/configuration
       title: Configuration
+    - local: main_classes/continuous_batching
+      title: Continuous batching
     - local: main_classes/data_collator
       title: Data Collator
     - local: main_classes/logging
@@ -1254,6 +1258,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/musicflamingo
+        title: MusicFlamingo
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo

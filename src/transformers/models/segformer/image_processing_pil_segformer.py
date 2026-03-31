@@ -31,20 +31,29 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
-from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 if is_torch_available():
-    import torch
-    import torch.nn.functional as F
+    pass
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
+
+
+@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(PilBackend):
     """PIL backend for Segformer with reduce_label support."""
 
@@ -139,7 +148,7 @@ class SegformerImageProcessorPil(PilBackend):
         self,
         images: list["np.ndarray"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -164,6 +173,7 @@ class SegformerImageProcessorPil(PilBackend):
 
         return processed_images
 
+    @requires(backends=("torch",))
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
@@ -180,8 +190,8 @@ class SegformerImageProcessorPil(PilBackend):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        if not is_torch_available():
-            raise ImportError("PyTorch is required for post_process_semantic_segmentation")
+        import torch
+        import torch.nn.functional as F
 
         logits = outputs.logits
 

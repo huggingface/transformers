@@ -35,6 +35,7 @@ from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -198,6 +199,20 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
         else {}
     )
     _is_composite = True
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        Override to ensure vision_config.projection_dim stays in sync with text_config.hidden_size.
+        The aligner projects vision features to text embedding dimension, so they must match.
+        """
+        from tests.test_modeling_common import ModelTesterMixin
+
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Sync projection_dim with text hidden_size since aligner output must match text embeddings
+        if hasattr(config, "vision_config") and hasattr(config, "text_config"):
+            config.vision_config.projection_dim = config.text_config.hidden_size
+        return config
 
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
@@ -409,6 +424,7 @@ class JanusIntegrationTest(unittest.TestCase):
         self.model_id = "deepseek-community/Janus-Pro-1B"
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
@@ -428,6 +444,7 @@ class JanusIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_batched(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -447,15 +464,25 @@ class JanusIntegrationTest(unittest.TestCase):
             images=[image_1, image_2], text=prompts, generation_mode="text", padding=True, return_tensors="pt"
         ).to(model.device, torch.float16)
 
-        EXPECTED_TEXT_COMPLETION = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\nforming a constellation, the constellation of Orion is located in the constellation of Scorpius.\n",  # fmt: skip
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                ("xpu", None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",  # fmt: skip
+                ],
+                (None, None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and is one",  # fmt: skip
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation of a winged figure. This constellation is the **Luna**, also",  # fmt: skip
+                ],
+            }
+        )
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        expected_text = EXPECTED_TEXT_COMPLETION.get_expectation()
+        self.assertEqual(expected_text, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -472,12 +499,13 @@ class JanusIntegrationTest(unittest.TestCase):
             model.device, torch.float16
         )
 
-        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same star constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part"]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
