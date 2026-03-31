@@ -1924,7 +1924,7 @@ class ProcessorMixin(PushToHubMixin):
 
     def parse_response(
         self,
-        response: str | list[str | int | list[int]] | np.ndarray | torch.Tensor,
+        response: "str | list[str | int | list[int]] | np.ndarray | torch.Tensor",
         schema: list | dict | None = None,
     ):
         """
