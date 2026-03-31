@@ -28,7 +28,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_mobile_det_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     r"""
     reduction (`int`, *optional*, defaults to 4):

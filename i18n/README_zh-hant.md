@@ -243,7 +243,7 @@ pipeline(
 
 Transformers 不僅僅是一個使用預訓練模型的工具包，它還是一個圍繞它和 Hugging Face Hub 建構的專案社群。我們希望 Transformers 能夠賦能開發者、研究人員、學生、教授、工程師以及其他任何人，去建構他們夢想中的專案。
 
-為了慶祝 Transformers 獲得 10 萬顆星標，我們希望透過 [awesome-transformers](./awesome-transformers.md) 頁面來聚焦社群，該頁面列出了100個基於 Transformers 建構的精彩專案。
+為了慶祝 Transformers 獲得 10 萬顆星標，我們希望透過 [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) 頁面來聚焦社群，該頁面列出了100個基於 Transformers 建構的精彩專案。
 
 如果您擁有或使用一個您認為應該被列入其中的專案，請隨時提交 PR 將其加入！
 

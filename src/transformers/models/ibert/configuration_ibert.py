@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="kssteven/ibert-roberta-base")
-@strict(accept_kwargs=True)
+@strict
 class IBertConfig(PreTrainedConfig):
     r"""
     type_vocab_size (`int`, *optional*, defaults to 2):
@@ -53,7 +53,7 @@ class IBertConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     quant_mode: bool = False
     force_dequant: str = "none"
 

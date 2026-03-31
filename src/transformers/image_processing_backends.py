@@ -25,6 +25,7 @@ from .image_transforms import (
 )
 from .image_transforms import (
     convert_to_rgb,
+    divide_to_patches,  # noqa: F401 - re-exported for backward compat with image_processing_utils_fast
     get_resize_output_image_size,
     get_size_with_aspect_ratio,
     group_images_by_shape,
@@ -57,9 +58,8 @@ from .utils import (
     is_torchvision_available,
     is_vision_available,
     logging,
-    requires_backends,
 )
-from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, requires
 
 
 if is_vision_available():
@@ -80,11 +80,11 @@ else:
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch", "torchvision"))
 class TorchvisionBackend(BaseImageProcessor):
     """Torchvision backend for GPU-accelerated batched image processing."""
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
-        requires_backends(self, "torchvision")
         super().__init__(**kwargs)
         self._set_attributes(**kwargs)
 
@@ -406,6 +406,7 @@ class TorchvisionBackend(BaseImageProcessor):
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
+@requires(backends=("vision",))
 class PilBackend(BaseImageProcessor):
     """PIL/NumPy backend for portable CPU-only image processing."""
 
@@ -528,7 +529,7 @@ class PilBackend(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None = None,
+        resample: "PILImageResampling | None" = None,
         reducing_gap: int | None = None,
         **kwargs,
     ) -> np.ndarray:
@@ -627,7 +628,7 @@ class PilBackend(BaseImageProcessor):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: Union["PILImageResampling", "tvF.InterpolationMode", int] | None,
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -664,3 +665,7 @@ class PilBackend(BaseImageProcessor):
         if processor_dict.get("image_processor_type", "").endswith("Pil"):
             processor_dict["image_processor_type"] = processor_dict["image_processor_type"][:-3]
         return processor_dict
+
+
+# Backward-compatible alias: allow referring to TorchvisionBackend as BaseImageProcessorFast
+BaseImageProcessorFast = TorchvisionBackend

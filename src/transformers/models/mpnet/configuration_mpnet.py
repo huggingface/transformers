@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/mpnet-base")
-@strict(accept_kwargs=True)
+@strict
 class MPNetConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -58,7 +58,7 @@ class MPNetConfig(PreTrainedConfig):
     relative_attention_num_buckets: int = 32
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
 
 
