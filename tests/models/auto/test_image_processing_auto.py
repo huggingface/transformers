@@ -269,7 +269,7 @@ class AutoImageProcessorTest(unittest.TestCase):
             self.assertTrue(image_processor.is_local)
 
             # If remote code is enabled but local code originated from transformers, we load the remote one.
-            CustomConfig.__module__ = "transformers.models.custom.configuration_custom"
+            NewImageProcessor.__module__ = "transformers.models.custom.configuration_custom"
             image_processor = AutoImageProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True
             )

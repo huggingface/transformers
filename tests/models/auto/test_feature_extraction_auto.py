@@ -182,7 +182,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertTrue(feature_extractor.is_local)
 
             # If remote code is enabled but local code originated from transformers, we load the remote one.
-            CustomConfig.__module__ = "transformers.models.custom.configuration_custom"
+            NewFeatureExtractor.__module__ = "transformers.models.custom.configuration_custom"
             feature_extractor = AutoFeatureExtractor.from_pretrained(
                 "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
             )

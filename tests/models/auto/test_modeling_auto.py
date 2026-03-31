@@ -465,6 +465,7 @@ class AutoModelTest(unittest.TestCase):
 
             # If remote code is enabled but local code originated from transformers, we load the remote one.
             NewModelConfigLocal.__module__ = "transformers.models.new_model.configuration_new_model"
+            NewModel.__module__ = "transformers.models.new_model.modeling_new_model"
             model = AutoModel.from_pretrained("hf-internal-testing/test_dynamic_model", trust_remote_code=True)
             self.assertEqual(model.config.__class__.__name__, "NewModelConfig")
 

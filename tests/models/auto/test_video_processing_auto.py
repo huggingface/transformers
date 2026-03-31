@@ -234,7 +234,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
             self.assertTrue(video_processor.is_local)
 
             # If remote code is enabled but local code originated from transformers, we load the remote one.
-            CustomConfig.__module__ = "transformers.models.custom.configuration_custom"
+            NewVideoProcessor.__module__ = "transformers.models.custom.configuration_custom"
             video_processor = AutoVideoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_video_processor", trust_remote_code=True
             )
