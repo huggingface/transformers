@@ -270,7 +270,7 @@ class LlamaAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward, attention_mask, **kwargs
         )
 
         attn_output, attn_weights = attention_interface(
