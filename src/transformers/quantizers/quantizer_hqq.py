@@ -245,6 +245,47 @@ class HqqHfQuantizer(HfQuantizer):
 
     #         setattr(parent_module, node, hqq_layer)
 
+    def _setup_missing_key_filters(self, model, checkpoint_files):
+        """Scan checkpoint files to find HQQ-quantized modules.
+
+        For those modules:
+        1. Suppress their .weight missing key warnings in the load report.
+        2. Replace their weight parameter with a scalar meta tensor so that
+           ``_move_missing_keys_from_meta_to_device`` does not allocate
+           full-size fp16 tensors on GPU (which would cause OOM).
+        """
+        import re
+
+        from safetensors import safe_open
+
+        quantized_modules = set()
+        for ckpt_file in checkpoint_files:
+            if ckpt_file.endswith(".safetensors"):
+                with safe_open(ckpt_file, framework="pt") as f:
+                    for k in f.keys():
+                        if k.endswith(".W_q"):
+                            quantized_modules.add(k[: -len(".W_q")])
+            else:
+                state_dict = torch.load(ckpt_file, map_location="cpu", weights_only=True)
+                for k in state_dict:
+                    if k.endswith(".W_q"):
+                        quantized_modules.add(k[: -len(".W_q")])
+
+        if quantized_modules:
+            # Build regex that matches only .weight keys of quantized modules
+            escaped = [re.escape(m) + r"\.weight" for m in quantized_modules]
+            existing = model._keys_to_ignore_on_load_missing or []
+            model._keys_to_ignore_on_load_missing = existing + escaped
+
+            # Replace weight params with scalar meta tensors to avoid GPU allocation
+            for module_name in quantized_modules:
+                try:
+                    module = model.get_submodule(module_name)
+                except AttributeError:
+                    continue
+                if hasattr(module, "weight") and module.weight is not None:
+                    module.weight = torch.nn.Parameter(torch.empty(0, device="meta"), requires_grad=False)
+
     def _patch_layer_for_multigpu(self, hqq_layer):
         def forward_with_device(self, x):
             out = torch.matmul(x.to(self.device), self.dequantize().t())
@@ -264,6 +305,20 @@ class HqqHfQuantizer(HfQuantizer):
         if self.pre_quantized:
             # Store checkpoint files for loading in _process_model_after_weight_loading
             self._checkpoint_files = checkpoint_files
+
+            # Suppress noisy load report: HQQ checkpoint keys (W_q, scale, etc.) are
+            # "unexpected" and nn.Linear .weight keys are "missing" from the standard
+            # loading perspective, but _load_hqq_from_checkpoint handles them.
+            hqq_keys = HQQLinear(None, None).state_dict_keys()
+            ignore_unexpected = [rf"\.{k}$" for k in hqq_keys]
+            existing = model._keys_to_ignore_on_load_unexpected or []
+            model._keys_to_ignore_on_load_unexpected = existing + ignore_unexpected
+
+            # For missing keys: scan checkpoint to find which modules have W_q (are HQQ-quantized),
+            # and suppress only their .weight keys. Also replace their weight with a scalar meta
+            # tensor to prevent _move_missing_keys_from_meta_to_device from allocating full-size
+            # tensors on GPU (which would cause OOM for large models).
+            self._setup_missing_key_filters(model, checkpoint_files)
         else:
             # Add the corresponding quant_config to each valid module for on-the-fly quantization.
             # prepare_for_hqq_linear() also sets the right quantization config inside the model
@@ -363,6 +418,13 @@ class HqqHfQuantizer(HfQuantizer):
             setattr(parent, child_name, hqq_layer)
 
         del full_state_dict
+
+        # Free any leftover GPU memory from replaced nn.Linear modules
+        import gc
+
+        gc.collect()
+        if target_device.type != "cpu":
+            torch.cuda.empty_cache()
 
     def is_serializable(self):
         return True
