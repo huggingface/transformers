@@ -3,7 +3,7 @@
 #     "inspect-ai",
 #     "inspect-evals",
 #     "huggingface-hub",
-#     "transformers[serving] @ git+https://github.com/NathanHB/transformers.git@fix-continuous-batching-json-response",
+#     "transformers[serving] @ git+https://github.com/huggingface/transformers.git@main",
 #     "openai>=2.26.0",
 #     "torchvision",
 #     "kernels",
@@ -72,13 +72,13 @@ def main():
     parser.add_argument(
         "--limit",
         type=int,
-        default=5,
+        default=10,
         help="Number of evaluation samples to run (default: 5)",
     )
     parser.add_argument(
         "--max-connections",
         type=int,
-        default=2,
+        default=10,
         help="Maximum concurrent connections for evaluation (default: 2)",
     )
     parser.add_argument(
@@ -150,8 +150,7 @@ def main():
 
         serve_cmd.extend(["--cb-max-memory-percent", str(args.cb_max_memory_percent)])
 
-        if args.cb_use_cuda_graph:
-            serve_cmd.append("--cb-use-cuda-graph")
+        serve_cmd.append("--cb-use-cuda-graph")
 
     # Always use sdpa attention implementation
     serve_cmd.extend(["--attn-implementation", "kernels-community/flash-attn2"])
