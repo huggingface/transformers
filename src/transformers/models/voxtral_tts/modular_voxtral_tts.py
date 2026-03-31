@@ -17,7 +17,9 @@ import math
 import torch
 import torch.nn as nn
 
-from .configuration_voxtral_tts import VoxtralTtsCodecConfig, VoxtralTtsFlowMatchingConfig
+from ...cache_utils import Cache
+from ...modeling_outputs import CausalLMOutputWithPast
+from .configuration_voxtral_tts import VoxtralTtsCodecConfig, VoxtralTtsConfig, VoxtralTtsFlowMatchingConfig
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -398,8 +400,77 @@ class VoxtralTtsCodecModel(nn.Module):
         return waveform
 
 
+class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "embed_text_tokens.weight"}
+
+    def __init__(self, config: VoxtralTtsConfig):
+        super().__init__(config)
+        self.vocab_size = config.vocab_size
+
+        self.embed_text_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.backbone_model = VoxtralTtsBackboneModel._from_config(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.flow_matching_transformer = VoxtralTtsFlowMatchingTransformer(config.flow_matching_config)
+        self.codec_model = VoxtralTtsCodecModel(config.codec_config)
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_text_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_text_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        audio_codes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs,
+    ) -> CausalLMOutputWithPast:
+        if inputs_embeds is None:
+            parts = []
+            if audio_codes is not None:
+                parts.append(self.backbone_model.embed_tokens(audio_codes))
+            if input_ids is not None:
+                parts.append(self.embed_text_tokens(input_ids))
+            if parts:
+                inputs_embeds = torch.cat(parts, dim=1) if len(parts) > 1 else parts[0]
+
+        backbone_outputs = self.backbone_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = backbone_outputs[0]
+        logits = self.lm_head(hidden_states)
+
+        return CausalLMOutputWithPast(
+            logits=logits,
+            past_key_values=backbone_outputs.past_key_values,
+            hidden_states=backbone_outputs.hidden_states,
+            attentions=backbone_outputs.attentions,
+        )
+
+
 __all__ = [
     "VoxtralTtsPreTrainedModel",
     "VoxtralTtsBackboneModel",
     "VoxtralTtsCodecModel",
+    "VoxtralTtsForTextToSpeech",
 ]
