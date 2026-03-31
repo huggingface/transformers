@@ -1324,6 +1324,8 @@
         title: SAM3
       - local: model_doc/sam3_video
         title: SAM3 Video
+      - local: model_doc/sam3_lite_text
+        title: SAM3-LiteText
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
