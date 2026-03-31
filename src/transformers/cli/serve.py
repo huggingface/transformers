@@ -112,7 +112,7 @@ class Serve:
             enable_cors=enable_cors,
         )
 
-        config = uvicorn.Config(app, host=host, port=port, log_level=log_level)
+        config = uvicorn.Config(app, host=host, port=port, log_level="info")
         self.server = uvicorn.Server(config)
 
         if non_blocking:

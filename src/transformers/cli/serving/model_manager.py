@@ -254,6 +254,7 @@ class ModelManager:
 
         with lock:
             if model_id_and_revision not in self.loaded_models:
+                logger.warning(f"Loading {model_id_and_revision}")
                 if progress_callback is not None:
                     progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "processor"})
                 processor = self._load_processor(model_id_and_revision)

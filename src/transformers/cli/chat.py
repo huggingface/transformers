@@ -163,6 +163,7 @@ class RichInterface:
         elapsed = time.time() - start_time
         if elapsed > 0 and completion_tokens > 0:
             tok_per_sec = completion_tokens / elapsed
+            self._console.print()
             self._console.print(f"[dim]{completion_tokens} tokens in {elapsed:.1f}s ({tok_per_sec:.1f} tok/s)[/dim]")
         self._console.print()
 

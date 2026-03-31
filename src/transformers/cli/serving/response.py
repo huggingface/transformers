@@ -95,8 +95,6 @@ class ResponseHandler(BaseHandler):
     _valid_params_class = TransformersResponseCreateParamsStreaming
     _unused_fields = UNUSED_RESPONSE_FIELDS
 
-    # ----- entry point -----
-
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate, load model, dispatch to streaming or non-streaming.
 
@@ -112,6 +110,7 @@ class ResponseHandler(BaseHandler):
         model_id, model, processor = self._resolve_model(body)
         modality = self.model_manager.get_model_modality(model, processor=processor)
         use_cb = self.generation_state.use_continuous_batching(model, modality)
+        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
 
         # Two-step input conversion (chat completions skips step 1 since messages are already standard):

@@ -92,8 +92,6 @@ class ChatCompletionHandler(BaseHandler):
     _valid_params_class = TransformersCompletionCreateParamsStreaming
     _unused_fields = UNUSED_CHAT_COMPLETION_FIELDS
 
-    # ----- entry point -----
-
     async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate the request, load the model, and dispatch to streaming or non-streaming.
 
@@ -109,6 +107,7 @@ class ChatCompletionHandler(BaseHandler):
         model_id, model, processor = self._resolve_model(body)
         modality = self.model_manager.get_model_modality(model, processor=processor)
         use_cb = self.generation_state.use_continuous_batching(model, modality)
+        logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
         processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
 
