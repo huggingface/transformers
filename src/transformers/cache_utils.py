@@ -670,9 +670,9 @@ class HQQQuantizedLayer(QuantizedLayer):
 
 
 class LinearAttentionCacheLayerMixin(ABC):
-    """Base, abstract class for a mamba single layer's cache."""
+    """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a Mamba layer, so it is compileable
+    # All shapes are static by essence in a LinearAttention layer, so it is compileable
     is_compileable = True
 
     def __init__(self):
@@ -727,7 +727,7 @@ class LinearAttentionCacheLayerMixin(ABC):
             self.recurrent_states = self.recurrent_states.index_select(0, beam_idx.to(self.device))
 
     def crop(self, max_length: int):
-        # We don't crop the mamba cache, so simply do nothing here
+        # We don't crop the linear attention cache, so simply do nothing here
         pass
 
 
@@ -756,7 +756,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
     def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
         """
-        Update the mamba cache in-place, and return the necessary conv states.
+        Update the linear attention cache in-place, and return the necessary conv states.
 
         Args:
             conv_states (`torch.Tensor`): The new conv states to cache.
@@ -789,7 +789,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
     def update_recurrent_state(self, recurrent_states: torch.Tensor, **kwargs) -> torch.Tensor:
         """
-        Update the mamba cache in-place, and return the necessary ssm states.
+        Update the linear attention cache in-place, and return the necessary ssm states.
 
         Args:
             smm_states (`torch.Tensor`): The new ssm states to cache.
@@ -816,7 +816,7 @@ class LinearAttentionAndAttentionLayer(LinearAttentionLayer, DynamicLayer):
         # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
         if len(args) == 2 and len(kwargs) == 0:
             DynamicLayer.lazy_initialization(self, *args)
-        # Otherwise, for the Mamba cache, when it's called in `update_conv_state` or `update_recurrent_state`, it's
+        # Otherwise, for the LinearAttention cache, when it's called in `update_conv_state` or `update_recurrent_state`, it's
         # always called with 1 single kwarg (cause it needs to know if it's for the conv or ssm states)
         if len(args) == 0 and len(kwargs) == 1:
             LinearAttentionLayer.lazy_initialization(self, **kwargs)
@@ -957,7 +957,7 @@ class Cache:
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
         if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
-            raise ValueError("Cannot call `update_conv_state` on a non-Mamba layer!")
+            raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         conv_states = self.layers[layer_idx].update_conv_state(conv_states, **kwargs)
         return conv_states
 
@@ -977,7 +977,7 @@ class Cache:
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
         if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
-            raise ValueError("Cannot call `update_conv_state` on a non-Mamba layer!")
+            raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, **kwargs)
         return recurrent_states
 
@@ -1001,12 +1001,12 @@ class Cache:
         if layer_idx >= len(self.layers):
             return 0
 
-        # For alternating attention-mamba caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
+        # For alternating attention/linear attention  caches, `get_seq_length` needs to use attention layer idx when called with default layer_idx
         if not isinstance(self.layers[layer_idx], CacheLayerMixin):
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a Mamba layer, which "
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
                     "does not track sequence length."
                 )
             try:
@@ -1015,17 +1015,17 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "Mamba layers."
+                    "LinearAttention layers."
                 )
 
         return self.layers[layer_idx].get_seq_length()
 
     def has_previous_state(self, layer_idx: int | None = None) -> bool:
-        """Returns whether the Mamba layer at index `layer_idx` has previous state or not."""
+        """Returns whether the LinearAttention layer at index `layer_idx` has previous state or not."""
         if layer_idx is not None and layer_idx >= len(self.layers):
             return False
 
-        # In this case, use last Mamba layer
+        # In this case, use last LinearAttention layer
         if layer_idx is None:
             try:
                 layer_idx = next(
@@ -1035,8 +1035,8 @@ class Cache:
                 )
             except StopIteration:
                 raise ValueError(
-                    "`has_previous_state` can only be called on Mamba layers, and the current Cache seem to only contain "
-                    "Attention layers."
+                    "`has_previous_state` can only be called on LinearAttention layers, and the current Cache seem to "
+                    "only contain Attention layers."
                 )
         elif not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError(
@@ -1057,12 +1057,12 @@ class Cache:
         if layer_idx >= len(self.layers):
             return query_length, 0
 
-        # For alternating attention-mamba caches, `get_mask_sizes` needs to use attention layer idx when called with default layer_idx
+        # For alternating attention/linear attention caches, `get_mask_sizes` needs to use attention layer idx when called with default layer_idx
         if not isinstance(self.layers[layer_idx], CacheLayerMixin):
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a Mamba layer, which "
+                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
                     "does not track sequence length."
                 )
             try:
@@ -1071,7 +1071,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "Mamba layers."
+                    "LinearAttention layers."
                 )
 
         return self.layers[layer_idx].get_mask_sizes(query_length)
@@ -1341,7 +1341,7 @@ class StaticCache(Cache):
                 layer = StaticSlidingWindowLayer(
                     max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
                 )
-            # Mamba layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
+            # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                 layer = LinearAttentionLayer()
             else:
