@@ -169,6 +169,8 @@ class Qwen2MoeTensorProcessor(TensorProcessor):
             else:  # w == "up"
                 out = out.narrow(shard_dim, shard_size, shard_size)
             out.copy_(torch_weights)
+
+
 class GptOssTensorProcessor(TensorProcessor):
     """
     Tensor processor for GPT-OSS models (MoE with 128 experts).
@@ -177,14 +179,11 @@ class GptOssTensorProcessor(TensorProcessor):
     - Interleaving gate and up projections if stored in a combined tensor (gate_up_projs).
     - Bias tensors (1D) are passed through without transpose.
     """
+
     # Regex for separate expert tensors: e.g., blk.0.ffn_down_projs.weight
-    GGUF_MOE_WEIGHTS_PATTERN = re.compile(
-        r"blk\.(?P<bid>\d+)\.ffn_(?P<proj>down|gate|up)_projs\.weight$"
-    )
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.ffn_(?P<proj>down|gate|up)_projs\.weight$")
     # Regex for combined gate+up tensor: e.g., blk.0.ffn_gate_up_projs.weight
-    GGUF_MOE_COMBINED_PATTERN = re.compile(
-        r"blk\.(?P<bid>\d+)\.ffn_gate_up_projs\.weight$"
-    )
+    GGUF_MOE_COMBINED_PATTERN = re.compile(r"blk\.(?P<bid>\d+)\.ffn_gate_up_projs\.weight$")
 
     def __init__(self, config=None):
         super().__init__(config=config)
@@ -195,9 +194,7 @@ class GptOssTensorProcessor(TensorProcessor):
             tensor_key_mapping = kwargs.get("tensor_key_mapping")
             parsed_parameters = kwargs.get("parsed_parameters")
             if tensor_key_mapping and parsed_parameters:
-                self._split_moe_expert_tensor(
-                    weights, parsed_parameters, m["bid"], m["proj"], tensor_key_mapping
-                )
+                self._split_moe_expert_tensor(weights, parsed_parameters, m["bid"], m["proj"], tensor_key_mapping)
                 return GGUFTensor(weights, None, {})  # signal handled
 
         # 2. Handle combined gate+up tensor
@@ -205,9 +202,7 @@ class GptOssTensorProcessor(TensorProcessor):
             tensor_key_mapping = kwargs.get("tensor_key_mapping")
             parsed_parameters = kwargs.get("parsed_parameters")
             if tensor_key_mapping and parsed_parameters:
-                self._interleave_gate_up_tensor(
-                    weights, parsed_parameters, m["bid"], tensor_key_mapping
-                )
+                self._interleave_gate_up_tensor(weights, parsed_parameters, m["bid"], tensor_key_mapping)
                 return GGUFTensor(weights, None, {})
 
         # 3. Bias tensors (1D) → no transpose
@@ -255,14 +250,13 @@ class GptOssTensorProcessor(TensorProcessor):
         """
         num_experts = self.config.get("num_local_experts", 128)
         inter_size = weights.shape[1]
-        hidden_size = weights.shape[2]
         half_inter = inter_size // 2
-        gate_part = weights[:, :half_inter, :]   # [E, half_inter, hidden]
-        up_part = weights[:, half_inter:, :]     # [E, half_inter, hidden]
+        gate_part = weights[:, :half_inter, :]  # [E, half_inter, hidden]
+        up_part = weights[:, half_inter:, :]  # [E, half_inter, hidden]
 
         for i in range(min(num_experts, weights.shape[0])):
-            gate_weight = gate_part[i].T        # [hidden, half_inter]
-            up_weight = up_part[i].T            # [hidden, half_inter]
+            gate_weight = gate_part[i].T  # [hidden, half_inter]
+            up_weight = up_part[i].T  # [hidden, half_inter]
 
             gate_name = f"model.layers.{bid}.block_sparse_moe.experts.{i}.gate_proj.weight"
             up_name = f"model.layers.{bid}.block_sparse_moe.experts.{i}.up_proj.weight"
@@ -714,7 +708,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         parsed_parameters["config"]["full_attn_idxs"] = [
             i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
         ]
-          
+
     if updated_architecture == "gpt_oss":
         # Helper to read keys with the correct prefix
         def read_gpt_key(reader, suffix, default=None):
@@ -724,19 +718,34 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
                 if isinstance(val, bytes):
                     val = val.decode("utf-8")
                 return val
-            return default 
+            return default
 
-# Reconstruct YaRN rope_scaling (only if type is "yarn")
+        #  Reconstruct rope_scaling from GGUF metadata
         rope_type = read_gpt_key(reader, "rope.scaling.type")
-        if rope_type == "yarn":
-            rope_scaling = {
-                "rope_type": rope_type,
-                "factor": float(read_gpt_key(reader, "rope.scaling.factor", 1.0)),
-                "original_max_position_embeddings": int(read_gpt_key(reader, "rope.scaling.original_context_length", 4096)),
-                "attention_factor": 1.0,
-                "beta_fast": 32.0,
-                "beta_slow": 1.0,
-            }
+        if rope_type is not None:
+            rope_scaling = {"rope_type": rope_type}
+
+            # Collect all rope.scaling keys dynamically
+            for key in reader.fields:
+                if not key.startswith("gpt-oss.rope.scaling."):
+                    continue
+                suffix = key[len("gpt-oss.rope.scaling.") :]
+                if suffix == "type":
+                    continue
+                value = reader.fields[key].parts[0]
+                if isinstance(value, bytes):
+                    value = value.decode("utf-8")
+                # Convert to appropriate type
+                if suffix in ("factor", "attention_factor", "beta_fast", "beta_slow"):
+                    value = float(value)
+                elif suffix in ("original_context_length", "original_max_position_embeddings"):
+                    # Map GGUF's original_context_length to HF's original_max_position_embeddings
+                    suffix = "original_max_position_embeddings"
+                    value = int(value)
+                else:
+                    pass
+                rope_scaling[suffix] = value
+
             parsed_parameters["config"]["rope_scaling"] = rope_scaling
 
     # retrieve config vocab_size from tokenizer
