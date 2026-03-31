@@ -296,10 +296,11 @@ class Transpose(ConversionOps):
 
 
 class Conv3dToLinear(ConversionOps):
-    """Conv3d patch-embed weights → Linear layout. ``get_patch_shape`` (optional) is passed through on ``reverse_op``."""
+    """Conv3d weights → flattened Linear layout."""
 
-    def __init__(self, get_patch_shape: Callable[[Any], tuple[int, int, tuple[int, int]]] | None = None):
-        self._get_patch_shape = get_patch_shape
+    def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
 
     @staticmethod
     def _get_target_pattern(
@@ -331,33 +332,15 @@ class Conv3dToLinear(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return LinearToConv3d(get_patch_shape=self._get_patch_shape)
+        return LinearToConv3d(in_channels=self.in_channels, kernel_size=self.kernel_size)
 
 
 class LinearToConv3d(ConversionOps):
-    """Linear patch-embed weights → Conv3d layout. Shape comes from ``config`` in :meth:`convert`, via
-    :meth:`default_get_conv3d_patch_shape_from_config` unless ``get_patch_shape`` is given."""
+    """Flattened Linear weights → Conv3d layout."""
 
-    @classmethod
-    def default_get_conv3d_patch_shape_from_config(cls, config) -> tuple[int, int, tuple[int, int]]:
-        """Patch layout ``(in_channels, temporal_patch_size, (patch_h, patch_w))`` from ``vision_config`` or ``config``.
-        Override or pass ``get_patch_shape`` on the op when field names differ."""
-        vision_config = getattr(config, "vision_config", config)
-
-        temporal_patch_size = vision_config.temporal_patch_size
-        if isinstance(temporal_patch_size, (list, tuple)):
-            temporal_patch_size = temporal_patch_size[0]
-
-        patch_size = vision_config.patch_size
-        if isinstance(patch_size, int):
-            spatial_patch_shape = (patch_size, patch_size)
-        else:
-            spatial_patch_shape = tuple(patch_size)
-
-        return vision_config.in_channels, temporal_patch_size, spatial_patch_shape
-
-    def __init__(self, get_patch_shape: Callable[[Any], tuple[int, int, tuple[int, int]]] | None = None):
-        self._get_patch_shape = get_patch_shape
+    def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
 
     @torch.no_grad
     def convert(
@@ -367,15 +350,7 @@ class LinearToConv3d(ConversionOps):
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
 
-        if tensor.ndim == 5:
-            return {target_pattern: tensor.contiguous()}
-        if tensor.ndim != 2:
-            raise ValueError(f"LinearToConv3d expects a 2D or 5D tensor, got {tensor.ndim}D")
-
-        # read patch shape from config, use default_get_conv3d_patch_shape_from_config if _get_patch_shape is not provided
-        get_patch = self._get_patch_shape or type(self).default_get_conv3d_patch_shape_from_config
-        in_channels, temporal_patch_size, spatial_patch_shape = get_patch(kwargs["config"])
-        target_shape = (tensor.shape[0], in_channels, temporal_patch_size, *spatial_patch_shape)
+        target_shape = (tensor.shape[0], self.in_channels, *self.kernel_size)
         if tensor.numel() != math.prod(target_shape):
             raise ValueError(f"Cannot reshape tensor with shape {tensor.shape} into {target_shape}")
 
@@ -383,7 +358,7 @@ class LinearToConv3d(ConversionOps):
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return Conv3dToLinear(get_patch_shape=self._get_patch_shape)
+        return Conv3dToLinear(in_channels=self.in_channels, kernel_size=self.kernel_size)
 
 
 class PermuteForRope(ConversionOps):

@@ -47,15 +47,6 @@ def _is_fusable_patch_embedding(module: nn.Module) -> bool:
     )
 
 
-def _make_patch_shape_getter(in_channels: int, kernel_size: tuple[int, int, int]):
-    temporal_patch_size, patch_height, patch_width = kernel_size
-
-    def get_patch_shape(_):
-        return in_channels, temporal_patch_size, (patch_height, patch_width)
-
-    return get_patch_shape
-
-
 def _make_fused_patch_embedding_class(original_cls: type[nn.Module], reference_module: nn.Module) -> type[nn.Module]:
     reference_proj = reference_module.proj
 
@@ -88,9 +79,7 @@ def _build_weight_converter_for_module(module_name: str, reference_module: nn.Mo
     return WeightConverter(
         source_patterns=weight_name,
         target_patterns=weight_name,
-        operations=[
-            Conv3dToLinear(get_patch_shape=_make_patch_shape_getter(proj.in_channels, tuple(proj.kernel_size)))
-        ],
+        operations=[Conv3dToLinear(in_channels=proj.in_channels, kernel_size=tuple(proj.kernel_size))],
     )
 
 
