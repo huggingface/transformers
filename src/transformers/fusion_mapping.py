@@ -14,6 +14,7 @@
 
 import math
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -32,6 +33,14 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _FUSION_DISCOVERY_CACHE: dict[str, dict[type, tuple[dict[str, type[nn.Module]], list[WeightConverter]]]] = {}
+
+
+@dataclass(frozen=True)
+class ModuleFusionSpec:
+    is_fusable: Callable[[nn.Module], bool]
+    make_fused_class: Callable[[type[nn.Module], nn.Module], type[nn.Module]]
+    make_weight_converter: Callable[[str, nn.Module], WeightConverter]
+    empty_log_message: str
 
 
 def _is_fusable_patch_embedding(module: nn.Module) -> bool:
@@ -117,17 +126,17 @@ def _discover_fusable_modules(
     return patch_mapping, converters
 
 
-def _register_patch_embedding_fusion(cls: "type[PreTrainedModel]", config) -> None:
+def _register_module_fusion(cls: "type[PreTrainedModel]", config, fusion_name: str, spec: ModuleFusionSpec) -> None:
     fusable_classes, converters = _discover_fusable_modules(
         cls,
         config,
-        fusion_name="patch_embeddings",
-        is_fusable=_is_fusable_patch_embedding,
-        make_fused_class=_make_fused_patch_embedding_class,
-        make_weight_converter=_build_weight_converter_for_module,
+        fusion_name=fusion_name,
+        is_fusable=spec.is_fusable,
+        make_fused_class=spec.make_fused_class,
+        make_weight_converter=spec.make_weight_converter,
     )
     if not fusable_classes:
-        logger.debug("No compatible patch-embedding classes found to fuse for %s", cls.__name__)
+        logger.debug(spec.empty_log_message, cls.__name__)
         return
 
     register_patch_mapping(fusable_classes, overwrite=True)
@@ -153,8 +162,13 @@ def _register_patch_embedding_fusion(cls: "type[PreTrainedModel]", config) -> No
     register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
 
 
-_FUSION_REGISTRY: dict[str, Callable[["type[PreTrainedModel]", Any], None]] = {
-    "patch_embeddings": _register_patch_embedding_fusion
+_FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {
+    "patch_embeddings": ModuleFusionSpec(
+        is_fusable=_is_fusable_patch_embedding,
+        make_fused_class=_make_fused_patch_embedding_class,
+        make_weight_converter=_build_weight_converter_for_module,
+        empty_log_message="No compatible patch-embedding classes found to fuse for %s",
+    )
 }
 
 
@@ -180,4 +194,4 @@ def register_fusion_patches(
         return
 
     for fusion_name in _iter_enabled_fusions(fusion_config):
-        _FUSION_REGISTRY[fusion_name](cls, config)
+        _register_module_fusion(cls, config, fusion_name, _FUSION_REGISTRY[fusion_name])
