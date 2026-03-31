@@ -435,6 +435,15 @@
   title: Resources
 - isExpanded: false
   sections:
+  - local: contributing
+    title: Contribute to Transformers
+  - local: testing
+    title: Writing model tests
+  - local: pr_checks
+    title: Pull request checks
+  title: Contribute
+- isExpanded: false
+  sections:
   - sections:
     - local: model_doc/auto
       title: Auto Classes
