@@ -511,9 +511,9 @@ class Zamba2MambaMixer(nn.Module):
             dBx = dB * hidden_states[..., None]
 
             # State calculation
-            recurrent_states = cache_params.layers[self.layer_idx].recurrent_states.clone()
-            recurrent_states = recurrent_states * dA + dBx
-            recurrent_states = cache_params.update_recurrent_state(recurrent_states, self.layer_idx)
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            ssm_states = ssm_states * dA + dBx
+            ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
 
             # Subsequent output
             # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
@@ -522,7 +522,7 @@ class Zamba2MambaMixer(nn.Module):
             C = C.reshape(batch_size, -1, C.shape[-1])
             # [bsz, num_heads, head_dim]
 
-            ssm_states = recurrent_states.to(C.dtype)  # Shape: [b, h, d, n]
+            ssm_states = ssm_states.to(C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
