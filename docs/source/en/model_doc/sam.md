@@ -148,10 +148,12 @@ alt="drawing" width="900"/>
 ## SamImageProcessor
 
 [[autodoc]] SamImageProcessor
+    - preprocess
 
-## SamImageProcessorFast
+## SamImageProcessorPil
 
-[[autodoc]] SamImageProcessorFast
+[[autodoc]] SamImageProcessorPil
+    - preprocess
 
 ## SamVisionModel
 

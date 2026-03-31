@@ -37,7 +37,7 @@ from ..llava.modeling_llava import (
 
 
 @auto_docstring(checkpoint="KamilaMila/FastVLM-7B")
-@strict(accept_kwargs=True)
+@strict
 class FastVlmConfig(LlavaConfig):
     r"""
     Example:

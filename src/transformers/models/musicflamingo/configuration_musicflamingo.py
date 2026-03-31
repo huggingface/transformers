@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -27,13 +28,15 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/music-flamingo-2601-hf")
-@strict(accept_kwargs=True)
+@strict
 class MusicFlamingoConfig(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
+    audio_frame_step (`float`, *optional*, defaults to 0.01):
+        Duration in seconds of one input mel frame (trained with hop_length 160 at sampling_rate 16000).
 
     Example:
 
@@ -66,13 +69,10 @@ class MusicFlamingoConfig(PreTrainedConfig):
 
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
-    head_dim: int = 256
+    audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200}
-        self.max_position_embeddings = self.rope_parameters["rope_theta"]
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "musicflamingo_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
@@ -86,6 +86,11 @@ class MusicFlamingoConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING["qwen2"]()
 
         super().__post_init__(**kwargs)
+
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
+        self.max_position_embeddings = self.rope_parameters["rope_theta"]
+        self.head_dim = self.audio_config.hidden_size
 
 
 __all__ = ["MusicFlamingoConfig"]

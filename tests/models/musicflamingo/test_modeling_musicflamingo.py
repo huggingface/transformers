@@ -110,6 +110,7 @@ class MusicFlamingoModelTester:
             text_config=self.text_config,
             audio_config=self.audio_config,
             audio_token_id=self.audio_token_id,
+            rope_parameters={"rope_type": "default", "rope_theta": 2048, "partial_rotary_factor": 0.5},
         )
 
     def prepare_config_and_inputs(self):
@@ -170,6 +171,59 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     def setUp(self):
         self.model_tester = MusicFlamingoModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MusicFlamingoConfig, has_text_modality=False)
+
+    def test_rotary_window_axis_resets_per_audio(self):
+        config = self.model_tester.get_config()
+        pos_emb = MusicFlamingoForConditionalGeneration(config).pos_emb.to(torch_device)
+
+        timestamps = torch.tensor(
+            [
+                [0.00, 0.04, 0.08],
+                [30.00, 30.04, 30.08],
+                [60.00, 60.04, 60.08],
+                [0.00, 0.04, 0.08],
+                [30.00, 30.04, 30.08],
+            ],
+            device=torch_device,
+        )
+        cos, sin = pos_emb(timestamps, seq_len=timestamps.shape[1])
+
+        torch.testing.assert_close(cos[0], cos[3])
+        torch.testing.assert_close(sin[0], sin[3])
+        torch.testing.assert_close(cos[1], cos[4])
+        torch.testing.assert_close(sin[1], sin[4])
+        self.assertFalse(torch.allclose(cos[0], cos[1]))
+
+    def test_build_audio_timestamps_reconstructs_windows_from_input_ids(self):
+        config = self.model_tester.get_config()
+        model = MusicFlamingoForConditionalGeneration(config).to(torch_device).eval()
+        num_windows = 5
+        feat_seq_length = self.model_tester.feat_seq_length
+        input_features_mask = torch.ones([num_windows, feat_seq_length], dtype=torch.bool, device=torch_device)
+        input_ids = ids_tensor([2, 60], config.text_config.vocab_size - 2).to(torch_device) + 2
+        input_ids[0, :45] = config.audio_token_id
+        input_ids[1, :30] = config.audio_token_id
+
+        _, post_lengths = model.audio_tower._get_feat_extract_output_lengths(
+            input_features_mask.sum(-1).to(torch.long)
+        )
+        max_post_length = int(post_lengths.max().item())
+        audio_embed_frame_step = config.audio_frame_step * 4
+        frame_offsets = (
+            torch.arange(max_post_length, dtype=torch.float32, device=torch_device) * audio_embed_frame_step
+        )
+        audio_timestamps = torch.stack(
+            [
+                0 * max_post_length * audio_embed_frame_step + frame_offsets,
+                1 * max_post_length * audio_embed_frame_step + frame_offsets,
+                2 * max_post_length * audio_embed_frame_step + frame_offsets,
+                0 * max_post_length * audio_embed_frame_step + frame_offsets,
+                1 * max_post_length * audio_embed_frame_step + frame_offsets,
+            ]
+        )
+
+        inferred = model._build_audio_timestamps(input_ids, post_lengths, max_post_length)
+        torch.testing.assert_close(inferred, audio_timestamps)
 
     @unittest.skip(
         reason="This test does not apply to MusicFlamingo since High-level inputs_embeds corresponding to audio tokens are replaced when input features are provided."

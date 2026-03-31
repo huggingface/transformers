@@ -18,7 +18,6 @@ import numpy as np
 
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -29,9 +28,6 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    from transformers import PPOCRV5ServerDetImageProcessorFast
 
 
 class PPOCRV5ServerDetImageProcessingTester:
@@ -136,9 +132,6 @@ class PPOCRV5ServerDetImageProcessingTester:
 @require_torch
 @require_vision
 class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    test_slow_image_processor = False
-    fast_image_processing_class = PPOCRV5ServerDetImageProcessorFast if is_torchvision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = PPOCRV5ServerDetImageProcessingTester(self)
@@ -150,7 +143,7 @@ class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
     # PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes."
     # Skip Test batched
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -167,7 +160,7 @@ class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
     # PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes.
     # Skip Test batched
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -183,7 +176,7 @@ class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
     # PPOCRV5ServerDet can’t stack the images into a batch because the image processor resizes them adaptively, leading to inconsistent output sizes.
     # Skip Test batched
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -196,6 +189,6 @@ class PPOCRV5ServerDetImageProcessingTest(ImageProcessingTestMixin, unittest.Tes
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
-    @unittest.skip(reason="PPOCRV5ServerDetImageProcessorFast does not support 4 channel images yet")
+    @unittest.skip(reason="PPOCRV5ServerDetImageProcessor does not support 4 channel images yet")
     def test_call_numpy_4_channels():
         pass

@@ -31,6 +31,7 @@ It has no auto-fix mode.
 """
 
 import ast
+import functools
 import os
 import re
 import types
@@ -184,11 +185,17 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+        "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+        "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+        "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+        "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
         "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
         "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
         "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
@@ -254,6 +261,7 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+        "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     ]
 )
 
@@ -441,6 +449,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Emu3TextModel",  # Building part of bigger (tested) model
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
+    "SLANeXtSLAHead",  # Building part of bigger (tested) model
+    "SLANeXtBackbone",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model
@@ -476,6 +486,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
+    "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
 ]
 
 
@@ -555,6 +566,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
+@functools.lru_cache(maxsize=1)
 def get_model_modules() -> list[str]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
@@ -905,22 +917,24 @@ def check_all_auto_object_names_being_defined():
 
     for name, mapping in mappings_to_check.items():
         for class_names in mapping.values():
+            if isinstance(class_names, dict):
+                class_names = tuple(class_names.values())
             if not isinstance(class_names, tuple):
                 class_names = (class_names,)
-                for class_name in class_names:
-                    if class_name is None:
+            for class_name in class_names:
+                if class_name is None:
+                    continue
+                # dummy object is accepted
+                if not hasattr(transformers, class_name):
+                    # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
+                    # module, if it's a private model defined in this file.
+                    if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
                         continue
-                    # dummy object is accepted
-                    if not hasattr(transformers, class_name):
-                        # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
-                        # module, if it's a private model defined in this file.
-                        if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
-                        if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
-                            continue
-                        failures.append(
-                            f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
-                        )
+                    if name.endswith("MODEL_FOR_IMAGE_MAPPING_NAMES") and is_a_private_model(class_name):
+                        continue
+                    failures.append(
+                        f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
+                    )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -1106,6 +1120,7 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeForConditionalGeneration",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessor",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessorFast",  # BC Alias
+    "Ernie4_5_VL_MoeImageProcessorPil",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
     "Ernie4_5_VL_MoeTextConfig",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
@@ -1177,6 +1192,9 @@ def ignore_undocumented(name: str) -> bool:
         return True
     # BLT models are internal building blocks, tested implicitly through BltForCausalLM
     if name.startswith("Blt"):
+        return True
+    # image_processing_*_fast are backward-compat module aliases, not public objects.
+    if name.startswith("image_processing_") and name.endswith("_fast"):
         return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True
@@ -1323,11 +1341,11 @@ def check_models_have_kwargs():
             with open(modeling_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
-            # Map all classes in the file to their base classes
+            # Map all classes in the file to their base classes (only top-level classes)
             class_bases = {}
             all_class_nodes = {}
 
-            for node in ast.walk(tree):
+            for node in tree.body:
                 if isinstance(node, ast.ClassDef):
                     # We only care about base classes that are simple names
                     bases = [b.id for b in node.bases if isinstance(b, ast.Name)]

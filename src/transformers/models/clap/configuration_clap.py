@@ -23,10 +23,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="laion/clap-htsat-fused")
-@strict(accept_kwargs=True)
+@strict
 class ClapTextConfig(PreTrainedConfig):
     r"""
-
     Examples:
 
     ```python
@@ -65,7 +64,7 @@ class ClapTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="laion/clap-htsat-fused")
-@strict(accept_kwargs=True)
+@strict
 class ClapAudioConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 8):
@@ -142,7 +141,7 @@ class ClapAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="laion/clap-htsat-fused")
-@strict(accept_kwargs=True)
+@strict
 class ClapConfig(PreTrainedConfig):
     r"""
     Example:

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/vjepa2-vitl-fpc64-256")
-@strict(accept_kwargs=True)
+@strict
 class VJEPA2Config(PreTrainedConfig):
     r"""
     crop_size (`int`, *optional*, defaults to 256):

@@ -188,7 +188,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         audio_token_id=vocab["<sound>"],
         audio_bos_token_id=vocab.get("<|sound_bos|>"),
         audio_eos_token_id=vocab.get("<|sound_eos|>"),
-        head_dim=256,
+        audio_rotary_dim=256,
         rope_parameters={"rope_type": "default", "rope_theta": 1200},
     )
     model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)

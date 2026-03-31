@@ -102,6 +102,17 @@ class GlmAsrProcessor(ProcessorMixin):
         num_tokens = (audio_lengths - merge_factor) // merge_factor + 1
         return num_tokens
 
+    def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
+        audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
+        audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
+        audio_token_pattern = re.compile(re.escape(self.audio_token))
+        for i, audio_length in enumerate(audio_tokens_lengths):
+            text[i] = audio_token_pattern.sub(self.audio_token * audio_length, text[i])
+        return text
+
+    def _get_audio_tokens_mask(self, input_ids):
+        return input_ids == self.audio_token_id
+
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -182,14 +193,8 @@ class GlmAsrProcessor(ProcessorMixin):
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
 
-            # Compute sequence lengths token counting
-            audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-            audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
-
-            # expand audio tokens in text
-            for i, audio_length in enumerate(audio_tokens_lengths):
-                expanded = re.sub(re.escape(self.audio_token), self.audio_token * audio_length, text[i])
-                text[i] = expanded
+            # Expand audio tokens in text
+            text = self._expand_audio_tokens(text, padding_mask, per_sample_windows)
 
         # Tokenize
         text_inputs = self.tokenizer(text, **text_kwargs)
@@ -197,7 +202,7 @@ class GlmAsrProcessor(ProcessorMixin):
         data = {**text_inputs, **audio_inputs}
         if output_labels:
             labels = data["input_ids"].clone()
-            labels[labels == self.audio_token_id] = -100
+            labels[self._get_audio_tokens_mask(labels)] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
 
