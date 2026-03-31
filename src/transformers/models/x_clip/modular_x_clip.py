@@ -49,6 +49,27 @@ from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfi
 
 
 class XCLIPOutput(CLIPOutput):
+    """
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+        Contrastive loss for video-text similarity.
+    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
+        similarity scores.
+    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+        The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
+        similarity scores.
+    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The video embeddings obtained by applying the projection layer to the pooled output of
+        [`XCLIPVisionModel`].
+    text_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`XCLIPTextModel`].
+    vision_model_output (`BaseModelOutputWithPooling`):
+        The output of the [`XCLIPVisionModel`].
+    mit_output (`BaseModelOutputWithPooling`):
+        The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
+    """
     logits_per_video: torch.FloatTensor | None = None
     video_embeds: torch.FloatTensor | None = None
     mit_output: BaseModelOutputWithPooling = None
@@ -336,7 +357,22 @@ class XCLIPVisionModel(CLIPVisionModel, XCLIPPreTrainedModel):
         >>> outputs = model(pixel_values)
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        return super().forward(pixel_values, interpolate_pos_encoding, **kwargs)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layernorm(hidden_states)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+        )
 
 
 class XCLIPMultiframeIntegrationTransformer(nn.Module):
