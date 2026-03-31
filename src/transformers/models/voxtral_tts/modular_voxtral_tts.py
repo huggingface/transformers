@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import torch
 import torch.nn as nn
 
+from .configuration_voxtral_tts import VoxtralTtsFlowMatchingConfig
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -81,6 +84,71 @@ class VoxtralTtsBackboneModel(MistralModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = VoxtralTtsAudioEmbeddings(config)
+
+
+class VoxtralTtsFlowMatchingAttention(VoxtralTtsAttention):
+    def __init__(self, config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.is_causal = False
+
+
+class VoxtralTtsFlowMatchingDecoderLayer(VoxtralTtsDecoderLayer):
+    def __init__(self, config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = VoxtralTtsFlowMatchingAttention(config=config, layer_idx=layer_idx)
+
+
+class VoxtralTtsFlowMatchingTransformer(nn.Module):
+    def __init__(self, config: VoxtralTtsFlowMatchingConfig):
+        super().__init__()
+        self.config = config
+
+        self.llm_projection = nn.Linear(config.input_dim, config.hidden_size, bias=False)
+        self.time_projection = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.input_projection = nn.Linear(config.acoustic_dim, config.hidden_size, bias=False)
+
+        self.layers = nn.ModuleList(
+            [VoxtralTtsFlowMatchingDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = VoxtralTtsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = VoxtralTtsRotaryEmbedding(config=config)
+
+        self.semantic_codebook_output = nn.Linear(config.hidden_size, config.semantic_vocab_size, bias=False)
+        self.acoustic_codebook_output = nn.Linear(config.hidden_size, config.acoustic_dim, bias=False)
+
+    @staticmethod
+    def _get_timestep_embedding(timesteps: torch.Tensor, dim: int) -> torch.Tensor:
+        half_dim = dim // 2
+        exponent = -math.log(10000.0) * torch.arange(half_dim, device=timesteps.device, dtype=torch.float32) / half_dim
+        emb = timesteps.float().unsqueeze(-1) * torch.exp(exponent).unsqueeze(0)
+        return torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        timesteps: torch.Tensor,
+        acoustic_embeddings: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        h = self.llm_projection(hidden_states)
+        t = self.time_projection(self._get_timestep_embedding(timesteps, self.config.hidden_size))
+        x = self.input_projection(acoustic_embeddings)
+
+        combined = h + t.unsqueeze(1) + x
+
+        position_ids = torch.arange(combined.shape[1], device=combined.device).unsqueeze(0)
+        position_embeddings = self.rotary_emb(combined, position_ids=position_ids)
+
+        for layer in self.layers:
+            combined = layer(
+                combined,
+                position_embeddings=position_embeddings,
+            )
+
+        combined = self.norm(combined)
+
+        semantic_logits = self.semantic_codebook_output(combined)
+        acoustic_output = self.acoustic_codebook_output(combined)
+        return semantic_logits, acoustic_output
 
 
 __all__ = [

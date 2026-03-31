@@ -151,6 +151,12 @@ class VoxtralTtsFlowMatchingConfig(PreTrainedConfig):
         Maximum noise level for flow matching.
     acoustic_dim (`int`, *optional*, defaults to 36):
         Number of acoustic codebooks (dimensionality of the acoustic input).
+    semantic_vocab_size (`int`, *optional*, defaults to 8320):
+        Size of the semantic codebook output head (8192 semantic codes + 128 special tokens).
+    attention_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for attention weights.
+    max_position_embeddings (`int`, *optional*, defaults to 128000):
+        Maximum sequence length for rotary position embeddings.
 
     Example:
 
@@ -175,7 +181,12 @@ class VoxtralTtsFlowMatchingConfig(PreTrainedConfig):
     sigma: float = 1e-5
     sigma_max: float = 1.0
     acoustic_dim: int = 36
+    semantic_vocab_size: int = 8320
     hidden_act: str = "silu"
+    attention_dropout: float = 0.0
+    max_position_embeddings: int = 128000
+    rope_parameters: RopeParameters | dict | None = None
+    sliding_window: int | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
@@ -189,10 +200,8 @@ class VoxtralTtsFlowMatchingConfig(PreTrainedConfig):
 @strict
 class VoxtralTtsConfig(PreTrainedConfig):
     r"""
-    codec_config (`VoxtralTtsCodecConfig`, *optional*):
-        Configuration for the codec decoder.
-    flow_matching_config (`VoxtralTtsFlowMatchingConfig`, *optional*):
-        Configuration for the flow-matching transformer.
+    rope_theta (`float`, *optional*, defaults to 1000000.0):
+        Base frequency for the backbone RoPE embeddings.
     audio_token_id (`int`, *optional*, defaults to 24):
         Token ID used to represent audio placeholder tokens in the text input.
     begin_audio_token_id (`int`, *optional*, defaults to 25):
@@ -207,8 +216,6 @@ class VoxtralTtsConfig(PreTrainedConfig):
         Number of quantization levels per acoustic codebook.
     n_acoustic_codebook (`int`, *optional*, defaults to 36):
         Number of acoustic codebooks.
-    rope_theta (`float`, *optional*, defaults to 1000000.0):
-        Base frequency for the backbone RoPE embeddings.
     audio_vocab_size (`int`, *optional*, defaults to 9088):
         Total number of entries in the audio codebook embedding table. Covers 1 semantic codebook (8192 entries)
         plus 36 acoustic codebooks (21 levels each, laid out with stride 25).
@@ -216,6 +223,10 @@ class VoxtralTtsConfig(PreTrainedConfig):
         Audio sampling rate in Hz.
     frame_rate (`float`, *optional*, defaults to 12.5):
         Audio frame rate in Hz.
+    codec_config (`VoxtralTtsCodecConfig`, *optional*):
+        Configuration for the codec decoder.
+    flow_matching_config (`VoxtralTtsFlowMatchingConfig`, *optional*):
+        Configuration for the flow-matching transformer.
 
     Example:
 
