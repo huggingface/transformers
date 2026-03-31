@@ -202,7 +202,7 @@ def w8a8_fp8_matmul(
             A_2d = A.view(-1, A.shape[-1])
             As_2d = As.view(-1, As.shape[-1])
             output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
-            deepgemm_fp8_matmul((A_2d, As_2d), (B, Bs), output)
+            deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
             return output.view(A.shape[:-1] + (B.shape[0],))
 
     _load_triton_kernel()
