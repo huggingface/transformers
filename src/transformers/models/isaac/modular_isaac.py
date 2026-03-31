@@ -74,36 +74,6 @@ if is_torchvision_available():
     from ..pix2struct.image_processing_pix2struct import torch_extract_patches
 
 
-class SinglePoint(NamedTuple):
-    x: int
-    y: int
-    mention: str | None = None
-    t: float | None = None
-
-
-class BoundingBox(NamedTuple):
-    top_left: SinglePoint
-    bottom_right: SinglePoint
-    mention: str | None = None
-    t: float | None = None
-
-
-class Polygon(NamedTuple):
-    points: tuple[SinglePoint, ...]
-    mention: str | None = None
-    t: float | None = None
-
-
-IsaacAnnotation = SinglePoint | BoundingBox | Polygon
-
-
-_POINT_BOX_OR_POLYGON_TAG = re.compile(
-    r"<(?P<tag>point|point_box|polygon)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
-)
-_ATTR_RE = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
-_COORD_RE = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
-
-
 class IsaacProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -112,78 +82,6 @@ class IsaacProcessorKwargs(ProcessingKwargs, total=False):
             "return_mm_token_type_ids": True,
         },
     }
-
-
-def _maybe_float(value: str | None) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
-
-
-def _parse_attrs(attr_text: str) -> dict[str, str]:
-    attrs = {}
-    for match in _ATTR_RE.finditer(attr_text or ""):
-        key = match.group(1)
-        value = match.group(2) or match.group(3) or ""
-        attrs[key] = value
-    return attrs
-
-
-def _parse_point_body(body: str, mention: str | None = None, t: str | None = None) -> SinglePoint:
-    match = _COORD_RE.search(body)
-    if not match:
-        raise ValueError(f"Malformed <point> tag: {body!r}")
-    x, y = int(match.group(1)), int(match.group(2))
-    return SinglePoint(x=x, y=y, mention=mention, t=_maybe_float(t))
-
-
-def _parse_box_body(body: str, mention: str | None = None, t: str | None = None) -> BoundingBox:
-    coords = list(_COORD_RE.finditer(body))
-    if len(coords) < 2:
-        raise ValueError(f"Malformed <point_box> tag: {body!r}")
-
-    top_left = SinglePoint(x=int(coords[0].group(1)), y=int(coords[0].group(2)))
-    bottom_right = SinglePoint(x=int(coords[1].group(1)), y=int(coords[1].group(2)))
-    return BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=_maybe_float(t))
-
-
-def _parse_polygon_body(body: str, mention: str | None = None, t: str | None = None) -> Polygon:
-    coords = list(_COORD_RE.finditer(body))
-    if len(coords) < 3:
-        raise ValueError(f"Malformed <polygon> tag: {body!r}")
-
-    points = tuple(SinglePoint(x=int(coord.group(1)), y=int(coord.group(2))) for coord in coords)
-    return Polygon(points=points, mention=mention, t=_maybe_float(t))
-
-
-def clean_text_and_extract_points(
-    text: str,
-    expected: str | None = None,
-) -> tuple[str, list[IsaacAnnotation]]:
-    results: list[IsaacAnnotation] = []
-    for match in _POINT_BOX_OR_POLYGON_TAG.finditer(text or ""):
-        tag = match.group("tag").lower()
-        attrs = _parse_attrs(match.group("attrs"))
-        mention = attrs.get("mention")
-        t = attrs.get("t")
-        if tag == "point":
-            if expected not in (None, "point"):
-                continue
-            results.append(_parse_point_body(match.group("body"), mention=mention, t=t))
-        elif tag == "point_box":
-            if expected not in (None, "box"):
-                continue
-            results.append(_parse_box_body(match.group("body"), mention=mention, t=t))
-        else:
-            if expected not in (None, "polygon"):
-                continue
-            results.append(_parse_polygon_body(match.group("body"), mention=mention, t=t))
-
-    clean_text = re.sub(r"\s+", " ", _POINT_BOX_OR_POLYGON_TAG.sub("", text or "")).strip()
-    return clean_text, results
 
 
 @auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
@@ -849,6 +747,29 @@ class IsaacConfig(PretrainedConfig):
 
 @auto_docstring
 class IsaacProcessor(ProcessorMixin):
+    class _SinglePoint(NamedTuple):
+        x: int
+        y: int
+        mention: str | None = None
+        t: float | None = None
+
+    class _BoundingBox(NamedTuple):
+        top_left: Any
+        bottom_right: Any
+        mention: str | None = None
+        t: float | None = None
+
+    class _Polygon(NamedTuple):
+        points: tuple[Any, ...]
+        mention: str | None = None
+        t: float | None = None
+
+    _point_box_or_polygon_tag = re.compile(
+        r"<(?P<tag>point|point_box|polygon)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
+    )
+    _attr_re = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
+    _coord_re = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
+
     def __init__(
         self,
         image_processor,
@@ -880,6 +801,94 @@ class IsaacProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids", "image_metadata"]
 
+    @staticmethod
+    def _maybe_float(value: str | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
+
+    @classmethod
+    def _parse_attrs(cls, attr_text: str) -> dict[str, str]:
+        attrs = {}
+        for match in cls._attr_re.finditer(attr_text or ""):
+            key = match.group(1)
+            value = match.group(2) or match.group(3) or ""
+            attrs[key] = value
+        return attrs
+
+    @classmethod
+    def _parse_point_body(
+        cls,
+        body: str,
+        mention: str | None = None,
+        t: str | None = None,
+    ) -> Any:
+        match = cls._coord_re.search(body)
+        if not match:
+            raise ValueError(f"Malformed <point> tag: {body!r}")
+        x, y = int(match.group(1)), int(match.group(2))
+        return cls._SinglePoint(x=x, y=y, mention=mention, t=cls._maybe_float(t))
+
+    @classmethod
+    def _parse_box_body(
+        cls,
+        body: str,
+        mention: str | None = None,
+        t: str | None = None,
+    ) -> Any:
+        coords = list(cls._coord_re.finditer(body))
+        if len(coords) < 2:
+            raise ValueError(f"Malformed <point_box> tag: {body!r}")
+
+        top_left = cls._SinglePoint(x=int(coords[0].group(1)), y=int(coords[0].group(2)))
+        bottom_right = cls._SinglePoint(x=int(coords[1].group(1)), y=int(coords[1].group(2)))
+        return cls._BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=cls._maybe_float(t))
+
+    @classmethod
+    def _parse_polygon_body(
+        cls,
+        body: str,
+        mention: str | None = None,
+        t: str | None = None,
+    ) -> Any:
+        coords = list(cls._coord_re.finditer(body))
+        if len(coords) < 3:
+            raise ValueError(f"Malformed <polygon> tag: {body!r}")
+
+        points = tuple(cls._SinglePoint(x=int(coord.group(1)), y=int(coord.group(2))) for coord in coords)
+        return cls._Polygon(points=points, mention=mention, t=cls._maybe_float(t))
+
+    @classmethod
+    def clean_text_and_extract_points(
+        cls,
+        text: str,
+        expected: str | None = None,
+    ) -> tuple[str, list[Any]]:
+        results: list[Any] = []
+        for match in cls._point_box_or_polygon_tag.finditer(text or ""):
+            tag = match.group("tag").lower()
+            attrs = cls._parse_attrs(match.group("attrs"))
+            mention = attrs.get("mention")
+            t = attrs.get("t")
+            if tag == "point":
+                if expected not in (None, "point"):
+                    continue
+                results.append(cls._parse_point_body(match.group("body"), mention=mention, t=t))
+            elif tag == "point_box":
+                if expected not in (None, "box"):
+                    continue
+                results.append(cls._parse_box_body(match.group("body"), mention=mention, t=t))
+            else:
+                if expected not in (None, "polygon"):
+                    continue
+                results.append(cls._parse_polygon_body(match.group("body"), mention=mention, t=t))
+
+        clean_text = re.sub(r"\s+", " ", cls._point_box_or_polygon_tag.sub("", text or "")).strip()
+        return clean_text, results
+
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         vision_data = {}
         if image_sizes is not None:
@@ -901,9 +910,9 @@ class IsaacProcessor(ProcessorMixin):
         text: str,
         expected: str | None = None,
         cleanup_and_extract: bool = True,
-    ) -> str | tuple[str, list[IsaacAnnotation]]:
+    ) -> str | tuple[str, list[Any]]:
         if cleanup_and_extract:
-            return clean_text_and_extract_points(text, expected=expected)
+            return self.clean_text_and_extract_points(text, expected=expected)
         return text
 
     def post_process_image_text_to_text(

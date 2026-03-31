@@ -50,26 +50,6 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
-class SinglePoint(NamedTuple):
-    x: int
-    y: int
-    mention: str | None = None
-    t: float | None = None
-
-
-class BoundingBox(NamedTuple):
-    top_left: SinglePoint
-    bottom_right: SinglePoint
-    mention: str | None = None
-    t: float | None = None
-
-
-class Polygon(NamedTuple):
-    points: tuple[SinglePoint, ...]
-    mention: str | None = None
-    t: float | None = None
-
-
 class IsaacVisionEmbeddings(nn.Module):
     """Adapter around SigLIP2 vision embeddings that consumes packed patch sequences.
 
@@ -522,6 +502,26 @@ class IsaacMultiModalProjector(nn.Module):
         hidden_states = self.silu(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
+
+class _SinglePoint(NamedTuple):
+    x: int
+    y: int
+    mention: str | None = None
+    t: float | None = None
+
+
+class _BoundingBox(NamedTuple):
+    top_left: Any
+    bottom_right: Any
+    mention: str | None = None
+    t: float | None = None
+
+
+class _Polygon(NamedTuple):
+    points: tuple[Any, ...]
+    mention: str | None = None
+    t: float | None = None
 
 
 class IsaacRotaryEmbedding(nn.Module):
