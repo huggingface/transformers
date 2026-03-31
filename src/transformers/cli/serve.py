@@ -695,6 +695,8 @@ class Serve:
         # Thread-safety for load_model_and_processor / load_audio_model_and_processor
         self.model_locks: dict[str, threading.Lock] = {}
         self.model_locks_guard = threading.Lock()
+        # Thread-safety for continuous batching manager init/teardown
+        self._cb_manager_lock = threading.Lock()
 
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefill
@@ -1137,63 +1139,64 @@ class Serve:
         """
 
         model_id_and_revision = self.process_model_name(req["model"])
-        must_discard_cache = model_id_and_revision != self.last_model
 
-        self.last_model = model_id_and_revision
+        with self._cb_manager_lock:
+            must_discard_cache = model_id_and_revision != self.last_model
+            self.last_model = model_id_and_revision
 
-        # When switching models, terminate a continuous batching manager if it is running.
-        if must_discard_cache:
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=2)
-                self.running_continuous_batching_manager = None
+            # When switching models, terminate a continuous batching manager if it is running.
+            if must_discard_cache:
+                if self.running_continuous_batching_manager is not None:
+                    self.running_continuous_batching_manager.stop(block=True, timeout=2)
+                    self.running_continuous_batching_manager = None
 
-        model, processor = self.load_model_and_processor(model_id_and_revision)
+            model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        # Continuous batching only supports text-only models
-        if self.get_model_modality(model, processor=processor) != Modality.LLM:
-            logger.warning_once(
-                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
-            )
-            return self.generate_chat_completion(req)
+            # Continuous batching only supports text-only models
+            if self.get_model_modality(model, processor=processor) != Modality.LLM:
+                logger.warning_once(
+                    "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+                )
+                return self.generate_chat_completion(req)
 
-        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+            tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
-        generation_config = create_generation_config_from_req(
-            req,
-            model_generation_config=model.generation_config,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
-            use_cache=False,
-            do_sample=False,
-            scheduler="fifo",
-        )
-
-        if self.running_continuous_batching_manager is None:
-            from transformers import ContinuousBatchingConfig
-
-            # Build continuous batching config from CLI arguments
-            cb_config_kwargs = {}
-            if self.cb_block_size is not None:
-                cb_config_kwargs["block_size"] = self.cb_block_size
-            if self.cb_num_blocks is not None:
-                cb_config_kwargs["num_blocks"] = self.cb_num_blocks
-            if self.cb_max_batch_tokens is not None:
-                cb_config_kwargs["max_batch_tokens"] = self.cb_max_batch_tokens
-            if self.cb_max_memory_percent is not None:
-                cb_config_kwargs["max_memory_percent"] = self.cb_max_memory_percent
-            if self.cb_use_cuda_graph is not None:
-                cb_config_kwargs["use_cuda_graph"] = self.cb_use_cuda_graph
-
-            cb_config = ContinuousBatchingConfig(**cb_config_kwargs) if cb_config_kwargs else None
-
-            self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config,
-                continuous_batching_config=cb_config,
+            generation_config = create_generation_config_from_req(
+                req,
+                model_generation_config=model.generation_config,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.pad_token_id,
+                use_cache=False,
+                do_sample=False,
+                scheduler="fifo",
             )
 
-            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
-            self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
-            self.running_continuous_batching_manager.start()
+            if self.running_continuous_batching_manager is None:
+                from transformers import ContinuousBatchingConfig
+
+                # Build continuous batching config from CLI arguments
+                cb_config_kwargs = {}
+                if self.cb_block_size is not None:
+                    cb_config_kwargs["block_size"] = self.cb_block_size
+                if self.cb_num_blocks is not None:
+                    cb_config_kwargs["num_blocks"] = self.cb_num_blocks
+                if self.cb_max_batch_tokens is not None:
+                    cb_config_kwargs["max_batch_tokens"] = self.cb_max_batch_tokens
+                if self.cb_max_memory_percent is not None:
+                    cb_config_kwargs["max_memory_percent"] = self.cb_max_memory_percent
+                if self.cb_use_cuda_graph is not None:
+                    cb_config_kwargs["use_cuda_graph"] = self.cb_use_cuda_graph
+
+                cb_config = ContinuousBatchingConfig(**cb_config_kwargs) if cb_config_kwargs else None
+
+                self.running_continuous_batching_manager = model.init_continuous_batching(
+                    generation_config=generation_config,
+                    continuous_batching_config=cb_config,
+                )
+
+                # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
+                self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
+                self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
         modality = self.get_model_modality(model, processor=processor)
@@ -1261,6 +1264,9 @@ class Serve:
             result = None
             while self.running_continuous_batching_manager.is_running() and result is None:
                 result = self.running_continuous_batching_manager.get_result(request_id=_request_id, timeout=1)
+
+            if result is None:
+                raise RuntimeError(f"Request {_request_id} failed: generation loop stopped before producing a result.")
 
             content = tokenizer.decode(result.generated_tokens)
 
