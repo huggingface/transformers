@@ -38,6 +38,17 @@ import os
 import re
 
 
+CHECKER_CONFIG = {
+    "name": "dummies",
+    "label": "Dummy objects",
+    # Over-approximation: only reads __init__.py and utils/dummy_*_objects.py, but any
+    # new public object added anywhere could require a dummy update.
+    "file_globs": ["src/transformers/**/*.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_dummies.py
 PATH_TO_TRANSFORMERS = "src/transformers"

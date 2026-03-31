@@ -47,10 +47,6 @@ else:
 if is_vision_available():
     from PIL.Image import Image
 
-if is_torch_available():
-    from torch import Tensor
-
-
 ChatType = list[dict[str, Any]]
 
 
@@ -93,7 +89,9 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
     if is_vision_available():
         type_mapping[Image] = {"type": "image"}
     if is_torch_available():
-        type_mapping[Tensor] = {"type": "audio"}
+        import torch
+
+        type_mapping[torch.Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
