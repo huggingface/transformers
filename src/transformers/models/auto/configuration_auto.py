@@ -312,6 +312,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mpt", "MptConfig"),
         ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
+        ("musicflamingo", "MusicFlamingoConfig"),
+        ("musicflamingo_encoder", "AudioFlamingo3EncoderConfig"),
         ("musicgen", "MusicgenConfig"),
         ("musicgen_melody", "MusicgenMelodyConfig"),
         ("mvp", "MvpConfig"),
@@ -835,6 +837,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mpt", "MPT"),
         ("mra", "MRA"),
         ("mt5", "MT5"),
+        ("musicflamingo", "MusicFlamingo"),
+        ("musicflamingo_encoder", "AudioFlamingo3Encoder"),
         ("musicgen", "MusicGen"),
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
@@ -1070,6 +1074,7 @@ DEPRECATED_MODELS = []
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("audioflamingo3_encoder", "audioflamingo3"),
+        ("musicflamingo_encoder", "musicflamingo"),
         ("openai-gpt", "openai"),
         ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
