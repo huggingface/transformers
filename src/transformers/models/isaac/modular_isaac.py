@@ -1672,6 +1672,7 @@ __all__ = [
     "IsaacTextConfig",
     "IsaacTextModel",
     "IsaacVisionConfig",
+    "IsaacVisionTransformer",
     "IsaacModel",
     "IsaacPreTrainedModel",  # noqa: F822
     "IsaacForConditionalGeneration",

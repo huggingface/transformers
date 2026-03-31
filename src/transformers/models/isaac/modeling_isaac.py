@@ -1839,4 +1839,10 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
-__all__ = ["IsaacTextModel", "IsaacModel", "IsaacPreTrainedModel", "IsaacForConditionalGeneration"]
+__all__ = [
+    "IsaacTextModel",
+    "IsaacVisionTransformer",
+    "IsaacModel",
+    "IsaacPreTrainedModel",
+    "IsaacForConditionalGeneration",
+]

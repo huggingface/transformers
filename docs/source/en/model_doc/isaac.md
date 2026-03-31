@@ -132,6 +132,10 @@ Set `expected="point"` to extract point annotations, or leave `expected=None` to
 
 [[autodoc]] IsaacConfig
 
+## IsaacVisionTransformer
+
+[[autodoc]] IsaacVisionTransformer
+
 ## IsaacTextModel
 
 [[autodoc]] IsaacTextModel
