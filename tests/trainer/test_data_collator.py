@@ -302,7 +302,7 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
 
         # Should not include attention_mask or flash attn kwargs by default
-        for key in ["attention_mask", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
+        for key in ["attention_mask", "cu_seqlens", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
             self.assertNotIn(key, batch)
 
     def test_flash_attn_kwargs(self):
@@ -310,6 +310,7 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
         batch = collator(self._get_features())
 
+        self.assertEqual(batch["cu_seqlens"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["max_length_k"], 7)
@@ -356,7 +357,9 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         collator = DataCollatorWithFlattening(return_tensors="np", return_flash_attn_kwargs=True)
         batch = collator(self._get_features())
 
+        self.assertEqual(batch["cu_seqlens"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["max_length_k"], 7)
 
     def test_immutability(self):
