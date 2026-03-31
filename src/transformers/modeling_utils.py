@@ -3616,7 +3616,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.append(torch.device("meta"))
+            # meta_device_safe_creation_ops patches torch.linspace to default to CPU
+            # so that custom models calling .item() during __init__ (e.g. drop-path
+            # schedules) don't crash on meta tensors.
+            init_contexts.extend([torch.device("meta"), init.meta_device_safe_creation_ops()])
 
         return init_contexts
 
