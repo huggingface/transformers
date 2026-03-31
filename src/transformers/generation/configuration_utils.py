@@ -1762,7 +1762,8 @@ class ContinuousBatchingConfig:
     def resolve_compile_configs(
         self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
     ) -> None:
-        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed."""
+        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
+        Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
         logger_ = logging.get_logger("ContinuousBatchingLogger")
 
         # For each config, priority is: explicit config, default config, fallback config, None
