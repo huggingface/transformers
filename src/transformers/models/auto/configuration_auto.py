@@ -1465,7 +1465,9 @@ class AutoConfig:
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
-        explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith("transformers.")
+        explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
+            "transformers."
+        )
         if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             if "--" in class_ref:
