@@ -27,7 +27,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
-@strict(accept_kwargs=True)
+@strict
 class IsaacVisionConfig(PreTrainedConfig):
     r"""
     num_patches (`int`, *optional*, defaults to 256):
@@ -57,7 +57,7 @@ class IsaacVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
-@strict(accept_kwargs=True)
+@strict
 class IsaacTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -108,7 +108,6 @@ class IsaacTextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     use_sliding_window: bool = False
-    sliding_window: int | None = 4096
     max_window_layers: int = 28
     layer_types: list[str] | None = None
     attention_dropout: float | int = 0.0
@@ -118,23 +117,18 @@ class IsaacTextConfig(PreTrainedConfig):
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
     def __post_init__(self, **kwargs):
-        self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
         if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        super().__post_init__(**kwargs)
+            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
+
+        PretrainedConfig.__post_init__(self, **kwargs)
         self.validate_layer_type()
 
 
 @auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
-@strict(accept_kwargs=True)
+@strict
 class IsaacConfig(PretrainedConfig):
     r"""
     vision_config (`IsaacVisionConfig` or `dict`, *optional*):
@@ -146,9 +140,6 @@ class IsaacConfig(PretrainedConfig):
         Rescale factor applied by the image processor before normalization.
     max_sequence_length (`int`, *optional*, defaults to 16384):
         Maximum multimodal sequence length produced by the processor and expected by the model.
-    vision_token (`str`, *optional*, defaults to `"<image>"`):
-        Placeholder string inserted into text prompts to mark image positions.
-
     Example:
 
     ```python
@@ -166,7 +157,6 @@ class IsaacConfig(PretrainedConfig):
     text_config: IsaacTextConfig | dict | None = None
     vision_rescale_factor: float = 1 / 255
     max_sequence_length: int = 16384
-    vision_token: str = "<image>"
 
     def __post_init__(self, **kwargs):
         for key in ("use_cache", "rope_theta", "max_position_embeddings"):

@@ -37,7 +37,7 @@ weights before using them in commercial settings.
 
 ## Usage
 
-Isaac uses explicit image placeholders in the rendered prompt. Every occurrence of `processor.vision_token` (usually
+Isaac uses explicit image placeholders in the rendered prompt. Every occurrence of `processor.image_token` (usually
 `<image>`) must have a matching image in the `images` argument.
 
 ```py
@@ -57,7 +57,7 @@ model = IsaacForConditionalGeneration.from_pretrained(
 images = [Image.open("chart.png"), Image.open("panel.jpg")]
 messages = [
     {"role": "user", "content": "Compare the two figures and explain what changed."},
-    {"role": "user", "content": f"{processor.vision_token}{processor.vision_token}"},
+    {"role": "user", "content": f"{processor.image_token}{processor.image_token}"},
 ]
 
 prompt = processor.apply_chat_template(
@@ -67,17 +67,11 @@ prompt = processor.apply_chat_template(
 ).strip()
 
 inputs = processor(text=prompt, images=images, return_tensors="pt")
-multimodal_keys = (
-    "input_ids",
-    "attention_mask",
-    "mm_token_type_ids",
-    "vision_patches",
-    "vision_patch_attention_mask",
-    "vision_token_grids",
-    "vision_token_offsets",
-    "vision_token_lengths",
-)
-model_inputs = {key: inputs[key].to(model.device) for key in multimodal_keys}
+model_inputs = {
+    key: value.to(model.device)
+    for key, value in inputs.items()
+    if value is not None
+}
 
 with torch.inference_mode():
     generated_ids = model.generate(
@@ -93,18 +87,25 @@ response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
 
-`IsaacProcessor` returns standard multimodal tensors that can be passed directly to the model, including `input_ids`,
-`attention_mask`, `mm_token_type_ids`, `vision_patches`, `vision_patch_attention_mask`, `vision_token_grids`,
-`vision_token_offsets`, `vision_token_lengths`, and `vision_image_attention_mask`.
+`IsaacProcessor` returns the standard text tensors plus Isaac's batch-major visual tensors:
+
+- `pixel_values`: `(batch_size, max_images, max_patches, patch_dim)`
+- `image_grid_thw`: `(batch_size, max_images, 3)`
+- `image_metadata`: `(batch_size, max_images, 2)` storing `(offset, length)` for each image slot
+- `mm_token_type_ids`: `(batch_size, sequence_length)`
 
 Important notes:
 
 - Pass the full processor output to `generate()`. Isaac uses the multimodal tensors during prefill and handles cached
   decoding internally.
-- Batched inputs can mix text-only and multimodal samples. For batched multimodal inputs, pass images as a nested list such
-  as `[[image_a], [image_b, image_c], []]`.
-- If truncation is enabled, the processor keeps the rightmost part of the packed multimodal sequence and updates
-  `vision_token_offsets` and `vision_token_lengths` automatically.
+- For fully text-only batches, `pixel_values`, `image_grid_thw`, and `image_metadata` are `None`. When moving inputs to
+  the model, keep only non-`None` values as shown above.
+- Batched inputs can mix text-only and multimodal samples. For direct processor/model batching, pass images as a nested
+  list such as `[[], [image_a], [image_b, image_c]]`.
+- `image_grid_thw[batch_idx, image_slot] == (0, 0, 0)` marks a padded empty slot. Real image slots have
+  `(T=1, H>0, W>0)`.
+- If truncation is enabled, the processor keeps the rightmost part of the multimodal prompt and updates the slot-local
+  `image_metadata[..., 0]` and `image_metadata[..., 1]` values automatically.
 
 ### Post-processing grounded outputs
 

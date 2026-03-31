@@ -22,7 +22,7 @@ import re
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import is_torch_available
 from .modeling_isaac import BoundingBox, Polygon, SinglePoint
@@ -37,6 +37,7 @@ class IsaacProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": True,
             "return_attention_mask": True,
+            "return_mm_token_type_ids": True,
         },
     }
 
@@ -130,15 +131,12 @@ class IsaacProcessor(ProcessorMixin):
         image_processor,
         tokenizer,
         chat_template: str | dict[str, str] | None = None,
-        vision_token: str = "<image>",
         max_sequence_length: int = 16384,
     ):
         """
         Args:
             chat_template (`str` or `dict[str, str]`, *optional*):
                 Chat template override forwarded to [`~processing_utils.ProcessorMixin`].
-            vision_token (`str`, *optional*, defaults to `"<image>"`):
-                Placeholder token used inside text prompts to mark image positions.
             max_sequence_length (`int`, *optional*, defaults to 16384):
                 Maximum packed multimodal sequence length produced by the processor.
         """
@@ -148,12 +146,32 @@ class IsaacProcessor(ProcessorMixin):
         self.image_processor = image_processor
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.text_pad_token_id = self.pad_token_id = tokenizer.pad_token_id
-        self.image_pad_token_id = tokenizer.image_pad_token_id
-        self.image_token = tokenizer.image_pad_token
-        self.image_token_id = self.image_pad_token_id
+        self.image_token = getattr(tokenizer, "image_pad_token", None) or getattr(tokenizer, "image_token", None)
+        self.image_token_id = getattr(tokenizer, "image_pad_token_id", None) or getattr(
+            tokenizer, "image_token_id", None
+        )
 
-        self.vision_token = vision_token
         self.max_sequence_length = max_sequence_length
+
+    @property
+    def model_input_names(self):
+        return super().model_input_names + ["mm_token_type_ids", "image_metadata"]
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = dict(IsaacProcessorKwargs._defaults.get("images_kwargs", {}))
+            images_kwargs.update(kwargs)
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            pixel_shuffle_scale = images_kwargs.get("pixel_shuffle_scale") or self.image_processor.pixel_shuffle_scale
+            num_image_tokens = [num_patches // pixel_shuffle_scale**2 for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def post_process_generation(
         self,
@@ -197,8 +215,10 @@ class IsaacProcessor(ProcessorMixin):
         padding = text_kwargs.pop("padding", True)
         padding_side = text_kwargs.pop("padding_side", "left")
         return_attention_mask = text_kwargs.pop("return_attention_mask", True)
+        return_mm_token_type_ids = text_kwargs.pop("return_mm_token_type_ids", True)
         pad_to_multiple_of = text_kwargs.pop("pad_to_multiple_of", None)
         text_kwargs.pop("return_tensors", None)
+        text_kwargs.pop("return_overflowing_tokens", None)
         text_kwargs.setdefault("add_special_tokens", False)
 
         texts = [text] if isinstance(text, str) else text
@@ -208,7 +228,7 @@ class IsaacProcessor(ProcessorMixin):
             fetched_images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(fetched_images)
             if len(batched_images) != len(texts):
-                num_images_in_text = [text_value.count(self.vision_token) for text_value in texts]
+                num_images_in_text = [text_value.count(self.image_token) for text_value in texts]
                 num_images_in_images = [len(sample_images) for sample_images in batched_images]
                 add_message = ""
                 if sum(num_images_in_text) == sum(num_images_in_images):
@@ -220,19 +240,23 @@ class IsaacProcessor(ProcessorMixin):
 
         pairs = list(zip(texts, batched_images, strict=True))
         image_inputs = self.image_processor(images=batched_images, return_tensors=TensorType.PYTORCH)
-        vision_token_grids = image_inputs["vision_token_grids"]
-        vision_segment_lengths = (vision_token_grids[..., 0] // self.image_processor.pixel_shuffle_scale) * (
-            vision_token_grids[..., 1] // self.image_processor.pixel_shuffle_scale
-        )
-        vision_token_offsets = torch.zeros_like(vision_segment_lengths)
-        vision_token_lengths = torch.zeros_like(vision_segment_lengths)
+        image_grid_thw = image_inputs["image_grid_thw"]
+        image_metadata = None
+        vision_segment_lengths = None
+        if image_grid_thw is not None:
+            batch_size, max_images = image_grid_thw.shape[:2]
+            image_metadata = torch.zeros((batch_size, max_images, 2), dtype=torch.long)
+            grid_heights = image_grid_thw[..., 1]
+            grid_widths = image_grid_thw[..., 2]
+            vision_segment_lengths = (grid_heights // self.image_processor.pixel_shuffle_scale) * (
+                grid_widths // self.image_processor.pixel_shuffle_scale
+            )
 
-        sample_input_ids: list[torch.Tensor] = []
         expanded_texts = []
         expected_image_lengths_per_sample = []
 
         for batch_idx, (text_value, sample_images) in enumerate(pairs):
-            segments = text_value.split(self.vision_token)
+            segments = text_value.split(self.image_token)
             num_images = len(segments) - 1
             num_provided_images = len(sample_images)
             if num_images != num_provided_images:
@@ -240,81 +264,91 @@ class IsaacProcessor(ProcessorMixin):
                     f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
                 )
 
-            expected_image_lengths = [
-                int(vision_segment_lengths[batch_idx, image_idx].item()) for image_idx in range(num_images)
-            ]
+            expected_image_lengths = []
+            expanded_text_parts = [segments[0]]
+            for image_idx in range(num_images):
+                segment_length = int(vision_segment_lengths[batch_idx, image_idx].item())
+                expected_image_lengths.append(segment_length)
+                expanded_text_parts.append(self.image_token * segment_length)
+                expanded_text_parts.append(segments[image_idx + 1])
+
             expected_image_lengths_per_sample.append(expected_image_lengths)
-
-            expanded_text = segments[0]
-            for image_idx, segment_length in enumerate(expected_image_lengths):
-                expanded_text += (self.image_token * segment_length) + segments[image_idx + 1]
-            expanded_texts.append(expanded_text)
-
-        tokenized_text_inputs = self.tokenizer(expanded_texts, return_tensors=None, **text_kwargs)
-        self._check_special_mm_tokens(expanded_texts, tokenized_text_inputs, modalities=["image"])
+            expanded_texts.append("".join(expanded_text_parts))
 
         effective_max_length = self.max_sequence_length
-        if truncation and max_length is not None:
+        if max_length is not None and (truncation or padding == "max_length"):
             effective_max_length = max_length
 
-        for batch_idx, (expected_image_lengths, sample_input_ids_list) in enumerate(
-            zip(expected_image_lengths_per_sample, tokenized_text_inputs["input_ids"], strict=True)
-        ):
-            sample_input = torch.tensor(sample_input_ids_list, dtype=torch.long)
-            image_positions = sample_input.eq(self.image_pad_token_id).nonzero(as_tuple=False).flatten()
-            image_spans = image_positions.split(expected_image_lengths) if expected_image_lengths else ()
-            image_bounds = []
-
-            for image_idx, (segment_length, image_span) in enumerate(
-                zip(expected_image_lengths, image_spans, strict=True)
-            ):
-                image_start = int(image_span[0].item())
-                image_end = int(image_span[-1].item()) + 1
-                image_bounds.append((image_start, image_end))
-            total = int(sample_input.shape[0])
-            start = max(0, total - effective_max_length)
-            sample_input_ids.append(sample_input[start:])
-
-            for image_idx, (image_start, image_end) in enumerate(image_bounds):
-                kept_start = max(start, image_start)
-                kept_end = min(total, image_end)
-                if kept_end > kept_start:
-                    vision_token_offsets[batch_idx, image_idx] = kept_start - image_start
-                    vision_token_lengths[batch_idx, image_idx] = kept_end - kept_start
-
-        # Pad only after Isaac-specific truncation so image span offsets and lengths stay aligned.
-        padded_text_inputs = self.tokenizer.pad(
-            {"input_ids": [sample_input.tolist() for sample_input in sample_input_ids]},
+        self.tokenizer.truncation_side = "left"
+        self.tokenizer.padding_side = padding_side
+        tokenized_text_inputs = self.tokenizer(
+            expanded_texts,
+            truncation=True,
+            max_length=effective_max_length,
             padding=padding,
-            max_length=max_length if padding == "max_length" else None,
             pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
-            return_tensors=TensorType.PYTORCH,
+            return_overflowing_tokens=True,
+            stride=0,
+            return_tensors=None,
+            **text_kwargs,
         )
-        input_ids = padded_text_inputs["input_ids"]
-        attention_mask = padded_text_inputs.get("attention_mask")
-        if attention_mask is None:
-            attention_mask = input_ids.ne(self.pad_token_id).to(dtype=torch.long)
 
-        mm_token_type_ids = input_ids.eq(self.image_pad_token_id).to(dtype=torch.long)
-        vision_image_attention_mask = vision_token_lengths.gt(0).to(dtype=torch.long)
+        kept_input_ids_per_sample: list[list[int] | None] = [None] * len(texts)
+        overflow_input_ids_per_sample: list[list[list[int]]] = [[] for _ in texts]
+        overflow_to_sample_mapping = tokenized_text_inputs.get("overflow_to_sample_mapping")
+        if overflow_to_sample_mapping is None:
+            overflow_to_sample_mapping = list(range(len(tokenized_text_inputs["input_ids"])))
 
-        vision_patches = image_inputs["vision_patches"]
-        image_patch_attention_mask = image_inputs["image_patch_attention_mask"]
+        for row_input_ids, sample_idx in zip(
+            tokenized_text_inputs["input_ids"], overflow_to_sample_mapping, strict=True
+        ):
+            sample_idx = int(sample_idx)
+            if kept_input_ids_per_sample[sample_idx] is None:
+                kept_input_ids_per_sample[sample_idx] = row_input_ids
+            else:
+                overflow_input_ids_per_sample[sample_idx].append(row_input_ids)
+
+        for batch_idx, expected_image_lengths in enumerate(expected_image_lengths_per_sample):
+            dropped_image_tokens = sum(
+                overflow_input_ids.count(self.image_token_id)
+                for overflow_input_ids in overflow_input_ids_per_sample[batch_idx]
+            )
+
+            remaining_dropped = dropped_image_tokens
+            for image_idx, expected_length in enumerate(expected_image_lengths):
+                if remaining_dropped <= 0:
+                    offset = 0
+                    length = expected_length
+                elif remaining_dropped < expected_length:
+                    offset = remaining_dropped
+                    length = expected_length - offset
+                    remaining_dropped = 0
+                else:
+                    offset = 0
+                    length = 0
+                    remaining_dropped -= expected_length
+
+                # Record which suffix of this image's placeholder span survives left truncation.
+                # The model still encodes the full image and uses this window for both feature gathering and vision RoPE.
+                image_metadata[batch_idx, image_idx, 0] = offset
+                image_metadata[batch_idx, image_idx, 1] = length
+
+        input_ids = torch.tensor(kept_input_ids_per_sample, dtype=torch.long)
+        attention_mask = input_ids.ne(self.pad_token_id).to(dtype=torch.long)
+
+        data = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": image_inputs["pixel_values"],
+            "image_grid_thw": image_grid_thw,
+            "image_metadata": image_metadata,
+        }
+        if return_mm_token_type_ids:
+            data["mm_token_type_ids"] = input_ids.eq(self.image_token_id).to(dtype=torch.long)
 
         return BatchFeature(
-            data={
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "mm_token_type_ids": mm_token_type_ids,
-                "vision_patches": vision_patches,
-                "image_patch_attention_mask": image_patch_attention_mask,
-                "vision_token_grids": vision_token_grids,
-                "vision_token_offsets": vision_token_offsets,
-                "vision_token_lengths": vision_token_lengths,
-                "vision_image_attention_mask": vision_image_attention_mask,
-            },
+            data=data,
             tensor_type=return_tensors,
         )
 

@@ -177,9 +177,8 @@ class IsaacImageProcessor(TorchvisionBackend):
 
     resample = PILImageResampling.BILINEAR
     model_input_names = [
-        "vision_patches",
-        "image_patch_attention_mask",
-        "vision_token_grids",
+        "pixel_values",
+        "image_grid_thw",
     ]
     valid_kwargs = IsaacImageProcessorKwargs
 
@@ -221,37 +220,65 @@ class IsaacImageProcessor(TorchvisionBackend):
             return image.clamp(0, 255).round().to(torch.uint8)
         return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
-    def pad(
+    def get_number_of_image_patches(
+        self,
+        image_height: int,
+        image_width: int,
+        images_kwargs: dict[str, Any] | None = None,
+    ) -> int:
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        max_num_patches = images_kwargs.get("max_num_patches", self.max_num_patches)
+        min_num_patches = images_kwargs.get("min_num_patches", self.min_num_patches)
+        pixel_shuffle_scale = images_kwargs.get("pixel_shuffle_scale", self.pixel_shuffle_scale)
+
+        target_height, target_width = get_image_size_for_max_num_patches(
+            image_height,
+            image_width,
+            patch_size,
+            max_num_patches,
+            min_num_patches=min_num_patches,
+            pixel_shuffle_scale=pixel_shuffle_scale,
+        )
+        return (target_height // patch_size) * (target_width // patch_size)
+
+    def pack_images(
         self,
         vision_patches: list[list[torch.Tensor]],
         vision_token_grids: list[list[torch.Tensor]],
-    ) -> dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor | None]:
         batch_size = len(vision_patches)
-        first_patch = next(patches for sample_patches in vision_patches for patches in sample_patches)
-        max_images = max(len(sample_patches) for sample_patches in vision_patches)
-        max_patches = max(patches.shape[0] for sample_patches in vision_patches for patches in sample_patches)
+        max_images = max((len(sample_patches) for sample_patches in vision_patches), default=0)
+        flat_patches = [patches for sample_patches in vision_patches for patches in sample_patches]
+        if max_images == 0 or not flat_patches:
+            return {
+                "pixel_values": None,
+                "image_grid_thw": None,
+            }
+
+        first_patch = flat_patches[0]
+        max_patches = max(patches.shape[0] for patches in flat_patches)
         patch_dim = first_patch.shape[-1]
         patch_dtype = first_patch.dtype
         patch_device = first_patch.device
 
         tensors = {
-            "vision_patches": torch.zeros(
-                (batch_size, max_images, max_patches, patch_dim), device=patch_device, dtype=patch_dtype
+            "pixel_values": torch.zeros(
+                (batch_size, max_images, max_patches, patch_dim),
+                device=patch_device,
+                dtype=patch_dtype,
             ),
-            "image_patch_attention_mask": torch.zeros(
-                (batch_size, max_images, max_patches), device=patch_device, dtype=torch.long
-            ),
-            "vision_token_grids": torch.zeros((batch_size, max_images, 2), device=patch_device, dtype=torch.long),
+            "image_grid_thw": torch.zeros((batch_size, max_images, 3), device=patch_device, dtype=torch.long),
         }
 
         for batch_idx, (sample_patches, sample_token_grids) in enumerate(
             zip(vision_patches, vision_token_grids, strict=True)
         ):
-            for image_idx, (patches, token_grid) in enumerate(zip(sample_patches, sample_token_grids, strict=True)):
+            for image_slot, (patches, token_grid) in enumerate(zip(sample_patches, sample_token_grids, strict=True)):
                 patch_count = int(patches.shape[0])
-                tensors["vision_patches"][batch_idx, image_idx, :patch_count] = patches
-                tensors["image_patch_attention_mask"][batch_idx, image_idx, :patch_count] = 1
-                tensors["vision_token_grids"][batch_idx, image_idx] = token_grid
+                tensors["pixel_values"][batch_idx, image_slot, :patch_count] = patches
+                tensors["image_grid_thw"][batch_idx, image_slot, 0] = 1
+                tensors["image_grid_thw"][batch_idx, image_slot, 1:] = token_grid
 
         return tensors
 
@@ -275,15 +302,12 @@ class IsaacImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         resample = kwargs.pop("interpolation", resample)
-        batch_size = len(images)
         # IsaacProcessor routes text-only calls here as an empty image list per sample.
-        # This returns empty vision tensors to preserve the multimodal output schema;
-        # image-token/image-count mismatches are validated earlier in processor's _preprocess call.
+        # Return `None` visual fields so text-only batches skip multimodal codepaths like other VLMs.
         if all(len(sample_images) == 0 for sample_images in images):
             tensors = {
-                "vision_patches": torch.zeros((batch_size, 0, 0, 0), dtype=torch.float32),
-                "image_patch_attention_mask": torch.zeros((batch_size, 0, 0), dtype=torch.long),
-                "vision_token_grids": torch.zeros((batch_size, 0, 2), dtype=torch.long),
+                "pixel_values": None,
+                "image_grid_thw": None,
             }
             return BatchFeature(data=tensors, tensor_type=return_tensors)
 
@@ -352,7 +376,7 @@ class IsaacImageProcessor(TorchvisionBackend):
         if not do_pad:
             raise ValueError("IsaacImageProcessor doesn't support `do_pad=False` mode.")
 
-        tensors = self.pad(
+        tensors = self.pack_images(
             vision_patches=nested_outputs["vision_patches"],
             vision_token_grids=nested_outputs["vision_token_grids"],
         )
