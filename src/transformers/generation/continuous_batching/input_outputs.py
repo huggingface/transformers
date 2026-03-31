@@ -124,9 +124,7 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(max_graphs)
-        # The trash index is a valid cache position in the extra padding zone, used as a sentinel for padded slots.
-        # The cache allocates 2 extra blocks; this index points to the second-to-last page in that zone.
-        self._trash_index = cache.cache_shape[0] - 2
+        self._trash_index = cache.trash_index
         # Setup static tensors and compute stream
         self._setup_static_tensors()
         self._reset_static_tensors(full_reset=True)

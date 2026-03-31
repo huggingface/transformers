@@ -191,6 +191,7 @@ class PagedAttentionCache:
             num_attention_masks=num_attention_masks,
             max_blocks_per_request=continuous_batching_config.max_blocks_per_request or 0,
             return_logprobs=continuous_batching_config.return_logprobs,
+            use_async_batching=continuous_batching_config.use_async_batching,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
@@ -222,8 +223,12 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
-        # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
+        # We add two extra blocks to the cache as a padding zone that no BlockManager ever allocates from: one for the
+        # sentinel index (marks the spot of a new token in the read indices) and one for the trash index (for padding,
+        # block is never used so writes are silently discarded)
         self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
+        self.sentinel_index = self.cache_shape[0] - 1
+        self.trash_index = self.sentinel_index - 1
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -245,7 +250,9 @@ class PagedAttentionCache:
                 cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=self.allow_block_sharing)
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
-                cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
+                cm = SlidingAttentionCacheAllocator(
+                    i, self.block_size, config.sliding_window, self.sentinel_index, self.trash_index
+                )
                 self.num_sliding_attention_groups += 1
                 self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
             else:
@@ -359,10 +366,10 @@ class PagedAttentionCache:
 
         Returns the complete KV states (cached + new) for attention computation.
         """
-        # Retrieve the layer read and write indices, cast to int64 for index_select/index_copy_
+        # Retrieve the layer read and write indices
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
-        layer_read_index = read_index[group_idx].long()
-        layer_write_index = write_index[group_idx].long()
+        layer_read_index = read_index[group_idx]
+        layer_write_index = write_index[group_idx]
         # Select the correct cache
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
@@ -381,16 +388,14 @@ class PagedAttentionCache:
         # Case: sliding window -- we  need to be careful of read/write order because of chunked prefill, because it's
         # the only case where you may write over cache you need to use
         else:
-            # Compute the mask before remapping -1 sentinels to valid indices for index_select
-            new_token_mask = layer_read_index == -1
-            mask = new_token_mask.unsqueeze(-1).unsqueeze(-1)
-            safe_read_index = torch.where(new_token_mask, layer_write_index[0], layer_read_index)
-            # Add the cache to the key and value states
-            key_states_with_cache = torch.index_select(k_cache, 0, safe_read_index)
+            # Sentinel positions in read_index mark new-token slots; index_select reads garbage there,
+            # then masked_scatter_ overwrites them with the actual new key/value states.
+            mask = (layer_read_index == self.sentinel_index).unsqueeze(-1).unsqueeze(-1)
+            key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
             key_states_with_cache.masked_scatter_(mask, key_states)
-            value_states_with_cache = torch.index_select(v_cache, 0, safe_read_index)
+            value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
             value_states_with_cache.masked_scatter_(mask, value_states)
-            # Write new KV values to the cache
+            # Write new KV values to the cache (padding slots in write_index point to the trash position)
             k_cache.index_copy_(0, layer_write_index, key_states)
             v_cache.index_copy_(0, layer_write_index, value_states)
 
@@ -519,7 +524,7 @@ class PagedAttentionMemoryHandler:
         num_attention_masks: int,
         max_blocks_per_request: int = 0,
         return_logprobs: bool = False,
-        io_multiplier: int = 1,
+        use_async_batching: bool = False,
     ) -> None:
         """Initialize the memory handler. ``io_multiplier`` accounts for async double-buffering (2 GPU-side IO
         instances instead of 1). It only scales the IO tensors, not the KV cache or the activation peak.
@@ -532,7 +537,7 @@ class PagedAttentionMemoryHandler:
         self.num_attention_masks = num_attention_masks
         self.max_blocks_per_request = max_blocks_per_request
         self.num_output_rows = 2 if return_logprobs else 1
-        self.io_multiplier = io_multiplier
+        self.io_multiplier = 2 if use_async_batching else 1
 
     @staticmethod
     def get_available_memory(max_memory_percent: float = 1.0) -> int:

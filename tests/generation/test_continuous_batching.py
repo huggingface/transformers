@@ -1176,9 +1176,9 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         if max_bpr > 0:
             tensors.append(torch.empty((num_groups, M, max_bpr), dtype=i32, device=device))
         # write_index: [num_groups, M]
-        tensors.append(torch.empty((num_groups, M), dtype=i32, device=device))
+        tensors.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))
         # read_index: [num_groups, N + M]
-        tensors.append(torch.empty((num_groups, N + M), dtype=i32, device=device))
+        tensors.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))
 
         actual_cuda = torch.cuda.memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in tensors)
