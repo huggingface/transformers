@@ -1652,11 +1652,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Check for attention dropout, which is incompatible with newer FA versions
         # (many should not really care about dropout as it is not super effective, hence warning for now)
-        if flash_attn_version > 2 or flash_attn_version == "torch":
+        if flash_attn_version == "torch" or flash_attn_version > 2:
             if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
                 logger.warning_once(
                     f"You are attempting to use Flash Attention {flash_attn_version} with dropout. "
                     "This might lead to unexpected behaviour as this is not supported on recent versions of Flash Attention."
+                )
+
+        if flash_attn_version == "torch":
+            if getattr(self.config, "sliding_window", None) is not None:
+                logger.warning_once(
+                    f"You are attempting to use Flash Attention {flash_attn_version} with sliding window. "
+                    "This might lead to unexpected behaviour as this only supported in a limited way with torch natives."
                 )
 
         # People often move dtypes after init so we only warn in those cases
@@ -1821,7 +1828,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 # No fallback for native torch
                 if fa_version == "torch":
                     continue
- 
+
                 # Check whether we have an original FA requested but not available in the env
                 if requested_original_flash_attn := (
                     attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
