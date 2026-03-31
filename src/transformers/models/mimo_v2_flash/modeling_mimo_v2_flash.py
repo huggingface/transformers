@@ -40,7 +40,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+
+# trf-ignore: TRF009
 from ..gpt_oss import modeling_gpt_oss as modeling_gpt_oss_module  # NOTE @casinca: temp, waiting for GPT-oss refactor
+
+# trf-ignore: TRF009
 from ..llama import modeling_llama as modeling_llama_module  # NOTE @casinca: temp, waiting for GPT-oss refactor
 from .configuration_mimo_v2_flash import MiMoV2FlashConfig
 
@@ -593,8 +597,8 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
         if self.has_sliding_layers:
             position_embeddings_mapping["sliding_attention"] = self.swa_rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            layer_type = decoder_layer.attention_type
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_type = self.config.layer_types[layer_idx]
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[layer_type],

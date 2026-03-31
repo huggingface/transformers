@@ -23,10 +23,37 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
+from ...utils import auto_docstring
 
 
-@strict(accept_kwargs=True)
+@auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
+@strict
 class MiMoV2FlashConfig(PreTrainedConfig):
+    r"""
+    qk_head_dim (`int`, *optional*, defaults to 192):
+        Dimension of query and key heads for full attention layers.
+    v_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of value heads for full attention layers.
+    swa_num_attention_heads (`int`, *optional*, defaults to 64):
+        Number of attention heads for sliding window attention layers.
+    swa_num_key_value_heads (`int`, *optional*, defaults to 8):
+        Number of key-value heads for sliding window attention layers.
+    swa_qk_head_dim (`int`, *optional*, defaults to 192):
+        Dimension of query and key heads for sliding window attention layers.
+    swa_v_head_dim (`int`, *optional*, defaults to 128):
+        Dimension of value heads for sliding window attention layers.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of expert groups for group-based top-k routing.
+    topk_group (`int`, *optional*, defaults to 1):
+        Number of groups selected per token in group-based top-k routing.
+    moe_layer_freq (`list`, *optional*):
+        Per-layer binary flag indicating MoE (1) vs dense MLP (0).
+    add_swa_attention_sink_bias (`bool`, *optional*, defaults to `True`):
+        Whether to add attention sink bias to sliding window attention layers.
+    add_full_attention_sink_bias (`bool`, *optional*, defaults to `False`):
+        Whether to add attention sink bias to full attention layers.
+    """
+
     model_type = "mimo_v2_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"full_attention": 5_000_000.0, "sliding_attention": 10_000.0}
