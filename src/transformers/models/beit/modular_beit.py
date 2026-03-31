@@ -220,10 +220,10 @@ class BeitLayer(GradientCheckpointingLayer):
         self.mlp = BeitMLP(config)
         init_values = config.layer_scale_init_value
         self.lambda_1 = (
-            nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else None
+            nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else 1.0
         )
         self.lambda_2 = (
-            nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else None
+            nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else 1.0
         )
         self.relative_position_bias = BeitRelativePositionBias(config) if config.use_relative_position_bias else None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -254,15 +254,13 @@ class BeitLayer(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = self.dropout(hidden_states)
-        if self.lambda_1 is not None:
-            hidden_states = self.lambda_1 * hidden_states
+        hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path(hidden_states) + residual
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        if self.lambda_2 is not None:
-            hidden_states = self.lambda_2 * hidden_states
+        hidden_states = self.lambda_2 * hidden_states
         hidden_states = self.drop_path(hidden_states) + residual
 
         return hidden_states
@@ -298,7 +296,7 @@ class BeitPreTrainedModel(PreTrainedModel):
         elif isinstance(module, BeitRelativePositionBias):
             init.zeros_(module.relative_position_bias_table)
         elif isinstance(module, BeitLayer):
-            if module.lambda_1 is not None:
+            if isinstance(module.lambda_1, nn.Parameter):
                 init.constant_(module.lambda_1, self.config.layer_scale_init_value)
                 init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
@@ -353,14 +351,14 @@ class BeitModel(BeitPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embedding_output,
+            inputs_embeds=embedding_output,
             attention_mask=attention_mask,
         )
 
-        if self.share_position_bias is not None:
+        if self.shared_position_bias is not None:
             height, width = resolution
             window_size = (height // self.config.patch_size, width // self.config.patch_size)
-            shared_relative_position_bias = self.share_position_bias(
+            shared_relative_position_bias = self.shared_position_bias(
                 window_size, interpolate_pos_encoding=interpolate_pos_encoding, dim_size=embedding_output.shape[1]
             )
             attention_mask = (

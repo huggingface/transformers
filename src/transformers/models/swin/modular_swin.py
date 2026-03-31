@@ -31,7 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..vit.modeling_vit import ViTMLP, eager_attention_forward
+from ..vit.modeling_vit import ViTAttention, ViTMLP, eager_attention_forward
 from .configuration_swin import SwinConfig
 
 
@@ -171,7 +171,7 @@ def window_partition(input_feature, window_size):
     input_feature = input_feature.view(
         batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
     )
-    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    windows = input_feature.transpose(2, 3).contiguous().view(-1, window_size, window_size, num_channels)
     return windows
 
 
@@ -181,7 +181,7 @@ def window_reverse(windows, window_size, height, width):
     """
     num_channels = windows.shape[-1]
     windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    windows = windows.transpose(2, 3).contiguous().view(-1, height, width, num_channels)
     return windows
 
 
@@ -392,29 +392,23 @@ class SwinRelativePositionBias(nn.Module):
         return relative_position_bias.permute(2, 0, 1).contiguous().unsqueeze(0)  # 1, num_heads, Wh*Ww, Wh*Ww
 
 
-class SwinAttention(nn.Module):
-    def __init__(self, config: SwinConfig, dim: int, num_heads: int, window_size: int):
-        super().__init__()
-        if dim % num_heads != 0:
+class SwinAttention(ViTAttention):
+    def __init__(self, config: SwinConfig, hidden_size: int, num_attention_heads: int, window_size: int):
+        super().__init__(config)
+        self.num_attention_heads = num_attention_heads
+        self.head_dim = hidden_size // num_attention_heads
+
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size)
+
+        self.relative_position_bias = SwinRelativePositionBias(num_attention_heads, (window_size, window_size))
+
+        if hidden_size % num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
+                f"The hidden size ({hidden_size}) is not a multiple of the number of attention heads ({num_attention_heads})"
             )
-
-        self.config = config
-        self.num_attention_heads = num_heads
-        self.head_dim = dim // num_heads
-        self.all_head_size = self.num_attention_heads * self.head_dim
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-        self.attention_dropout = config.attention_probs_dropout_prob
-
-        window_size = window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
-        self.relative_position_bias = SwinRelativePositionBias(num_heads, window_size)
-
-        self.q_proj = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        self.k_proj = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(self.all_head_size, dim)
 
     def forward(
         self,

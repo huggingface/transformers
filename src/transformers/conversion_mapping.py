@@ -547,7 +547,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["beit"] = mapping["vit"].copy()
     mapping["beit"] += [
         WeightRenaming("attention.attention.relative_position_bias.", "relative_position_bias."),
-        WeightRenaming("encoder.relative_position_bias", "shared_pos_bias"),
+        WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
     ]
 
     mapping["pixio"] = mapping["vit"].copy()
