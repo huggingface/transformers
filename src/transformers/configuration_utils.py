@@ -43,7 +43,6 @@ from .utils import (
 )
 from .utils.generic import is_timm_config_dict
 
-
 if TYPE_CHECKING:
     import torch
 
@@ -52,10 +51,16 @@ logger = logging.get_logger(__name__)
 
 
 # type hinting: specifying the type of config class that inherits from PreTrainedConfig
-SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
+SpecificPreTrainedConfigType = TypeVar(
+    "SpecificPreTrainedConfigType", bound="PreTrainedConfig"
+)
 
 _FLOAT_TAG_KEY = "__float__"
-_FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
+_FLOAT_TAG_VALUES = {
+    "Infinity": float("inf"),
+    "-Infinity": float("-inf"),
+    "NaN": float("nan"),
+}
 
 
 ALLOWED_LAYER_TYPES = (
@@ -71,26 +76,29 @@ ALLOWED_LAYER_TYPES = (
 )
 
 
-# copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
 def wrap_init_to_accept_kwargs(cls: dataclass):
     original_init = cls.__init__
 
     @wraps(original_init)
     def __init__(self, *args, **kwargs: Any) -> None:
-        # Extract only the fields that are part of the dataclass
         dataclass_fields = {f.name for f in fields(cls)}
         standard_kwargs = {k: v for k, v in kwargs.items() if k in dataclass_fields}
 
-        # We need to call bare `__init__` without `__post_init__` but the `original_init` of
-        # any dataclas contains a call to post-init at the end (without kwargs)
         if len(args) > 0:
             raise ValueError(
                 f"{cls.__name__} accepts only keyword arguments, but found `{len(args)}` positional args."
             )
 
+        # Set standard fields
         for f in fields(cls):  # type: ignore
             if f.name in standard_kwargs:
                 setattr(self, f.name, standard_kwargs[f.name])
+                # ✅ ADD THIS TYPE CHECK FOR num_labels
+                if f.name == "num_labels" and getattr(self, f.name) is not None:
+                    if not isinstance(getattr(self, f.name), int):
+                        raise TypeError(
+                            f"num_labels must be int, got {type(getattr(self, f.name))}"
+                        )
             elif f.default is not MISSING:
                 setattr(self, f.name, f.default)
             elif f.default_factory is not MISSING:
@@ -98,13 +106,10 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
             else:
                 raise TypeError(f"Missing required field - '{f.name}'")
 
-        # Pass any additional kwargs to `__post_init__` and let the object
-        # decide whether to set the attr or use for different purposes (e.g. BC checks)
-        additional_kwargs = {}
-        for name, value in kwargs.items():
-            if name not in dataclass_fields:
-                additional_kwargs[name] = value
-
+        # Handle extra kwargs
+        additional_kwargs = {
+            k: v for k, v in kwargs.items() if k not in dataclass_fields
+        }
         self.__post_init__(**additional_kwargs)
 
     cls.__init__ = __init__
@@ -231,7 +236,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     # Fine-tuning task arguments
     id2label: dict[int, str] | dict[str, str] | None = None
     label2id: dict[str, int] | dict[str, str] | None = None
-    problem_type: Literal["regression", "single_label_classification", "multi_label_classification"] | None = None
+    problem_type: (
+        Literal[
+            "regression", "single_label_classification", "multi_label_classification"
+        ]
+        | None
+    ) = None
 
     def __post_init__(self, **kwargs):
         # BC for the `torch_dtype` argument instead of the simpler `dtype`
@@ -239,7 +249,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if (torch_dtype := kwargs.pop("torch_dtype", None)) is not None:
             # If both are provided, keep `dtype`
             self.dtype = self.dtype if self.dtype is not None else torch_dtype
-        if self.dtype is not None and isinstance(self.dtype, str) and is_torch_available():
+        if (
+            self.dtype is not None
+            and isinstance(self.dtype, str)
+            and is_torch_available()
+        ):
             # we will start using self.dtype in v5, but to be consistent with
             # from_pretrained's dtype arg convert it to an actual torch.dtype object
             import torch
@@ -252,7 +266,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if self.id2label is None:
             self.num_labels = kwargs.get("num_labels", 2)
         else:
-            if kwargs.get("num_labels") is not None and len(self.id2label) != kwargs.get("num_labels"):
+            if kwargs.get("num_labels") is not None and len(
+                self.id2label
+            ) != kwargs.get("num_labels"):
                 logger.warning(
                     f"You passed `num_labels={kwargs.get('num_labels')}` which is incompatible to "
                     f"the `id2label` map of length `{len(self.id2label)}`."
@@ -281,12 +297,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
         self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
-        self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
+        self._experts_implementation: str | None = kwargs.pop(
+            "experts_implementation", None
+        )
 
         # Additional attributes without default values
         for key, value in kwargs.items():
             # Check this to avoid deserializing problematic fields from hub configs - they should use the public field
-            if key not in ("_attn_implementation_internal", "_experts_implementation_internal"):
+            if key not in (
+                "_attn_implementation_internal",
+                "_experts_implementation_internal",
+            ):
                 try:
                     setattr(self, key, value)
                 except AttributeError as err:
@@ -311,7 +332,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     @name_or_path.setter
     def name_or_path(self, value):
-        self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
+        self._name_or_path = str(
+            value
+        )  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
     def num_labels(self) -> int:
@@ -356,16 +379,22 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
         current_attn = getattr(self, "_attn_implementation", None)
-        attn_implementation = value if not isinstance(value, dict) else value.get("", current_attn)
+        attn_implementation = (
+            value if not isinstance(value, dict) else value.get("", current_attn)
+        )
         self._attn_implementation_internal = attn_implementation
 
         # Set it recursively on the subconfigs
         for subconfig_key in self.sub_configs:
             subconfig = getattr(self, subconfig_key, None)
             if subconfig is not None:
-                current_subconfig_attn = getattr(subconfig, "_attn_implementation", None)
+                current_subconfig_attn = getattr(
+                    subconfig, "_attn_implementation", None
+                )
                 sub_implementation = (
-                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
+                    value
+                    if not isinstance(value, dict)
+                    else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
 
@@ -378,16 +407,22 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         """We set it recursively on the sub-configs as well"""
         # Set if for current config
         current_moe = getattr(self, "_experts_implementation", None)
-        experts_implementation = value if not isinstance(value, dict) else value.get("", current_moe)
+        experts_implementation = (
+            value if not isinstance(value, dict) else value.get("", current_moe)
+        )
         self._experts_implementation_internal = experts_implementation
 
         # Set it recursively on the subconfigs
         for subconfig_key in self.sub_configs:
             subconfig = getattr(self, subconfig_key, None)
             if subconfig is not None:
-                current_subconfig_moe = getattr(subconfig, "_experts_implementation", None)
+                current_subconfig_moe = getattr(
+                    subconfig, "_experts_implementation", None
+                )
                 sub_implementation = (
-                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
+                    value
+                    if not isinstance(value, dict)
+                    else value.get(subconfig_key, current_subconfig_moe)
                 )
                 subconfig._experts_implementation = sub_implementation
 
@@ -398,7 +433,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     @property
     def use_return_dict(self):
-        logger.warning_once("`use_return_dict` is deprecated! Use `return_dict` instead!")
+        logger.warning_once(
+            "`use_return_dict` is deprecated! Use `return_dict` instead!"
+        )
         return self.return_dict
 
     @torch_dtype.setter
@@ -443,7 +480,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if vocab_size is not None:
             # Check for all special tokens, e..g. pad_token_id, image_token_id, audio_token_id
             for value in text_config:
-                if value.endswith("_token_id") and isinstance(value, int) and not 0 <= value < vocab_size:
+                if (
+                    value.endswith("_token_id")
+                    and isinstance(value, int)
+                    and not 0 <= value < vocab_size
+                ):
                     # Can't be an exception until we can load configs that fail validation: several configs on the Hub
                     # store invalid special tokens, e.g. `pad_token_id=-1`
                     logger.warning_once(
@@ -453,11 +494,20 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def validate_layer_type(self):
         """Check that `layer_types` is correctly defined."""
-        if not (getattr(self, "layer_types", None) is not None and hasattr(self, "num_hidden_layers")):
+        if not (
+            getattr(self, "layer_types", None) is not None
+            and hasattr(self, "num_hidden_layers")
+        ):
             return
-        elif not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in self.layer_types):
-            raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}")
-        elif self.num_hidden_layers is not None and self.num_hidden_layers != len(self.layer_types):
+        elif not all(
+            layer_type in ALLOWED_LAYER_TYPES for layer_type in self.layer_types
+        ):
+            raise ValueError(
+                f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES} but got {self.layer_types}"
+            )
+        elif self.num_hidden_layers is not None and self.num_hidden_layers != len(
+            self.layer_types
+        ):
             raise ValueError(
                 f"`num_hidden_layers` ({self.num_hidden_layers}) must be equal to the number of layer types "
                 f"({len(self.layer_types)})"
@@ -471,7 +521,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def rope_scaling(self, value):
         self.rope_parameters = value
 
-    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
+    def save_pretrained(
+        self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs
+    ):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
         [`~PreTrainedConfig.from_pretrained`] class method.
@@ -487,7 +539,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if os.path.isfile(save_directory):
-            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+            raise AssertionError(
+                f"Provided path ({save_directory}) should be a directory, not a file"
+            )
 
         generation_parameters = self._get_generation_parameters()
         if len(generation_parameters) > 0:
@@ -621,11 +675,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
 
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+        if (
+            "model_type" in config_dict
+            and hasattr(cls, "model_type")
+            and config_dict["model_type"] != cls.model_type
+        ):
             # sometimes the config has no `base_config_key` if the config is used in several composite models
             # e.g. LlamaConfig. In that case we try to see if there is match in `model_type` before raising a warning
             for v in config_dict.values():
@@ -662,7 +722,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         """
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
-        config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls._get_config_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
         if config_dict is None:
             return {}, kwargs
         if "_commit_hash" in config_dict:
@@ -670,9 +732,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # That config file may point us toward another config file to use.
         if "configuration_files" in config_dict:
-            configuration_file = get_configuration_file(config_dict["configuration_files"])
+            configuration_file = get_configuration_file(
+                config_dict["configuration_files"]
+            )
             config_dict, kwargs = cls._get_config_dict(
-                pretrained_model_name_or_path, _configuration_file=configuration_file, **original_kwargs
+                pretrained_model_name_or_path,
+                _configuration_file=configuration_file,
+                **original_kwargs,
             )
 
         return config_dict, kwargs
@@ -713,7 +779,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
         else:
-            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
+            configuration_file = (
+                kwargs.pop("_configuration_file", CONFIG_NAME)
+                if gguf_file is None
+                else gguf_file
+            )
 
             try:
                 # Load from local folder or from cache or download from model Hub and cache
@@ -748,19 +818,25 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         try:
             if gguf_file:
-                config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
+                config_dict = load_gguf_checkpoint(
+                    resolved_config_file, return_tensors=False
+                )["config"]
             else:
                 # Load config dict
                 config_dict = cls._dict_from_json_file(resolved_config_file)
 
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
-            raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
+            raise OSError(
+                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
+            )
 
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
-            logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
+            logger.info(
+                f"loading configuration file {configuration_file} from cache at {resolved_config_file}"
+            )
 
         # timm models are not saved with the model_type in the config file
         if "model_type" not in config_dict and is_timm_config_dict(config_dict):
@@ -826,7 +902,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 current_attr = getattr(config, key)
                 # To authorize passing a custom subconfig as kwarg in models that have nested configs.
                 # We need to update only custom kwarg values instead and keep other attr in subconfig.
-                if isinstance(current_attr, PreTrainedConfig) and isinstance(value, dict):
+                if isinstance(current_attr, PreTrainedConfig) and isinstance(
+                    value, dict
+                ):
                     current_attr_updated = current_attr.to_dict()
                     current_attr_updated.update(value)
                     value = current_attr.__class__(**current_attr_updated)
@@ -902,7 +980,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         This method deserializes objects like `{'__float__': Infinity}` to their float values like `Infinity`.
         """
         if isinstance(obj, dict):
-            if set(obj.keys()) == {_FLOAT_TAG_KEY} and isinstance(obj[_FLOAT_TAG_KEY], str):
+            if set(obj.keys()) == {_FLOAT_TAG_KEY} and isinstance(
+                obj[_FLOAT_TAG_KEY], str
+            ):
                 tag = obj[_FLOAT_TAG_KEY]
                 if tag in _FLOAT_TAG_VALUES:
                     return _FLOAT_TAG_VALUES[tag]
@@ -939,7 +1019,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         default_config_dict = PreTrainedConfig().to_dict()
 
         # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        class_config_dict = (
+            self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        )
 
         serializable_config_dict = {}
 
@@ -952,7 +1034,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
+                diff = recursive_diff_dict(
+                    value, default_config_dict, config_obj=getattr(self, key, None)
+                )
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
@@ -963,7 +1047,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                 or key == "transformers_version"
                 or key == "vocab_file"
                 or value != default_config_dict[key]
-                or (key in default_config_dict and value != class_config_dict.get(key, value))
+                or (
+                    key in default_config_dict
+                    and value != class_config_dict.get(key, value)
+                )
             ):
                 serializable_config_dict[key] = value
 
@@ -976,7 +1063,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
+                if not isinstance(self.quantization_config, dict)
+                and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(serializable_config_dict)
@@ -1023,7 +1111,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
+                if not isinstance(self.quantization_config, dict)
+                and self.quantization_config is not None
                 else self.quantization_config
             )
         self.dict_dtype_to_str(output)
@@ -1185,11 +1274,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         if there are any.
         """
         generation_params = {}
-        default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        default_config = (
+            self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
+        )
         for key in GenerationConfig._get_default_generation_params().keys():
             if key == "use_cache":
                 continue  # common key for most models
-            if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
+            if (
+                hasattr(self, key)
+                and getattr(self, key) is not None
+                and key not in default_config
+            ):
                 generation_params[key] = getattr(self, key)
 
         return generation_params
@@ -1212,12 +1307,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             encoder (`Optional[bool]`, *optional*):
                 If set to `True`, then only search for encoder config names.
         """
-        return_both = decoder == encoder  # both unset or both set -> search all possible names
+        return_both = (
+            decoder == encoder
+        )  # both unset or both set -> search all possible names
 
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
         encoder_possible_text_config_names = ("text_encoder",)
         if return_both:
-            possible_text_config_names = encoder_possible_text_config_names + decoder_possible_text_config_names
+            possible_text_config_names = (
+                encoder_possible_text_config_names + decoder_possible_text_config_names
+            )
         elif decoder:
             possible_text_config_names = decoder_possible_text_config_names
         else:
@@ -1242,7 +1341,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             config_to_return = self
 
         # handle legacy models with flat config structure, when we only want one of the configs
-        if not return_both and len(valid_text_config_names) == 0 and config_to_return.is_encoder_decoder:
+        if (
+            not return_both
+            and len(valid_text_config_names) == 0
+            and config_to_return.is_encoder_decoder
+        ):
             config_to_return = copy.deepcopy(config_to_return)
             prefix_to_keep = "decoder" if decoder else "encoder"
             for key in config_to_return.to_dict():
@@ -1284,7 +1387,11 @@ def get_configuration_file(configuration_files: list[str]) -> str:
     """
     configuration_files_map = {}
     for file_name in configuration_files:
-        if file_name.startswith("config.") and file_name.endswith(".json") and file_name != "config.json":
+        if (
+            file_name.startswith("config.")
+            and file_name.endswith(".json")
+            and file_name != "config.json"
+        ):
             v = file_name.removeprefix("config.").removesuffix(".json")
             configuration_files_map[v] = file_name
     available_versions = sorted(configuration_files_map.keys())
@@ -1313,7 +1420,11 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
         obj_value = getattr(config_obj, str(key), None)
-        if isinstance(obj_value, PreTrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+        if (
+            isinstance(obj_value, PreTrainedConfig)
+            and key in dict_b
+            and isinstance(dict_b[key], dict)
+        ):
             diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             diff[key] = diff_value
         elif key not in dict_b or (value != default[key]):
@@ -1332,7 +1443,9 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 PretrainedConfig = PreTrainedConfig
 
 
-def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
+def layer_type_validation(
+    layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True
+):
     logger.warning(
         "`layer_type_validation` is deprecated and will be removed in v5.20. "
         "Use `PreTrainedConfig.validate_layer_type` instead"
@@ -1341,7 +1454,22 @@ def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None 
     if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
         raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
     if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
+        print("DEBUG:", num_hidden_layers, len(layer_types))
         raise ValueError(
             f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "
             f"({len(layer_types)})"
         )
+
+
+if __name__ == "__main__":
+    from transformers.configuration_utils import PretrainedConfig
+
+    # Correct type test
+    cfg = PretrainedConfig(num_labels=5)
+    print("Correct type test passed:", cfg.num_labels)
+
+    # Incorrect type test (TypeError raise hoga)
+    try:
+        cfg_bad = PretrainedConfig(num_labels="five")
+    except TypeError as e:
+        print("Incorrect type test passed:", e)
