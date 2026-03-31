@@ -738,8 +738,13 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
-        explicit_local_code = has_local_code and not type(config).__module__.startswith("transformers.")
-
+        explicit_local_code = has_local_code and (
+            tokenizer_config_class is not None
+            and not (
+                tokenizer_class_from_name(tokenizer_config_class).__module__.startswith("transformers.")
+                and tokenizer_class_from_name(tokenizer_config_class + "Fast").__module__.startswith("transformers.")
+            )
+        )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
             has_remote_code = False

@@ -511,7 +511,7 @@ class AutoTokenizerTest(unittest.TestCase):
             self.assertFalse(tokenizer.special_attribute_present)
 
             # If remote code is enabled but local code originated from transformers, we load the remote one.
-            CustomConfig.__module__ = "transformers.models.custom.configuration_custom"
+            NewTokenizer.__module__ = "transformers.models.custom.configuration_custom"
             tokenizer = AutoTokenizer.from_pretrained(
                 "hf-internal-testing/test_dynamic_tokenizer", trust_remote_code=True, use_fast=False
             )
