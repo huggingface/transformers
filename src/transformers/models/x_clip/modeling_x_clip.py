@@ -69,6 +69,7 @@ class XCLIPOutput(ModelOutput):
     text_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
+
     logits_per_video: torch.FloatTensor | None = None
     video_embeds: torch.FloatTensor | None = None
     mit_output: BaseModelOutputWithPooling = None
