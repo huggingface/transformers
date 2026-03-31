@@ -23,15 +23,16 @@ from torch.nn.utils.rnn import pad_sequence
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging, requires_backends
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils.import_utils import requires
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..superglue.image_processing_pil_superglue import SuperGlueImageProcessorPil
-from ..superglue.image_processing_superglue import SuperGlueImageProcessor, SuperGlueImageProcessorKwargs
+from ..superglue.image_processing_superglue import SuperGlueImageProcessor
 from ..superpoint import SuperPointConfig
 
 
@@ -39,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="ETH-CVG/lightglue_superpoint")
-@strict(accept_kwargs=True)
+@strict
 class LightGlueConfig(PreTrainedConfig):
     r"""
     keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -52,8 +53,6 @@ class LightGlueConfig(PreTrainedConfig):
         The confidence threshold used to prune points
     filter_threshold (`float`, *optional*, defaults to 0.1):
         The confidence threshold used to filter matches
-    trust_remote_code (`bool`, *optional*, defaults to `False`):
-        Whether to trust remote code when using other models than SuperPoint as keypoint detector.
 
     Examples:
         ```python
@@ -85,10 +84,6 @@ class LightGlueConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_dropout: float | int = 0.0
     attention_bias: bool = True
-    # LightGlue can be used with other models than SuperPoint as keypoint detector
-    # We provide the trust_remote_code argument to allow the use of other models
-    # that are not registered in the CONFIG_MAPPING dictionary (for example DISK)
-    trust_remote_code: bool = False
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -98,14 +93,9 @@ class LightGlueConfig(PreTrainedConfig):
         # See https://github.com/huggingface/transformers/pull/31718#discussion_r2109733153
         if isinstance(self.keypoint_detector_config, dict):
             self.keypoint_detector_config["model_type"] = self.keypoint_detector_config.get("model_type", "superpoint")
-            if self.keypoint_detector_config["model_type"] not in CONFIG_MAPPING:
-                self.keypoint_detector_config = AutoConfig.from_pretrained(
-                    self.keypoint_detector_config["_name_or_path"], trust_remote_code=self.trust_remote_code
-                )
-            else:
-                self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
-                    **self.keypoint_detector_config, attn_implementation="eager"
-                )
+            self.keypoint_detector_config = CONFIG_MAPPING[self.keypoint_detector_config["model_type"]](
+                **self.keypoint_detector_config, attn_implementation="eager"
+            )
         elif self.keypoint_detector_config is None:
             self.keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
@@ -164,8 +154,13 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
-    pass
+class LightGlueImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 class LightGlueImageProcessor(SuperGlueImageProcessor):
@@ -178,14 +173,15 @@ class LightGlueImageProcessor(SuperGlueImageProcessor):
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 
+@requires(backends=("torch",))
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
+    @requires(backends=("torch",))
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
         target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
-        requires_backends(self, "torch")
+    ) -> list[dict[str, "torch.Tensor"]]:
         return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
 
 
@@ -513,9 +509,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-        self.keypoint_detector = AutoModelForKeypointDetection.from_config(
-            config.keypoint_detector_config, trust_remote_code=config.trust_remote_code
-        )
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
 
         self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
         self.descriptor_dim = config.descriptor_dim

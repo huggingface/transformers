@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/blenderbot-3B")
-@strict(accept_kwargs=True)
+@strict
 class BlenderbotConfig(PreTrainedConfig):
     r"""
     encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 3):
@@ -73,7 +73,7 @@ class BlenderbotConfig(PreTrainedConfig):
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
     encoder_no_repeat_ngram_size: int = 3
-    forced_eos_token_id: int | None = 2
+    forced_eos_token_id: int | list[int] | None = 2
     is_decoder: bool = False
     tie_word_embeddings: bool = True
 

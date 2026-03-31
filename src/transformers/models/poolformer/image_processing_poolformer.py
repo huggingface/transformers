@@ -13,6 +13,9 @@
 # limitations under the License.
 """Image processor class for PoolFormer."""
 
+import torch
+from torchvision.transforms.v2 import functional as tvF
+
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import get_resize_output_image_size, group_images_by_shape, reorder_images
@@ -24,15 +27,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, auto_docstring
 
 
 class PoolFormerImageProcessorKwargs(ImagesKwargs, total=False):

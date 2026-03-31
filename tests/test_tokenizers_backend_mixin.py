@@ -527,6 +527,14 @@ Hey how are you doing"""  # noqa: W293
     EXPECTED_DISHAM993_ELECTRICAL_NER_MODERNBERT_BASE = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_DEEPSEEK_AI_DEEPSEEK_R1 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
     EXPECTED_REDHATAI_DEEPSEEK_CODER_V2_LITE_INSTRUCT_FP8 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_H2OAI_H2OVL_MISSISSIPPI_2B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n \nhi there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_OPENGVLAB_INTERNVL2_4B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_INTEL_MINIMAX_M25_INT4_AUTOROUND = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_FRIENDLIAI_MOLMO_7B_O_0924 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_LUKEALONSO_QWEN35_397B_A17B_NVFP4 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_EMBODIED_COT_ECOT_OPENVLA_7B_BRIDGE = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_DEEPGLINT_AI_UNIME_PHI35_V_42B = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
+    EXPECTED_1024M_PHI_35_MOE_4BIT_FP4 = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n\nhithere\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED = [
         ("xlangai/OpenCUA-7B", EXPECTED_XLANGAI_OPENCUA_7B),
@@ -542,6 +550,14 @@ Hey how are you doing"""  # noqa: W293
             "RedHatAI/DeepSeek-Coder-V2-Lite-Instruct-FP8",
             EXPECTED_REDHATAI_DEEPSEEK_CODER_V2_LITE_INSTRUCT_FP8,
         ),
+        ("h2oai/h2ovl-mississippi-2b", EXPECTED_H2OAI_H2OVL_MISSISSIPPI_2B),
+        ("OpenGVLab/InternVL2-4B", EXPECTED_OPENGVLAB_INTERNVL2_4B),
+        ("Intel/MiniMax-M2.5-int4-AutoRound", EXPECTED_INTEL_MINIMAX_M25_INT4_AUTOROUND),
+        ("FriendliAI/Molmo-7B-O-0924", EXPECTED_FRIENDLIAI_MOLMO_7B_O_0924),
+        ("lukealonso/Qwen3.5-397B-A17B-NVFP4", EXPECTED_LUKEALONSO_QWEN35_397B_A17B_NVFP4),
+        ("Embodied-CoT/ecot-openvla-7b-bridge", EXPECTED_EMBODIED_COT_ECOT_OPENVLA_7B_BRIDGE),
+        ("DeepGlint-AI/UniME-Phi3.5-V-4.2B", EXPECTED_DEEPGLINT_AI_UNIME_PHI35_V_42B),
+        ("1024m/Phi-3.5-MoE-4bit-fp4", EXPECTED_1024M_PHI_35_MOE_4BIT_FP4),
     ]
 
     @parameterized.expand(TOKENIZERS_BACKEND_V5_MODELS_WITH_EXPECTED)

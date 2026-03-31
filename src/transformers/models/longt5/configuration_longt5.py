@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/long-t5-local-base")
-@strict(accept_kwargs=True)
+@strict
 class LongT5Config(PreTrainedConfig):
     r"""
     d_ff (`int`, *optional*, defaults to 2048):
@@ -34,8 +34,6 @@ class LongT5Config(PreTrainedConfig):
         The number of buckets to use for each attention layer.
     relative_attention_max_distance (`int`, *optional*, defaults to 128):
         The maximum distance of the longer sequences for the bucket separation.
-    dropout_rate (`float`, *optional*, defaults to 0.1):
-        The ratio for all dropout layers.
     feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
         Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. LongT5v1.1 uses the
         `"gated-gelu"` feed forward projection. Original LongT5 implementation uses `"gated-gelu"`.
@@ -72,7 +70,7 @@ class LongT5Config(PreTrainedConfig):
     encoder_attention_type: str = "local"
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     bos_token_id: int | None = None
     is_decoder: bool = False
     tie_word_embeddings: bool = True

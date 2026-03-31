@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -42,13 +43,12 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -63,7 +63,7 @@ from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeStatics,
     Ernie4_5_MoeTopKRouter,
 )
-from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessor
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
@@ -79,15 +79,11 @@ from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
 
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
-
-
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     r"""
     temporal_merge_size (`int`, *optional*, defaults to 2):
@@ -114,13 +110,11 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     r"""
     use_bias (`bool`, *optional*, defaults to `False`):
         Whether to use a bias in any of the projections including mlp and attention for example
-    mlp_layer_types (`list`, *optional*):
-        MLP (Moe vs Dense) pattern for each layer.
     moe_k (`int`, *optional*, defaults to 6):
         Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
@@ -129,6 +123,8 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
+    mlp_layer_types (`list`, *optional*):
+        MLP (Moe vs Dense) pattern for each layer.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -168,7 +164,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")
-@strict(accept_kwargs=True)
+@strict
 class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 101304):
@@ -1224,7 +1220,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         )
 
 
-class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
+class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -1234,6 +1230,10 @@ class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
         The merge size of the vision encoder to llm encoder.
     """
 
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+
 
 class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 6177}
@@ -1241,10 +1241,10 @@ class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

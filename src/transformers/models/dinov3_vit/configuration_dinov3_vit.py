@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/dinov3-vits16-pretrain-lvd1689m")
-@strict(accept_kwargs=True)
+@strict
 class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     rope_theta (`float`, *optional*, defaults to 100.0):
@@ -53,10 +53,6 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
         Whether to apply layer normalization to the feature maps when used as backbone.
     reshape_hidden_states (`bool`, *optional*, defaults to `True`):
         Whether to reshape the hidden states to spatial dimensions when used as backbone.
-    return_class_token (`bool`, *optional*, defaults to `False`):
-        Whether the backbone should also return the CLS token for each selected feature stage alongside
-        the spatial feature maps. When `True`, [`DINOv3ViTBackboneOutput`] will have a non-`None`
-        `cls_tokens` field.
 
     Example:
 

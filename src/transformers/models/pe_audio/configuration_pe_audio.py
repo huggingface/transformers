@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
-@strict(accept_kwargs=True)
+@strict
 class PeAudioEncoderConfig(PreTrainedConfig):
     r"""
     dac_config (`Union[PreTrainedConfig, dict]`, *optional*):
@@ -40,7 +40,8 @@ class PeAudioEncoderConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "pe_audio_encoder"
     sub_configs = {"dac_config": AutoConfig}
@@ -85,7 +86,7 @@ class PeAudioEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="facebook/pe-av-large")
-@strict(accept_kwargs=True)
+@strict
 class PeAudioConfig(PretrainedConfig):
     r"""
     Example:

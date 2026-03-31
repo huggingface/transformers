@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
-@strict(accept_kwargs=True)
+@strict
 class OwlViTTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -57,11 +57,11 @@ class OwlViTTextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 0
     bos_token_id: int | None = 49406
-    eos_token_id: int | None = 49407
+    eos_token_id: int | list[int] | None = 49407
 
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
-@strict(accept_kwargs=True)
+@strict
 class OwlViTVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -97,7 +97,7 @@ class OwlViTVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/owlvit-base-patch16")
-@strict(accept_kwargs=True)
+@strict
 class OwlViTConfig(PreTrainedConfig):
     model_type = "owlvit"
     sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}
