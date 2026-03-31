@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .cohere2_vision import *
+    from .cohere_asr import *
     from .colmodernvbert import *
     from .colpali import *
     from .colqwen2 import *
@@ -272,6 +273,7 @@ if TYPE_CHECKING:
     from .mpt import *
     from .mra import *
     from .mt5 import *
+    from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
     from .mvp import *

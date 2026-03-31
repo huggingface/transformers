@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Iterable
 
 import numpy as np
@@ -25,13 +26,71 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_glm_image import GlmImageImageProcessorKwargs, smart_resize
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.glm_image.image_processing_glm_image.GlmImageImageProcessorKwargs
+class GlmImageImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_pixels (`int`, *optional*, defaults to `56 * 56`):
+        The min pixels of the image to resize the image.
+    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+        The max pixels of the image to resize the image.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+
+
+def smart_resize(
+    height: int,
+    width: int,
+    factor: int = 16,
+    min_pixels: int = 512 * 512,
+    max_pixels: int = 2048 * 2048,
+) -> tuple[int, int]:
+    if height < factor or width < factor:
+        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+    elif max(height, width) / min(height, width) > 4:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 4, got {max(height, width) / min(height, width)}"
+        )
+
+    shortest_edge = int(round(math.sqrt(min_pixels)))
+    longest_edge = int(round(math.sqrt(max_pixels)))
+    min_side = min(height, width)
+    max_side = max(height, width)
+
+    scale = 1.0
+
+    if min_side < shortest_edge:
+        scale = shortest_edge / min_side
+
+    if max_side * scale > longest_edge:
+        scale = longest_edge / max_side
+
+    height = height // 2
+    width = width // 2
+
+    h_bar = max(factor, int(round(height * scale / factor)) * factor)
+    w_bar = max(factor, int(round(width * scale / factor)) * factor)
+
+    if max(h_bar, w_bar) > longest_edge:
+        beta = max(h_bar, w_bar) / longest_edge
+        h_bar = max(factor, int(math.floor((h_bar / beta) / factor)) * factor)
+        w_bar = max(factor, int(math.floor((w_bar / beta) / factor)) * factor)
+
+    return h_bar, w_bar
 
 
 @auto_docstring
@@ -96,7 +155,7 @@ class GlmImageImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

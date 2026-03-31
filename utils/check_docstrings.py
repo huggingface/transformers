@@ -385,21 +385,45 @@ MATH_OPERATORS = {
 }
 
 
-def has_auto_docstring_decorator(obj) -> bool:
-    try:
-        # Get the source lines for the object
-        source_lines = inspect.getsourcelines(obj)[0]
+def _get_auto_docstring_names(file_path: str, cache: dict[str, set[str]] | None = None) -> set[str]:
+    """
+    Parse a source file once and return the set of class/function names decorated with @auto_docstring.
+    Walks top-level definitions and one level into class bodies (methods).
+    Results can be cached per file path.
+    """
+    if cache is not None and file_path in cache:
+        return cache[file_path]
 
-        # Check the lines before the definition for @auto_docstring decorator
-        for line in source_lines[:10]:  # Check first 10 lines (decorators come before def/class)
-            line = line.strip()
-            if line.startswith("@auto_docstring"):
-                return True
-    except (TypeError, OSError):
-        # Some objects don't have source code available
+    names = set()
+    try:
+        with open(file_path) as f:
+            source = f.read()
+        tree = ast.parse(source, filename=file_path)
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                if any(_is_auto_docstring_decorator(dec) for dec in node.decorator_list):
+                    names.add(node.name)
+                # Also check methods inside classes
+                if isinstance(node, ast.ClassDef):
+                    for class_item in node.body:
+                        if isinstance(class_item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            if any(_is_auto_docstring_decorator(dec) for dec in class_item.decorator_list):
+                                names.add(class_item.name)
+    except (OSError, SyntaxError):
         pass
 
-    return False
+    if cache is not None:
+        cache[file_path] = names
+    return names
+
+
+def has_auto_docstring_decorator(obj, cache: dict[str, set[str]] | None = None) -> bool:
+    try:
+        source_file = inspect.getfile(obj)
+    except (TypeError, OSError):
+        return False
+    decorated_names = _get_auto_docstring_names(source_file, cache=cache)
+    return obj.__name__ in decorated_names
 
 
 def find_indent(line: str) -> int:
@@ -1359,13 +1383,14 @@ def generate_new_docstring_for_class(
     )
 
 
-def _build_ast_indexes(source: str) -> list[DecoratedItem]:
+def _build_ast_indexes(source: str, tree: ast.Module | None = None) -> list[DecoratedItem]:
     """Parse source once and return list of all @auto_docstring decorated items.
 
     Returns:
         List of DecoratedItem objects, one for each @auto_docstring decorated function or class.
     """
-    tree = ast.parse(source)
+    if tree is None:
+        tree = ast.parse(source)
     # First pass: collect top-level string variables (for resolving custom_args variable references)
     var_to_string: dict[str, str] = {}
     for node in tree.body:
@@ -1380,9 +1405,9 @@ def _build_ast_indexes(source: str) -> list[DecoratedItem]:
             if isinstance(node.value.value, str) and isinstance(node.target, ast.Name):
                 var_to_string[node.target.id] = node.value.value
     # Second pass: find all @auto_docstring decorated functions/classes
-    # First, identify processor classes to track method context
+    # First, identify processor classes to track method context (only top-level classes)
     processor_classes: set[str] = set()
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
                 if isinstance(base, ast.Name) and ("ProcessorMixin" in base.id or "Processor" in base.id):
@@ -1525,7 +1550,7 @@ def _extract_type_name(annotation) -> str | None:
     return None
 
 
-def _find_typed_dict_classes(source: str) -> list[dict]:
+def _find_typed_dict_classes(source: str, tree: ast.Module | None = None) -> list[dict]:
     """
     Find all custom TypedDict kwargs classes in the source.
 
@@ -1534,7 +1559,8 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
         - fields: fields that need custom documentation (not in standard args, not nested TypedDicts)
         - all_fields: all fields including those in standard args (for redundancy checking)
     """
-    tree = ast.parse(source)
+    if tree is None:
+        tree = ast.parse(source)
 
     # Get standard args that are already documented in source classes
     standard_args = set()
@@ -1543,32 +1569,21 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
     except Exception as e:
         logger.debug(f"Could not get standard args from source: {e}")
 
-    # Collect all TypedDict class names first (for excluding nested TypedDicts)
+    # Collect TypedDict class names and nodes (TypedDicts are always top-level)
     typed_dict_names = set()
-    for node in ast.walk(tree):
+    typed_dict_nodes = []
+    for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
                 if isinstance(base, ast.Name) and ("TypedDict" in base.id or "Kwargs" in base.id):
                     typed_dict_names.add(node.name)
+                    typed_dict_nodes.append(node)
                     break
 
     typed_dicts = []
 
     # Check each TypedDict class
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
-
-        # Check if this is a TypedDict
-        is_typed_dict = False
-        for base in node.bases:
-            if isinstance(base, ast.Name) and ("TypedDict" in base.id or "Kwargs" in base.id):
-                is_typed_dict = True
-                break
-
-        if not is_typed_dict:
-            continue
-
+    for node in typed_dict_nodes:
         # Skip standard kwargs classes
         if node.name in ["TextKwargs", "ImagesKwargs", "VideosKwargs", "AudioKwargs", "ProcessingKwargs"]:
             continue
@@ -1632,6 +1647,7 @@ def _find_typed_dict_classes(source: str) -> list[dict]:
 def _process_typed_dict_docstrings(
     candidate_file: str,
     overwrite: bool = False,
+    tree: ast.Module | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """
     Check and optionally fix TypedDict docstrings.
@@ -1640,6 +1656,7 @@ def _process_typed_dict_docstrings(
     Args:
         candidate_file: Path to the file to process
         overwrite: Whether to fix issues by writing to the file
+        tree: Pre-parsed AST tree to avoid re-parsing the file
 
     Returns:
         Tuple of (missing_warnings, fill_warnings, redundant_warnings)
@@ -1647,7 +1664,7 @@ def _process_typed_dict_docstrings(
     with open(candidate_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    typed_dicts = _find_typed_dict_classes(content)
+    typed_dicts = _find_typed_dict_classes(content, tree=tree)
     if not typed_dicts:
         return [], [], []
 
@@ -1925,11 +1942,20 @@ def update_file_with_new_docstrings(
     )
 
 
-def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
+def check_auto_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are decorated with `@auto_docstrings`.
     This function orchestrates the process by finding relevant files, scanning for decorators,
     generating new docstrings, and updating files as needed.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether to fix inconsistencies or not.
+        check_all (`bool`, *optional*, defaults to `False`):
+            Whether to check all files.
+        cache (Dictionary `str` to `Set[str]`, *optional*):
+            To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
+            computed results.
     """
     # 1. Find all model files to check
     matching_files = find_matching_model_files(check_all)
@@ -1947,8 +1973,12 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             content = f.read()
         lines = content.split("\n")
 
-        # Parse file once to find all @auto_docstring decorated items
-        decorated_items = _build_ast_indexes(content)
+        # Parse file once and share the AST tree across all analysis passes
+        tree = ast.parse(content)
+        decorated_items = _build_ast_indexes(content, tree=tree)
+
+        # Warm the cache so check_docstrings() won't re-parse this file
+        _get_auto_docstring_names(candidate_file, cache=cache)
 
         missing_docstring_args_warnings = []
         fill_docstring_args_warnings = []
@@ -1975,7 +2005,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         # Process TypedDict kwargs (separate pass to avoid line number conflicts)
         # This runs AFTER @auto_docstring processing is complete
         typed_dict_missing_warnings, typed_dict_fill_warnings, typed_dict_redundant_warnings = (
-            _process_typed_dict_docstrings(candidate_file, overwrite=overwrite)
+            _process_typed_dict_docstrings(candidate_file, overwrite=overwrite, tree=tree)
         )
 
         # Report TypedDict errors
@@ -2035,7 +2065,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
         )
 
 
-def check_docstrings(overwrite: bool = False, check_all: bool = False):
+def check_docstrings(overwrite: bool = False, check_all: bool = False, cache: dict[str, set[str]] | None = None):
     """
     Check docstrings of all public objects that are callables and are documented. By default, only checks the diff.
 
@@ -2044,6 +2074,9 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             Whether to fix inconsistencies or not.
         check_all (`bool`, *optional*, defaults to `False`):
             Whether to check all files.
+        cache (Dictionary `str` to `Set[str]`, *optional*):
+            To speed up auto-docstring detection if it was previously called on a file, the cache of all previously
+            computed results.
     """
     module_diff_files = None
     if not check_all:
@@ -2077,16 +2110,16 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
 
-        # Skip objects decorated with @auto_docstring - they have auto-generated documentation
-        if has_auto_docstring_decorator(obj):
-            continue
-
         # If we are checking against the diff, we skip objects that are not part of the diff.
         if module_diff_files is not None:
             object_file = find_source_file(getattr(transformers, name))
             object_file_relative_path = "src/" + str(object_file).split("/src/")[1]
             if object_file_relative_path not in module_diff_files:
                 continue
+
+        # Skip objects decorated with @auto_docstring - they have auto-generated documentation
+        if has_auto_docstring_decorator(obj, cache=cache):
+            continue
 
         # Check docstring
         try:
@@ -2142,5 +2175,6 @@ if __name__ == "__main__":
         "--check_all", action="store_true", help="Whether to check all files. By default, only checks the diff"
     )
     args = parser.parse_args()
-    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
-    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all)
+    auto_docstring_cache: dict[str, set[str]] = {}
+    check_auto_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
+    check_docstrings(overwrite=args.fix_and_overwrite, check_all=args.check_all, cache=auto_docstring_cache)
