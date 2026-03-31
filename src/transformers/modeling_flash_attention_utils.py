@@ -689,7 +689,7 @@ def _process_flash_attention_kwargs(
     #   2. Base FA (non-varlen) has no support for sliding windows (natively)
     if is_flash_attention_torch and flash_kwargs.get("window_size") is None:
         flash_kwargs["window_size"] = (-1, 0) if is_causal else (-1, -1)
-    elif enable_torch_specifics:
+    elif is_flash_attention_torch and enable_torch_specifics:
         raise ValueError(
             "Flash Attention torch does not support sliding window through non-varlen paths (yet), e.g. "
             "when you don't use an attention mask during inference."
