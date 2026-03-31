@@ -21,17 +21,15 @@
 
 import numpy as np
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_cv2_available, is_torchvision_available, requires_backends
+from ...utils import auto_docstring, is_cv2_available, requires_backends
 from ...utils.generic import TensorType
 
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 if is_cv2_available():
     import cv2

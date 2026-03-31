@@ -16,16 +16,13 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
-import torch
-from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, logging, requires_backends
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, logging
 from ...utils.import_utils import requires
-from .image_processing_glpn import GLPNImageProcessorKwargs
 
 
 if TYPE_CHECKING:
@@ -34,8 +31,18 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+# Adapted from transformers.models.glpn.image_processing_glpn.GLPNImageProcessorKwargs
+class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    size_divisor (`int`, *optional*, defaults to 32):
+        When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
+        multiple of `size_divisor`.
+    """
+
+    size_divisor: int
+
+
 @auto_docstring
-@requires(backends=("vision", "torch", "torchvision"))
 class GLPNImageProcessorPil(PilBackend):
     """PIL backend for GLPN with size_divisor resize."""
 
@@ -63,7 +70,7 @@ class GLPNImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         size_divisor: int = 32,
         **kwargs,
     ) -> np.ndarray:
@@ -78,7 +85,7 @@ class GLPNImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -104,6 +111,7 @@ class GLPNImageProcessorPil(PilBackend):
             processed_images.append(image)
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+    @requires(backends=("torch",))
     def post_process_depth_estimation(
         self, outputs: "DepthEstimatorOutput", target_sizes: TensorType | list[tuple[int, int]] | None = None
     ) -> list[dict[str, TensorType]]:
@@ -111,7 +119,8 @@ class GLPNImageProcessorPil(PilBackend):
         Convert raw model outputs to final depth predictions.
         Only supports PyTorch.
         """
-        requires_backends(self, "torch")
+        import torch.nn.functional as F
+
         predicted_depth = outputs.predicted_depth
         if target_sizes is not None and len(predicted_depth) != len(target_sizes):
             raise ValueError(
@@ -122,7 +131,7 @@ class GLPNImageProcessorPil(PilBackend):
         for depth, target_size in zip(predicted_depth, target_sizes):
             if target_size is not None:
                 depth = depth[None, None, ...]
-                depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
+                depth = F.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
                 depth = depth.squeeze(0).squeeze(0)
             results.append({"predicted_depth": depth})
         return results

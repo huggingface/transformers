@@ -3282,8 +3282,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Detect if embeddings have been untied at runtime (e.g. after PEFT merge or vocab resize
         # with independent training). If the config still says tie_word_embeddings=True but the
-        # actual tensor storages differ, update the config to prevent weight corruption on reload.
-        if getattr(model_to_save.config, "tie_word_embeddings", False):
+        # actual tensor storages differ, we save tie_word_embeddings=False in the config file
+        # to prevent weight corruption on reload. We restore the original value afterwards so
+        # this method does not permanently alter the model's runtime behavior.
+        _original_tie_word_embeddings = getattr(model_to_save.config, "tie_word_embeddings", None)
+        if _original_tie_word_embeddings:
             try:
                 input_embeddings = model_to_save.get_input_embeddings()
                 output_embeddings = model_to_save.get_output_embeddings()
@@ -3295,32 +3298,36 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 ):
                     in_weight = input_embeddings.weight
                     out_weight = output_embeddings.weight
-                    # If they don't share identical memory, their values might still be identical (e.g. cloned).
-                    # If their values differ entirely (like after PEFT merge), they are functionally untied.
-                    if in_weight.data_ptr() != out_weight.data_ptr():
-                        if in_weight.device != out_weight.device:
-                            is_tied = torch.equal(in_weight.to(out_weight.device), out_weight)
-                        else:
-                            is_tied = torch.equal(in_weight, out_weight)
-
-                        if not is_tied:
-                            logger.warning(
-                                "The model config specifies `tie_word_embeddings=True` but the input and output embeddings"
-                                " do not share the same weights (they may have been untied after PEFT adapter merging or"
-                                " vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config to prevent"
-                                " weight corruption on reload."
-                            )
-                            model_to_save.config.tie_word_embeddings = False
+                    # Only check when both weights are on the same non-meta device.
+                    # In the real PEFT merge / vocab resize scenario, both weights are always
+                    # on the same device, so data_ptr() comparison is sufficient and reliable.
+                    # We skip the check for cross-device (e.g. distributed/TP) and meta tensors
+                    # to avoid false positives.
+                    if (
+                        in_weight.device == out_weight.device
+                        and in_weight.device.type != "meta"
+                        and in_weight.data_ptr() != out_weight.data_ptr()
+                    ):
+                        logger.warning(
+                            "The model config specifies `tie_word_embeddings=True` but the input and output embeddings"
+                            " do not share the same weights (they may have been untied after PEFT adapter merging or"
+                            " vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config to prevent"
+                            " weight corruption on reload."
+                        )
+                        model_to_save.config.tie_word_embeddings = False
             except NotImplementedError:
                 pass
-            except Exception as e:
-                # Catch any device/meta tensor related errors gracefully
-                logger.debug("Could not check tied embeddings during save: %s", e)
 
         # Save the config
         if is_main_process:
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
+
+        # Restore the original tie_word_embeddings value so save_pretrained() has no side effects
+        if _original_tie_word_embeddings is not None:
+            model_to_save.config.tie_word_embeddings = _original_tie_word_embeddings
+
+        if is_main_process:
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
 

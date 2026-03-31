@@ -51,7 +51,7 @@ class LevitImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         **kwargs,
     ) -> np.ndarray:
         """Resize: shortest_edge is rescaled to int((256/224) * shortest_edge)."""
