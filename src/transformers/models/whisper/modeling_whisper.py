@@ -325,7 +325,10 @@ class WhisperAttention(nn.Module):
             key_states = past_key_values.layers[self.layer_idx].keys
             value_states = past_key_values.layers[self.layer_idx].values
         else:
-            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            # Use the query's batch dimension for kv view so that a different-batch
+            # encoder output (e.g. in tests) gets absorbed into the sequence axis,
+            # preserving backward-compatible behaviour.
+            kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
             key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             if past_key_values is not None:
