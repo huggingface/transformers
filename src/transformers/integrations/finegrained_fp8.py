@@ -137,11 +137,9 @@ def _load_deepgemm_kernel():
         )
 
     kernel = lazy_load_kernel("deep-gemm")
-    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt", None)
-    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
-    deepgemm_per_token_cast_to_fp8 = (
-        getattr(kernel.utils, "per_token_cast_to_fp8", None) if hasattr(kernel, "utils") else None
-    )
+    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt")
+    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous")
+    deepgemm_per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
 
     missing = [
         name
