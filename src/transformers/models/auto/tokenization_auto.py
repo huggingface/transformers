@@ -738,6 +738,7 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
+        explicit_local_code = has_local_code and not type(config).__module__.startswith("transformers.")
 
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -758,7 +759,7 @@ class AutoTokenizer:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code and not has_local_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             # BC v5: register *Fast aliases before remote code loads.
             if tokenizer_config_class:
                 tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))
