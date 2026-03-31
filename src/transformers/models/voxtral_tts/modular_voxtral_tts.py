@@ -29,6 +29,7 @@ from ..mistral.modeling_mistral import (
     MistralRotaryEmbedding,
 )
 from .configuration_voxtral_tts import VoxtralTtsCodecConfig, VoxtralTtsConfig, VoxtralTtsFlowMatchingConfig
+from .generation_voxtral_tts import VoxtralTtsGenerationMixin
 
 
 class VoxtralTtsMLP(MistralMLP):
@@ -386,7 +387,7 @@ class VoxtralTtsCodecModel(nn.Module):
         return waveform
 
 
-class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel):
+class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel, VoxtralTtsGenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "embed_text_tokens.weight"}
 
     def __init__(self, config: VoxtralTtsConfig):

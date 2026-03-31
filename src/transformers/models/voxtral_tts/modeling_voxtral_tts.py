@@ -39,6 +39,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_voxtral_tts import VoxtralTtsCodecConfig, VoxtralTtsConfig, VoxtralTtsFlowMatchingConfig
+from .generation_voxtral_tts import VoxtralTtsGenerationMixin
 
 
 class VoxtralTtsMLP(nn.Module):
@@ -731,7 +732,7 @@ class VoxtralTtsCodecModel(nn.Module):
         return waveform
 
 
-class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel):
+class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel, VoxtralTtsGenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "embed_text_tokens.weight"}
 
     def __init__(self, config: VoxtralTtsConfig):
