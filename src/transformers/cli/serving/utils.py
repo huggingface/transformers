@@ -38,7 +38,13 @@ if TYPE_CHECKING:
     import tokenizers
     import torch
 
-    from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
+    from transformers import (
+        ContinuousBatchingConfig,
+        GenerationConfig,
+        PreTrainedModel,
+        PreTrainedTokenizerFast,
+        ProcessorMixin,
+    )
     from transformers.generation.continuous_batching.continuous_api import ContinuousBatchingManager
     from transformers.generation.continuous_batching.requests import GenerationOutput
     from transformers.generation.continuous_batching.scheduler import Scheduler
@@ -614,8 +620,9 @@ class CBGenerateManager(BaseGenerateManager):
        to ``add_request`` and the CB manager no longer needs a shared config.
     """
 
-    def __init__(self):
+    def __init__(self, cb_config: "ContinuousBatchingConfig | None" = None):
         self._cb = None
+        self._cb_config = cb_config
 
     def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
         """Initialize the CB manager on first call with the request's generation config.
@@ -629,7 +636,9 @@ class CBGenerateManager(BaseGenerateManager):
         if self._cb is not None:
             return
 
-        self._cb = model.init_continuous_batching(generation_config=gen_config)
+        self._cb = model.init_continuous_batching(
+            generation_config=gen_config, continuous_batching_config=self._cb_config
+        )
         self._cb.start()
 
     def generate_streaming(
@@ -727,9 +736,15 @@ class GenerationState:
             sequential ``model.generate()`` calls.
     """
 
-    def __init__(self, continuous_batching: bool = False, compile: bool = False):
+    def __init__(
+        self,
+        continuous_batching: bool = False,
+        compile: bool = False,
+        cb_config: "ContinuousBatchingConfig | None" = None,
+    ):
         self._continuous_batching = continuous_batching
         self._compile = compile
+        self._cb_config = cb_config
         self._generate_managers: dict[str, GenerateManager] = {}
         self._cb_manager: CBGenerateManager | None = None
         self._cb_model_id: str | None = None
@@ -770,7 +785,7 @@ class GenerationState:
                     self._cb_manager.stop()
                     self._cb_manager = None
             if self._cb_manager is None:
-                self._cb_manager = CBGenerateManager()
+                self._cb_manager = CBGenerateManager(cb_config=self._cb_config)
                 self._cb_model_id = model_id
             return self._cb_manager
         if model_id not in self._generate_managers:

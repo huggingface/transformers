@@ -19,7 +19,7 @@ from inspect_ai.log import bundle_log_dir
 from inspect_evals.gpqa import gpqa_diamond
 
 
-def wait_for_server_up(server_process, timeout=600):
+def wait_for_server_up(server_process, port=8000, timeout=600):
     start_time = time.time()
 
     import urllib.error
@@ -27,7 +27,7 @@ def wait_for_server_up(server_process, timeout=600):
 
     while time.time() - start_time < timeout:
         try:
-            req = urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)
+            req = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
             if req.status == 200:
                 elapsed = time.time() - start_time
                 print("\n" + "=" * 70)
@@ -68,6 +68,12 @@ def main():
         "--no-continuous-batching",
         action="store_true",
         help="Disable continuous batching (enabled by default)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for the transformers serve server (default: 8000)",
     )
     parser.add_argument(
         "--limit",
@@ -133,6 +139,7 @@ def main():
     serve_cmd = [
         "transformers",
         "serve",
+        args.model,
     ]
 
     # Add continuous batching if not disabled
@@ -154,6 +161,7 @@ def main():
 
     # Always use sdpa attention implementation
     serve_cmd.extend(["--attn-implementation", "kernels-community/flash-attn2"])
+    serve_cmd.extend(["--port", str(args.port)])
 
     print("Starting transformers serve with continuous batching...")
     print(f"Model: {args.model}")
@@ -171,13 +179,13 @@ def main():
     # Start server with output going directly to stdout/stderr
     server_process = subprocess.Popen(serve_cmd, stdout=None, stderr=None)
 
-    wait_for_server_up(server_process, timeout=600)
+    wait_for_server_up(server_process, port=args.port, timeout=600)
 
     eval(
         gpqa_diamond,
         model=f"openai-api/transformers-serve/{args.model}",
         log_dir=args.log_dir,
-        model_base_url="http://localhost:8000/v1",
+        model_base_url=f"http://localhost:{args.port}/v1",
         display="plain",
         limit=args.limit,
         model_args={"stream": False},

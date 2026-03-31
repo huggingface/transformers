@@ -164,10 +164,17 @@ class ModelManager:
                 f"Unsupported quantization method: '{self.quantization}'. Must be 'bnb-4bit' or 'bnb-8bit'."
             )
         VALID_ATTN_IMPLEMENTATIONS = {"eager", "sdpa", "flash_attention_2", "flash_attention_3", "flex_attention"}
-        if self.attn_implementation is not None and self.attn_implementation not in VALID_ATTN_IMPLEMENTATIONS:
+        is_kernels_community = self.attn_implementation is not None and self.attn_implementation.startswith(
+            "kernels-community/"
+        )
+        if (
+            self.attn_implementation is not None
+            and not is_kernels_community
+            and self.attn_implementation not in VALID_ATTN_IMPLEMENTATIONS
+        ):
             raise ValueError(
                 f"Unsupported attention implementation: '{self.attn_implementation}'. "
-                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS}."
+                f"Must be one of {VALID_ATTN_IMPLEMENTATIONS} or a kernels-community kernel (e.g. 'kernels-community/flash-attn2')."
             )
 
     @staticmethod

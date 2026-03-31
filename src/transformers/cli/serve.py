@@ -36,8 +36,24 @@ class Serve:
         force_model: Annotated[str | None, typer.Argument(help="Model to preload and use for all requests.")] = None,
         # Model options
         continuous_batching: Annotated[
-            bool, typer.Option(help="Enable continuous batching with paged attention for higher throughput.")
+            bool,
+            typer.Option(help="Enable continuous batching with paged attention. Configure with --cb-* flags."),
         ] = False,
+        cb_block_size: Annotated[
+            int | None, typer.Option(help="KV cache block size in tokens for continuous batching.")
+        ] = None,
+        cb_num_blocks: Annotated[
+            int | None, typer.Option(help="Number of KV cache blocks for continuous batching.")
+        ] = None,
+        cb_max_batch_tokens: Annotated[
+            int | None, typer.Option(help="Maximum tokens per batch for continuous batching.")
+        ] = None,
+        cb_max_memory_percent: Annotated[
+            float | None, typer.Option(help="Max GPU memory fraction for KV cache (0.0-1.0).")
+        ] = None,
+        cb_use_cuda_graph: Annotated[
+            bool | None, typer.Option(help="Enable CUDA graphs for continuous batching.")
+        ] = None,
         attn_implementation: Annotated[
             str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
         ] = None,
@@ -90,7 +106,20 @@ class Serve:
             model_timeout=model_timeout,
             force_model=force_model,
         )
-        self._generation_state = GenerationState(continuous_batching=continuous_batching, compile=compile)
+        from transformers import ContinuousBatchingConfig
+
+        cb_config = ContinuousBatchingConfig(
+            block_size=cb_block_size,
+            num_blocks=cb_num_blocks,
+            max_batch_tokens=cb_max_batch_tokens,
+            max_memory_percent=cb_max_memory_percent,
+            use_cuda_graph=cb_use_cuda_graph,
+        )
+        self._generation_state = GenerationState(
+            continuous_batching=continuous_batching,
+            compile=compile,
+            cb_config=cb_config,
+        )
 
         self._chat_handler = ChatCompletionHandler(
             model_manager=self._model_manager,

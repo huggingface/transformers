@@ -39,7 +39,7 @@ from transformers.cli.serving.utils import (
     ToolCallParser,
     detect_tool_format,
 )
-from transformers.testing_utils import require_serve, require_torch_accelerator, require_vision, slow
+from transformers.testing_utils import require_librosa, require_serve, require_torch_accelerator, require_vision, slow
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -1557,6 +1557,7 @@ class TestVLM(unittest.TestCase):
 
 
 @slow
+@require_librosa
 @require_serve
 class TestTranscription(unittest.TestCase):
     """Integration tests for POST /v1/audio/transcriptions with whisper-tiny."""
@@ -1693,6 +1694,25 @@ class TestContinuousBatchingChatCompletion(unittest.TestCase):
         )
         self.assertIsNotNone(resp.choices[0].message.content)
         self.assertTrue(len(resp.choices[0].message.content) > 0)
+
+    def test_non_streaming_response_json_format(self):
+        """Non-streaming CB responses return proper JSON objects, not double-encoded strings."""
+        response = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "Say hello"}],
+            stream=False,
+            max_tokens=5,
+        )
+        self.assertIsNotNone(response)
+        self.assertIsNotNone(response.id)
+        self.assertIsNotNone(response.choices)
+        self.assertEqual(len(response.choices), 1)
+
+        choice = response.choices[0]
+        self.assertIsNotNone(choice.message)
+        self.assertIsNotNone(choice.message.content)
+        self.assertEqual(choice.message.role, "assistant")
+        self.assertIsInstance(choice.message.content, str)
 
     def test_multi_turn(self):
         """Multi-turn conversation works with CB."""
