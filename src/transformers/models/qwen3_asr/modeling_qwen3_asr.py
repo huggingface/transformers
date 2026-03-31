@@ -102,18 +102,12 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
-
-        # Flatten batch inputs for audio encoder (matches Qwen3OmniMoe approach) -> TODO in processor instead? see audio flamingo
-        audio_feature_lengths = torch.sum(input_features_mask, dim=1)
-        input_features = input_features.permute(0, 2, 1)[input_features_mask.bool()].permute(1, 0)
-
         audio_output = self.audio_tower(
             input_features,
-            feature_lens=audio_feature_lengths,
+            feature_lens=input_features_mask.sum(dim=1),
             **kwargs,
         )
         audio_output.pooler_output = audio_output.last_hidden_state
-
         return audio_output
 
     @can_return_tuple

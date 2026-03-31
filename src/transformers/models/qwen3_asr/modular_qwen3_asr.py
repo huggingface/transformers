@@ -134,7 +134,6 @@ class Qwen3ASRProcessor(ProcessorMixin):
         self.audio_eos_token = self.tokenizer.audio_eos_token
         self.audio_eos_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_eos_token)
 
-    # TODO (ebezzam) could use modular from VibeVoice ASR, if we define a method `_get_feat_extract_output_lengths` for it
     def __call__(
         self,
         audio: AudioInput,
@@ -177,9 +176,12 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-        # Prepare audio
+        # Prepare audio: batched, padded, and flatten as expected by Qwen3OmniMoe's audio encoder
         data = self.feature_extractor(audio, **audio_kwargs)
         data["input_features_mask"] = data.pop("attention_mask")
+        data["input_features"] = (
+            data["input_features"].permute(0, 2, 1)[data["input_features_mask"].bool()].permute(1, 0)
+        )
 
         # Replace audio tokens in text
         audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()
@@ -240,18 +242,12 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
-
-        # Flatten batch inputs for audio encoder (matches Qwen3OmniMoe approach) -> TODO in processor instead? see audio flamingo
-        audio_feature_lengths = torch.sum(input_features_mask, dim=1)
-        input_features = input_features.permute(0, 2, 1)[input_features_mask.bool()].permute(1, 0)
-
         audio_output = self.audio_tower(
             input_features,
-            feature_lens=audio_feature_lengths,
+            feature_lens=input_features_mask.sum(dim=1),
             **kwargs,
         )
         audio_output.pooler_output = audio_output.last_hidden_state
-
         return audio_output
 
     def forward(

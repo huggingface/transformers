@@ -78,7 +78,6 @@ class Qwen3ASRProcessor(ProcessorMixin):
         self.audio_eos_token = self.tokenizer.audio_eos_token
         self.audio_eos_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_eos_token)
 
-    # TODO (ebezzam) could use modular from VibeVoice ASR, if we define a method `_get_feat_extract_output_lengths` for it
     def __call__(
         self,
         audio: AudioInput,
@@ -121,9 +120,12 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-        # Prepare audio
+        # Prepare audio: batched, padded, and flatten as expected by Qwen3OmniMoe's audio encoder
         data = self.feature_extractor(audio, **audio_kwargs)
         data["input_features_mask"] = data.pop("attention_mask")
+        data["input_features"] = (
+            data["input_features"].permute(0, 2, 1)[data["input_features_mask"].bool()].permute(1, 0)
+        )
 
         # Replace audio tokens in text
         audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()
