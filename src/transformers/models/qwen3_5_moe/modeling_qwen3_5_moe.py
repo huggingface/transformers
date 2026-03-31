@@ -438,7 +438,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         # getting projected states from cache if it exists
         if use_precomputed_states:
             conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].ssm_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -522,7 +522,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         # Update cache
         if cache_params is not None:
-            cache_params.update_ssm_state(last_recurrent_state, self.layer_idx)
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)

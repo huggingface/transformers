@@ -286,7 +286,7 @@ class Mamba2Mixer(nn.Module):
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].ssm_states,
+                cache_params.layers[self.layer_idx].recurrent_states,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -384,7 +384,7 @@ class Mamba2Mixer(nn.Module):
 
                 # Init cache
                 if ssm_state is not None and cache_params is not None:
-                    cache_params.update_ssm_state(ssm_state, layer_idx=self.layer_idx)
+                    cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
                 scan_output = scan_output.view(batch_size, seq_len, -1)
                 # Multiply "gate" branch and apply extra normalization layer
@@ -476,8 +476,8 @@ class Mamba2Mixer(nn.Module):
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].ssm_states * dA + dBx
-            ssm_states = cache_params.update_ssm_state(ssm_states, layer_idx=self.layer_idx)
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states * dA + dBx
+            ssm_states = cache_params.update_recurrent_state(ssm_states, layer_idx=self.layer_idx)
 
             # Subsequent output
             # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
@@ -574,7 +574,7 @@ class Mamba2Mixer(nn.Module):
 
             # Init cache
             if ssm_state is not None and cache_params is not None:
-                cache_params.update_ssm_state(ssm_state, layer_idx=self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, layer_idx=self.layer_idx)
 
         scan_output = self.norm(y, gate)
 

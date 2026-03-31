@@ -669,7 +669,7 @@ class HQQQuantizedLayer(QuantizedLayer):
         return tensor
 
 
-class MambaCacheLayerMixin(ABC):
+class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a mamba single layer's cache."""
 
     # All shapes are static by essence in a Mamba layer, so it is compileable
@@ -677,9 +677,9 @@ class MambaCacheLayerMixin(ABC):
 
     def __init__(self):
         self.conv_states: torch.Tensor | None = None
-        self.ssm_states: torch.Tensor | None = None
+        self.recurrent_states: torch.Tensor | None = None
         self.is_conv_states_initialized = False
-        self.is_ssm_states_initialized = False
+        self.is_recurrent_states_initialized = False
         self.has_previous_state = False
 
     def __repr__(self):
@@ -687,53 +687,53 @@ class MambaCacheLayerMixin(ABC):
 
     @abstractmethod
     def lazy_initialization(
-        self, conv_states: torch.Tensor | None = None, ssm_states: torch.Tensor | None = None
+        self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None: ...
 
     @abstractmethod
     def update_conv_state(self, conv_states: torch.Tensor) -> torch.Tensor: ...
 
     @abstractmethod
-    def update_ssm_state(self, ssm_states: torch.Tensor) -> torch.Tensor: ...
+    def update_recurrent_state(self, recurrent_states: torch.Tensor) -> torch.Tensor: ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
         if self.is_conv_states_initialized:
             self.conv_states = self.conv_states.to("cpu", non_blocking=True)
-        if self.is_ssm_states_initialized:
-            self.ssm_states = self.ssm_states.to("cpu", non_blocking=True)
+        if self.is_recurrent_states_initialized:
+            self.recurrent_states = self.recurrent_states.to("cpu", non_blocking=True)
 
     def prefetch(self):
         """In case of layer offloading, this allows to move the data back to the layer's device ahead of time."""
         if self.is_conv_states_initialized and self.conv_states.device != self.device:
             self.conv_states = self.conv_states.to(self.device, non_blocking=True)
-        if self.is_ssm_states_initialized and self.ssm_states.device != self.device:
-            self.ssm_states = self.ssm_states.to(self.device, non_blocking=True)
+        if self.is_recurrent_states_initialized and self.recurrent_states.device != self.device:
+            self.recurrent_states = self.recurrent_states.to(self.device, non_blocking=True)
 
     def reset(self) -> None:
         """Resets the cache values while preserving the objects"""
         if self.is_conv_states_initialized:
             self.conv_states.zero_()
-        if self.is_ssm_states_initialized:
-            self.ssm_states.zero_()
+        if self.is_recurrent_states_initialized:
+            self.recurrent_states.zero_()
         self.has_previous_state = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         if self.is_conv_states_initialized:
             self.conv_states = self.conv_states.index_select(0, beam_idx.to(self.device))
-        # ssm_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
-        if self.is_ssm_states_initialized:
-            self.ssm_states = self.ssm_states.index_select(0, beam_idx.to(self.device))
+        # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
+        if self.is_recurrent_states_initialized:
+            self.recurrent_states = self.recurrent_states.index_select(0, beam_idx.to(self.device))
 
     def crop(self, max_length: int):
         # We don't crop the mamba cache, so simply do nothing here
         pass
 
 
-class MambaLayer(MambaCacheLayerMixin):
+class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
-        self, conv_states: torch.Tensor | None = None, ssm_states: torch.Tensor | None = None
+        self, conv_states: torch.Tensor | None = None, recurrent_states: torch.Tensor | None = None
     ) -> None:
         # Here, we will lazy init both states separately, each in their own update function
         if conv_states is not None:
@@ -746,13 +746,13 @@ class MambaLayer(MambaCacheLayerMixin):
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.conv_states)
             self.is_conv_states_initialized = True
-        if ssm_states is not None:
+        if recurrent_states is not None:
             # The shape is always static, so we init as such
-            self.ssm_states = torch.zeros_like(ssm_states, dtype=self.dtype, device=self.device)
+            self.recurrent_states = torch.zeros_like(recurrent_states, dtype=self.dtype, device=self.device)
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
-                torch._dynamo.mark_static_address(self.ssm_states)
-            self.is_ssm_states_initialized = True
+                torch._dynamo.mark_static_address(self.recurrent_states)
+            self.is_recurrent_states_initialized = True
 
     def update_conv_state(self, conv_states: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -787,7 +787,7 @@ class MambaLayer(MambaCacheLayerMixin):
 
         return self.conv_states
 
-    def update_ssm_state(self, ssm_states: torch.Tensor, **kwargs) -> torch.Tensor:
+    def update_recurrent_state(self, recurrent_states: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Update the mamba cache in-place, and return the necessary ssm states.
 
@@ -797,37 +797,37 @@ class MambaLayer(MambaCacheLayerMixin):
         Returns:
             `torch.Tensor`: The updated ssm states.
         """
-        if not self.is_ssm_states_initialized:
-            self.lazy_initialization(ssm_states=ssm_states)
+        if not self.is_recurrent_states_initialized:
+            self.lazy_initialization(recurrent_states=recurrent_states)
         # Note that we copy instead of assigning, to preserve the static address for cudagraphs
-        self.ssm_states.copy_(ssm_states)
-        return self.ssm_states
+        self.recurrent_states.copy_(recurrent_states)
+        return self.recurrent_states
 
 
-class MambaAndAttentionLayer(MambaLayer, DynamicLayer):
+class LinearAttentionAndAttentionLayer(LinearAttentionLayer, DynamicLayer):
     # The dynamic Attention part makes it non-compileable
     is_compileable = False
 
     def __init__(self):
         DynamicLayer.__init__(self)
-        MambaLayer.__init__(self)
+        LinearAttentionLayer.__init__(self)
 
     def lazy_initialization(self, *args, **kwargs) -> None:
         # When the Attention cache is used with `update`, `lazy_initialization` is called with 2 positional args
         if len(args) == 2 and len(kwargs) == 0:
             DynamicLayer.lazy_initialization(self, *args)
-        # Otherwise, for the Mamba cache, when it's called in `update_conv_state` or `update_ssm_state`, it's
+        # Otherwise, for the Mamba cache, when it's called in `update_conv_state` or `update_recurrent_state`, it's
         # always called with 1 single kwarg (cause it needs to know if it's for the conv or ssm states)
         if len(args) == 0 and len(kwargs) == 1:
-            MambaLayer.lazy_initialization(self, **kwargs)
+            LinearAttentionLayer.lazy_initialization(self, **kwargs)
 
     def reset(self) -> None:
-        MambaLayer.reset(self)
+        LinearAttentionLayer.reset(self)
         DynamicLayer.reset(self)
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
-        MambaLayer.reorder_cache(self, beam_idx)
+        LinearAttentionLayer.reorder_cache(self, beam_idx)
         DynamicLayer.reorder_cache(self, beam_idx)
 
 
@@ -838,9 +838,9 @@ class Cache:
 
     Args:
         layers (`Optional`, *optional*):
-            A list of pre-created `CacheLayerMixin` or `MambaCacheLayerMixin`. If omitted (`None`), then `layer_class_to_replicate`
+            A list of pre-created `CacheLayerMixin` or `LinearAttentionCacheLayerMixin`. If omitted (`None`), then `layer_class_to_replicate`
             will be used.
-        layer_class_to_replicate (`type[CacheLayerMixin | MambaCacheLayerMixin]`, *optional*):
+        layer_class_to_replicate (`type[CacheLayerMixin | LinearAttentionCacheLayerMixin]`, *optional*):
             Only used if `layers` is omitted (`None`), in which case it will be used as the base class for each layer,
             and the layers will be added lazily as soon as `update` is called with a `layer_idx` greater than the current
             list of layers.
@@ -853,8 +853,8 @@ class Cache:
 
     def __init__(
         self,
-        layers: list[CacheLayerMixin | MambaCacheLayerMixin] | None = None,
-        layer_class_to_replicate: type[CacheLayerMixin | MambaCacheLayerMixin] | None = None,
+        layers: list[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
+        layer_class_to_replicate: type[CacheLayerMixin | LinearAttentionCacheLayerMixin] | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
     ):
@@ -956,14 +956,14 @@ class Cache:
         """
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
-        if not isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+        if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError("Cannot call `update_conv_state` on a non-Mamba layer!")
         conv_states = self.layers[layer_idx].update_conv_state(conv_states, **kwargs)
         return conv_states
 
-    def update_ssm_state(self, ssm_states: torch.Tensor, layer_idx: int, **kwargs) -> torch.Tensor:
+    def update_recurrent_state(self, recurrent_states: torch.Tensor, layer_idx: int, **kwargs) -> torch.Tensor:
         """
-        Updates the cache with the new `ssm_states` for the layer `layer_idx`.
+        Updates the cache with the new `recurrent_states` for the layer `layer_idx`.
 
         Parameters:
             smm_states (`torch.Tensor`):
@@ -976,10 +976,10 @@ class Cache:
         """
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
-        if not isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+        if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError("Cannot call `update_conv_state` on a non-Mamba layer!")
-        ssm_states = self.layers[layer_idx].update_ssm_state(ssm_states, **kwargs)
-        return ssm_states
+        recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, **kwargs)
+        return recurrent_states
 
     def early_initialization(
         self, batch_size: int, num_heads: int, head_dim: int, dtype: torch.dtype, device: torch.device
@@ -1029,14 +1029,16 @@ class Cache:
         if layer_idx is None:
             try:
                 layer_idx = next(
-                    idx for idx in range(len(self) - 1, -1, -1) if isinstance(self.layers[idx], MambaCacheLayerMixin)
+                    idx
+                    for idx in range(len(self) - 1, -1, -1)
+                    if isinstance(self.layers[idx], LinearAttentionCacheLayerMixin)
                 )
             except StopIteration:
                 raise ValueError(
                     "`has_previous_state` can only be called on Mamba layers, and the current Cache seem to only contain "
                     "Attention layers."
                 )
-        elif not isinstance(self.layers[layer_idx], MambaCacheLayerMixin):
+        elif not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError(
                 f"You called `has_previous_state` on layer index {layer_idx}, but this layer is an Attention layer, which "
                 "does not support calling it."
@@ -1222,14 +1224,14 @@ class DynamicCache(Cache):
                 # states they should return - only the mask changes to make them different at the end!
                 if layer_type in ("sliding_attention", "chunked_attention"):
                     layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
-                # Note: we want moe layers to be MambaLayer, so that we can correctly grab sequence length etc from attention layers.
+                # Note: we want moe layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from attention layers.
                 # Since moe layers will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
                 # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skip
                 # the indices we don't need
                 elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
-                    layers.append(MambaLayer())
+                    layers.append(LinearAttentionLayer())
                 elif layer_type == "hybrid":
-                    layers.append(MambaAndAttentionLayer())
+                    layers.append(LinearAttentionAndAttentionLayer())
                 else:
                     layers.append(DynamicLayer())
 
@@ -1341,7 +1343,7 @@ class StaticCache(Cache):
                 )
             # Mamba layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
-                layer = MambaLayer()
+                layer = LinearAttentionLayer()
             else:
                 layer = StaticLayer(max_cache_len=max_cache_len)
             layers.append(layer)

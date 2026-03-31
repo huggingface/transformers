@@ -386,7 +386,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
             if layer_type == "moe":
                 self.assertEqual(layer.conv_states, None)
-                self.assertEqual(layer.ssm_states, None)
+                self.assertEqual(layer.recurrent_states, None)
             # Attention layer cache
             elif layer_type == "attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
@@ -394,7 +394,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Mamba layer cache
             elif layer_type == "mamba":
                 self.assertEqual(layer.conv_states.shape, conv_shape)
-                self.assertEqual(layer.ssm_states.shape, ssm_shape)
+                self.assertEqual(layer.recurrent_states.shape, ssm_shape)
             else:
                 raise ValueError("Unknown layer type.")
 

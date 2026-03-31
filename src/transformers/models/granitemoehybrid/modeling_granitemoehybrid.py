@@ -409,7 +409,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].ssm_states,
+                cache_params.layers[self.layer_idx].recurrent_states,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -510,7 +510,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
                 # Init cache
                 if ssm_state is not None and cache_params is not None:
-                    ssm_state = cache_params.update_ssm_state(ssm_state, self.layer_idx)
+                    ssm_state = cache_params.update_recurrent_state(ssm_state, self.layer_idx)
 
                 scan_output = scan_output.view(batch_size, seq_len, -1)
                 # Multiply "gate" branch and apply extra normalization layer
@@ -571,7 +571,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         A = -torch.exp(self.A_log.float())                            # [num_heads]
         if use_precomputed_states:
             # We need to guarantee that anything regarding the cache is on the same device
-            cache_device = cache_params.layers[self.layer_idx].ssm_states.device
+            cache_device = cache_params.layers[self.layer_idx].recurrent_states.device
 
             # Note: there is no need to pad parameter matrices here, as there is just one new token
             # for batched generation
@@ -601,8 +601,8 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             dBx = (dB * hidden_states[..., None]).to(device=cache_device)
 
             # State calculation
-            ssm_states = cache_params.layers[self.layer_idx].ssm_states * dA + dBx
-            ssm_states = cache_params.update_ssm_state(ssm_states, self.layer_idx)
+            ssm_states = cache_params.layers[self.layer_idx].recurrent_states * dA + dBx
+            ssm_states = cache_params.update_recurrent_state(ssm_states, self.layer_idx)
 
             # Subsequent output
             # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
@@ -699,7 +699,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
             # Init cache
             if ssm_state is not None and cache_params is not None:
-                ssm_state = cache_params.update_ssm_state(ssm_state, self.layer_idx)
+                ssm_state = cache_params.update_recurrent_state(ssm_state, self.layer_idx)
 
         scan_output = self.norm(y, gate)
 

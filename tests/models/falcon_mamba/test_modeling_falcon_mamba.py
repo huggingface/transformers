@@ -337,7 +337,9 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                     if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
                         for idx in range(len(tuple_object)):
                             recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
-                            recursive_check(tuple_object.layers[idx].ssm_states, dict_object.layers[idx].ssm_states)
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                            )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)

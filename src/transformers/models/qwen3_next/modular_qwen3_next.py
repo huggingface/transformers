@@ -446,7 +446,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         # getting projected states from cache if it exists
         if use_precomputed_states:
             conv_state = cache_params.layers[self.layer_idx].conv_states
-            recurrent_state = cache_params.layers[self.layer_idx].ssm_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         projected_states_qkvz = self.in_proj_qkvz(hidden_states)
         projected_states_ba = self.in_proj_ba(hidden_states)
@@ -527,7 +527,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         # Update cache
         if cache_params is not None:
-            cache_params.update_ssm_state(last_recurrent_state, self.layer_idx)
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         z_shape_og = z.shape
         # reshape input data into 2D tensor

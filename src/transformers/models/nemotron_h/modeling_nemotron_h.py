@@ -255,7 +255,7 @@ class NemotronHMamba2Mixer(nn.Module):
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
             hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             hidden_states = selective_state_update(
-                cache_params.layers[self.layer_idx].ssm_states,
+                cache_params.layers[self.layer_idx].recurrent_states,
                 hidden_states_reshaped,
                 dt,
                 A,
@@ -356,7 +356,7 @@ class NemotronHMamba2Mixer(nn.Module):
                     **dt_limit_kwargs,
                 )
                 if ssm_state is not None and cache_params is not None:
-                    cache_params.update_ssm_state(ssm_state, self.layer_idx)
+                    cache_params.update_recurrent_state(ssm_state, self.layer_idx)
                 scan_output = scan_output.view(batch_size, seq_len, -1)
                 # Multiply "gate" branch and apply extra normalization layer
                 scan_output = self.norm(scan_output, gate)
@@ -435,9 +435,9 @@ class NemotronHMamba2Mixer(nn.Module):
             dBx = dB * hidden_states[..., None]
 
             # State calculation
-            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
-            ssm_state = ssm_state * dA + dBx
-            ssm_state = cache_params.update_ssm_state(ssm_state, self.layer_idx)
+            recurrent_states = cache_params.layers[self.layer_idx].recurrent_states.clone()
+            recurrent_states = recurrent_states * dA + dBx
+            recurrent_states = cache_params.update_recurrent_state(recurrent_states, self.layer_idx)
 
             # Subsequent output
             # [bsz, n_groups * state_size] -> [bsz, num_heads, state_size]
@@ -446,7 +446,7 @@ class NemotronHMamba2Mixer(nn.Module):
             C = C.reshape(batch_size, -1, C.shape[-1])
             # [bsz, num_heads, head_dim]
 
-            ssm_states = ssm_state.to(C.dtype)  # Shape: [b, h, d, n]
+            ssm_states = recurrent_states.to(C.dtype)  # Shape: [b, h, d, n]
             # Reshape ssm_states to merge the first two dimensions
             ssm_states_reshaped = ssm_states.view(batch_size * self.num_heads, self.head_dim, self.ssm_state_size)  # Shape: [b*h, d, n]
             C_reshaped = C.view(batch_size * self.num_heads, self.ssm_state_size, 1)  # Shape: [b*h, n, 1]
@@ -535,7 +535,7 @@ class NemotronHMamba2Mixer(nn.Module):
                 y = y[:, :seq_len, :, :]
             y = y.reshape(batch_size, seq_len, -1)
             if ssm_state is not None and cache_params is not None:
-                cache_params.update_ssm_state(ssm_state, self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, self.layer_idx)
 
         scan_output = self.norm(y, gate)
 

@@ -236,7 +236,7 @@ class JambaMambaMixer(nn.Module):
         time_proj_bias = time_proj_bias.float() if time_proj_bias is not None else None
         if use_precomputed_states:
             scan_outputs = selective_state_update(
-                cache_params.layers[self.layer_idx].ssm_states,
+                cache_params.layers[self.layer_idx].recurrent_states,
                 hidden_states[..., 0],
                 discrete_time_step[..., 0],
                 A,
@@ -261,7 +261,7 @@ class JambaMambaMixer(nn.Module):
                 return_last_state=True,
             )
             if ssm_state is not None and cache_params is not None:
-                cache_params.update_ssm_state(ssm_state, self.layer_idx)
+                cache_params.update_recurrent_state(ssm_state, self.layer_idx)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_outputs.transpose(1, 2))
@@ -281,7 +281,7 @@ class JambaMambaMixer(nn.Module):
 
         if cache_params is not None and cache_params.has_previous_state(self.layer_idx):
             # In training mode, we don't want to perform in-place operations on ssm_state so we can compute the backwards pass
-            ssm_state = cache_params.layers[self.layer_idx].ssm_states.clone()
+            ssm_state = cache_params.layers[self.layer_idx].recurrent_states.clone()
         else:
             ssm_state = torch.zeros(
                 (batch_size, self.intermediate_size, self.ssm_state_size),
@@ -339,7 +339,7 @@ class JambaMambaMixer(nn.Module):
         scan_output = (scan_output * self.act(gate))
 
         if cache_params is not None:
-            cache_params.update_ssm_state(ssm_state, self.layer_idx)
+            cache_params.update_recurrent_state(ssm_state, self.layer_idx)
 
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.transpose(1, 2))
