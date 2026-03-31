@@ -1277,7 +1277,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Named special tokens (bos_token, eos_token, etc.)
         if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
-            token_value = self._special_tokens_map.get(key_without_id)
+            # Use __dict__.get to avoid recursive __getattr__ when _special_tokens_map
+            # is not yet initialized (e.g. during fast tokenizer __init__)
+            token_value = self.__dict__.get("_special_tokens_map", {}).get(key_without_id)
             if token_value is None:
                 if self.verbose:
                     logger.error(f"Using {key}, but it is not set yet.")
@@ -1286,7 +1288,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Extra special tokens
         if key_without_id == "extra_special_tokens":
-            tokens = [str(tok) for tok in self._extra_special_tokens]
+            tokens = [str(tok) for tok in self.__dict__.get("_extra_special_tokens", [])]
             return self.convert_tokens_to_ids(tokens) if key != key_without_id else tokens
 
         if key not in self.__dict__:

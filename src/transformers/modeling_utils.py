@@ -4610,7 +4610,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in self.all_tied_weights_keys.keys():
+        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
             param._is_hf_initialized = True
 

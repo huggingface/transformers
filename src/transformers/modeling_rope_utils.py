@@ -555,10 +555,47 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
+def _compute_default_rope_parameters(
+    config: Optional["PreTrainedConfig"] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
+) -> tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies for the default RoPE implementation (no scaling).
+
+    Args:
+        config ([`~transformers.PreTrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+        layer_type (`str`, *optional*):
+            The layer type for per-layer rope configs.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    config.standardize_rope_params()
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+
+    base = rope_parameters_dict.get("rope_theta", getattr(config, "rope_theta", config.default_theta))
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+    return inv_freq, attention_factor
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
 ROPE_INIT_FUNCTIONS = {
+    "default": _compute_default_rope_parameters,
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
@@ -699,10 +736,17 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig"):
+    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
+
+        Args:
+            ignore_keys (`set`, *optional*):
+                Keys to ignore during validation. If provided, sets `ignore_keys_at_rope_validation` on the config.
+                Deprecated: set `config.ignore_keys_at_rope_validation` directly instead.
         """
+        if ignore_keys is not None:
+            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | ignore_keys
         # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
         # Note that validation runs every time a new config is created, even if config is non-RoPE
         rope_parameters_dict = getattr(self, "rope_parameters", None)
@@ -729,10 +773,13 @@ class RotaryEmbeddingConfigMixin:
                 )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "rope_theta"}
+        required_keys = {"rope_type"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
     def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor", "rope_theta"}
