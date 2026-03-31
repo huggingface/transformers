@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_voxtral_tts.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2026 the HuggingFace Team. All rights reserved.
+# Copyright 2025 Mistral AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,12 +30,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -486,23 +481,4 @@ class VoxtralTtsForCausalLM(VoxtralTtsPreTrainedModel, GenerationMixin):
         )
 
 
-class VoxtralTtsForTokenClassification(GenericForTokenClassification, VoxtralTtsPreTrainedModel):
-    pass
-
-
-class VoxtralTtsForSequenceClassification(GenericForSequenceClassification, VoxtralTtsPreTrainedModel):
-    pass
-
-
-class VoxtralTtsForQuestionAnswering(GenericForQuestionAnswering, VoxtralTtsPreTrainedModel):
-    pass
-
-
-__all__ = [
-    "VoxtralTtsForCausalLM",
-    "VoxtralTtsForQuestionAnswering",
-    "VoxtralTtsModel",
-    "VoxtralTtsPreTrainedModel",
-    "VoxtralTtsForSequenceClassification",
-    "VoxtralTtsForTokenClassification",
-]
+__all__ = ["VoxtralTtsForCausalLM", "VoxtralTtsModel", "VoxtralTtsPreTrainedModel"]
