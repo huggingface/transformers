@@ -488,6 +488,9 @@ def compute_model_class_match_summary(
 _RELEASE_RE = re.compile(
     r"(?:^|[\*_`\s>])(?:this|the)\s+model\s+was\s+released\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
 )
+_ADDED_TO_HF_RE = re.compile(
+    r"added\s+to\s+Hugging\s+Face\s+Transformers\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
+)
 
 
 def build_date_data() -> dict[str, str]:
@@ -514,7 +517,7 @@ def build_date_data() -> dict[str, str]:
             # Skip unreadable files quietly
             logging.info(f"Failed to read md for {md_path}")
 
-        m = _RELEASE_RE.search(text)
+        m = _ADDED_TO_HF_RE.search(text) or _RELEASE_RE.search(text)
         if m:
             model_id = md_path.stem  # e.g., "llama" from "llama.md"
             result[model_id] = m.group(1)
@@ -650,7 +653,7 @@ class CodeSimilarityAnalyzer:
             self.dataset = load_from_disk(str(local_path))
         else:
             logging.info(f"downloading index from hub: {self.hub_dataset}")
-            self.dataset = load_dataset(self.hub_dataset, split="train")
+            self.dataset = load_dataset(self.hub_dataset, split="train", cache_dir=str(Path.cwd() / ".hf_cache"))
 
         self._attach_faiss_index()
 
@@ -863,6 +866,7 @@ class CodeSimilarityAnalyzer:
         k: int,
         ignore_models: set[str] | None = None,
         dates: dict[str, str] | None = None,
+        query_date: str | None = None,
     ) -> list[tuple[str, float]]:
         assert self.dataset is not None
         buffer_size = min(k + 200, len(self.dataset))
@@ -882,6 +886,9 @@ class CodeSimilarityAnalyzer:
             if _normalize(parent_model) in ignore_models:
                 continue
             date = dates.get(parent_model, "")
+            # Skip candidates released after the query model
+            if query_date and date and date > query_date:
+                continue
             output.append((identifier, float(score), date or "9999-99-99"))
         # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
         output.sort(key=lambda x: (-x[1], x[2]))
@@ -894,6 +901,8 @@ class CodeSimilarityAnalyzer:
         self_name: str,
         k: int,
         ignore_models: set[str] | None = None,
+        dates: dict[str, str] | None = None,
+        query_date: str | None = None,
     ) -> list[tuple[str, float]]:
         """
         Find top-k most similar definitions using Jaccard similarity on token sets.
@@ -904,6 +913,8 @@ class CodeSimilarityAnalyzer:
             self_name (`str`): Name of the query definition to exclude.
             k (`int`): Number of top results to return.
             ignore_models (`set[str]` or `None`, *optional*): Set of normalized model IDs to exclude.
+            dates (`dict[str, str]` or `None`, *optional*): Mapping of model_id to release date.
+            query_date (`str` or `None`, *optional*): Release date of the query model; candidates released after this are excluded.
 
         Returns:
             `list[tuple[str, float]]`: List of (identifier, score) tuples.
@@ -911,6 +922,8 @@ class CodeSimilarityAnalyzer:
         assert self.dataset is not None
         if ignore_models is None:
             ignore_models = set()
+        if dates is None:
+            dates = {}
         scores = []
         for identifier, token_list in zip(self.dataset["identifier"], self.dataset["tokens"]):
             parent_relative_path, match_name = identifier.split(":", 1)
@@ -919,6 +932,10 @@ class CodeSimilarityAnalyzer:
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
             if _normalize(parent_model) in ignore_models:
+                continue
+            # Skip candidates released after the query model
+            candidate_date = dates.get(parent_model, "")
+            if query_date and candidate_date and candidate_date > query_date:
                 continue
             tokens = set(token_list)
             if not tokens or not query_tokens:
@@ -999,6 +1016,7 @@ class CodeSimilarityAnalyzer:
             m: set(b) for m, b in zip(self.modular_dataset["model_name"], self.modular_dataset["bases"])
         }
         model_symbol_by_name, model_symbol_by_suffix = self._build_model_symbol_index()
+        query_date = dates.get(self_model, "")
 
         output = {}
         for i, query_identifier in enumerate(query_identifiers):
@@ -1010,6 +1028,7 @@ class CodeSimilarityAnalyzer:
                 top_k_per_item,
                 ignore_models,
                 dates,
+                query_date,
             )
 
             # Expand results with parent models from modular inheritance.
@@ -1051,7 +1070,7 @@ class CodeSimilarityAnalyzer:
             entry = {"kind": kind, "embedding": embedding_top}
             if use_jaccard:
                 jaccard_top = self._topk_jaccard(
-                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item, ignore_models
+                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item, ignore_models, dates, query_date
                 )
                 jaccard_set = {identifier for identifier, _ in jaccard_top}
                 intersection = set(embedding_set & jaccard_set)
