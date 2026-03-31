@@ -255,6 +255,17 @@ class ProcessorTesterMixin:
             SPECIAL_MODEL_TYPE_TO_MODULE_NAME,
         )
 
+        # Get the component class from the appropriate Auto mapping
+        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+            mapping_name = attribute
+        elif "tokenizer" in attribute:
+            mapping_name = "tokenizer"
+        else:
+            raise ValueError(
+                f"Unknown attribute type: '{attribute}'. "
+                f"Please override _setup_{attribute}() in your test class to provide custom setup."
+            )
+
         # Extract model_type from the test file name
         # Test files are named like test_processing_align.py or test_processor_align.py
         test_file = inspect.getfile(cls)
@@ -269,58 +280,43 @@ class ProcessorTesterMixin:
         if model_type not in CONFIG_MAPPING_NAMES:
             # check if the model type is a special model type
             for special_model_type, special_module_name in SPECIAL_MODEL_TYPE_TO_MODULE_NAME.items():
-                if model_type == special_module_name:
-                    model_type = special_model_type
-                    break
+                if model_type != special_module_name:
+                    continue
 
-        # Get the config class for this model type
-        if model_type not in CONFIG_MAPPING_NAMES:
-            raise ValueError(
-                f"Model type '{model_type}' not found in CONFIG_MAPPING_NAMES. "
-                f"Please override _setup_{attribute}() in your test class."
-            )
+                # Get the config class for this model type
+                if special_model_type not in CONFIG_MAPPING_NAMES:
+                    continue
 
-        config_class = CONFIG_MAPPING[model_type]
+                config_class = CONFIG_MAPPING[special_model_type]
 
-        # Now get the component class from the appropriate Auto mapping
-        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
-            mapping_name = attribute
-        elif "tokenizer" in attribute:
-            mapping_name = "tokenizer"
-        else:
-            raise ValueError(
-                f"Unknown attribute type: '{attribute}'. "
-                f"Please override _setup_{attribute}() in your test class to provide custom setup."
-            )
+                # Get the appropriate Auto mapping for this component type
+                if mapping_name == "tokenizer":
+                    from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+                    from transformers.utils import is_tokenizers_available
 
-        # Get the appropriate Auto mapping for this component type
-        if mapping_name == "tokenizer":
-            from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
-            from transformers.utils import is_tokenizers_available
+                    component_class = TOKENIZER_MAPPING.get(config_class, None)
+                    if component_class is None and is_tokenizers_available():
+                        from transformers.tokenization_utils_tokenizers import TokenizersBackend
 
-            component_class = TOKENIZER_MAPPING.get(config_class, None)
-            if component_class is None and is_tokenizers_available():
-                from transformers.tokenization_utils_tokenizers import TokenizersBackend
+                        component_class = TokenizersBackend
+                elif mapping_name == "image_processor":
+                    from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
 
-                component_class = TokenizersBackend
-        elif mapping_name == "image_processor":
-            from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
+                    component_class = IMAGE_PROCESSOR_MAPPING.get(config_class, None)
+                elif mapping_name == "feature_extractor" or mapping_name == "audio_processor":
+                    from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING
 
-            component_class = IMAGE_PROCESSOR_MAPPING.get(config_class, None)
-        elif mapping_name == "feature_extractor" or mapping_name == "audio_processor":
-            from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING
+                    component_class = FEATURE_EXTRACTOR_MAPPING.get(config_class, None)
+                elif mapping_name == "video_processor":
+                    from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING
 
-            component_class = FEATURE_EXTRACTOR_MAPPING.get(config_class, None)
-        elif mapping_name == "video_processor":
-            from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING
-
-            component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
-        else:
-            raise ValueError(f"Unknown mapping for attribute: {attribute}")
+                    component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
+                else:
+                    raise ValueError(f"Unknown mapping for attribute: {attribute}")
 
         if component_class is None:
             raise ValueError(
-                f"Could not find {mapping_name} class for config {config_class.__name__}. "
+                f"Could not find {mapping_name} class for model {match.group(1)}. "
                 f"Please override _setup_{attribute}() in your test class."
             )
 
