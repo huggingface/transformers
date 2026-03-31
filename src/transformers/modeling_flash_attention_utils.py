@@ -685,15 +685,19 @@ def _process_flash_attention_kwargs(
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
     # The torch API inconcistently adopted features for their FA backends
-    #   1. Varlen can use sliding window but also has to set it to determine causality
-    #   2. Base FA (non-varlen) has no support for sliding windows (natively)
-    if is_flash_attention_torch and flash_kwargs.get("window_size") is None:
-        flash_kwargs["window_size"] = (-1, 0) if is_causal else (-1, -1)
-    elif is_flash_attention_torch and enable_torch_specifics:
-        raise ValueError(
-            "Flash Attention torch does not support sliding window through non-varlen paths (yet), e.g. "
-            "when you don't use an attention mask during inference."
-        )
+    #   1. Base FA (non-varlen) has no support for sliding windows (natively)
+    #   2. Varlen can use sliding window but also has to set it to determine causality
+    if is_flash_attention_torch:
+        if enable_torch_specifics:
+            raise ValueError(
+                "Flash Attention torch does not support sliding window through non-varlen paths (yet), e.g. "
+                "when you don't use an attention mask during inference."
+            )
+
+        if flash_kwargs.get("window_size") is None:
+            flash_kwargs["window_size"] = (-1, 0) if is_causal else (-1, -1)
+        elif is_causal:
+            flash_kwargs["window_size"] = (flash_kwargs["window_size"][0], 0)
 
     if supports_mapping["dropout_p"]:
         flash_kwargs["dropout_p"] = dropout
