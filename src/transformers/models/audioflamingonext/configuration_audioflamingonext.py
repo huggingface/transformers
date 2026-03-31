@@ -34,6 +34,8 @@ class AudioFlamingoNextConfig(PreTrainedConfig):
             The beginning-of-audio token index used to mark the start of audio spans.
     audio_eos_token_id (`int`, *optional*, defaults to 151671):
         The end-of-audio token index used to mark the end of audio spans.
+    audio_frame_step (`float`, *optional*, defaults to 0.01):
+        Duration in seconds of one input mel frame (trained with hop_length 160 at sampling_rate 16000).
 
     Example:
 
@@ -66,7 +68,7 @@ class AudioFlamingoNextConfig(PreTrainedConfig):
 
     audio_bos_token_id: int = 151670
     audio_eos_token_id: int = 151671
-    head_dim: int = 256
+    audio_frame_step: float = 0.01
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):

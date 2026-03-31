@@ -23,7 +23,6 @@ from collections.abc import Callable
 from math import pi
 from typing import Optional
 
-import torch
 from torch import Tensor, broadcast_tensors, nn
 
 from ... import initialization as init
@@ -34,14 +33,22 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_audioflamingonext import AudioFlamingoNextConfig
 
 
+if is_torch_available():
+    import torch
+
+
 class AudioFlamingoNextRotaryEmbedding(nn.Module):
-    """Rotary time embedding module for computing 2D axial rotary embeddings for batch and time dimensions,
-    with time-based angle modulation. See (Goel et al., 2024) for more details: https://arxiv.org/abs/2410.12109
+    """Rotary time embedding module used by AudioFlamingoNext checkpoints.
+
+    This is a checkpoint-faithful integration, not a direct implementation of the RoTE formulation described in
+    (Goel et al., 2024): https://arxiv.org/abs/2410.12109. It applies axial rotary embeddings over the window index
+    within each audio sample and the encoder time index within each window, then modulates both axes with absolute
+    timestamps in seconds.
     """
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
@@ -84,7 +91,9 @@ class AudioFlamingoNextRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
 
@@ -96,19 +105,20 @@ class AudioFlamingoNextRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:
-        """Compute 2D axial rotary embeddings for batch and time dimensions."""
+        """Compute 2D axial rotary embeddings for window and time dimensions."""
 
-        # Compute frequencies for the window axis
-        batch_positions = torch.arange(timestamps.shape[0], device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        batch_positions = batch_positions / self.max_seq_len_cached
-        batch_freqs = batch_positions.unsqueeze(-1) * self.inv_freq
-        batch_freqs = torch.repeat_interleave(batch_freqs, 2, dim=-1)
+        # Compute frequencies for the window axis, accounting for x4 due to the downsampling in the audio encoder (conv2 and avg pooling)
+        window_starts = timestamps[:, 0].to(device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        window_duration = self.config.audio_frame_step * 4 * seq_len
+        window_positions = torch.round(window_starts / window_duration) / self.max_seq_len_cached
+        window_freqs = window_positions.unsqueeze(-1) * self.inv_freq
+        window_freqs = torch.repeat_interleave(window_freqs, 2, dim=-1)
 
         # Broadcasting and apply time-based angle modulation
-        batch_freqs = batch_freqs[:, None, :]
+        window_freqs = window_freqs[:, None, :]
         time_freqs = self.position_angles[:seq_len][None, :, :]
-        batch_freqs, time_freqs = broadcast_tensors(batch_freqs, time_freqs)
-        freqs = torch.cat((batch_freqs, time_freqs), dim=-1)
+        window_freqs, time_freqs = broadcast_tensors(window_freqs, time_freqs)
+        freqs = torch.cat((window_freqs, time_freqs), dim=-1)
         angle = (-timestamps * 2 * pi).to(freqs)
         freqs = freqs * angle.unsqueeze(-1)
         return freqs.cos(), freqs.sin()
@@ -176,13 +186,9 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     cos = cos.to(hidden_states)
     sin = sin.to(hidden_states)
     rot_dim = cos.shape[-1]
-    if rot_dim > hidden_states.shape[-1]:
-        raise ValueError(
-            f"feature dimension {hidden_states.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
-        )
 
-    rotated = hidden_states[..., :rot_dim]
     passthrough = hidden_states[..., rot_dim:]
+    rotated = hidden_states[..., :rot_dim]
     rotated = (rotated * cos) + (rotate_half(rotated) * sin)
     return torch.cat((rotated, passthrough), dim=-1).to(original_dtype)
 
@@ -234,14 +240,14 @@ class AudioFlamingoNextForConditionalGeneration(AudioFlamingoNextPreTrainedModel
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        rote_timestamps: torch.Tensor,
+        input_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
-        rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
-            Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Token ids containing the audio token ID placeholders, for reconstructing rotary time embedding timestamps.
         """
         audio_output = self.audio_tower(
             input_features,
@@ -250,12 +256,13 @@ class AudioFlamingoNextForConditionalGeneration(AudioFlamingoNextPreTrainedModel
             **kwargs,
         )
         hidden_states = audio_output.last_hidden_state
-        cos, sin = self.pos_emb(rote_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
+        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
+        audio_timestamps = self._build_audio_timestamps(input_ids, post_lengths, hidden_states.shape[-2])
+        cos, sin = self.pos_emb(audio_timestamps.to(hidden_states.device), seq_len=hidden_states.shape[-2])
         hidden_states = apply_rotary_time_emb(hidden_states, cos, sin)
         audio_embeds = self.multi_modal_projector(hidden_states)
 
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
-        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1).to(torch.long))
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
 
@@ -268,14 +275,12 @@ class AudioFlamingoNextForConditionalGeneration(AudioFlamingoNextPreTrainedModel
         input_ids: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         input_features_mask: torch.Tensor | None = None,
-        rote_timestamps: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -285,8 +290,6 @@ class AudioFlamingoNextForConditionalGeneration(AudioFlamingoNextPreTrainedModel
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        rote_timestamps (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
-            Timestamps in seconds for each encoder output position, used to compute rotary time embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -332,16 +335,12 @@ class AudioFlamingoNextForConditionalGeneration(AudioFlamingoNextPreTrainedModel
         >>> print(decoded_outputs)
         ["This track is an uplifting Eurodance-style Trance-Pop anthem..."]
         ```"""
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(
-                input_features,
-                input_features_mask,
-                rote_timestamps=rote_timestamps,
-                return_dict=True,
+                input_features, input_features_mask, input_ids=input_ids, return_dict=True
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
@@ -357,28 +356,58 @@ class AudioFlamingoNextForConditionalGeneration(AudioFlamingoNextPreTrainedModel
             past_key_values=past_key_values,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
         return outputs
 
-    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
+    def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
-        rote_timestamps = kwargs.pop("rote_timestamps", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration:
+        if is_first_iteration or not model_inputs.get("use_cache", False):
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:
                 model_inputs["input_features_mask"] = input_features_mask
-            if rote_timestamps is not None:
-                model_inputs["rote_timestamps"] = rote_timestamps
 
         return model_inputs
+
+    def _build_audio_timestamps(
+        self,
+        input_ids: torch.LongTensor,
+        post_lengths: torch.LongTensor,
+        max_post_length: int,
+    ) -> torch.FloatTensor:
+        audio_token_mask = input_ids == self.config.audio_token_id
+        diff = torch.diff(torch.nn.functional.pad(audio_token_mask.int(), (1, 1), value=0), dim=1)
+        _, starts = torch.where(diff == 1)
+        _, ends = torch.where(diff == -1)
+        sample_lengths = (ends - starts).to(torch.long)
+
+        # Account for 4x downsampling in audio encoder (conv2 and avg pooling)
+        audio_embed_frame_step = self.config.audio_frame_step * 4
+        frame_offsets = (
+            torch.arange(max_post_length, device=post_lengths.device, dtype=torch.float32) * audio_embed_frame_step
+        )
+
+        # Map each encoder output row to its audio sample using token counts
+        cumsum_post = torch.cat([torch.zeros(1, device=post_lengths.device), torch.cumsum(post_lengths, dim=0)[:-1]])
+        cumsum_samples = torch.cumsum(sample_lengths, dim=0)
+        sample_indices = torch.searchsorted(cumsum_samples, cumsum_post, right=True)
+
+        # Compute window index within each sample (0, 1, 2, ... then reset for next sample)
+        sample_start_rows = torch.searchsorted(
+            sample_indices, torch.arange(sample_lengths.shape[0], device=post_lengths.device)
+        )
+        window_indices = (
+            torch.arange(post_lengths.shape[0], device=post_lengths.device) - sample_start_rows[sample_indices]
+        )
+
+        # Compute timestamps
+        return window_indices.unsqueeze(1) * max_post_length * audio_embed_frame_step + frame_offsets
 
 
 __all__ = ["AudioFlamingoNextPreTrainedModel", "AudioFlamingoNextForConditionalGeneration"]
