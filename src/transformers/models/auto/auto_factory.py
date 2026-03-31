@@ -208,7 +208,9 @@ class _BaseAutoModelClass:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
-        explicit_local_code = has_local_code and not _get_model_class(config, cls._model_mapping).__module__.startswith("transformers.")
+        explicit_local_code = has_local_code and not _get_model_class(
+            config, cls._model_mapping
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
@@ -343,7 +345,9 @@ class _BaseAutoModelClass:
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
-        explicit_local_code = has_local_code and not _get_model_class(config, cls._model_mapping).__module__.startswith("transformers.")
+        explicit_local_code = has_local_code and not _get_model_class(
+            config, cls._model_mapping
+        ).__module__.startswith("transformers.")
         upstream_repo = None
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
