@@ -29,13 +29,13 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusVisionConfig(PreTrainedConfig):
     r"""
-    num_image_tokens (`int`, *optional*, defaults to 576):
-        Number of image tokens.
     projection_dropout (`float`, *optional*, defaults to 0.0):
         Dropout probability for the projection layer.
+    num_image_tokens (`int`, *optional*, defaults to 576):
+        Number of image tokens.
     """
 
     model_type = "janus_vision_model"
@@ -62,21 +62,21 @@ class JanusVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusVQVAEConfig(PreTrainedConfig):
     r"""
-    image_token_embed_dim (`int`, *optional*, defaults to 2048):
-        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
-    num_patches (`int`, *optional*, defaults to 32):
-        Num of patches the input images can be divided into.
-    out_channels (`int`, *optional*, defaults to 3):
-        Number of out channels.
     base_channels (`int`, *optional*, defaults to 128):
         Base channel count.
     channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
         Channel multipliers for each resolution.
     num_res_blocks (`int`, *optional*, defaults to 2):
         Number of residual blocks.
+    num_patches (`int`, *optional*, defaults to 32):
+        Num of patches the input images can be divided into.
+    out_channels (`int`, *optional*, defaults to 3):
+        Number of out channels.
+    image_token_embed_dim (`int`, *optional*, defaults to 2048):
+        Dimension of image embeddings. It should be same as the dimensionality of text embeddings.
     """
 
     model_type = "janus_vqgan"
@@ -97,11 +97,11 @@ class JanusVQVAEConfig(PreTrainedConfig):
     projection_dim: int = 2048
     num_hidden_layers: int = 2
     hidden_act: str = "gelu"
-    image_token_embed_dim = 2048
+    image_token_embed_dim: int = 2048
 
 
 @auto_docstring(checkpoint="deepseek-community/Janus-Pro-1B")
-@strict(accept_kwargs=True)
+@strict
 class JanusConfig(PreTrainedConfig):
     r"""
     Example:

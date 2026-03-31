@@ -31,7 +31,20 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType
+from ...utils.import_utils import requires
+
+
+class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
+        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g.
+        ADE20k). The background label will be replaced by 255.
+    """
+
+    do_reduce_labels: bool
 
 
 class SegformerImageProcessor(BeitImageProcessor):
@@ -101,7 +114,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
@@ -141,6 +154,7 @@ class SegformerImageProcessor(BeitImageProcessor):
         return processed_images
 
 
+@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -207,7 +221,7 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
         self,
         images: list["np.ndarray"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
