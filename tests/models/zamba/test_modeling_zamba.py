@@ -289,11 +289,13 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.mamba_expand * config.hidden_size
-        conv_shape = (batch_size, intermediate_size, config.mamba_d_conv)
-        ssm_shape = (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
-        return conv_shape, ssm_shape
+        return (batch_size, intermediate_size, config.mamba_d_conv)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        intermediate_size = config.mamba_expand * config.hidden_size
+        return (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = ZambaModelTester(self)

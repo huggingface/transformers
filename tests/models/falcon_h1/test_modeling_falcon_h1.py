@@ -253,18 +253,19 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
-        conv_kernel_size = config.mamba_d_conv
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = (
             config.mamba_d_ssm if config.mamba_d_ssm is not None else int(config.mamba_expand * config.hidden_size)
         )
         conv_shape = (
             batch_size,
             intermediate_size + 2 * config.mamba_n_groups * config.mamba_d_state,
-            conv_kernel_size,
+            config.mamba_d_conv,
         )
-        ssm_shape = (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
-        return conv_shape, ssm_shape
+        return conv_shape
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = FalconH1ModelTester(self)

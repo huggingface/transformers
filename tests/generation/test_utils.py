@@ -2537,16 +2537,23 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
-        # Default mamba cache shape - can vary based on models so this function is convenient to easily check caches
-        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention cache layers
-        # so the None default values will not be used
+    def _get_conv_state_shape(self, batch_size: int, config):
+        # Default conv state shape, for linear attention models - can vary based on models so this function is convenient
+        # to easily check caches
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention
+        # cache layers, so the None default values will not be used
         intermediate_size = getattr(config, "intermediate_size", None)
         conv_kernel = getattr(config, "conv_kernel", None)
+        return (batch_size, intermediate_size, conv_kernel)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        # Default recurrent state shape, for linear attention models - can vary based on models so this function is convenient
+        # to easily check caches
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention
+        # cache layers, so the None default values will not be used
+        intermediate_size = getattr(config, "intermediate_size", None)
         state_size = getattr(config, "state_size", None)
-        conv_shape = (batch_size, intermediate_size, conv_kernel)
-        ssm_shape = (batch_size, intermediate_size, state_size)
-        return conv_shape, ssm_shape
+        return (batch_size, intermediate_size, state_size)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
@@ -2580,7 +2587,8 @@ class GenerationTesterMixin:
         )
 
         # For mamba layers
-        conv_shape, ssm_shape = self._get_mamba_cache_shapes(batch_size, config)
+        conv_shape = self._get_conv_state_shape(batch_size, config)
+        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
@@ -2600,13 +2608,13 @@ class GenerationTesterMixin:
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, ssm_shape)
+                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 # May not be used (e.g. lfm2)
                 if layer.is_recurrent_states_initialized:
-                    self.assertEqual(layer.recurrent_states.shape, ssm_shape)
+                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             # Attention only layer type
             else:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)

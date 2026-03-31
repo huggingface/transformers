@@ -351,15 +351,17 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         else {}
     )
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.mamba_num_heads * config.mamba_head_dim
         conv_shape = (
             batch_size,
             intermediate_size + 2 * config.n_groups * config.ssm_state_size,
             config.conv_kernel,
         )
-        ssm_shape = (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
-        return conv_shape, ssm_shape
+        return conv_shape
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
@@ -379,7 +381,8 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
         attention_shape = (batch_size, num_kv_heads, seq_length, head_dim)
         # For mamba layers
-        conv_shape, ssm_shape = self._get_mamba_cache_shapes(batch_size, config)
+        conv_shape = self._get_conv_state_shape(batch_size, config)
+        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check each layer has the correct shape
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
@@ -394,7 +397,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # Mamba layer cache
             elif layer_type == "mamba":
                 self.assertEqual(layer.conv_states.shape, conv_shape)
-                self.assertEqual(layer.recurrent_states.shape, ssm_shape)
+                self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             else:
                 raise ValueError("Unknown layer type.")
 

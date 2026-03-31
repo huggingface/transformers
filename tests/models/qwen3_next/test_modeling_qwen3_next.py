@@ -57,16 +57,21 @@ class Qwen3NextModelTester(CausalLMModelTester):
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3NextModelTester
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
+    def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
         num_k_heads = config.linear_num_key_heads
         head_k_dim = config.linear_key_head_dim
         head_v_dim = config.linear_value_head_dim
         intermediate_size = 2 * num_k_heads * head_k_dim + num_v_heads * head_v_dim
 
-        conv_shape = (batch_size, intermediate_size, config.linear_conv_kernel_dim)
-        ssm_shape = (batch_size, num_v_heads, head_k_dim, head_v_dim)
-        return conv_shape, ssm_shape
+        return (batch_size, intermediate_size, config.linear_conv_kernel_dim)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        num_v_heads = config.linear_num_value_heads
+        head_k_dim = config.linear_key_head_dim
+        head_v_dim = config.linear_value_head_dim
+
+        return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
     def test_attention_outputs(self):
         "Needs to be overwritten as Qwen3-Next alternates between attention layers and gated deltanet layers."

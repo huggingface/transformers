@@ -51,10 +51,8 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = Lfm2ForCausalLM if is_torch_available() else None
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
-        conv_shape = (batch_size, config.hidden_size, config.conv_L_cache)
-        ssm_shape = (0,)
-        return conv_shape, ssm_shape
+    def _get_conv_state_shape(self, batch_size: int, config):
+        return (batch_size, config.hidden_size, config.conv_L_cache)
 
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""

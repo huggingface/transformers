@@ -302,14 +302,16 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                 loss_padfree = res_padfree.loss
                 torch.testing.assert_close(loss_padded, loss_padfree)
 
-    def _get_mamba_cache_shapes(self, batch_size: int, config):
+    def _get_conv_state_shape(self, batch_size: int, config):
         conv_shape = (
             batch_size,
             config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * config.mamba_d_state,
             config.mamba_d_conv,
         )
-        ssm_shape = (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
-        return conv_shape, ssm_shape
+        return conv_shape
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
     def test_config_requires_mamba_or_attention_layers(self):
         """Ensure we can't create a config with disallowed layers."""
