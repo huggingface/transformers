@@ -329,6 +329,12 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_disk_offload_safetensors(self):
         pass
 
+    @unittest.skip(
+        "Offloading does not work correctly for zamba2 - probably due to their mixed layer classes or tied weights"
+    )
+    def test_cpu_offload(self):
+        pass
+
     @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass

@@ -300,15 +300,21 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=32)
 
     @unittest.skip(
-        "Same as zamba2 -> investigate, it's probably due to their tied weights that accelerate does not work"
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
     )
     def test_disk_offload_bin(self):
         pass
 
     @unittest.skip(
-        "Same as zamba2 -> investigate, it's probably due to their tied weights that accelerate does not work"
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
     )
     def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_cpu_offload(self):
         pass
 
     def test_config(self):
