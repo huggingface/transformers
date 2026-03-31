@@ -1,4 +1,4 @@
-# Copyright 2026 the HuggingFace Team. All rights reserved.
+# Copyright 2025 Mistral AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..mistral.configuration_mistral import MistralConfig
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
     MistralForCausalLM,
-    MistralForQuestionAnswering,
-    MistralForSequenceClassification,
-    MistralForTokenClassification,
     MistralMLP,
     MistralModel,
     MistralPreTrainedModel,
     MistralRMSNorm,
     MistralRotaryEmbedding,
 )
-
-
-class VoxtralTtsConfig(MistralConfig):
-    pass
 
 
 class VoxtralTtsMLP(MistralMLP):
@@ -64,24 +56,8 @@ class VoxtralTtsForCausalLM(MistralForCausalLM):
     pass
 
 
-class VoxtralTtsForTokenClassification(MistralForTokenClassification):
-    pass
-
-
-class VoxtralTtsForSequenceClassification(MistralForSequenceClassification):
-    pass
-
-
-class VoxtralTtsForQuestionAnswering(MistralForQuestionAnswering):
-    pass
-
-
 __all__ = [
-    "VoxtralTtsConfig",
     "VoxtralTtsForCausalLM",
-    "VoxtralTtsForQuestionAnswering",
     "VoxtralTtsModel",
     "VoxtralTtsPreTrainedModel",
-    "VoxtralTtsForSequenceClassification",
-    "VoxtralTtsForTokenClassification",
 ]
