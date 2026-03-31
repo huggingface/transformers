@@ -131,9 +131,10 @@ class MegatronBertSelfAttention(nn.Module):
         output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         query_layer = self.query(hidden_states)
-        query_layer = query_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+        query_layer = query_layer.view(hidden_shape).transpose(
             1, 2
         )
 
@@ -157,13 +158,13 @@ class MegatronBertSelfAttention(nn.Module):
             value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_layer = self.key(current_states)
-            key_layer = key_layer.view(batch_size, -1, self.num_attention_heads, self.attention_head_size).transpose(
+            key_layer = key_layer.view(hidden_shape).transpose(
                 1, 2
             )
             value_layer = self.value(current_states)
-            value_layer = value_layer.view(
-                batch_size, -1, self.num_attention_heads, self.attention_head_size
-            ).transpose(1, 2)
+            value_layer = value_layer.view(hidden_shape).transpose(1, 2)
+
+
 
             if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation

@@ -254,20 +254,21 @@ class BeitSelfAttention(nn.Module):
         interpolate_pos_encoding: bool = False,
         resolution: tuple[int] | None = None,
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         query_layer = (
             self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
         key_layer = (
             self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
         value_layer = (
             self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
 
@@ -320,20 +321,21 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
                 f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
                 "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
             )
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         query_layer = (
             self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
         key_layer = (
             self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
         value_layer = (
             self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
 

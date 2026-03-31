@@ -162,10 +162,11 @@ class BigBirdSelfAttention(nn.Module):
         past_key_values=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         query_layer = (
             self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
 
@@ -179,12 +180,12 @@ class BigBirdSelfAttention(nn.Module):
         else:
             key_layer = (
                 self.key(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .view(hidden_shape)
                 .transpose(1, 2)
             )
             value_layer = (
                 self.value(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+                .view(hidden_shape)
                 .transpose(1, 2)
             )
 

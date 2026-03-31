@@ -141,20 +141,21 @@ class MPNetSelfAttention(nn.Module):
         output_attentions=False,
         **kwargs,
     ):
-        batch_size, seq_length, _ = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
         q = (
             self.q(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
         k = (
             self.k(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
         v = (
             self.v(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
+            .view(hidden_shape)
             .transpose(1, 2)
         )
 

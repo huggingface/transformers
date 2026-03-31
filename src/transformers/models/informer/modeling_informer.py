@@ -344,14 +344,13 @@ class InformerAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
-        kv_input_shape = (bsz, src_len, -1, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = False
         if past_key_values is not None:
@@ -373,8 +372,9 @@ class InformerAttention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
-            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.head_dim)
+            key_states = key_states.view(kv_shape).transpose(1, 2)
+            value_states = value_states.view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
@@ -397,7 +397,7 @@ class InformerAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -457,7 +457,7 @@ class InformerProbSparseAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
-        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+        src_len = key_value_states.shape[1] if key_value_states is not None else tgt_len
         kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
@@ -531,7 +531,6 @@ class InformerProbSparseAttention(nn.Module):
         # Use q_reduce to calculate attention weights
         attn_weights = torch.bmm(q_reduce, key_states.transpose(1, 2))
 
-        src_len = key_states.size(1)
         if attn_weights.size() != (bsz * self.num_heads, u, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, u, src_len)}, but is"
