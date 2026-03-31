@@ -11,6 +11,16 @@ from huggingface_hub import paper_info
 from transformers import logging
 
 
+CHECKER_CONFIG = {
+    "name": "add_dates",
+    "label": "Model dates",
+    # Approximate: also reads docs/source/en/model_doc/*.md and uses git log + network
+    # calls to GitHub/HuggingFace for commit dates and paper metadata.
+    "file_globs": ["src/transformers/models/**/__init__.py", "docs/source/en/model_doc/**/*.md"],
+    "check_args": ["--check-only"],
+    "fix_args": [],
+}
+
 logger = logging.get_logger(__name__)
 
 
