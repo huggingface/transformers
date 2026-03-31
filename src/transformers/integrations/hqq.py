@@ -194,3 +194,68 @@ class HqqQuantize:
 
         # Return empty dict so the loading code doesn't try to set params
         return {}
+
+
+class HqqDeserialize:
+    """Deserialize HQQ pre-quantized weights into an HQQLinear module."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict,
+        full_layer_name=None,
+        model=None,
+        **kwargs,
+    ):
+        from hqq.core.quantize import HQQLinear
+
+        # Unwrap list values
+        state_dict = {}
+        for key, value in input_dict.items():
+            state_dict[key] = value[0] if isinstance(value, list) else value
+
+        # If W_q is not present, this is not an HQQ-quantized layer — pass through
+        if "W_q" not in state_dict:
+            return input_dict
+
+        # full_layer_name is e.g. "model.layers.0.self_attn.v_proj.weight"
+        # (target pattern "weight" appended to module path)
+        module_name = full_layer_name.rsplit(".", 1)[0]
+
+        parent_name, _, child_name = module_name.rpartition(".")
+        parent = model.get_submodule(parent_name) if parent_name else model
+
+        # Create empty HQQLinear
+        hqq_layer = HQQLinear(
+            None,
+            None,
+            compute_dtype=self.hf_quantizer.dtype or torch.float16,
+            device="cpu",
+            initialize=False,
+        )
+
+        # Make W_q an nn.Parameter as HQQ expects
+        if "W_q" in state_dict:
+            state_dict["W_q"] = torch.nn.Parameter(state_dict["W_q"], requires_grad=False)
+
+        hqq_layer.load_state_dict(state_dict)
+
+        if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+            hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+
+        if self.hf_quantizer.using_multi_gpu:
+            hqq_layer = self.hf_quantizer._patch_layer_for_multigpu(hqq_layer)
+
+        setattr(parent, child_name, hqq_layer)
+
+        # Mark weight and bias as loaded
+        missing_keys = kwargs.get("missing_keys")
+        if missing_keys is not None:
+            missing_keys.discard(full_layer_name)
+            # Also discard bias since HQQLinear handles it internally
+            bias_key = module_name + ".bias"
+            missing_keys.discard(bias_key)
+
+        return {}
