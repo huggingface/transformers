@@ -598,7 +598,9 @@ class FlashAttentionKwargs(TypedDict, total=False):
     max_length_k: int | None
 
 
-def _consolidate_flash_kwarg_alternative_name(kwargs_dict: dict[str, Any], obj: Any, original_name: str, supports_mapping: dict[str, bool]):
+def _consolidate_flash_kwarg_alternative_name(
+    kwargs_dict: dict[str, Any], obj: Any, original_name: str, supports_mapping: dict[str, bool]
+):
     """
     Consolidates different naming conventions under all FA functions that we support by checking for all alternative names
     and whether the FA function supports it. Based on that, it is added to the (existing) kwargs or not.
