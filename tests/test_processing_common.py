@@ -250,7 +250,6 @@ class ProcessorTesterMixin:
         import re
 
         from transformers.models.auto.configuration_auto import (
-            CONFIG_MAPPING,
             CONFIG_MAPPING_NAMES,
             SPECIAL_MODEL_TYPE_TO_MODULE_NAME,
         )
@@ -277,42 +276,18 @@ class ProcessorTesterMixin:
             )
 
         model_type = match.group(1)
+
         if model_type not in CONFIG_MAPPING_NAMES:
             # check if the model type is a special model type
             for special_model_type, special_module_name in SPECIAL_MODEL_TYPE_TO_MODULE_NAME.items():
-                if model_type != special_module_name:
+                if model_type != special_module_name or special_model_type not in CONFIG_MAPPING_NAMES:
                     continue
 
-                # Get the config class for this model type
-                if special_model_type not in CONFIG_MAPPING_NAMES:
-                    continue
-
-                config_class = CONFIG_MAPPING[special_model_type]
-
-                # Get the appropriate Auto mapping for this component type
-                if mapping_name == "tokenizer":
-                    from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
-                    from transformers.utils import is_tokenizers_available
-
-                    component_class = TOKENIZER_MAPPING.get(config_class, None)
-                    if component_class is None and is_tokenizers_available():
-                        from transformers.tokenization_utils_tokenizers import TokenizersBackend
-
-                        component_class = TokenizersBackend
-                elif mapping_name == "image_processor":
-                    from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
-
-                    component_class = IMAGE_PROCESSOR_MAPPING.get(config_class, None)
-                elif mapping_name == "feature_extractor" or mapping_name == "audio_processor":
-                    from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING
-
-                    component_class = FEATURE_EXTRACTOR_MAPPING.get(config_class, None)
-                elif mapping_name == "video_processor":
-                    from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING
-
-                    component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
-                else:
-                    raise ValueError(f"Unknown mapping for attribute: {attribute}")
+                component_class = cls.resolve_model_type_to_attribute(special_model_type, mapping_name)
+                if component_class is not None:
+                    break
+        else:
+            component_class = cls.resolve_model_type_to_attribute(model_type, mapping_name)
 
         if component_class is None:
             raise ValueError(
@@ -333,6 +308,37 @@ class ProcessorTesterMixin:
                 component_class = (
                     component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
                 )
+        return component_class
+
+    @staticmethod
+    def resolve_model_type_to_attribute(model_type, mapping_name):
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+
+        config_class = CONFIG_MAPPING[model_type]
+
+        # Get the appropriate Auto mapping for this component type
+        if mapping_name == "tokenizer":
+            from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+            from transformers.utils import is_tokenizers_available
+
+            component_class = TOKENIZER_MAPPING.get(config_class, None)
+            if component_class is None and is_tokenizers_available():
+                from transformers.tokenization_utils_tokenizers import TokenizersBackend
+                component_class = TokenizersBackend
+        elif mapping_name == "image_processor":
+            from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
+
+            component_class = IMAGE_PROCESSOR_MAPPING.get(config_class, None)
+        elif mapping_name == "feature_extractor" or mapping_name == "audio_processor":
+            from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING
+
+            component_class = FEATURE_EXTRACTOR_MAPPING.get(config_class, None)
+        elif mapping_name == "video_processor":
+            from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING
+
+            component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
+        else:
+            raise ValueError(f"Unknown mapping for attribute: {mapping_name}")
         return component_class
 
     @classmethod
