@@ -20,8 +20,8 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
-from ..utils.import_utils import get_cuda_runtime_version
-from .hub_kernels import lazy_load_kernel, resolve_internal_import
+from ..utils.import_utils import get_cuda_runtime_version, resolve_internal_import
+from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
 
 
