@@ -82,7 +82,7 @@ def _make_fused_patch_embedding_class(original_cls: type[nn.Module], reference_m
     return FusedPatchEmbedding
 
 
-def _build_weight_converter_for_module(module_name: str, reference_module: nn.Module) -> WeightConverter:
+def _make_patch_embedding_weight_converter(module_name: str, reference_module: nn.Module) -> WeightConverter:
     weight_name = f"{module_name}.proj.weight"
     proj = reference_module.proj
     return WeightConverter(
@@ -166,7 +166,7 @@ _FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {
     "patch_embeddings": ModuleFusionSpec(
         is_fusable=_is_fusable_patch_embedding,
         make_fused_class=_make_fused_patch_embedding_class,
-        make_weight_converter=_build_weight_converter_for_module,
+        make_weight_converter=_make_patch_embedding_weight_converter,
         empty_log_message="No compatible patch-embedding classes found to fuse for %s",
     )
 }
