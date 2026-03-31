@@ -16,18 +16,12 @@ import re
 
 import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...audio_utils import AudioInput, make_list_of_audio
-from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
@@ -35,60 +29,10 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..qwen3_omni_moe.configuration_qwen3_omni_moe import (
-    Qwen3OmniMoeTextConfig,
-)
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
-    Qwen3OmniMoeThinkerTextAttention,
-    Qwen3OmniMoeThinkerTextDecoderLayer,
-    Qwen3OmniMoeThinkerTextMLP,
-    Qwen3OmniMoeThinkerTextModel,
-    Qwen3OmniMoeThinkerTextRMSNorm,
     _get_feat_extract_output_lengths,
 )
-
-
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
-@strict
-class Qwen3ASRTextConfig(Qwen3OmniMoeTextConfig):
-    """
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3ASRTextModel, Qwen3ASRTextConfig
-
-    >>> # Initializing a Qwen3ASRText style configuration
-    >>> configuration = Qwen3ASRTextConfig()
-
-    >>> # Initializing a model
-    >>> model = Qwen3ASRTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    vocab_size: int = 151936
-    intermediate_size: int = 6144
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 8
-    head_dim: int = 128
-    max_position_embeddings: int = 65536
-    tie_word_embeddings: bool = True
-
-    # Remove MoE-specific attributes from parent
-    decoder_sparse_step = AttributeError()
-    moe_intermediate_size = AttributeError()
-    num_experts_per_tok = AttributeError()
-    num_experts = AttributeError()
-    norm_topk_prob = AttributeError()
-    output_router_logits = AttributeError()
-    router_aux_loss_coef = AttributeError()
-    sliding_window = AttributeError()
-    mlp_only_layers = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        PreTrainedConfig.__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -114,10 +58,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_asr"
-    sub_configs = {
-        "audio_config": AutoConfig,
-        "text_config": Qwen3ASRTextConfig,
-    }
+    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -139,10 +80,20 @@ class Qwen3ASRConfig(PreTrainedConfig):
                 output_dim=2048,
             )
 
-        if self.text_config is None:
-            self.text_config = Qwen3ASRTextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Qwen3ASRTextConfig(**self.text_config)
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen3"](
+                hidden_size=2048,
+                intermediate_size=6144,
+                num_hidden_layers=28,
+                num_attention_heads=16,
+                num_key_value_heads=8,
+                head_dim=128,
+                max_position_embeddings=65536,
+                tie_word_embeddings=True,
+            )
 
         super().__post_init__(**kwargs)
 
@@ -261,120 +212,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
 
 
-class Qwen3ASRRMSNorm(Qwen3OmniMoeThinkerTextRMSNorm): ...
-
-
-class Qwen3ASRAttention(Qwen3OmniMoeThinkerTextAttention): ...
-
-
-class Qwen3ASRMLP(Qwen3OmniMoeThinkerTextMLP): ...
-
-
-class Qwen3ASRThinkerTextDecoderLayer(Qwen3OmniMoeThinkerTextDecoderLayer):
-    def __init__(self, config: Qwen3ASRTextConfig, layer_idx: int):
-        GradientCheckpointingLayer.__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = Qwen3ASRAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Qwen3ASRMLP(config)
-        self.input_layernorm = Qwen3ASRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Qwen3ASRRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-
 @auto_docstring
 class Qwen3ASRPreTrainedModel(PreTrainedModel):
     config: Qwen3ASRConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3ASRThinkerTextDecoderLayer"]
+    _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _can_record_outputs = {"attentions": Qwen3ASRAttention}
-
-
-class Qwen3ASRThinkerTextAttention(Qwen3OmniMoeThinkerTextAttention): ...
-
-
-@auto_docstring(custom_intro=("Text part of Qwen3ASRThinker, "))
-class Qwen3ASRTextModel(Qwen3OmniMoeThinkerTextModel):
-    _no_split_modules = ["Qwen3ASRThinkerTextDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRThinkerTextAttention,
-    }
-
-    def __init__(self, config: Qwen3ASRTextConfig):
-        super().__init__(config)
-
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        """Similar to Qwen3OmniMoeThinkerTextModel but without vision inputs"""
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        # torch.jit.trace() doesn't support cache objects in the output
-        if use_cache and past_key_values is None and not torch.jit.is_tracing():
-            past_key_values = DynamicCache(config=self.config)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        # the hard coded `4` is for text, temporal, height and width.
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
-        elif position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
-
-        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
-            text_position_ids = position_ids[0]
-            position_ids = position_ids[1:]
-        else:
-            text_position_ids = position_ids[0]
-
-        attention_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=text_position_ids,
-        )
-        hidden_states = inputs_embeds
-
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for decoder_layer in self.layers:
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_ids=text_position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-            hidden_states = layer_outputs
-        hidden_states = self.norm(hidden_states)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-        )
-
-    def _deepstack_process(self, *args, **kwargs):
-        raise NotImplementedError("Not needed")
 
 
 @auto_docstring(
@@ -384,33 +233,27 @@ class Qwen3ASRTextModel(Qwen3OmniMoeThinkerTextModel):
 )
 class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
     config_class = Qwen3ASRConfig
-    _no_split_modules = ["Qwen3OmniMoeAudioEncoder", "Qwen3ASRThinkerTextDecoderLayer"]
-    _can_record_outputs = {
-        "hidden_states": Qwen3ASRThinkerTextDecoderLayer,
-        "attentions": Qwen3ASRThinkerTextAttention,
-    }
+    _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3DecoderLayer"]
 
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
         self.audio_tower = AutoModel.from_config(config.audio_config)
-        # TODO possible to use Qwen3ForCausalLM via AutoModelForCausalLM? for both text model and LM head
-        self.model = Qwen3ASRTextModel(config.text_config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
+        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.language_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.language_model.set_output_embeddings(new_embeddings)
 
     def get_audio_features(
         self,
@@ -454,6 +297,7 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         inputs_embeds=None,
         labels=None,
         use_cache=None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         r"""
@@ -481,30 +325,18 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
             )
 
-        outputs = self.model(
+        outputs: CausalLMOutputWithPast = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
-            )
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            past_key_values=outputs.past_key_values,
-        )
+        return outputs
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_features = kwargs.pop("input_features", None)
@@ -522,10 +354,8 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
 
 
 __all__ = [
-    "Qwen3ASRTextConfig",
     "Qwen3ASRConfig",
     "Qwen3ASRProcessor",
     "Qwen3ASRForConditionalGeneration",
     "Qwen3ASRPreTrainedModel",
-    "Qwen3ASRTextModel",
 ]

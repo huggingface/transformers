@@ -277,7 +277,6 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
-        "Qwen3ASRTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3ASRForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
     ]
 )

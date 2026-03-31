@@ -31,7 +31,7 @@ class Qwen3ASRModelTester:
         self.is_training = False
 
         text_config = {
-            "model_type": "Qwen3ASRTextConfig",
+            "model_type": "qwen3",
             "vocab_size": 151936,
             "hidden_size": 16,
             "intermediate_size": 32,
@@ -42,10 +42,7 @@ class Qwen3ASRModelTester:
             "bos_token_id": 0,
             "pad_token_id": 1,
             "eos_token_id": 2,
-            "decoder_start_token_id": 0,
             "tie_word_embeddings": False,
-            "output_attentions": True,
-            "output_hidden_states": True,
         }
         audio_config = {
             "model_type": "qwen3_audio_encoder",
@@ -63,16 +60,14 @@ class Qwen3ASRModelTester:
 
     def get_config(self):
         return Qwen3ASRConfig(
-            thinker_config={
-                "audio_config": self.audio_config,
-                "text_config": self.text_config,
-            },
+            audio_config=self.audio_config,
+            text_config=self.text_config,
             audio_token_id=self.audio_token_id,
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.thinker_config.text_config.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
         attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.long)
         inputs_dict = {
             "input_ids": input_ids,
@@ -103,11 +98,11 @@ class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     def test_model_is_small(self):
         pass
 
-    @unittest.skip(reason="MoE models don't work with torch.compile")
+    @unittest.skip(reason="Multi-modal model with sub-models")
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip(reason="MoE models don't work with torch.compile")
+    @unittest.skip(reason="Multi-modal model with sub-models")
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 

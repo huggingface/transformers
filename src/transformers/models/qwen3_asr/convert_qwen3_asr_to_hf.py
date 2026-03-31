@@ -62,8 +62,9 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # fmt: off
 STATE_DICT_MAPPING = {
-    # Remove thinker. prefix from all keys since we flattened the model structure
-    r"^thinker\.": r"",
+    r"^thinker\.audio_tower\.": r"audio_tower.",
+    r"^thinker\.lm_head\.": r"language_model.lm_head.",
+    r"^thinker\.model\.": r"language_model.model.",
 }
 # fmt: on
 
@@ -180,19 +181,30 @@ def write_model(src_root: Path, dst_root: Path):
         for key in audio_config_unused:
             config_dict["audio_config"].pop(key, None)
 
-    # Remove non-standard fields and auto-populated defaults from text_config
+    # Remove non-standard fields and auto-populated defaults from text_config.
+    # model_type is stripped so Qwen3ASRConfig.__post_init__ defaults to "qwen3".
     if "text_config" in config_dict:
         text_config_unused = [
-            "_name_or_path", "architectures", "dtype", "use_bfloat16", "add_cross_attention",
+            "_name_or_path", "architectures", "dtype", "model_type", "use_bfloat16", "add_cross_attention",
             "chunk_size_feed_forward", "cross_attention_hidden_size", "decoder_start_token_id",
             "finetuning_task", "id2label", "label2id", "is_decoder", "is_encoder_decoder",
             "output_attentions", "output_hidden_states", "prefix", "problem_type", "pruned_heads",
             "return_dict", "sep_token_id", "task_specific_params", "tf_legacy_loss", "tie_encoder_decoder",
             "tokenizer_class", "torchscript",
-            # Note: pad_token_id, bos_token_id, eos_token_id are actual Qwen3ASRTextConfig params, keep them
+            # MoE-specific fields from original OmniMoe text config (not in Qwen3Config)
+            "decoder_sparse_step", "moe_intermediate_size", "num_experts_per_tok", "num_experts",
+            "norm_topk_prob", "output_router_logits", "router_aux_loss_coef", "mlp_only_layers",
+            # Note: pad_token_id, bos_token_id, eos_token_id are actual Qwen3Config params, keep them
         ]
         for key in text_config_unused:
             config_dict["text_config"].pop(key, None)
+
+        # Strip M-RoPE fields from rope_scaling (Qwen3Config uses standard RoPE, not M-RoPE)
+        # Also remove legacy "type" key (Qwen3Config uses "rope_type" inside rope_parameters)
+        rope_cfg = config_dict["text_config"].get("rope_scaling")
+        if isinstance(rope_cfg, dict):
+            for mrope_key in ["mrope_interleaved", "interleaved", "mrope_section", "type"]:
+                rope_cfg.pop(mrope_key, None)
     # fmt: on
 
     config = Qwen3ASRConfig(**config_dict)

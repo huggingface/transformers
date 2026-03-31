@@ -21,75 +21,8 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
-
-
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
-@strict
-class Qwen3ASRTextConfig(PreTrainedConfig):
-    """
-    Example:
-
-    ```python
-    >>> from transformers import Qwen3ASRTextModel, Qwen3ASRTextConfig
-
-    >>> # Initializing a Qwen3ASRText style configuration
-    >>> configuration = Qwen3ASRTextConfig()
-
-    >>> # Initializing a model
-    >>> model = Qwen3ASRTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "qwen3_asr_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = 1000000.0
-
-    # Default tensor parallel plan for base model `Qwen3ASRText`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-    ignore_keys_at_rope_validation = {"mrope_section", "interleaved", "mrope_interleaved"}
-
-    vocab_size: int = 151936
-    hidden_size: int = 2048
-    intermediate_size: int = 6144
-    num_hidden_layers: int = 28
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 8
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 65536
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
-    use_cache: bool = True
-    rope_parameters: RopeParameters | dict | None = None
-    attention_bias: bool = False
-    attention_dropout: float | int = 0.0
-    pad_token_id: int | None = None
-    bos_token_id: int | None = None
-    eos_token_id: int | list[int] | None = None
-    head_dim: int = 128
-    tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -115,10 +48,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_asr"
-    sub_configs = {
-        "audio_config": AutoConfig,
-        "text_config": Qwen3ASRTextConfig,
-    }
+    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -140,12 +70,22 @@ class Qwen3ASRConfig(PreTrainedConfig):
                 output_dim=2048,
             )
 
-        if self.text_config is None:
-            self.text_config = Qwen3ASRTextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Qwen3ASRTextConfig(**self.text_config)
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen3"](
+                hidden_size=2048,
+                intermediate_size=6144,
+                num_hidden_layers=28,
+                num_attention_heads=16,
+                num_key_value_heads=8,
+                head_dim=128,
+                max_position_embeddings=65536,
+                tie_word_embeddings=True,
+            )
 
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen3ASRTextConfig", "Qwen3ASRConfig"]
+__all__ = ["Qwen3ASRConfig"]
