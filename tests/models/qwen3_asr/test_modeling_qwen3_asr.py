@@ -48,7 +48,7 @@ class Qwen3ASRModelTester:
             "output_hidden_states": True,
         }
         audio_config = {
-            "model_type": "Qwen3ASRAudioEncoderConfig",
+            "model_type": "qwen3_audio_encoder",
             "d_model": 8,
             "encoder_layers": 1,
             "encoder_attention_heads": 2,

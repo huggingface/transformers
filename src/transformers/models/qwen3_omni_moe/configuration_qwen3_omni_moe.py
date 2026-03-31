@@ -35,7 +35,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     max_source_positions (`int`, *optional*, defaults to 1500):
         Maximum sequence length for the inputs
     n_window (`int`, *optional*, defaults to 50):
-        Number of windwos
+        Number of windows
     output_dim (`int`, *optional*, defaults to 3584):
         Dimensionality of the output
     n_window_infer (`int`, *optional*, defaults to `800`):
@@ -43,7 +43,7 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     conv_chunksize (`int`, *optional*, defaults to `500`):
         Chunk size of each input to convolutional layer
     downsample_hidden_size (`int`, *optional*, defaults to `480`):
-        Hidden size in donwsampling layer
+        Hidden size in downsampling layer
     """
 
     model_type = "qwen3_omni_moe_audio_encoder"
@@ -660,4 +660,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config()
 
 
-__all__ = ["Qwen3OmniMoeConfig", "Qwen3OmniMoeThinkerConfig", "Qwen3OmniMoeTalkerConfig"]
+__all__ = [
+    "Qwen3OmniMoeAudioEncoderConfig",
+    "Qwen3OmniMoeConfig",
+    "Qwen3OmniMoeThinkerConfig",
+    "Qwen3OmniMoeTalkerConfig",
+]

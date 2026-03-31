@@ -23,45 +23,11 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
-@strict(accept_kwargs=True)
-class Qwen3ASRAudioEncoderConfig(PreTrainedConfig):
-    r"""
-    downsample_hidden_size ( `int`, *optional*, defaults to `480`): Hidden size in donwsampling layer
-    conv_chunksize ( `int`, *optional*, defaults to `500`): Chunk size of each input to convolutional layer
-    n_window_infer ( `int`, *optional*, defaults to `800`): Number of windows during inference
-    max_source_positions (`int`, *optional*, defaults to 1500): Maximum sequence length for the inputs
-    n_window (`int`, *optional*, defaults to 50):  Number of windwos
-    output_dim (`int`, *optional*, defaults to 2048):  Dimensionality of the output
-    """
-
-    model_type = "qwen3_asr_audio_encoder"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
-
-    num_mel_bins: int = 128
-
-    encoder_layers: int = 24
-    encoder_attention_heads: int = 16
-    encoder_ffn_dim: int = 4096
-    d_model: int = 1024
-    dropout: float | int = 0.0
-    attention_dropout: float | int = 0.0
-    activation_function: str = "gelu"
-    activation_dropout: float | int = 0.0
-    scale_embedding: bool = False
-    initializer_range: float = 0.02
-    max_source_positions: int = 1500
-    n_window: int = 50
-    output_dim: int = 2048
-    n_window_infer: int = 800
-    conv_chunksize: int = 500
-    downsample_hidden_size: int = 480
-
-
-@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3ASRTextConfig(PreTrainedConfig):
     """
     Example:
@@ -116,7 +82,6 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
-    mlp_only_layers: list[int] | None = None
     pad_token_id: int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
@@ -124,13 +89,11 @@ class Qwen3ASRTextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        self.mlp_only_layers = [] if self.mlp_only_layers is None else self.mlp_only_layers
-
         super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
     audio_token_id (`int`, *optional*, defaults to 151676):
@@ -153,7 +116,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     model_type = "qwen3_asr"
     sub_configs = {
-        "audio_config": Qwen3ASRAudioEncoderConfig,
+        "audio_config": AutoConfig,
         "text_config": Qwen3ASRTextConfig,
     }
 
@@ -165,10 +128,17 @@ class Qwen3ASRConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
-        if self.audio_config is None:
-            self.audio_config = Qwen3ASRAudioEncoderConfig()
-        elif isinstance(self.audio_config, dict):
-            self.audio_config = Qwen3ASRAudioEncoderConfig(**self.audio_config)
+        if isinstance(self.audio_config, dict):
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_audio_encoder")
+            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["qwen3_audio_encoder"](
+                encoder_layers=24,
+                encoder_attention_heads=16,
+                encoder_ffn_dim=4096,
+                d_model=1024,
+                output_dim=2048,
+            )
 
         if self.text_config is None:
             self.text_config = Qwen3ASRTextConfig()
@@ -178,4 +148,4 @@ class Qwen3ASRConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen3ASRAudioEncoderConfig", "Qwen3ASRTextConfig", "Qwen3ASRConfig"]
+__all__ = ["Qwen3ASRTextConfig", "Qwen3ASRConfig"]

@@ -1,3 +1,17 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Reproducible Usage
 ==================
@@ -152,10 +166,11 @@ def write_model(src_root: Path, dst_root: Path):
         if "initializer_range" in thinker_config:
             config_dict["initializer_range"] = thinker_config["initializer_range"]
 
-    # Remove non-standard fields and auto-populated defaults from audio_config
+    # Audio encoder reuses Qwen3OmniMoeAudioEncoderConfig directly via AutoModel;
+    # clean up non-standard fields but keep model-specific values (e.g. output_dim differs across sizes)
     if "audio_config" in config_dict:
         audio_config_unused = [
-            "_name_or_path", "architectures", "dtype", "use_bfloat16", "add_cross_attention",
+            "_name_or_path", "architectures", "dtype", "model_type", "use_bfloat16", "add_cross_attention",
             "chunk_size_feed_forward", "cross_attention_hidden_size", "decoder_start_token_id",
             "finetuning_task", "id2label", "label2id", "is_decoder", "is_encoder_decoder",
             "output_attentions", "output_hidden_states", "pad_token_id", "bos_token_id", "eos_token_id",
