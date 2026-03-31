@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
@@ -677,7 +678,27 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "model"):
+            del cls.model
+        cleanup(torch_device, gc_collect=True)
+
     def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
         )
@@ -710,9 +731,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
@@ -764,7 +783,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
-            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:-",
+            ("cuda", (8, 6)): "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
             ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
         }).get_expectation()  # fmt: skip
 
@@ -773,9 +792,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(
             text=[text] * 2,
@@ -791,13 +808,9 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 7) : [
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
-                    "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is of glass shattering, and the dog in the picture is a Labrador Retriever",
-                ],
                 ("cuda", 8): [
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n",
-                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information, here is a breakdown of what you're hearing and seeing:\n\n"
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
+                    "user\nWhat's that sound and what kind of dog is this?\nassistant\nBased on the audio and visual information provided:\n\nThe sound you hear is the distinct, high-pitched",
                 ],
                 ("rocm", (9, 4)): [
                     "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog is a Labrador Retriever.",
@@ -811,9 +824,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_multiturn(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
 
         messages = [
             self.messages[0],
@@ -857,9 +868,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_w_audio(self):
-        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-Omni-30B-A3B-Instruct", dtype=torch.bfloat16, device_map="auto"
-        )
+        model = self.get_model()
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/guess_age_gender.wav"
 
         messages = [
@@ -894,8 +903,7 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("cuda", 7): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nWell, I can try. But it's not always that accurate. I might be able to make",
-                ("cuda", 8): "'system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also make inferences about'",
+                ("cuda", 8): "system\nYou are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.\nuser\n\nassistant\nYes, I can analyze audio inputs to understand spoken content, and I can also process and respond to",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -906,6 +914,10 @@ class Qwen3OmniModelIntegrationTest(unittest.TestCase):
         )
         self.assertFalse(torch.isnan(output[1]).any().item())
 
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we need to keep
+    # the loaded model (without FA) in `cls.model`. If this test is not run first, when loading the flash attention
+    # model here, there is already a previous loaded model `cls.model` and we will get GPU OOM.
+    @run_first
     @slow
     @require_flash_attn
     @require_torch_accelerator

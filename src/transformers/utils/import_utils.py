@@ -15,6 +15,7 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import functools
 import importlib.machinery
 import importlib.metadata
 import importlib.util
@@ -2530,8 +2531,19 @@ def requires(*, backends=()):
                 raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
 
     def inner_fn(fun):
-        fun.__backends = applied_backends
-        return fun
+        if isinstance(fun, type):
+            # For classes, just attach the metadata — don't wrap, as that would
+            # turn the class into a plain function and break isinstance checks.
+            fun.__backends = applied_backends
+            return fun
+
+        @functools.wraps(fun)
+        def wrapper(*args, **kwargs):
+            requires_backends(fun, applied_backends)
+            return fun(*args, **kwargs)
+
+        wrapper.__backends = applied_backends  # type: ignore [unresolved-attribute]
+        return wrapper
 
     return inner_fn
 

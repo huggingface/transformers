@@ -529,6 +529,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     system_token_id: int = 8948
     user_token_id: int = 872
     assistant_token_id: int = 77091
+    initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.thinker_config is None:
@@ -548,6 +549,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
             logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
         elif isinstance(self.code2wav_config, dict):
             self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
+
+        if self.initializer_range is None:
+            self.initializer_range = self.thinker_config.initializer_range
 
         super().__post_init__(**kwargs)
 
@@ -1074,10 +1078,6 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
-    _no_split_modules = [
-        "Qwen3OmniMoeAudioEncoderLayer",
-        "Qwen3OmniMoeThinkerTextDecoderLayer",
-    ]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -1775,9 +1775,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values,
-            attention_mask,
-            inputs_embeds,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
@@ -2425,7 +2425,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_codes = (
             torch.stack([hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None], dim=1)
             .transpose(1, 2)
-            .to(self.code2wav.device)
+            .to(talker_result.hidden_states[-1][-1].device)
         )
         talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
 
