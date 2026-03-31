@@ -474,7 +474,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("voxtral_realtime", "VoxtralRealtimeForConditionalGeneration"),
         ("voxtral_realtime_encoder", "VoxtralRealtimeEncoder"),
         ("voxtral_realtime_text", "VoxtralRealtimeTextModel"),
-        ("voxtral_tts", "VoxtralTtsModel"),
+        ("voxtral_tts", "VoxtralTtsForTextToSpeech"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -738,7 +738,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("starcoder2", "Starcoder2ForCausalLM"),
         ("trocr", "TrOCRForCausalLM"),
         ("vaultgemma", "VaultGemmaForCausalLM"),
-        ("voxtral_tts", "VoxtralTtsForCausalLM"),
         ("whisper", "WhisperForCausalLM"),
         ("xglm", "XGLMForCausalLM"),
         ("xlm", "XLMWithLMHeadModel"),
@@ -1323,7 +1322,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("t5gemma2", "T5Gemma2ForSequenceClassification"),
         ("tapas", "TapasForSequenceClassification"),
         ("umt5", "UMT5ForSequenceClassification"),
-        ("voxtral_tts", "VoxtralTtsForSequenceClassification"),
         ("xlm", "XLMForSequenceClassification"),
         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
@@ -1409,7 +1407,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForQuestionAnswering"),
         ("t5", "T5ForQuestionAnswering"),
         ("umt5", "UMT5ForQuestionAnswering"),
-        ("voxtral_tts", "VoxtralTtsForQuestionAnswering"),
         ("xlm", "XLMForQuestionAnsweringSimple"),
         ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
@@ -1530,7 +1527,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("t5gemma", "T5GemmaForTokenClassification"),
         ("t5gemma2", "T5Gemma2ForTokenClassification"),
         ("umt5", "UMT5ForTokenClassification"),
-        ("voxtral_tts", "VoxtralTtsForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
@@ -1674,6 +1670,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vits", "VitsModel"),
+        ("voxtral_tts", "VoxtralTtsForTextToSpeech"),
     ]
 )
 

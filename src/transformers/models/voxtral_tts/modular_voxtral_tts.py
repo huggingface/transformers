@@ -19,7 +19,6 @@ import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
-from .configuration_voxtral_tts import VoxtralTtsCodecConfig, VoxtralTtsConfig, VoxtralTtsFlowMatchingConfig
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -29,6 +28,7 @@ from ..mistral.modeling_mistral import (
     MistralRMSNorm,
     MistralRotaryEmbedding,
 )
+from .configuration_voxtral_tts import VoxtralTtsCodecConfig, VoxtralTtsConfig, VoxtralTtsFlowMatchingConfig
 
 
 class VoxtralTtsMLP(MistralMLP):
@@ -157,7 +157,6 @@ class VoxtralTtsFlowMatchingTransformer(nn.Module):
 
 
 class VoxtralTtsSemanticCodebook(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig):
         super().__init__()
         self.register_buffer("cluster_usage", torch.ones(config.semantic_codebook_size))
@@ -172,7 +171,6 @@ class VoxtralTtsSemanticCodebook(nn.Module):
 
 
 class VoxtralTtsQuantizer(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig):
         super().__init__()
         self.semantic_codebook = VoxtralTtsSemanticCodebook(config)
@@ -182,7 +180,6 @@ class VoxtralTtsQuantizer(nn.Module):
 
 
 class VoxtralTtsCodecAttention(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig):
         super().__init__()
         self.num_heads = config.num_attention_heads
@@ -224,7 +221,6 @@ class VoxtralTtsCodecAttention(nn.Module):
 
 
 class VoxtralTtsCodecMLP(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig):
         super().__init__()
         self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -236,7 +232,6 @@ class VoxtralTtsCodecMLP(nn.Module):
 
 
 class VoxtralTtsCodecTransformerLayer(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig, layer_idx: int = 0):
         super().__init__()
         self.self_attn = VoxtralTtsCodecAttention(config)
@@ -246,12 +241,8 @@ class VoxtralTtsCodecTransformerLayer(nn.Module):
 
         self.use_layer_scale = config.layer_scale
         if config.layer_scale:
-            self.self_attn_layer_scale = nn.Parameter(
-                torch.full((config.hidden_size,), config.layer_scale_init)
-            )
-            self.mlp_layer_scale = nn.Parameter(
-                torch.full((config.hidden_size,), config.layer_scale_init)
-            )
+            self.self_attn_layer_scale = nn.Parameter(torch.full((config.hidden_size,), config.layer_scale_init))
+            self.mlp_layer_scale = nn.Parameter(torch.full((config.hidden_size,), config.layer_scale_init))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
@@ -272,12 +263,9 @@ class VoxtralTtsCodecTransformerLayer(nn.Module):
 
 
 class VoxtralTtsCodecTransformerBlock(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig, num_layers: int):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [VoxtralTtsCodecTransformerLayer(config, layer_idx=i) for i in range(num_layers)]
-        )
+        self.layers = nn.ModuleList([VoxtralTtsCodecTransformerLayer(config, layer_idx=i) for i in range(num_layers)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.transpose(1, 2)
@@ -287,7 +275,6 @@ class VoxtralTtsCodecTransformerBlock(nn.Module):
 
 
 class VoxtralTtsCodecConvBlock(nn.Module):
-
     def __init__(
         self,
         in_channels: int,
@@ -326,7 +313,6 @@ class VoxtralTtsCodecConvBlock(nn.Module):
 
 
 class VoxtralTtsCodecModel(nn.Module):
-
     def __init__(self, config: VoxtralTtsCodecConfig):
         super().__init__()
         self.config = config
