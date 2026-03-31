@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 
 class BertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """Construct the embeddings from word, position and token_type embeddings. aaaa"""
 
     def __init__(self, config):
         super().__init__()
