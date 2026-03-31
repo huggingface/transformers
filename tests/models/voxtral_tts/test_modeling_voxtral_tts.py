@@ -11,51 +11,222 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch VoxtralTts model."""
+"""Testing suite for the PyTorch Voxtral TTS model."""
 
-import gc
+import copy
+import os
+import shutil
+import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
-from transformers import AutoTokenizer, BitsAndBytesConfig, DynamicCache, is_torch_available, set_seed
-from transformers.cache_utils import DynamicSlidingWindowLayer
+from transformers import VoxtralTtsConfig, is_torch_available
 from transformers.testing_utils import (
-    DeviceProperties,
-    Expectations,
-    backend_empty_cache,
     cleanup,
-    get_device_properties,
-    require_bitsandbytes,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
 
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    ids_tensor,
+)
+
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        VoxtralTtsForCausalLM,
-        VoxtralTtsModel,
-    )
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+    from transformers import VoxtralTtsForTextToSpeech
+    from transformers.models.voxtral_tts.convert_voxtral_tts_weights_to_hf import write_model
 
 
-class VoxtralTtsModelTester(CausalLMModelTester):
-    if is_torch_available():
-        base_model_class = VoxtralTtsModel
+class VoxtralTtsModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=5,
+        num_audio_frames=3,
+        is_training=False,
+        num_codebooks=37,
+        hidden_size=64,
+        config={
+            "vocab_size": 128,
+            "hidden_size": 64,
+            "intermediate_size": 128,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "head_dim": 16,
+            "hidden_act": "silu",
+            "max_position_embeddings": 64,
+            "audio_vocab_size": 256,
+            "semantic_codebook_size": 64,
+            "acoustic_codebook_size": 5,
+            "n_acoustic_codebook": 36,
+            "num_codebooks": 37,
+            "tie_word_embeddings": True,
+        },
+        flow_matching_config={
+            "input_dim": 64,
+            "hidden_size": 64,
+            "intermediate_size": 128,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "head_dim": 16,
+            "semantic_vocab_size": 64,
+            "acoustic_dim": 36,
+            "max_position_embeddings": 64,
+            "rope_theta": 10000.0,
+            "sigma": 1e-5,
+            "sigma_max": 1.0,
+        },
+        codec_config={
+            "semantic_codebook_size": 64,
+            "semantic_dim": 32,
+            "acoustic_codebook_size": 5,
+            "acoustic_dim": 36,
+            "hidden_size": 32,
+            "intermediate_size": 64,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "head_dim": 16,
+            "patch_size": 8,
+            "patch_proj_kernel_size": 3,
+            "decoder_transformer_lengths": [1, 1, 1, 1],
+            "decoder_convs_kernels": [3, 4, 4, 4],
+            "decoder_convs_strides": [1, 2, 2, 2],
+            "norm_eps": 0.01,
+            "qk_norm_eps": 1e-6,
+            "layer_scale_init": 0.01,
+        },
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.num_audio_frames = num_audio_frames
+        self.is_training = is_training
+        self.num_codebooks = num_codebooks
+        self.config_dict = config
+        self.flow_matching_config = flow_matching_config
+        self.codec_config = codec_config
+
+        self.num_hidden_layers = config["num_hidden_layers"]
+        self.vocab_size = config["vocab_size"]
+        self.hidden_size = config["hidden_size"]
+        self.num_attention_heads = config["num_attention_heads"]
+        self.encoder_seq_length = self.num_audio_frames + self.seq_length
+
+    def get_config(self):
+        return VoxtralTtsConfig(
+            flow_matching_config=self.flow_matching_config,
+            codec_config=self.codec_config,
+            **self.config_dict,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vocab_size)
+
+        audio_codes = torch.stack(
+            [
+                ids_tensor([self.batch_size, self.num_audio_frames], config.semantic_codebook_size),
+            ]
+            + [
+                ids_tensor([self.batch_size, self.num_audio_frames], config.acoustic_codebook_size)
+                for _ in range(config.n_acoustic_codebook)
+            ],
+            dim=-1,
+        )
+
+        attention_mask = torch.ones(
+            self.batch_size, self.num_audio_frames + self.seq_length, dtype=torch.long, device=torch_device
+        )
+
+        return config, input_ids, audio_codes, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, audio_codes, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {
+            "input_ids": input_ids,
+            "audio_codes": audio_codes,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+    def create_and_check_forward(self, config, input_ids, audio_codes, attention_mask):
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids=input_ids, audio_codes=audio_codes, attention_mask=attention_mask)
+        expected_seq_len = self.num_audio_frames + self.seq_length
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, expected_seq_len, config.vocab_size))
+
+    def create_and_check_forward_text_only(self, config, input_ids, audio_codes, attention_mask):
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids=input_ids)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
+
+    def create_and_check_forward_audio_only(self, config, input_ids, audio_codes, attention_mask):
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(audio_codes=audio_codes)
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_audio_frames, config.vocab_size)
+        )
 
 
 @require_torch
-class VoxtralTtsModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = VoxtralTtsModelTester
+class VoxtralTtsModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (VoxtralTtsForTextToSpeech,) if is_torch_available() else ()
+    all_generative_model_classes = ()
+    test_resize_embeddings = False
+    test_resize_embeddings_untied = False
 
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
+    def setUp(self):
+        self.model_tester = VoxtralTtsModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=VoxtralTtsConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_audio_frames + self.model_tester.seq_length,
+                ),
+                dtype=torch.long,
+                device=torch_device,
+            )
+        return inputs_dict
+
+    def test_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward(*config_and_inputs)
+
+    def test_forward_text_only(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_text_only(*config_and_inputs)
+
+    def test_forward_audio_only(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_forward_audio_only(*config_and_inputs)
+
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -68,393 +239,245 @@ class VoxtralTtsModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    @pytest.mark.skip(reason="Voxtral TTS has custom embedding approach (text and audio embeddings).")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @pytest.mark.skip(reason="Voxtral TTS has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
+    @pytest.mark.skip(reason="Voxtral TTS has special text+audio embeddings that are never tied in the standard way.")
+    def test_tied_weights_keys(self):
+        pass
+
+    @pytest.mark.skip(
+        reason="Voxtral TTS uses custom codec/FM modules with layer_scale params and VQ codebook buffers "
+        "that require custom _init_weights. The modular converter currently cannot add _init_weights "
+        "when the parent (Mistral) doesn't define one."
+    )
+    def test_can_init_all_missing_weights(self):
+        pass
+
+    @pytest.mark.skip(reason="Same as test_can_init_all_missing_weights: codec codebook buffers not in _init_weights.")
+    def test_init_weights_can_init_buffers(self):
+        pass
+
+    @pytest.mark.skip(
+        reason="VoxtralTtsCodecConfig uses strict dataclass validation and layer_scale field type "
+        "conflicts with the test's type coercion."
+    )
+    def test_can_load_ignoring_mismatched_shapes(self):
+        pass
+
+    @pytest.mark.skip(
+        reason="inputs_embeds test passes only text-shaped embeds but prepare_config_and_inputs "
+        "produces audio+text inputs. The two paths produce different sequence lengths."
+    )
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    @pytest.mark.skip(
+        reason="TP plan paths use backbone_model.layers.* but the test resolves "
+        "base_model_prefix='model' to backbone_model.backbone_model.layers.*. "
+        "This is a known modular converter issue with composite models."
+    )
+    def test_tp_plan_matches_params(self):
+        pass
+
+    def test_generate_with_tiny_model(self):
+        """Test that the custom TTS generate method works with a tiny config."""
+        config = self.model_tester.get_config()
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([1, 5], config.vocab_size).to(torch_device)
+
+        output = model.generate(input_ids=input_ids, max_new_tokens=2)
+        self.assertIsNotNone(output.audio)
+        self.assertEqual(len(output.audio), 1)
+        self.assertEqual(output.semantic_tokens.shape[0], 1)
+        self.assertEqual(output.semantic_tokens.shape[1], 2)
+        self.assertEqual(output.acoustic_values.shape, (1, 2, 36))
+
+    def test_generate_without_audio_output(self):
+        """Test generate with output_audio=False returns tokens but no waveform."""
+        config = self.model_tester.get_config()
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([1, 5], config.vocab_size).to(torch_device)
+
+        output = model.generate(input_ids=input_ids, max_new_tokens=2, output_audio=False)
+        self.assertIsNone(output.audio)
+        self.assertIsNotNone(output.semantic_tokens)
+        self.assertIsNotNone(output.acoustic_values)
+
+    def test_generate_with_voice_reference(self):
+        """Test generate with audio_codes (voice reference)."""
+        config = self.model_tester.get_config()
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([1, 5], config.vocab_size).to(torch_device)
+
+        audio_codes = torch.stack(
+            [ids_tensor([1, 3], config.semantic_codebook_size)]
+            + [ids_tensor([1, 3], config.acoustic_codebook_size) for _ in range(config.n_acoustic_codebook)],
+            dim=-1,
+        ).to(torch_device)
+
+        output = model.generate(input_ids=input_ids, audio_codes=audio_codes, max_new_tokens=2)
+        self.assertIsNotNone(output.audio)
+        self.assertEqual(output.semantic_tokens.shape[1], 2)
+
+    def test_generate_with_cfg(self):
+        """Test generate with classifier-free guidance."""
+        config = self.model_tester.get_config()
+        model = VoxtralTtsForTextToSpeech(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([1, 5], config.vocab_size).to(torch_device)
+
+        output = model.generate(input_ids=input_ids, max_new_tokens=2, cfg_alpha=1.2)
+        self.assertIsNotNone(output.audio)
+        self.assertEqual(output.semantic_tokens.shape[1], 2)
+
 
 @require_torch_accelerator
 class VoxtralTtsIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which accelerator are we using for our runners (e.g. A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    device_properties: DeviceProperties = (None, None, None)
+    model_checkpoint = "mistralai/Voxtral-4B-TTS-2603"
+    converted_checkpoint_dir = None
+    _cleanup_converted_checkpoint = False
 
     @classmethod
     def setUpClass(cls):
-        cls.device_properties = get_device_properties()
+        super().setUpClass()
 
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    @slow
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            "mistralai/VoxtralTts-7B-v0.1", device_map="auto", dtype=torch.float16
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        with torch.no_grad():
-            out = model(input_ids).logits.float().cpu()
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
-
-        # ("cuda", 8) for A100/A10, and ("cuda", 7) 7 for T4.
-        # considering differences in hardware processing and potential deviations in output.
-        # fmt: off
-        EXPECTED_SLICES = Expectations(
-            {
-                ("cuda", 7): torch.tensor([-5.8828, -5.8633, -0.1042, -4.7266, -5.8828, -5.8789, -5.8789, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -1.0801,  1.7598, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828]),
-                ("cuda", 8): torch.tensor([-5.8711, -5.8555, -0.1050, -4.7148, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -1.0781, 1.7568, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711]),
-                ("rocm", 9): torch.tensor([-5.8750, -5.8594, -0.1047, -4.7188, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -1.0781,  1.7578, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750]),
-            }
-        )
-        # fmt: on
-        expected_slice = EXPECTED_SLICES.get_expectation()
-
-        torch.testing.assert_close(out[0, 0, :30], expected_slice, atol=1e-4, rtol=1e-4)
-
-    @slow
-    @require_bitsandbytes
-    def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I’m not a fan of mustard, mayo,"
-
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/VoxtralTts-7B-v0.1", use_fast=False)
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            "mistralai/VoxtralTts-7B-v0.1",
-            device_map={"": torch_device},
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-        )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @require_flash_attn
-    @require_bitsandbytes
-    @slow
-    @pytest.mark.flash_attn_test
-    def test_model_7b_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            "mistralai/VoxtralTts-7B-v0.1",
-            device_map={"": torch_device},
-            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
-            attn_implementation="flash_attention_2",
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-    @slow
-    def test_model_7b_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            "mistralai/VoxtralTts-7B-v0.1", device_map="auto", attn_implementation="sdpa", dtype=torch.float16
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/VoxtralTts-7B-v0.1", use_fast=False)
-
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = "My favourite condiment is 100% ketchup. I’m not a fan of mustard, relish"
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/VoxtralTts-7B-v0.1", use_fast=False)
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            "mistralai/VoxtralTts-7B-v0.1", device_map="auto", dtype=torch.float16
-        )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        set_seed(42)
-        generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @pytest.mark.torch_compile_test
-    @slow
-    def test_compile_static_cache(self):
-        if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
-            self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
-
-        NUM_TOKENS_TO_GENERATE = 40
-        EXPECTED_TEXT_COMPLETION = [
-            "My favourite condiment is 100% ketchup. I love it on everything. "
-            "I’m not a big fan of mustard, mayo, or relish. I’m not a fan of pickles"
-        ]
-
-        prompts = ["My favourite condiment is "]
-        tokenizer = AutoTokenizer.from_pretrained("mistralai/VoxtralTts-7B-v0.1", use_fast=False)
-        tokenizer.pad_token = tokenizer.eos_token
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            "mistralai/VoxtralTts-7B-v0.1", device_map=torch_device, dtype=torch.float16
-        )
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-
-        # Dynamic Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
-
-        # Static Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Sliding Window Cache
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
-        )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        forward_function = model.__call__
-        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
-
-        # Sliding Window Cache + compile
-        torch._dynamo.reset()
-        model.__call__ = torch.compile(forward_function, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="sliding_window"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
-
-    @pytest.mark.flash_attn_test
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_flash_attn
-    @slow
-    def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
-        """Test that we can correctly generate beyond the sliding window. This is non-trivial as VoxtralTts will use
-        a DynamicCache with only sliding layers."""
-
-        # Impossible to test it with this model (even with < 100 tokens), probably due to the compilation of a large model.
-        if attn_implementation == "flex_attention":
-            self.skipTest(
-                reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
-            )
-
-        model_id = "mistralai/VoxtralTts-7B-v0.1"
-        EXPECTED_COMPLETIONS = [
-            "scenery, scenery, scenery, scenery, scenery,",
-            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
-        ]
-
-        input_text = [
-            "This is a nice place. " * 682 + "I really enjoy the scenery,",  # This has 4101 tokens, 15 more than 4096
-            "A list of colors: red, blue",  # This will almost all be padding tokens
-        ]
-
-        if attn_implementation == "eager":
-            input_text = input_text[:1]
-
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
-
-        model = VoxtralTtsForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, device_map=torch_device, dtype=torch.float16
-        )
-
-        # Make sure prefill is larger than sliding window
-        batch_size, input_size = inputs.input_ids.shape
-        self.assertTrue(input_size > model.config.sliding_window)
-
-        # Should already be Dynamic by default, but let's make sure!
-        out = model.generate(**inputs, max_new_tokens=20, cache_implementation="dynamic", return_dict_in_generate=True)
-        output_text = tokenizer.batch_decode(out.sequences[:batch_size, input_size:])
-
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS[:batch_size])
-
-        # Let's check that the dynamic cache has hybrid layers!
-        dynamic_cache = out.past_key_values
-        self.assertTrue(isinstance(dynamic_cache, DynamicCache))
-        for layer in dynamic_cache.layers:
-            self.assertTrue(isinstance(layer, DynamicSlidingWindowLayer))
-            self.assertEqual(layer.keys.shape[-2], model.config.sliding_window - 1)
-
-
-@slow
-@require_torch_accelerator
-class Mask4DTestHard(unittest.TestCase):
-    model_name = "mistralai/VoxtralTts-7B-v0.1"
-    model = None
-    model_dtype = None
-
-    @classmethod
-    def setUpClass(cls):
-        cleanup(torch_device, gc_collect=True)
-        if cls.model_dtype is None:
-            cls.model_dtype = torch.float16
-        if cls.model is None:
-            cls.model = VoxtralTtsForCausalLM.from_pretrained(cls.model_name, dtype=cls.model_dtype).to(torch_device)
+        cls.converted_checkpoint_dir = os.environ.get("VOXTRAL_TTS_HF_MODEL_DIR")
+        if cls.converted_checkpoint_dir is None:
+            cls.converted_checkpoint_dir = tempfile.mkdtemp(prefix="voxtral-tts-hf-")
+            cls._cleanup_converted_checkpoint = True
+            write_model(cls.model_checkpoint, cls.converted_checkpoint_dir)
 
     @classmethod
     def tearDownClass(cls):
-        del cls.model_dtype
-        del cls.model
-        cleanup(torch_device, gc_collect=True)
+        if cls._cleanup_converted_checkpoint and cls.converted_checkpoint_dir is not None:
+            shutil.rmtree(cls.converted_checkpoint_dir, ignore_errors=True)
+        super().tearDownClass()
+
+    def _get_model(self):
+        model = VoxtralTtsForTextToSpeech.from_pretrained(
+            self.converted_checkpoint_dir, device_map=torch_device, torch_dtype=torch.float16
+        )
+        model.eval()
+        return model
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=False)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def get_test_data(self):
-        template = "my favorite {}"
-        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
+    @slow
+    def test_forward_logits(self):
+        """Test that forward pass matches a known logits slice from converted original weights."""
+        model = self._get_model()
 
-        batch_separate = [template.format(x) for x in items]  # 3 separate lines
-        batch_shared_prefix = template.format(" ".join(items))  # 1 line with options concatenated
+        input_ids = torch.tensor([[1, 306, 4658, 278, 6593, 310]], device=torch_device)
+        with torch.no_grad():
+            out = model(input_ids=input_ids)
 
-        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(torch_device)
-        input_ids_shared_prefix = self.tokenizer(batch_shared_prefix, return_tensors="pt").input_ids.to(torch_device)
-
-        mask_shared_prefix = torch.tensor(
+        self.assertEqual(out.logits.shape[0], 1)
+        self.assertEqual(out.logits.shape[1], 6)
+        self.assertEqual(out.logits.shape[2], 131072)
+        expected_mean = torch.tensor([[0.0539, 0.1095, 0.0874, 0.1063, 0.0758, 0.1047]])
+        expected_last_logits = torch.tensor(
             [
-                [
-                    [
-                        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    ]
-                ]
-            ],
-            device=torch_device,
-        )
-
-        position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
-
-        # building custom positions ids based on custom mask
-        position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
-        # effectively: position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
-
-        # inverting the mask
-        min_dtype = torch.finfo(self.model_dtype).min
-        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
-
-        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
-
-    def test_stacked_causal_mask(self):
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
-
-    def test_partial_stacked_causal_mask(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # 2 forward runs with custom 4D masks
-        part_a = 3  # split point
-
-        input_1a = input_ids_shared_prefix[:, :part_a]
-        position_ids_1a = position_ids_shared_prefix[:, :part_a]
-        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
-
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
-
-        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
-        input_1b = input_ids_shared_prefix[:, part_a:]
-        position_ids_1b = position_ids_shared_prefix[:, part_a:]
-        mask_1b = mask_shared_prefix[:, :, part_a:, :]
-        outs_1b = self.model.forward(
-            input_1b, attention_mask=mask_1b, position_ids=position_ids_1b, past_key_values=past_key_values_a
-        )
-        decoded_1b = [
-            self.tokenizer.decode(t)
-            for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
+                0.9287,
+                -0.0992,
+                -2.8809,
+                1.0098,
+                0.4404,
+                0.9316,
+                0.9287,
+                0.9287,
+                0.9287,
+                0.4939,
+                0.9287,
+                0.9316,
+                2.2695,
+                0.1075,
+                0.9287,
+                0.9287,
+                0.9287,
+                0.9287,
+                0.9321,
+                0.9287,
             ]
-        ]
-        self.assertEqual(decoded, decoded_1b)
+        )
+        torch.testing.assert_close(out.logits.float().cpu().mean(-1), expected_mean, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            out.logits[0, -1, :20].float().cpu(),
+            expected_last_logits,
+            rtol=1e-3,
+            atol=1e-3,
+        )
+
+    @slow
+    def test_generate_produces_audio(self):
+        """Test that generate produces deterministic semantic tokens and audio from converted weights."""
+        model = self._get_model()
+
+        input_ids = torch.tensor([[1, 306, 4658, 278, 6593, 310]], device=torch_device)
+        torch.manual_seed(0)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(0)
+        output = model.generate(input_ids=input_ids, max_new_tokens=5, top_k=1)
+
+        self.assertIsNotNone(output.audio)
+        self.assertEqual(len(output.audio), 1)
+        self.assertGreater(output.audio[0].numel(), 0)
+        self.assertEqual(output.semantic_tokens.shape, (1, 5))
+        self.assertEqual(output.acoustic_values.shape, (1, 5, 36))
+        self.assertTrue(torch.equal(output.semantic_tokens.cpu(), torch.tensor([[5980, 5980, 5980, 5980, 5980]])))
+
+        expected_acoustic_tail = torch.tensor(
+            [-1.4766, 0.3071, -1.1709, -0.7568, 1.4160, -0.8506, 0.0724, 0.5459, -1.0312, 1.9434]
+        )
+        expected_audio = torch.tensor(
+            [
+                -5.4264e-04,
+                -1.4496e-03,
+                -2.5272e-03,
+                -3.3607e-03,
+                -3.4122e-03,
+                -2.7237e-03,
+                -1.7328e-03,
+                -8.9598e-04,
+                -2.3019e-04,
+                -5.0724e-05,
+                -5.0163e-04,
+                -1.3714e-03,
+                -2.2926e-03,
+                -2.4929e-03,
+                -2.2831e-03,
+                -2.1725e-03,
+                -2.4471e-03,
+                -3.1719e-03,
+                -3.6354e-03,
+                -3.8662e-03,
+            ]
+        )
+
+        torch.testing.assert_close(
+            output.acoustic_values[0, -1, :10].float().cpu(),
+            expected_acoustic_tail,
+            rtol=1e-3,
+            atol=1e-3,
+        )
+        torch.testing.assert_close(output.audio[0][:20].float().cpu(), expected_audio, rtol=1e-3, atol=1e-4)

@@ -320,24 +320,27 @@ class VoxtralTtsAudioEmbeddings(nn.Module):
         super().__init__()
         self.num_codebooks = config.num_codebooks
         self.embed_audio_tokens = nn.Embedding(config.audio_vocab_size, config.hidden_size)
-        offsets = self._compute_offsets(config)
-        self.register_buffer("audio_tokens_offsets", offsets, persistent=False)
 
-    @staticmethod
-    def _compute_offsets(config):
-        offsets = torch.zeros(config.num_codebooks, dtype=torch.long)
-        if config.n_acoustic_codebook > 1:
+        self._semantic_codebook_size = config.semantic_codebook_size
+        self._acoustic_codebook_size = config.acoustic_codebook_size
+        self._n_acoustic_codebook = config.n_acoustic_codebook
+        self._audio_vocab_size = config.audio_vocab_size
+
+    def _get_offsets(self, device: torch.device) -> torch.LongTensor:
+        offsets = torch.zeros(self.num_codebooks, dtype=torch.long, device=device)
+        if self._n_acoustic_codebook > 1:
             acoustic_stride = (
-                config.audio_vocab_size - config.semantic_codebook_size - config.acoustic_codebook_size
-            ) // (config.n_acoustic_codebook - 1)
+                self._audio_vocab_size - self._semantic_codebook_size - self._acoustic_codebook_size
+            ) // (self._n_acoustic_codebook - 1)
         else:
-            acoustic_stride = config.acoustic_codebook_size
-        for i in range(config.n_acoustic_codebook):
-            offsets[i + 1] = config.semantic_codebook_size + i * acoustic_stride
+            acoustic_stride = self._acoustic_codebook_size
+        for i in range(self._n_acoustic_codebook):
+            offsets[i + 1] = self._semantic_codebook_size + i * acoustic_stride
         return offsets
 
     def forward(self, input_ids):
-        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        offsets = self._get_offsets(input_ids.device)
+        inputs_embeds = self.embed_audio_tokens(input_ids + offsets)
         inputs_embeds = inputs_embeds.sum(dim=2)
         return inputs_embeds
 
@@ -478,7 +481,8 @@ class VoxtralTtsFlowMatchingTransformer(nn.Module):
         acoustic_embeddings: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.llm_projection(hidden_states)
-        t = self.time_projection(self._get_timestep_embedding(timesteps, self.config.hidden_size))
+        timestep_embedding = self._get_timestep_embedding(timesteps, self.config.hidden_size).to(hidden_states.dtype)
+        t = self.time_projection(timestep_embedding)
         x = self.input_projection(acoustic_embeddings)
 
         combined = h + t.unsqueeze(1) + x
@@ -769,8 +773,13 @@ class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel, VoxtralTtsGenerationM
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> CausalLMOutputWithPast:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if inputs_embeds is None:
             parts = []
             if audio_codes is not None:
@@ -780,17 +789,27 @@ class VoxtralTtsForTextToSpeech(VoxtralTtsPreTrainedModel, VoxtralTtsGenerationM
             if parts:
                 inputs_embeds = torch.cat(parts, dim=1) if len(parts) > 1 else parts[0]
 
-        backbone_outputs = self.backbone_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            **kwargs,
-        )
+        backbone_kwargs = {
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+            "use_cache": use_cache,
+        }
+        if output_attentions is not None:
+            backbone_kwargs["output_attentions"] = output_attentions
+        if output_hidden_states is not None:
+            backbone_kwargs["output_hidden_states"] = output_hidden_states
+        if return_dict is not None:
+            backbone_kwargs["return_dict"] = return_dict
+
+        backbone_outputs = self.backbone_model(**backbone_kwargs, **kwargs)
 
         hidden_states = backbone_outputs[0]
         logits = self.lm_head(hidden_states)
+
+        if not return_dict:
+            return (logits,) + backbone_outputs[1:]
 
         return CausalLMOutputWithPast(
             logits=logits,
