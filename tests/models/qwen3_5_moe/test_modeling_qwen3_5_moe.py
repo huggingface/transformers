@@ -401,6 +401,12 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         "Qwen3.5 Moe has a special Cache as it alternates with gated deltanet layers"
         self.assertIsInstance(past_key_values, Qwen3_5MoeDynamicCache)

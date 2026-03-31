@@ -153,7 +153,9 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
+    @unittest.skip(
+        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
+    )
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
@@ -318,6 +320,10 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         "Qwen3.5 has a special Cache as it alternates with gated deltanet layers"
