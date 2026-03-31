@@ -1243,7 +1243,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        contains_softmax_attention = self.config.layer_types.count("softmax_attention") > 0
+        contains_softmax_attention = self.config.layer_types.count("full_attention") > 0
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
