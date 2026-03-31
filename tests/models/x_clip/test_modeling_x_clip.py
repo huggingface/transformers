@@ -19,6 +19,7 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import (
@@ -33,6 +34,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -161,6 +163,13 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="X-CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -512,6 +521,7 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     maxdiff = None
+    additional_model_inputs = ["pixel_values"]
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)

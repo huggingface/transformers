@@ -70,6 +70,7 @@ class XCLIPOutput(CLIPOutput):
     mit_output (`BaseModelOutputWithPooling`):
         The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
     """
+
     logits_per_video: torch.FloatTensor | None = None
     video_embeds: torch.FloatTensor | None = None
     mit_output: BaseModelOutputWithPooling = None
