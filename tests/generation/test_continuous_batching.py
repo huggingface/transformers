@@ -1107,34 +1107,38 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     dtypes, no alignment padding or extra blocks) and compare the CUDA memory delta to the handler's prediction.
     """
 
-    # (block_size, page_size, num_groups, group_size, peak_act, num_attn_masks, max_bpr, logprobs, cache_dtype)
+    # (block_size, page_size, num_groups, group_size, peak_act, num_attn_masks, max_bpr, logprobs, cache_dtype, use_async_batching)
     CONFIGS = [
-        (32, 256, 1, 22, 34048, 1, 0, False, torch.float16),   # sdpa-like, 1 attn mask
-        (256, 256, 1, 22, 34048, 0, 0, False, torch.float16),  # flash-like, no attn mask
-        (32, 256, 2, 14, 34048, 2, 0, False, torch.bfloat16),  # hybrid model, 2 groups + 2 masks
-        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16),     # with block_table + logprobs
+        (32, 256, 1, 22, 34048, 1, 0, False, torch.float16, False),   # sdpa-like, 1 attn mask
+        (256, 256, 1, 22, 34048, 0, 0, False, torch.float16, False),  # flash-like, no attn mask
+        (32, 256, 2, 14, 34048, 2, 0, False, torch.bfloat16, False),  # hybrid model, 2 groups + 2 masks
+        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, False),     # with block_table + logprobs
+        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, True),     # with block_table + logprobs + async batching
     ]
 
     NUM_BLOCKS = 4
     MAX_BATCH_TOKENS = 64
 
-    @parameterized.expand(
-        [(f"config_{i}", *cfg) for i, cfg in enumerate(CONFIGS)],
-        name_func=lambda func, num, params: f"{func.__name__}_{params.args[0]}",
-    )
+    @parameterized.expand([(f"config_{i}", *cfg) for i, cfg in enumerate(CONFIGS)])
     def test_memory_prediction(
         self,
-        _name,
-        block_size,
-        page_size,
-        num_groups,
-        group_size,
-        peak_act,
-        num_attn_masks,
-        max_bpr,
-        logprobs,
-        cache_dtype,
-    ):
+        block_size: int,
+        page_size: int,
+        num_groups: int,
+        group_size: int,
+        peak_act: int,
+        num_attn_masks: int,
+        max_bpr: int,
+        logprobs: bool,
+        cache_dtype: torch.dtype,
+        use_async_batching: bool,
+    ) -> None:
+        cb_config = ContinuousBatchingConfig(
+            max_blocks_per_request=max_bpr,
+            return_logprobs=logprobs,
+            use_async_batching=use_async_batching,
+        )
+
         handler = PagedAttentionMemoryHandler(
             block_size=block_size,
             page_size=page_size,
@@ -1142,8 +1146,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             group_size=group_size,
             peak_activation_per_token=peak_act,
             num_attention_masks=num_attn_masks,
-            max_blocks_per_request=max_bpr,
-            return_logprobs=logprobs,
+            continuous_batching_config=cb_config,
         )
 
         N = self.NUM_BLOCKS * block_size  # num_pages
@@ -1158,27 +1161,30 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         torch.cuda.empty_cache()
         baseline = torch.cuda.memory_allocated(device)
 
+        k = handler.io_multiplier  # 1 sync, 2 async -- scales IO tensors only
         tensors = []
-        # kv_cache: 2 * group_size tensors of [N, page_size]
+        # kv_cache: 2 * group_size tensors of [N, page_size] (not scaled by k)
         for _ in range(group_size):
             tensors.append(torch.empty((N, page_size), dtype=cache_dtype, device=device))
             tensors.append(torch.empty((N, page_size), dtype=cache_dtype, device=device))
-        # activation peak: flat tensor of peak_act * M elements
+        # activation peak: flat tensor of peak_act * M elements (not scaled by k)
         tensors.append(torch.empty(peak_act * M, dtype=act_dtype, device=device))
-        # bulk_input: [7, M]
-        tensors.append(torch.empty((7, M), dtype=i32, device=device))
-        # output_ids: [num_output_rows, M]
-        tensors.append(torch.empty((num_output_rows, M), dtype=i32, device=device))
-        # attention_mask: [1, 1, M, N + M] per mask type
-        for _ in range(num_attn_masks):
-            tensors.append(torch.empty((1, 1, M, N + M), dtype=act_dtype, device=device))
-        # block_table: [num_groups, M, max_bpr] (empty when max_bpr == 0)
-        if max_bpr > 0:
-            tensors.append(torch.empty((num_groups, M, max_bpr), dtype=i32, device=device))
-        # write_index: [num_groups, M]
-        tensors.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))
-        # read_index: [num_groups, N + M]
-        tensors.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))
+        # IO tensors below are allocated k times (once per IO instance)
+        for _ in range(k):
+            # bulk_input: [7, M]
+            tensors.append(torch.empty((7, M), dtype=i32, device=device))
+            # output_ids: [num_output_rows, M]
+            tensors.append(torch.empty((num_output_rows, M), dtype=i32, device=device))
+            # attention_mask: [1, 1, M, N + M] per mask type
+            for _ in range(num_attn_masks):
+                tensors.append(torch.empty((1, 1, M, N + M), dtype=act_dtype, device=device))
+            # block_table: [num_groups, M, max_bpr] (empty when max_bpr == 0)
+            if max_bpr > 0:
+                tensors.append(torch.empty((num_groups, M, max_bpr), dtype=i32, device=device))
+            # write_index: [num_groups, M]
+            tensors.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))
+            # read_index: [num_groups, N + M]
+            tensors.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))
 
         actual_cuda = torch.cuda.memory_allocated(device) - baseline
         expected_nbytes = sum(t.nbytes for t in tensors)

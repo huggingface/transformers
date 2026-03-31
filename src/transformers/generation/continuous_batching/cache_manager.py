@@ -481,8 +481,8 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         """Returns the physical indices of where to read request_id's cache in the cache tensor.
         For a group of sliding window attention layers, we read from the cache tensor before writing on it, because the
         new cache can overwrite the old one. To form the cache + new key / values states, we read the at most
-        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the -1 indices
-        which indicate where to store the new key or values indices."""
+        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the sentinel
+        indices which indicate where to store the new key or values indices."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
         block_table = self.block_table.get(request_id)
         if block_table is None:

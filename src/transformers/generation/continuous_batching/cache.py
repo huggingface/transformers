@@ -189,9 +189,7 @@ class PagedAttentionCache:
             group_size=group_size,
             peak_activation_per_token=(config.hidden_size + config.vocab_size),
             num_attention_masks=num_attention_masks,
-            max_blocks_per_request=continuous_batching_config.max_blocks_per_request or 0,
-            return_logprobs=continuous_batching_config.return_logprobs,
-            use_async_batching=continuous_batching_config.use_async_batching,
+            continuous_batching_config=continuous_batching_config,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
@@ -522,22 +520,20 @@ class PagedAttentionMemoryHandler:
         group_size: int,
         peak_activation_per_token: int,
         num_attention_masks: int,
-        max_blocks_per_request: int = 0,
-        return_logprobs: bool = False,
-        use_async_batching: bool = False,
+        continuous_batching_config: ContinuousBatchingConfig,
     ) -> None:
-        """Initialize the memory handler. ``io_multiplier`` accounts for async double-buffering (2 GPU-side IO
-        instances instead of 1). It only scales the IO tensors, not the KV cache or the activation peak.
-        """
+        """Initialize the memory handler."""
         self.block_size = block_size
         self.page_size = page_size
         self.num_groups = num_groups
         self.group_size = group_size
         self.peak_activation_per_token = peak_activation_per_token
         self.num_attention_masks = num_attention_masks
-        self.max_blocks_per_request = max_blocks_per_request
-        self.num_output_rows = 2 if return_logprobs else 1
-        self.io_multiplier = 2 if use_async_batching else 1
+        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0
+        # This is the number of output rows for the output_ids tensor
+        self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
+        # This account for the set of 2 IOs if async batching is used
+        self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
 
     @staticmethod
     def get_available_memory(max_memory_percent: float = 1.0) -> int:

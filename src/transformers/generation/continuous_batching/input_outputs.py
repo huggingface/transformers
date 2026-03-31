@@ -210,7 +210,7 @@ class ContinuousBatchingIOs:
         self.read_index_storage = torch.empty(
             (num_groups, num_pages + max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
-        # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
+        # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
 
     def _transfer_inputs(
         self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
