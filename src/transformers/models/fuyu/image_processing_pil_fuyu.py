@@ -14,36 +14,178 @@
 """Image processor class for Fuyu."""
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ...image_processing_backends import PilBackend
-from ...image_processing_utils import get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
+    is_valid_image,
+    make_list_of_images,
 )
-from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    requires_backends,
-)
-from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list_of_list_of_images
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils.import_utils import requires
 
+
+if TYPE_CHECKING:
+    import torch
 
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+
+# Adapted from transformers.models.fuyu.image_processing_fuyu.FuyuBatchFeature
+class FuyuBatchFeature(BatchFeature):
+    """
+    BatchFeature class for Fuyu image processor and processor.
+
+    The outputs dictionary from the processors contains a mix of tensors and lists of tensors.
+    """
+
+    def convert_to_tensors(self, tensor_type: str | TensorType | None = None, **kwargs):
+        """
+        Convert the inner content to tensors.
+
+        Args:
+            tensor_type (`str` or [`~utils.TensorType`], *optional*):
+                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
+                `None`, no modification is done.
+        """
+        if tensor_type is None:
+            return self
+
+        is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type=tensor_type)
+
+        def _convert_tensor(elem):
+            if is_tensor(elem):
+                return elem
+            return as_tensor(elem)
+
+        def _safe_convert_tensor(elem):
+            try:
+                return _convert_tensor(elem)
+            except:  # noqa E722
+                if key == "overflowing_values":
+                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                raise ValueError(
+                    "Unable to create tensor, you should probably activate padding "
+                    "with 'padding=True' to have batched tensors with the same length."
+                )
+
+        # Do the tensor conversion in batch
+        for key, value in self.items():
+            if isinstance(value, list) and isinstance(value[0], list):
+                # list[list[Any]] -> list[list[Tensor]]
+                self[key] = [[_safe_convert_tensor(elem) for elem in elems] for elems in value]
+            elif isinstance(value, list):
+                # list[Any] -> list[Tensor]
+                self[key] = [_safe_convert_tensor(elem) for elem in value]
+            else:
+                # Any -> Tensor
+                self[key] = _safe_convert_tensor(value)
+        return self
+
+    def to(self, *args, **kwargs) -> "BatchFeature":
+        """
+        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
+        different `dtypes` and sending the `BatchFeature` to a different `device`.
+
+        Args:
+            args (`Tuple`):
+                Will be passed to the `to(...)` function of the tensors.
+            kwargs (`Dict`, *optional*):
+                Will be passed to the `to(...)` function of the tensors.
+
+        Returns:
+            [`BatchFeature`]: The same instance after modification.
+        """
+        requires_backends(self, ["torch"])
+        import torch
+
+        from ...utils import is_torch_device, is_torch_dtype
+
+        new_data = {}
+        device = kwargs.get("device")
+        # Check if the args are a device or a dtype
+        if device is None and len(args) > 0:
+            # device should be always the first argument
+            arg = args[0]
+            if is_torch_dtype(arg):
+                # The first argument is a dtype
+                pass
+            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
+                device = arg
+            else:
+                # it's something else
+                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+
+        def _to(elem):
+            # check if v is a floating point
+            if torch.is_floating_point(elem):
+                # cast and send to device
+                return elem.to(*args, **kwargs)
+            if device is not None:
+                return elem.to(device=device)
+
+            return elem
+
+        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+        for k, v in self.items():
+            if isinstance(v, list) and isinstance(v[0], list):
+                # Data structure is a list of lists
+                new_v = []
+                for elems in v:
+                    new_v.append([_to(elem) for elem in elems])
+                new_data[k] = new_v
+            elif isinstance(v, list):
+                # Data structure is a list
+                new_data[k] = [_to(elem) for elem in v]
+            else:
+                new_data[k] = _to(v)
+        self.data = new_data
+        return self
+
+
+# Adapted from transformers.models.fuyu.image_processing_fuyu.FuyuImagesKwargs
+class FuyuImagesKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
+        Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
+    padding_value (`float`, *optional*, defaults to 1.0):
+        The value to pad the image with.
+    padding_mode (`str`, *optional*, defaults to "constant"):
+        The padding mode to use when padding the image.
+    """
+
+    patch_size: SizeDict | None
+    padding_value: float
+    padding_mode: str
+
+
+# Adapted from transformers.models.fuyu.image_processing_fuyu.make_list_of_list_of_images
+def make_list_of_list_of_images(
+    images: list[list[ImageInput]] | list[ImageInput] | ImageInput,
+) -> list[list[ImageInput]]:
+    if is_valid_image(images):
+        return [[images]]
+
+    if isinstance(images, list) and all(isinstance(image, list) for image in images):
+        return images
+
+    if isinstance(images, list):
+        return [make_list_of_images(image) for image in images]
+
+    raise ValueError("images must be a list of list of images or a list of images or an image.")
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class FuyuImageProcessorPil(PilBackend):
     do_resize = True
     size = {"height": 1080, "width": 1920}
@@ -69,11 +211,7 @@ class FuyuImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[FuyuImagesKwargs]):
         super().__init__(**kwargs)
 
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-        expected_ndims: int = 3,
-    ) -> ImageInput:
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         images = self.fetch_images(images)
         return make_list_of_list_of_images(images)
 
@@ -81,7 +219,7 @@ class FuyuImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -116,7 +254,7 @@ class FuyuImageProcessorPil(PilBackend):
         images: list[list[np.ndarray]],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: PILImageResampling | None,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -428,11 +566,7 @@ class FuyuImageProcessorPil(PilBackend):
             }
         )
 
-    def _standardize_kwargs(
-        self,
-        patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, patch_size: dict[str, int] | SizeDict | None = None, **kwargs) -> dict:
         """
         Process Fuyu-specific kwargs before validation.
         """

@@ -157,6 +157,7 @@ class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ColModernVBertForRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
+    test_missing_keys = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):

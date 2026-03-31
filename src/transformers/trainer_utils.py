@@ -62,7 +62,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file as safe_load_file
 
-if is_peft_available():
+if is_peft_available() and is_torch_available():
     from peft import PeftMixedModel, PeftModel
 
 

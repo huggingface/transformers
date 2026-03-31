@@ -168,6 +168,7 @@ Operations are fully reversible. Saving reverses the conversions and returns the
 | [`MergeModulelist(dim)`] | [`SplitModulelist(dim)`] |
 | [`SplitModulelist(dim)`] | [`MergeModulelist(dim)`] |
 | [`Transpose(d0, d1)`] | [`Transpose(d1, d0)`] |
+| [`PermuteForRope()`] | [`PermuteForRope()`] |
 
 ### Chunk
 

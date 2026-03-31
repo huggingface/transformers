@@ -30,6 +30,8 @@
       title: Legacy model contribution
     - local: auto_docstring
       title: Documenting a model
+    - local: model_output_tracing
+      title: Tracing model intermediate outputs
     title: Models
   - isExpanded: false
     sections:
@@ -87,6 +89,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: continuous_batching_architecture
+      title: Continuous batching architecture
     - local: paged_attention
       title: Paged attention
     - sections:
@@ -413,6 +417,8 @@
       title: Callbacks
     - local: main_classes/configuration
       title: Configuration
+    - local: main_classes/continuous_batching
+      title: Continuous batching
     - local: main_classes/data_collator
       title: Data Collator
     - local: main_classes/logging
@@ -1000,6 +1006,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/cohere_asr
+        title: Cohere ASR
       - local: model_doc/csm
         title: CSM
       - local: model_doc/dac
@@ -1248,6 +1256,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/musicflamingo
+        title: MusicFlamingo
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo

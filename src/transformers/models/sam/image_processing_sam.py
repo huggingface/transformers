@@ -23,6 +23,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from torchvision.ops.boxes import batched_nms
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -36,11 +37,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, is_vision_available
+from ...utils import TensorType, auto_docstring, is_vision_available
 
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 if is_vision_available():
     import PIL

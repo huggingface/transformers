@@ -34,14 +34,13 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available, requires_backends
+from ...utils import TensorType, auto_docstring, requires_backends
 
 
 if TYPE_CHECKING:
     from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from torchvision.transforms.v2 import functional as tvF
 
 
 class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
