@@ -137,11 +137,11 @@ class HqqQuantize:
 
     def convert(
         self,
-        input_dict: dict[str, list[torch.Tensor]],
-        full_layer_name: str | None = None,
-        model: torch.nn.Module | None = None,
+        input_dict,
+        full_layer_name=None,
+        model=None,
         **kwargs,
-    ) -> dict[str, torch.Tensor]:
+    ):
         from hqq.core.quantize import HQQLinear
 
         from ..quantizers.quantizers_utils import get_module_from_name
