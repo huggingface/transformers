@@ -124,6 +124,7 @@ else:
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
             ("moonshine_streaming", "MoonshineStreamingProcessor"),
+            ("musicflamingo", "MusicFlamingoProcessor"),
             ("omdet-turbo", "OmDetTurboProcessor"),
             ("oneformer", "OneFormerProcessor"),
             ("ovis2", "Ovis2Processor"),

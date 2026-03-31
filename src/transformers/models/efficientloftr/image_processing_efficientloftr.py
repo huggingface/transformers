@@ -4,8 +4,9 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from typing import TYPE_CHECKING
 
-import torch
+from PIL import Image, ImageDraw
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
@@ -22,12 +23,14 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_vision_available
-from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
-if is_vision_available():
-    from PIL import Image, ImageDraw
+if is_torch_available():
+    import torch
+
+if TYPE_CHECKING:
+    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
 class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
