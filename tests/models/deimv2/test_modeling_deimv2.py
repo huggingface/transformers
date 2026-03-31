@@ -339,28 +339,25 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    # No class-level flag; Multi-scale deformable attention is incompatible with nn.DataParallel
-    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel`")
+    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    # No class-level flag; Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)
-    @unittest.skip(reason="Deimv2 does not use inputs_embeds")
+    @unittest.skip(
+        reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
+    )
     def test_inputs_embeds(self):
         pass
 
-    # Same as test_inputs_embeds; Forward signature has inputs_embeds but no input_ids
-    @unittest.skip(reason="Deimv2 does not use inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="Forward signature has inputs_embeds but no input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    # No class-level flag; Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack
-    @unittest.skip(reason="Deimv2 does not support input and output embeddings")
+    @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
         pass
 
-    # No class-level flag; Decoder heads are shared via reference assignment so untied saving is not applicable
-    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
     def test_load_save_without_tied_weights(self):
         pass
 
@@ -930,33 +927,31 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    # No class-level flag; Multi-scale deformable attention is incompatible with nn.DataParallel
-    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel`")
+    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    # No class-level flag; Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)
-    @unittest.skip(reason="Deimv2 does not use inputs_embeds")
+    @unittest.skip(
+        reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
+    )
     def test_inputs_embeds(self):
         pass
 
-    # Same as test_inputs_embeds; Forward signature has inputs_embeds but no input_ids
-    @unittest.skip(reason="Deimv2 does not use inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="Forward signature has inputs_embeds but no input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    # No class-level flag; Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack
-    @unittest.skip(reason="Deimv2 does not support input and output embeddings")
+    @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
         pass
 
-    # No class-level flag; Decoder heads are shared via reference assignment so untied saving is not applicable
-    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
     def test_load_save_without_tied_weights(self):
         pass
 
-    # LiteEncoder has no encoder_hidden_states so the base test fails accessing encoder_hidden_states[0]
-    @unittest.skip(reason="LiteEncoder has no encoder attentions for gradient retention check")
+    @unittest.skip(
+        reason="LiteEncoder has no encoder_hidden_states so the base test fails accessing encoder_hidden_states[0]"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -1279,33 +1274,29 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deimv2_object_detection_head_model(*config_and_inputs)
 
-    # No class-level flag; Multi-scale deformable attention is incompatible with nn.DataParallel
-    @unittest.skip(reason="Deimv2 doesn't work well with `nn.DataParallel`")
+    @unittest.skip(reason="Multi-scale deformable attention is incompatible with nn.DataParallel")
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    # No class-level flag; Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)
-    @unittest.skip(reason="Deimv2 does not use inputs_embeds")
+    @unittest.skip(
+        reason="Deimv2 is a vision model but inputs_embeds is in the forward signature (inherited from D-FINE)"
+    )
     def test_inputs_embeds(self):
         pass
 
-    # Same as test_inputs_embeds; Forward signature has inputs_embeds but no input_ids
-    @unittest.skip(reason="Deimv2 does not use inputs_embeds_matches_input_ids")
+    @unittest.skip(reason="Forward signature has inputs_embeds but no input_ids")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    # No class-level flag; Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack
-    @unittest.skip(reason="Deimv2 does not support input and output embeddings")
+    @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
         pass
 
-    # No class-level flag; Decoder heads are shared via reference assignment so untied saving is not applicable
-    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
     def test_load_save_without_tied_weights(self):
         pass
 
-    # No class-level flag; DINOv3 RoPE with dynamic interpolation causes torch.compile inductor overflow
-    @unittest.skip(reason="DINOv3 backbone with RoPE and dynamic interpolation causes torch.compile inductor overflow")
+    @unittest.skip(reason="DINOv3 RoPE with dynamic interpolation causes torch.compile inductor overflow")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -1358,8 +1349,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_batching_equivalence(self):
         super().test_batching_equivalence(atol=1e-4, rtol=1e-4)
 
-    # No class-level flag; Flex attention test requires decoder_input_ids which detection models don't have
-    @unittest.skip(reason="Deimv2 is not a generative encoder-decoder model and has no decoder_input_ids")
+    @unittest.skip(reason="Flex attention test requires decoder_input_ids which detection models don't have")
     def test_flex_attention_with_grads(self):
         pass
 

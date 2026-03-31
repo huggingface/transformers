@@ -21,7 +21,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
@@ -29,7 +28,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from ... import initialization as init
-from ...activations import ACT2CLS, ACT2FN
+from ...activations import ACT2CLS
 from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...integrations import use_kernel_forward_from_hub
@@ -140,19 +139,16 @@ class Deimv2ModelOutput(ModelOutput):
 
 
 @dataclass
-class Deimv2EncoderOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Output type for DEIMv2 encoder modules (HybridEncoder and LiteEncoder).
-
-    Args:
-        feature_maps (`list[torch.FloatTensor]`):
-            List of multi-scale feature maps from the encoder, one per feature level.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of each layer) of shape
-            `(batch_size, sequence_length, hidden_size)`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, sequence_length, sequence_length)`.
+    Attentions are only available for HybridEncoder variants with AIFI layers.
+    """
+)
+class Deimv2EncoderOutput(ModelOutput):
+    r"""
+    feature_maps (`list[torch.FloatTensor]`):
+        List of multi-scale feature maps from the encoder, one per feature level.
     """
 
     feature_maps: list[torch.FloatTensor] = None
@@ -184,23 +180,13 @@ class Deimv2RMSNorm(nn.Module):
 class Deimv2SwiGLUFFN(nn.Module):
     def __init__(self, in_features: int, hidden_features: int, out_features: int):
         super().__init__()
-        config = SimpleNamespace(
-            hidden_size=in_features,
-            intermediate_size=hidden_features,
-            mlp_bias=True,
-            hidden_act="silu",
-        )
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.gate_proj = nn.Linear(in_features, hidden_features, bias=True)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, out_features, bias=True)
+        self.act_fn = nn.SiLU()
 
     def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 class Deimv2Gate(nn.Module):
@@ -793,7 +779,7 @@ class Deimv2AIFILayer(nn.Module):
 class Deimv2SpatialTuningAdapter(nn.Module):
     def __init__(self, config: Deimv2Config):
         super().__init__()
-        inplanes = config.sta_inplanes
+        inplanes = config.spatial_tuning_adapter_inplanes
         self.stem_conv = Deimv2ConvNormLayer(config, 3, inplanes, 3, 2, activation="gelu")
         self.stem_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.conv2 = Deimv2ConvNormLayer(config, inplanes, 2 * inplanes, 3, 2)
@@ -844,7 +830,7 @@ class Deimv2LiteEncoder(nn.Module):
         self.fpn_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
         self.pan_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
 
-    def forward(self, inputs_embeds: list[torch.Tensor], **kwargs) -> Deimv2EncoderOutput:
+    def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
         projected_features = []
         for i, feature in enumerate(inputs_embeds):
             projected_features.append(self.input_proj[i](feature))
@@ -861,7 +847,11 @@ class Deimv2LiteEncoder(nn.Module):
         fused_feature = projected_features[1] + self.down_conv2(self.down_pool2(outputs[-1]))
         outputs.append(self.pan_block(fused_feature))
 
-        return Deimv2EncoderOutput(feature_maps=outputs)
+        # LiteEncoder has no transformer layers, so we collect projected features as hidden_states manually.
+        return Deimv2EncoderOutput(
+            feature_maps=outputs,
+            hidden_states=tuple(projected_features) if kwargs.get("output_hidden_states") else None,
+        )
 
 
 class Deimv2FrozenBatchNorm2d(nn.Module):
@@ -965,16 +955,16 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
         super().__init__()
         self.backbone = load_backbone(config)
 
-        self.sta = Deimv2SpatialTuningAdapter(config)
+        self.spatial_tuning_adapter = Deimv2SpatialTuningAdapter(config)
 
         embed_dim = config.backbone_config.hidden_size
         hidden_dim = config.encoder_hidden_dim
-        sta_channels = config.sta_inplanes
+        spatial_tuning_adapter_channels = config.spatial_tuning_adapter_inplanes
         self.fusion_proj = nn.ModuleList(
             [
-                Deimv2ConvNormLayer(config, embed_dim + sta_channels * 2, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + sta_channels * 4, hidden_dim, 1, 1),
-                Deimv2ConvNormLayer(config, embed_dim + sta_channels * 4, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 2, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
+                Deimv2ConvNormLayer(config, embed_dim + spatial_tuning_adapter_channels * 4, hidden_dim, 1, 1),
             ]
         )
 
@@ -989,12 +979,12 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
         semantic_features = []
         num_scales = len(feature_maps)
         for i, feat in enumerate(feature_maps):
-            resize_h = int(height_patches * 2 ** (num_scales - 2 - i))
-            resize_w = int(width_patches * 2 ** (num_scales - 2 - i))
-            spatial = F.interpolate(feat, size=[resize_h, resize_w], mode="bilinear", align_corners=False)
+            resize_height = int(height_patches * 2 ** (num_scales - 2 - i))
+            resize_width = int(width_patches * 2 ** (num_scales - 2 - i))
+            spatial = F.interpolate(feat, size=[resize_height, resize_width], mode="bilinear", align_corners=False)
             semantic_features.append(spatial)
 
-        detail_features = self.sta(pixel_values)
+        detail_features = self.spatial_tuning_adapter(pixel_values)
 
         outputs = []
         for i, (semantic_feature, detail_feature) in enumerate(zip(semantic_features, detail_features)):
@@ -1076,7 +1066,7 @@ class Deimv2DecoderLayer(nn.Module):
         spatial_shapes_list: list[tuple[int, int]] | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
@@ -1134,8 +1124,7 @@ class Deimv2DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        max_val = torch.finfo(hidden_states.dtype).max
-        hidden_states = self.final_layer_norm(hidden_states.clamp(min=-max_val, max=max_val))
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states
 
@@ -1241,12 +1230,9 @@ class Deimv2PreTrainedModel(PreTrainedModel):
 
 class Deimv2HybridEncoder(Deimv2PreTrainedModel):
     """
-    Hybrid encoder consisting of AIFI (Attention-based Intra-scale Feature Interaction) layers,
-    a top-down Feature Pyramid Network (FPN) and a bottom-up Path Aggregation Network (PAN).
-    More details on the paper: https://huggingface.co/papers/2304.08069
-
-    Args:
-        config: Deimv2Config
+    DEIMv2 variant of DFineHybridEncoder. Uses element-wise sum fusion (Deimv2FeatureFusion) instead of
+    D-FINE's channel concatenation, Deimv2RepNCSPELAN5 (simplified 4-way concat) instead of DFineRepNCSPELAN4,
+    and returns Deimv2EncoderOutput with feature_maps instead of BaseModelOutput with last_hidden_state.
     """
 
     _can_record_outputs = {
@@ -1273,11 +1259,11 @@ class Deimv2HybridEncoder(Deimv2PreTrainedModel):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
-            lateral_layer = Deimv2ConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
-            self.lateral_convs.append(lateral_layer)
+            self.lateral_convs.append(
+                Deimv2ConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
+            )
             num_blocks = round(3 * config.depth_mult)
-            fpn_layer = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
-            self.fpn_blocks.append(fpn_layer)
+            self.fpn_blocks.append(Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks))
 
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
@@ -1293,7 +1279,7 @@ class Deimv2HybridEncoder(Deimv2PreTrainedModel):
     def forward(
         self,
         inputs_embeds: list[torch.Tensor] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Deimv2EncoderOutput:
         r"""
         Args:
@@ -1768,7 +1754,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
         encoder_outputs: torch.FloatTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | Deimv2ModelOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1801,9 +1787,12 @@ class Deimv2Model(Deimv2PreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
+        # Overrides DFineModel.forward: DEIMv2 uses a unified conv_encoder (backbone + projection) instead of
+        # D-FINE's separate backbone + encoder_input_proj, and returns feature_maps instead of last_hidden_state.
         if pixel_values is None and inputs_embeds is None:
             raise ValueError("You have to specify either pixel_values or inputs_embeds")
 
+        # extract multi-scale features via conv_encoder (backbone + projection in one step)
         if inputs_embeds is None:
             batch_size, num_channels, height, width = pixel_values.shape
             device = pixel_values.device
@@ -1817,28 +1806,24 @@ class Deimv2Model(Deimv2PreTrainedModel):
             device = inputs_embeds.device
             proj_feats = inputs_embeds
 
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                proj_feats,
-                **kwargs,
-            )
-        elif not isinstance(encoder_outputs, Deimv2EncoderOutput):
-            encoder_outputs = Deimv2EncoderOutput(
-                feature_maps=encoder_outputs[0] if isinstance(encoder_outputs[0], list) else [encoder_outputs[0]],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
+        encoder_outputs = self.encoder(
+            proj_feats,
+            **kwargs,
+        )
 
+        # Equivalent to def _get_encoder_input
         sources = []
         for level, source in enumerate(encoder_outputs.feature_maps):
             sources.append(self.decoder_input_proj[level](source))
 
+        # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
             sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.feature_maps[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.feature_maps[-1]))
 
+        # Prepare encoder inputs (by flattening)
         source_flatten = []
         spatial_shapes_list = []
         spatial_shapes = torch.empty((len(sources), 2), device=device, dtype=torch.long)
@@ -1852,6 +1837,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
         source_flatten = torch.cat(source_flatten, 1)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
 
+        # prepare denoising training
         if self.training and self.config.num_denoising > 0 and labels is not None:
             (
                 denoising_class,
@@ -1874,13 +1860,17 @@ class Deimv2Model(Deimv2PreTrainedModel):
         device = source_flatten.device
         dtype = source_flatten.dtype
 
+        # prepare input for decoder
         if self.training or self.config.anchor_image_size is None:
+            # Pass spatial_shapes as tuple to make it hashable and make sure
+            # lru_cache is working for generate_anchors()
             spatial_shapes_tuple = tuple(spatial_shapes_list)
             anchors, valid_mask = self.generate_anchors(spatial_shapes_tuple, device=device, dtype=dtype)
         else:
             anchors, valid_mask = self.anchors, self.valid_mask
             anchors, valid_mask = anchors.to(device, dtype), valid_mask.to(device, dtype)
 
+        # use the valid_mask to selectively retain values in the feature map where the mask is True
         memory = valid_mask.to(source_flatten.dtype) * source_flatten
 
         output_memory = self.enc_output(memory)
@@ -1902,6 +1892,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
             dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
         )
 
+        # extract region features
         if self.config.learn_initial_query:
             target = self.weight_embedding.tile([batch_size, 1, 1])
         else:
@@ -1913,6 +1904,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
 
         init_reference_points = reference_points_unact.detach()
 
+        # decoder
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             encoder_hidden_states=source_flatten,

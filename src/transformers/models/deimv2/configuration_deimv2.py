@@ -133,7 +133,7 @@ class Deimv2Config(PreTrainedConfig):
         Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
     encoder_fuse_op (`str`, *optional*, defaults to `"sum"`):
         Fusion operation used in the encoder FPN. DEIMv2 uses `"sum"` instead of D-FINE's `"cat"`.
-    sta_inplanes (`int`, *optional*, defaults to 16):
+    spatial_tuning_adapter_inplanes (`int`, *optional*, defaults to 16):
         Number of input planes for the STA convolutional stem.
     encoder_type (`str`, *optional*, defaults to `"hybrid"`):
         Type of encoder to use. `"hybrid"` uses the full HybridEncoder with AIFI, FPN, and PAN.
@@ -233,7 +233,7 @@ class Deimv2Config(PreTrainedConfig):
     use_dense_o2o: bool = True
     mal_alpha: float | None = None
     encoder_fuse_op: str = "sum"
-    sta_inplanes: int = 16
+    spatial_tuning_adapter_inplanes: int = 16
     encoder_type: str = "hybrid"
     use_gateway: bool = True
     share_bbox_head: bool = False

@@ -40,6 +40,9 @@ class Deimv2Loss(DFineLoss):
         self.use_dense_o2o = config.use_dense_o2o
 
     def loss_labels_mal(self, outputs, targets, indices, num_boxes):
+        """Compute the Matching Aware Loss (MAL), which uses IoU-weighted soft labels
+        instead of hard one-hot targets, with focal-style weighting controlled by `mal_alpha`.
+        """
         idx = self._get_source_permutation_idx(indices)
 
         src_boxes = outputs["pred_boxes"][idx]

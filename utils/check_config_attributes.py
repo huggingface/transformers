@@ -102,7 +102,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "MaskFormerDetrConfig": True,
     "DetrConfig": True,
     "DFineConfig": True,
-    "Deimv2Config": True,
+    "Deimv2Config": True,  # Mixed encoder variants (hybrid/lite) + DFine inheritance
     "GroundingDinoConfig": True,
     "MMGroundingDinoConfig": True,
     "RTDetrConfig": True,

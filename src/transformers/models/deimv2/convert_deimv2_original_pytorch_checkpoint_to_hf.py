@@ -30,8 +30,61 @@ from transformers.models.dinov3_vit.configuration_dinov3_vit import DINOv3ViTCon
 from transformers.utils import logging
 
 
-logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+
+HGNETV2_BACKBONE_CONFIGS = {
+    "B0": {
+        "hidden_sizes": [128, 256, 512, 1024],
+        "stem_channels": [3, 16, 16],
+        "stage_in_channels": [16, 64, 256, 512],
+        "stage_mid_channels": [16, 32, 64, 128],
+        "stage_out_channels": [64, 256, 512, 1024],
+        "stage_num_blocks": [1, 1, 2, 1],
+        "stage_downsample": [False, True, True, True],
+        "stage_light_block": [False, False, True, True],
+        "stage_kernel_size": [3, 3, 5, 5],
+        "stage_numb_of_layers": [3, 3, 3, 3],
+    },
+    "Atto": {
+        "hidden_sizes": [64, 256, 256],
+        "stem_channels": [3, 16, 16],
+        "stage_in_channels": [16, 64, 256],
+        "stage_mid_channels": [16, 32, 64],
+        "stage_out_channels": [64, 256, 256],
+        "stage_num_blocks": [1, 1, 1],
+        "stage_downsample": [False, True, True],
+        "stage_light_block": [False, False, True],
+        "stage_kernel_size": [3, 3, 3],
+        "stage_numb_of_layers": [3, 3, 3],
+    },
+    "Femto": {
+        "hidden_sizes": [64, 256, 512],
+        "stem_channels": [3, 16, 16],
+        "stage_in_channels": [16, 64, 256],
+        "stage_mid_channels": [16, 32, 64],
+        "stage_out_channels": [64, 256, 512],
+        "stage_num_blocks": [1, 1, 1],
+        "stage_downsample": [False, True, True],
+        "stage_light_block": [False, False, True],
+        "stage_kernel_size": [3, 3, 5],
+        "stage_numb_of_layers": [3, 3, 3],
+    },
+    "Pico": {
+        "hidden_sizes": [64, 256, 512],
+        "stem_channels": [3, 16, 16],
+        "stage_in_channels": [16, 64, 256],
+        "stage_mid_channels": [16, 32, 64],
+        "stage_out_channels": [64, 256, 512],
+        "stage_num_blocks": [1, 1, 2],
+        "stage_downsample": [False, True, True],
+        "stage_light_block": [False, False, True],
+        "stage_kernel_size": [3, 3, 5],
+        "stage_numb_of_layers": [3, 3, 3],
+    },
+}
+HGNETV2_BACKBONE_CONFIGS["B1"] = HGNETV2_BACKBONE_CONFIGS["B0"]
+HGNETV2_BACKBONE_CONFIGS["B2"] = HGNETV2_BACKBONE_CONFIGS["B0"]
 
 
 MODEL_NAME_TO_HUB_REPO = {
@@ -75,33 +128,20 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
 
     # Encoder settings
     config.encoder_type = encoder_type
+    config.encoder_hidden_dim = encoder_cfg["hidden_dim"]
+    config.encoder_in_channels = encoder_cfg["in_channels"]
+    config.feat_strides = encoder_cfg.get("feat_strides", [16] if encoder_type == "lite" else [8, 16, 32])
+    config.activation_function = encoder_cfg.get("act", "silu")
+    config.depth_mult = float(encoder_cfg.get("depth_mult", 1.0))
+    config.hidden_expansion = float(encoder_cfg.get("expansion", 1.0))
+    config.encoder_fuse_op = encoder_cfg.get("fuse_op", "sum")
+    config.encoder_ffn_dim = encoder_cfg.get("dim_feedforward", 1024)
+    config.encoder_attention_heads = encoder_cfg.get("nhead", 8)
+    config.dropout = encoder_cfg.get("dropout", 0.0)
+    config.encode_proj_layers = encoder_cfg.get("use_encoder_idx", [2])
+    config.encoder_activation_function = encoder_cfg.get("enc_act", "gelu")
     if encoder_type == "lite":
-        config.encoder_hidden_dim = encoder_cfg["hidden_dim"]
-        config.encoder_in_channels = encoder_cfg["in_channels"]
-        config.feat_strides = encoder_cfg.get("feat_strides", [16])
-        config.activation_function = encoder_cfg.get("act", "silu")
-        config.depth_mult = float(encoder_cfg.get("depth_mult", 1.0))
-        config.hidden_expansion = float(encoder_cfg.get("expansion", 1.0))
-        config.encoder_fuse_op = "sum"
-        config.encoder_ffn_dim = 1024
-        config.encoder_attention_heads = 8
-        config.dropout = 0.0
-        config.encode_proj_layers = [2]
-        config.encoder_activation_function = "gelu"
         config.encoder_layers = 0
-    else:
-        config.encoder_hidden_dim = encoder_cfg["hidden_dim"]
-        config.encoder_in_channels = encoder_cfg["in_channels"]
-        config.feat_strides = encoder_cfg.get("feat_strides", [8, 16, 32])
-        config.activation_function = encoder_cfg.get("act", "silu")
-        config.depth_mult = float(encoder_cfg.get("depth_mult", 1.0))
-        config.hidden_expansion = float(encoder_cfg.get("expansion", 1.0))
-        config.encoder_fuse_op = encoder_cfg.get("fuse_op", "sum")
-        config.encoder_ffn_dim = encoder_cfg.get("dim_feedforward", 1024)
-        config.encoder_attention_heads = encoder_cfg.get("nhead", 8)
-        config.dropout = encoder_cfg.get("dropout", 0.0)
-        config.encode_proj_layers = encoder_cfg.get("use_encoder_idx", [2])
-        config.encoder_activation_function = encoder_cfg.get("enc_act", "gelu")
 
     # Decoder settings
     config.d_model = decoder_cfg["hidden_dim"]
@@ -131,52 +171,10 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
         config.backbone_config.out_indices = [i + 1 for i in return_idx]
         config.backbone_config.use_learnable_affine_block = backbone_cfg.get("use_lab", True)
 
-        if backbone_name in ["B0", "B1", "B2"]:
-            config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
-            config.backbone_config.stem_channels = [3, 16, 16]
-            config.backbone_config.stage_in_channels = [16, 64, 256, 512]
-            config.backbone_config.stage_mid_channels = [16, 32, 64, 128]
-            config.backbone_config.stage_out_channels = [64, 256, 512, 1024]
-            config.backbone_config.stage_num_blocks = [1, 1, 2, 1]
-            config.backbone_config.stage_downsample = [False, True, True, True]
-            config.backbone_config.stage_light_block = [False, False, True, True]
-            config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
-            config.backbone_config.stage_numb_of_layers = [3, 3, 3, 3]
-        elif backbone_name == "Atto":
-            config.backbone_config.hidden_sizes = [64, 256, 256]
-            config.backbone_config.stem_channels = [3, 16, 16]
-            config.backbone_config.stage_in_channels = [16, 64, 256]
-            config.backbone_config.stage_mid_channels = [16, 32, 64]
-            config.backbone_config.stage_out_channels = [64, 256, 256]
-            config.backbone_config.stage_num_blocks = [1, 1, 1]
-            config.backbone_config.stage_downsample = [False, True, True]
-            config.backbone_config.stage_light_block = [False, False, True]
-            config.backbone_config.stage_kernel_size = [3, 3, 3]
-            config.backbone_config.stage_numb_of_layers = [3, 3, 3]
-        elif backbone_name == "Femto":
-            config.backbone_config.hidden_sizes = [64, 256, 512]
-            config.backbone_config.stem_channels = [3, 16, 16]
-            config.backbone_config.stage_in_channels = [16, 64, 256]
-            config.backbone_config.stage_mid_channels = [16, 32, 64]
-            config.backbone_config.stage_out_channels = [64, 256, 512]
-            config.backbone_config.stage_num_blocks = [1, 1, 1]
-            config.backbone_config.stage_downsample = [False, True, True]
-            config.backbone_config.stage_light_block = [False, False, True]
-            config.backbone_config.stage_kernel_size = [3, 3, 5]
-            config.backbone_config.stage_numb_of_layers = [3, 3, 3]
-        elif backbone_name == "Pico":
-            config.backbone_config.hidden_sizes = [64, 256, 512]
-            config.backbone_config.stem_channels = [3, 16, 16]
-            config.backbone_config.stage_in_channels = [16, 64, 256]
-            config.backbone_config.stage_mid_channels = [16, 32, 64]
-            config.backbone_config.stage_out_channels = [64, 256, 512]
-            config.backbone_config.stage_num_blocks = [1, 1, 2]
-            config.backbone_config.stage_downsample = [False, True, True]
-            config.backbone_config.stage_light_block = [False, False, True]
-            config.backbone_config.stage_kernel_size = [3, 3, 5]
-            config.backbone_config.stage_numb_of_layers = [3, 3, 3]
-        else:
+        if backbone_name not in HGNETV2_BACKBONE_CONFIGS:
             raise ValueError(f"Unknown HGNetv2 variant: {backbone_name}")
+        for attr, value in HGNETV2_BACKBONE_CONFIGS[backbone_name].items():
+            setattr(config.backbone_config, attr, value)
 
         num_stages = len(config.backbone_config.hidden_sizes)
         config.backbone_config.depths = config.backbone_config.stage_numb_of_layers
@@ -185,7 +183,7 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
         dinov3_cfg = orig_config["DINOv3STAs"]
         name = dinov3_cfg["name"]
         interaction_indexes = dinov3_cfg["interaction_indexes"]
-        config.sta_inplanes = dinov3_cfg.get("conv_inplane") or 16
+        config.spatial_tuning_adapter_inplanes = dinov3_cfg.get("conv_inplane") or 16
 
         is_dinov3 = "dinov3" in name
 
@@ -476,14 +474,14 @@ DINOV3_KEY_MAPPING = {
     # Norm (L/X only)
     r"backbone\.dinov3\.norm\.(weight|bias)": r"model.conv_encoder.backbone.norm.\1",
     # STA adapter
-    r"backbone\.sta\.stem\.0\.(weight)": r"model.conv_encoder.sta.stem_conv.conv.\1",
-    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.stem_conv.norm.\1",
-    r"backbone\.sta\.conv2\.0\.(weight)": r"model.conv_encoder.sta.conv2.conv.\1",
-    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv2.norm.\1",
-    r"backbone\.sta\.conv3\.1\.(weight)": r"model.conv_encoder.sta.conv3.conv.\1",
-    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv3.norm.\1",
-    r"backbone\.sta\.conv4\.1\.(weight)": r"model.conv_encoder.sta.conv4.conv.\1",
-    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.sta.conv4.norm.\1",
+    r"backbone\.sta\.stem\.0\.(weight)": r"model.conv_encoder.spatial_tuning_adapter.stem_conv.conv.\1",
+    r"backbone\.sta\.stem\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.spatial_tuning_adapter.stem_conv.norm.\1",
+    r"backbone\.sta\.conv2\.0\.(weight)": r"model.conv_encoder.spatial_tuning_adapter.conv2.conv.\1",
+    r"backbone\.sta\.conv2\.1\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.spatial_tuning_adapter.conv2.norm.\1",
+    r"backbone\.sta\.conv3\.1\.(weight)": r"model.conv_encoder.spatial_tuning_adapter.conv3.conv.\1",
+    r"backbone\.sta\.conv3\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.spatial_tuning_adapter.conv3.norm.\1",
+    r"backbone\.sta\.conv4\.1\.(weight)": r"model.conv_encoder.spatial_tuning_adapter.conv4.conv.\1",
+    r"backbone\.sta\.conv4\.2\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.spatial_tuning_adapter.conv4.norm.\1",
     # Fusion projection convs/norms
     r"backbone\.convs\.(\d+)\.weight": r"model.conv_encoder.fusion_proj.\1.conv.weight",
     r"backbone\.norms\.(\d+)\.(weight|bias|running_mean|running_var)": r"model.conv_encoder.fusion_proj.\1.norm.\2",
