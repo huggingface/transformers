@@ -20,6 +20,7 @@ from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneConfigMixin, consolidate_backbone_kwargs_to_config
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging, torch_int
@@ -126,8 +127,6 @@ class RfDetrConfig(LwDetrConfig):
     num_queries (`int`, *optional*, defaults to 300):
         Number of object queries, i.e. detection slots. This is the maximal number of objects
         [`RfDetrModel`] can detect in a single image.
-    num_feature_levels (`int`, *optional*, defaults to 1):
-        Number of feature levels used in the multiscale deformable attention.
     group_detr (`int`, *optional*, defaults to 13):
         Number of groups for Group DETR attention mechanism, which helps reduce computational complexity.
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
@@ -135,14 +134,16 @@ class RfDetrConfig(LwDetrConfig):
         kernels are not supported by PyTorch ONNX export.
     class_loss_coefficient (`float`, *optional*, defaults to 1):
         Relative weight of the classification loss in the Hungarian matching cost.
-    mask_loss_coefficient (`float`, *optional*, defaults to 1):
-        Relative weight of the Focal loss in the instance segmentation mask loss.
     dice_loss_coefficient (`float`, *optional*, defaults to 1):
         Relative weight of the DICE/F-1 loss in the object detection loss.
     bbox_loss_coefficient (`float`, *optional*, defaults to 5):
         Relative weight of the L1 bounding box loss in the object detection loss.
     giou_loss_coefficient (`float`, *optional*, defaults to 2):
         Relative weight of the generalized IoU loss in the object detection loss.
+    num_feature_levels (`int`, *optional*, defaults to 1):
+        Number of feature levels used in the multiscale deformable attention.
+    mask_loss_coefficient (`float`, *optional*, defaults to 1):
+        Relative weight of the Focal loss in the instance segmentation mask loss.
     mask_point_sample_ratio (`int`, *optional*, defaults to 16):
         The ratio of points to sample for the mask loss calculation.
     mask_downsample_ratio (`int`, *optional*, defaults to 4):
