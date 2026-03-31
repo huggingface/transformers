@@ -1608,7 +1608,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif flash_attn_version == 2 and not is_flash_attn_greater_or_equal("2.3.3"):
                 raise ImportError(f"{preface} Flash Attention {flash_attn_version} requires at least version `2.3.3`.")
             elif flash_attn_version == "torch" and not is_torch_greater_or_equal("2.11.0"):
-                raise ImportError(f"{preface} Flash Attention {flash_attn_version} requires at least version `2.11.0`.")
+                raise ImportError(
+                    f"{preface} Flash Attention {flash_attn_version} requires at least version `2.11.0`."
+                )
             else:
                 # Supported devices availability
                 device_availability_checks, device_names = zip(*supported_devices)
@@ -1926,7 +1928,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_flash_attention_requested(requested_attention_implementation=applicable_attention) and (
             fa_matched := re.search(r"^flash_attention_(torch|\d)$", applicable_attention)
         ):
-            fa_version = fa_matched.group(1) if fa_matched.group(1) == "torch" else int(fa_matched.group(1))  # last digit
+            fa_version = (
+                fa_matched.group(1) if fa_matched.group(1) == "torch" else int(fa_matched.group(1))
+            )  # last digit
             self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
@@ -4876,7 +4880,6 @@ class AttentionInterface(GeneralInterface):
         default: Callable,
         # To determine if we can switch between SDPA and Varlen
         attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor | None = None,
         cu_seq_lens_q: torch.IntTensor | None = None,
         **kwargs,
     ) -> Callable:
@@ -4892,7 +4895,7 @@ class AttentionInterface(GeneralInterface):
                 f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
             )
         elif attn_implementation == "sdpa" and is_flash_attn_torch_available():
-            if attention_mask is None and (position_ids is not None or cu_seq_lens_q is not None):
+            if attention_mask is None and cu_seq_lens_q is not None:
                 return flash_attention_forward
 
         return super().get(attn_implementation, default)

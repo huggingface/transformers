@@ -23,7 +23,6 @@ from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import (
-    is_flash_attn_torch_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
     is_tracing,
@@ -839,8 +838,7 @@ def _preprocess_mask_arguments(
     # full graph dynamo tracing (i.e. torch.export or compile with `fullgraph=True`) will fail on Python<3.11
     # with `torch._dynamo.exc.Unsupported: 'inline in skipfiles:Mapping.__contains__ | __contains__, skipped
     # according trace_rules.lookup SKIP_DIRS'` -- can be removed when we require Python>=3.11
-    attn_implementation = config._attn_implementation
-    if attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping:
+    if config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping:
         return True, None, None, None, None, None, None
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
@@ -872,15 +870,10 @@ def _preprocess_mask_arguments(
         else:
             kv_length, kv_offset = attention_mask.shape[-1], 0
 
-    # We check the position_ids for potential packed sequence format, if
-    #   1. There is no 2D attention mask and cache, i.e. generally a training setup
-    #   2. Or we have some form of flash attention that can handle it natively
+    # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
+    # and we don't have past_key_values, i.e. generally a training setup)
     packed_sequence_mask = None
-    can_skip_packed_mask = is_flash_attention_requested(
-        requested_attention_implementation=attn_implementation,
-        allow_torch=is_flash_attn_torch_available(),
-    )
-    if not can_skip_packed_mask and position_ids is not None and attention_mask is None and past_key_values is None:
+    if position_ids is not None and attention_mask is None and past_key_values is None:
         batch_size = inputs_embeds.shape[0]
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:

@@ -410,7 +410,7 @@ class VisionAttention(nn.Module):
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward, None, None, cu_seqlens
+            self.config._attn_implementation, eager_attention_forward, None, cu_seqlens
         )
 
         if is_flash_attention_requested(self.config, allow_torch=is_flash_attn_torch_available()):

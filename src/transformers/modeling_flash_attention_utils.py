@@ -16,7 +16,7 @@ import inspect
 import os
 from collections.abc import Callable
 from functools import partial
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -111,8 +111,10 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "flash_attn_version": "torch",
         "general_availability_check": is_flash_attn_torch_available,
         "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("torch") is not None,
-        "supported_devices": ((is_torch_cuda_available, "cuda"),),  # Too uncertain on all features, restricting for now
-    }
+        "supported_devices": (
+            (is_torch_cuda_available, "cuda"),
+        ),  # Too uncertain on all features, restricting for now
+    },
 }
 
 
@@ -596,7 +598,20 @@ class FlashAttentionKwargs(TypedDict, total=False):
     max_length_k: int | None
 
 
-def _consolidate_flash_kwarg_alternative_name(kwargs_dict, obj, original_name, supports_mapping):
+def _consolidate_flash_kwarg_alternative_name(
+    kwargs_dict: dict[str, Any], obj: Any, original_name: str, supports_mapping: dict[str, bool]
+):
+    """
+    TODO
+
+    Args:
+        kwargs_dict (`dict[str, Any]`):
+            The current dict of collected kwargs to be passed to the underlying FA function.
+        obj (`Any`):
+            The potential object to be passed as kwarg, depending on whether it is supported or not.
+        original_name (`str`):
+            The kwarg name associated with the `obj`. This is based on first conventions from the original FA package.
+    """
     if obj is None:
         return None
 
@@ -669,7 +684,7 @@ def _process_flash_attention_kwargs(
 
     for assignable_variable, original_variable_name in zip(
         [is_causal, softmax_scale, s_aux, cu_seqlens_q, cu_seqlens_k],
-        ["causal", "softmax_scale", "s_aux", "cu_seqlens_q", "cu_seqlens_k"]
+        ["causal", "softmax_scale", "s_aux", "cu_seqlens_q", "cu_seqlens_k"],
     ):
         consolidate_flash_kwarg_alternative_name(
             obj=assignable_variable,
@@ -835,7 +850,7 @@ def _flash_attention_forward(
                 cu_seqlens_q=cu_seq_lens_q,
                 cu_seqlens_k=cu_seq_lens_k,
                 max_seqlen_q=max_length_q,
-                max_seqlen_k=max_length_k
+                max_seqlen_k=max_length_k,
             ),
         )
         if isinstance(out_unpad, tuple):
@@ -867,7 +882,7 @@ def _flash_attention_forward(
                 cu_seqlens_q=cu_seq_lens_q,
                 cu_seqlens_k=cu_seq_lens_k,
                 max_seqlen_q=max_length_q,
-                max_seqlen_k=max_length_k
+                max_seqlen_k=max_length_k,
             ),
         )
         if isinstance(out, tuple):
