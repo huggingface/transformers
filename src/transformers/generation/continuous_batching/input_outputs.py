@@ -207,10 +207,10 @@ class ContinuousBatchingIOs:
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = torch.empty(
-            (num_groups, max_batch_tokens), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_groups, max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
         self.read_index_storage = torch.empty(
-            (num_groups, num_pages + max_batch_tokens), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_groups, num_pages + max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -426,9 +426,10 @@ class ContinuousBatchingIOs:
 
         # If we are not using the block table, we populate the read and write indices
         if not self.use_block_table:
+            to_index_tensor = partial(torch.tensor, dtype=torch.int64, device=self.device)
             for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
-                self.read_index_storage[i, : len(group_read_indices)] = to_tensor(group_read_indices)
-                self.write_index_storage[i, : len(group_write_indices)] = to_tensor(group_write_indices)
+                self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
+                self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_read_sizes[i] = len(group_read_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
 

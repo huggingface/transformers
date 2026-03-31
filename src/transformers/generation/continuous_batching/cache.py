@@ -554,7 +554,7 @@ class PagedAttentionMemoryHandler:
         # -- N terms: cost per cache page --------------------------------------------------
         coeff_n = (
             2 * self.group_size * self.page_size * c   # kv_cache: 2 * group_size * [N, page_size] * cache_dtype
-            + k * self.num_groups * i                  # read_index: [num_groups, N + M]  (N part only)
+            + k * self.num_groups * 8                  # read_index: [num_groups, N + M]  (N part only, int64)
         )
         # -- M terms: cost per batch token -------------------------------------------------
         coeff_m = (
@@ -563,8 +563,8 @@ class PagedAttentionMemoryHandler:
             + k * self.num_output_rows * i             # output_ids: [num_output_rows, M] int32
             + k * self.num_groups                      # block_table: [bt_groups, M, max_blocks_per_req] int32
             * self.max_blocks_per_request * i          #   (zero when fast-decode is off)
-            + k * self.num_groups * i                  # write_index: [num_groups, M] int32
-            + k * self.num_groups * i                  # read_index: [num_groups, N + M] (M part only)
+            + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
+            + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
         )
         # -- N·M terms: cost per (page × batch token) -------------------------------------
         coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
