@@ -1109,11 +1109,11 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
     # (block_size, page_size, num_groups, group_size, peak_act, num_attn_masks, max_bpr, logprobs, cache_dtype, use_async_batching)
     CONFIGS = [
-        (32, 256, 1, 22, 34048, 1, 0, False, torch.float16, False),   # sdpa-like, 1 attn mask
+        (32, 256, 1, 22, 34048, 1, 0, False, torch.float16, False),  # sdpa-like, 1 attn mask
         (256, 256, 1, 22, 34048, 0, 0, False, torch.float16, False),  # flash-like, no attn mask
         (32, 256, 2, 14, 34048, 2, 0, False, torch.bfloat16, False),  # hybrid model, 2 groups + 2 masks
-        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, False),     # with block_table + logprobs
-        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, True),     # with block_table + logprobs + async batching
+        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, False),  # with block_table + logprobs
+        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, True),  # with block_table + logprobs + async batching
     ]
 
     NUM_BLOCKS = 4

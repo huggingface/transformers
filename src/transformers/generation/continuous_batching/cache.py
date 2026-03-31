@@ -543,9 +543,11 @@ class PagedAttentionMemoryHandler:
         available_memory = int(available_memory * max_memory_percent)
         return available_memory
 
+    # Formatting is disabled because of comment indentation, which improves readability.
+    # fmt: off
     def _equation_coefficients(self, cache_dtype: torch.dtype) -> tuple[int, int, int, int]:
         """Returns (coeff_n, coeff_m, coeff_nm, coeff_mm) for the memory polynomial. Each addend is annotated with
-        the tensor it corresponds to in ``ContinuousBatchingIOs._setup_static_tensors``.
+        the tensor it corresponds to in `ContinuousBatchingIOs._setup_static_tensors`.
         """
         i = self._input_dtype.itemsize       # int32
         a = self._activation_dtype.itemsize  # bfloat16
@@ -573,6 +575,7 @@ class PagedAttentionMemoryHandler:
         coeff_mm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (M² part only)
 
         return coeff_n, coeff_m, coeff_nm, coeff_mm
+    # fmt: on
 
     @staticmethod
     def _solve_quadratic(a: float, b: float, c: float) -> float:

@@ -441,7 +441,9 @@ class FullAttentionCacheAllocator(CacheAllocator):
 class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 
-    def __init__(self, index: int, block_size: int, sliding_window: int, sentinel_index: int, trash_index: int) -> None:
+    def __init__(
+        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, trash_index: int
+    ) -> None:
         """Initializes the cache manager for a group of sliding window attention layers. ``sentinel_index`` and
         ``trash_index`` are valid cache positions in the padding zone, used instead of -1 in read and write indices
         respectively so that index_select/index_copy_ never receive negative values.

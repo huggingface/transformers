@@ -96,7 +96,7 @@ class TestBatchGeneration(unittest.TestCase):
 
         for i, (output, expected_output) in enumerate(zip(batch_outputs.values(), expected_outputs)):
             generated = self.tokenizer.decode(output.generated_tokens, skip_special_tokens=False).strip()
-            expected_output = (expected_output.strip(), ) if isinstance(expected_output, str) else expected_output
+            expected_output = (expected_output.strip(),) if isinstance(expected_output, str) else expected_output
             self.assertIn(
                 generated,
                 [e.strip() for e in expected_output],
