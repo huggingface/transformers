@@ -122,7 +122,10 @@ class DynamoExporter(HfExporter):
 
 def _exportable_update_mask(attention_mask, past_key_values_or_cache_position=None, *args, **kwargs):
     """Export-safe mamba/linear-attn mask: keeps only `has_previous_state` (a Python bool)."""
-    if getattr(past_key_values_or_cache_position, "has_previous_state", False):
+    has_previous_state = getattr(past_key_values_or_cache_position, "has_previous_state", False)
+    if callable(has_previous_state):
+        has_previous_state = has_previous_state()
+    if has_previous_state:
         return None
     return attention_mask
 
