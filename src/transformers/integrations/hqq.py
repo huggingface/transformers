@@ -127,3 +127,70 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
         logger.warning("No linear modules were found in your model for quantization.")
 
     return model
+
+
+class HqqQuantize:
+    """HQQ quantization operation for the new weight loading flow."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        full_layer_name: str | None = None,
+        model: torch.nn.Module | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        from hqq.core.quantize import HQQLinear
+
+        from ..quantizers.quantizers_utils import get_module_from_name
+
+        # input_dict has {param_name: [tensor]} for the weight
+        value = list(input_dict.values())[0]
+        value = value[0] if isinstance(value, list) else value
+
+        # full_layer_name is e.g. "model.layers.0.self_attn.q_proj.weight"
+        module_name = full_layer_name.rsplit(".", 1)[0]
+        module, _ = get_module_from_name(model, full_layer_name)
+
+        # Load weight into the nn.Linear module
+        module.weight = torch.nn.Parameter(value, requires_grad=False)
+
+        # Get the quant_config that was set in _process_model_before_weight_loading
+        quant_config = getattr(module, "quant_config", None)
+        if quant_config is None:
+            # Module is skipped from quantization, just return the weight as-is
+            return {full_layer_name: value}
+
+        # Determine target device and compute dtype
+        target_device = value.device
+        compute_dtype = self.hf_quantizer.dtype
+
+        # Create HQQLinear from the nn.Linear
+        hqq_layer = HQQLinear(
+            module,
+            quant_config=quant_config,
+            compute_dtype=compute_dtype,
+            device=target_device,
+            del_orig=True,
+        )
+
+        if hqq_layer.bias is not None and isinstance(hqq_layer.bias, torch.Tensor):
+            hqq_layer.bias = torch.nn.Parameter(hqq_layer.bias)
+
+        if self.hf_quantizer.using_multi_gpu:
+            hqq_layer = self.hf_quantizer._patch_layer_for_multigpu(hqq_layer)
+
+        # Replace the module in the model
+        parent_module_name, _, child_name = module_name.rpartition(".")
+        parent_module = model.get_submodule(parent_module_name) if parent_module_name else model
+        setattr(parent_module, child_name, hqq_layer)
+
+        # Mark as loaded so it's not reported as missing
+        missing_keys = kwargs.get("missing_keys")
+        if missing_keys is not None:
+            missing_keys.discard(full_layer_name)
+
+        # Return empty dict so the loading code doesn't try to set params
+        return {}

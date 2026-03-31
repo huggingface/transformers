@@ -63,6 +63,11 @@ class HqqHfQuantizer(HfQuantizer):
         # Keys that are serialized specifically by hqq
         self.hqq_keys = HQQLinear(None, None).state_dict_keys() - {"bias"}
 
+    def update_dtype(self, dtype):
+        if dtype is not None:
+            self.dtype = dtype
+        return dtype
+
     def validate_environment(self, *args, **kwargs):
         if self.dtype is None:
             if "dtype" in kwargs:
@@ -144,10 +149,13 @@ class HqqHfQuantizer(HfQuantizer):
     #     return list(new_keys)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        module, _ = get_module_from_name(model, param_name)
-        # Since we do not prepare the modules in advance, we need every param of the Linear layer to go through
-        # `create_quantized_param`, even when `self.is_quantized == True`
-        return isinstance(module, torch.nn.Linear)
+        module, tensor_name = get_module_from_name(model, param_name)
+        return isinstance(module, torch.nn.Linear) and tensor_name == "weight"
+
+    def get_quantize_ops(self):
+        from ..integrations.hqq import HqqQuantize
+
+        return HqqQuantize(self)
 
     # TODO: to remove
     # def create_quantized_param(
