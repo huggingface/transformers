@@ -542,7 +542,7 @@ def fp8_deepgemm_experts_forward(
     proj_out = torch.zeros(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     deepgemm_grouped_fp8_matmul(
-        (act_fp8, act_scales), (w_up, ws_up), proj_out, grouped_layout, use_psum_layout=use_psum_layout
+        (act_fp8, act_scales), (w_up, ws_up.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
     # Apply gating or activation
@@ -557,7 +557,7 @@ def fp8_deepgemm_experts_forward(
     proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
     proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm_grouped_fp8_matmul(
-        (proj_fp8, proj_scales), (w_down, ws_down), proj_out, grouped_layout, use_psum_layout=use_psum_layout
+        (proj_fp8, proj_scales), (w_down, ws_down.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
     # Remove padding rows
