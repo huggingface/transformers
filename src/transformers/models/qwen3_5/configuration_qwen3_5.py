@@ -123,7 +123,7 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
         The maximum sequence length that this model might ever be used with
     """
 
-    model_type = "qwen3_5"
+    model_type = "qwen3_5_vision"
     base_config_key = "vision_config"
 
     depth: int = 27
