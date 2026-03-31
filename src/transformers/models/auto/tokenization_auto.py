@@ -322,6 +322,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             if is_mistral_common_available()
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
+        (
+            "voxtral_tts",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
@@ -422,7 +428,7 @@ def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
         if tokenizer_class == class_name:
             module_name = model_type_to_module_name(module_name)
             if (
-                module_name in ["mistral", "mistral3", "mixtral", "ministral", "ministral3", "pixtral", "voxtral"]
+                module_name in ["mistral", "mistral3", "mixtral", "ministral", "ministral3", "pixtral", "voxtral", "voxtral_tts"]
                 and class_name == "MistralCommonBackend"
             ):
                 module = importlib.import_module(".tokenization_mistral_common", "transformers")

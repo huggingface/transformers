@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .configuration_voxtral_tts import *
     from .generation_voxtral_tts import *
     from .modeling_voxtral_tts import *
+    from .processing_voxtral_tts import *
 else:
     import sys
 
