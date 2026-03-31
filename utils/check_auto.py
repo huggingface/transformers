@@ -92,13 +92,11 @@ def build_image_processor_mapping(
                 ):
                     fast_processor_name = node.name
 
-        processor_mapping[model_type] = {}
-
-        if slow_processor_name is not None:
-            processor_mapping[model_type]["pil"] = slow_processor_name
-
-        if fast_processor_name is not None:
-            processor_mapping[model_type]["torchvision"] = fast_processor_name
+        if slow_processor_name is not None or fast_processor_name is not None:
+            processor_mapping[model_type] = {
+                **({"pil": slow_processor_name} if slow_processor_name else {}),
+                **({"torchvision": fast_processor_name} if fast_processor_name else {}),
+            }
 
     return processor_mapping
 

@@ -769,53 +769,21 @@
     "paddleocr_vl_text": "paddleocr_vl"
   },
   "IMAGE_PROCESSOR_MAPPING_NAMES": {
-    "ministral3": {},
-    "mistral": {},
-    "hgnet_v2": {},
-    "mt5": {},
-    "granitemoe": {},
-    "nllb_moe": {},
-    "fast_vlm": {},
-    "jamba": {},
-    "gpt_neox": {},
-    "dab_detr": {},
-    "llama": {},
-    "xlm_roberta_xl": {},
-    "dpr": {},
-    "informer": {},
-    "glm_moe_dsa": {},
-    "swin": {},
-    "focalnet": {},
-    "glm4_moe": {},
-    "audio_spectrogram_transformer": {},
     "beit": {
       "pil": "BeitImageProcessorPil",
       "torchvision": "BeitImageProcessor"
     },
-    "deberta": {},
-    "timesfm": {},
     "depth_pro": {
       "torchvision": "DepthProImageProcessor"
     },
-    "megatron_bert": {},
-    "bros": {},
-    "clipseg": {},
     "llava_onevision": {
       "pil": "LlavaOnevisionImageProcessorPil",
       "torchvision": "LlavaOnevisionImageProcessor"
     },
-    "vitpose_backbone": {},
-    "colpali": {},
-    "t5gemma2": {},
     "ovis2": {
       "pil": "Ovis2ImageProcessorPil",
       "torchvision": "Ovis2ImageProcessor"
     },
-    "pvt_v2": {},
-    "kyutai_speech_to_text": {},
-    "mobilevitv2": {},
-    "colqwen2": {},
-    "pixio": {},
     "llama4": {
       "torchvision": "Llama4ImageProcessor"
     },
@@ -823,110 +791,65 @@
       "pil": "YolosImageProcessorPil",
       "torchvision": "YolosImageProcessor"
     },
-    "stablelm": {},
-    "pe_video": {},
-    "trocr": {},
-    "modernvbert": {},
-    "xlnet": {},
-    "opt": {},
-    "electra": {},
-    "seamless_m4t": {},
-    "granite": {},
-    "depth_anything": {},
     "chameleon": {
       "pil": "ChameleonImageProcessorPil",
       "torchvision": "ChameleonImageProcessor"
     },
-    "aimv2": {},
     "siglip2": {
       "pil": "Siglip2ImageProcessorPil",
       "torchvision": "Siglip2ImageProcessor"
     },
-    "ernie": {},
-    "swinv2": {},
     "clip": {
       "pil": "CLIPImageProcessorPil",
       "torchvision": "CLIPImageProcessor"
     },
-    "fastspeech2_conformer": {},
     "rt_detr": {
       "pil": "RTDetrImageProcessorPil",
       "torchvision": "RTDetrImageProcessor"
     },
-    "qwen2_5_vl": {},
     "cohere2_vision": {
       "torchvision": "Cohere2VisionImageProcessor"
     },
-    "sam2_video": {},
-    "qwen2_moe": {},
     "deepseek_vl_hybrid": {
       "pil": "DeepseekVLHybridImageProcessorPil",
       "torchvision": "DeepseekVLHybridImageProcessor"
     },
-    "longcat_flash": {},
-    "qwen3": {},
-    "mamba": {},
-    "helium": {},
     "glm4v": {
       "pil": "Glm4vImageProcessorPil",
       "torchvision": "Glm4vImageProcessor"
     },
-    "tapas": {},
-    "exaone_moe": {},
-    "persimmon": {},
-    "cohere2": {},
-    "granitemoehybrid": {},
     "glm46v": {
       "pil": "Glm46VImageProcessorPil",
       "torchvision": "Glm46VImageProcessor"
     },
-    "camembert": {},
-    "moshi": {},
-    "gpt_neox_japanese": {},
-    "esm": {},
-    "qwen3_5": {},
     "pixtral": {
       "pil": "PixtralImageProcessorPil",
       "torchvision": "PixtralImageProcessor"
     },
-    "layoutxlm": {},
-    "big_bird": {},
     "segformer": {
       "pil": "SegformerImageProcessorPil",
       "torchvision": "SegformerImageProcessor"
     },
-    "qwen2": {},
     "gemma3": {
       "pil": "Gemma3ImageProcessorPil",
       "torchvision": "Gemma3ImageProcessor"
     },
-    "vaultgemma": {},
-    "timesformer": {},
-    "glmasr": {},
     "zoedepth": {
       "pil": "ZoeDepthImageProcessorPil",
       "torchvision": "ZoeDepthImageProcessor"
     },
-    "glm4_moe_lite": {},
     "vitmatte": {
       "pil": "VitMatteImageProcessorPil",
       "torchvision": "VitMatteImageProcessor"
     },
-    "udop": {},
     "maskformer": {
       "pil": "MaskFormerImageProcessorPil",
       "torchvision": "MaskFormerImageProcessor"
     },
-    "dinov3_convnext": {},
-    "mimi": {},
-    "timesfm2_5": {},
-    "roberta_prelayernorm": {},
     "glm_image": {
       "pil": "GlmImageImageProcessorPil",
       "torchvision": "GlmImageImageProcessor"
     },
-    "starcoder2": {},
-    "patchtst": {},
     "dinov3_vit": {
       "torchvision": "DINOv3ViTImageProcessor"
     },
@@ -938,91 +861,45 @@
       "pil": "LlavaNextImageProcessorPil",
       "torchvision": "LlavaNextImageProcessor"
     },
-    "ministral": {},
-    "bigbird_pegasus": {},
-    "higgs_audio_v2": {},
-    "mistral4": {},
-    "ibert": {},
-    "cpmant": {},
-    "higgs_audio_v2_tokenizer": {},
-    "mvp": {},
-    "clvp": {},
-    "vjepa2": {},
     "deepseek_vl": {
       "pil": "DeepseekVLImageProcessorPil",
       "torchvision": "DeepseekVLImageProcessor"
     },
-    "flex_olmo": {},
-    "visual_bert": {},
-    "gptj": {},
     "idefics": {
       "pil": "IdeficsImageProcessorPil",
       "torchvision": "IdeficsImageProcessor"
     },
-    "solar_open": {},
-    "gemma3n": {},
-    "sam3_video": {},
-    "vit_mae": {},
-    "t5": {},
-    "ernie4_5": {},
-    "roberta": {},
-    "florence2": {},
-    "bert_generation": {},
-    "doge": {},
-    "afmoe": {},
-    "hunyuan_v1_dense": {},
     "levit": {
       "pil": "LevitImageProcessorPil",
       "torchvision": "LevitImageProcessor"
     },
-    "cohere": {},
-    "clap": {},
-    "vision_text_dual_encoder": {},
-    "dia": {},
     "phi4_multimodal": {
       "torchvision": "Phi4MultimodalImageProcessor"
     },
-    "vivit": {},
-    "granitemoeshared": {},
-    "metaclip_2": {},
-    "mamba2": {},
-    "sam_hq": {},
-    "time_series_transformer": {},
-    "voxtral_realtime": {},
-    "markuplm": {},
     "swin2sr": {
       "pil": "Swin2SRImageProcessorPil",
       "torchvision": "Swin2SRImageProcessor"
     },
-    "xcodec": {},
-    "convbert": {},
     "mobilevit": {
       "pil": "MobileViTImageProcessorPil",
       "torchvision": "MobileViTImageProcessor"
     },
-    "pp_ocrv5_mobile_rec": {},
-    "bert": {},
     "llava": {
       "pil": "LlavaImageProcessorPil",
       "torchvision": "LlavaImageProcessor"
     },
-    "gpt2": {},
     "detr": {
       "pil": "DetrImageProcessorPil",
       "torchvision": "DetrImageProcessor"
     },
-    "ijepa": {},
     "pp_chart2table": {
       "pil": "PPChart2TableImageProcessorPil",
       "torchvision": "PPChart2TableImageProcessor"
     },
-    "apertus": {},
     "fuyu": {
       "pil": "FuyuImageProcessorPil",
       "torchvision": "FuyuImageProcessor"
     },
-    "eomt_dinov3": {},
-    "mobilebert": {},
     "pp_lcnet": {
       "torchvision": "PPLCNetImageProcessor"
     },
@@ -1030,21 +907,14 @@
       "pil": "LayoutLMv2ImageProcessorPil",
       "torchvision": "LayoutLMv2ImageProcessor"
     },
-    "kosmos2": {},
-    "vit_msn": {},
-    "falcon": {},
-    "roformer": {},
-    "splinter": {},
     "eomt": {
       "pil": "EomtImageProcessorPil",
       "torchvision": "EomtImageProcessor"
     },
-    "voxtral": {},
     "prompt_depth_anything": {
       "pil": "PromptDepthAnythingImageProcessorPil",
       "torchvision": "PromptDepthAnythingImageProcessor"
     },
-    "plbart": {},
     "grounding_dino": {
       "pil": "GroundingDinoImageProcessorPil",
       "torchvision": "GroundingDinoImageProcessor"
@@ -1053,21 +923,10 @@
       "pil": "TvpImageProcessorPil",
       "torchvision": "TvpImageProcessor"
     },
-    "zamba2": {},
-    "exaone4": {},
-    "t5gemma": {},
     "bridgetower": {
       "pil": "BridgeTowerImageProcessorPil",
       "torchvision": "BridgeTowerImageProcessor"
     },
-    "bark": {},
-    "recurrent_gemma": {},
-    "jina_embeddings_v3": {},
-    "qwen2_5_omni": {},
-    "speech_encoder_decoder": {},
-    "edgetam_video": {},
-    "nemotron": {},
-    "pe_audio_video": {},
     "kosmos2_5": {
       "pil": "Kosmos2_5ImageProcessorPil",
       "torchvision": "Kosmos2_5ImageProcessor"
@@ -1076,45 +935,23 @@
       "pil": "ImageGPTImageProcessorPil",
       "torchvision": "ImageGPTImageProcessor"
     },
-    "xlstm": {},
-    "altclip": {},
-    "nystromformer": {},
-    "speecht5": {},
-    "pe_audio": {},
-    "hunyuan_v1_moe": {},
-    "xlm": {},
-    "seed_oss": {},
-    "m2m_100": {},
     "smolvlm": {
       "pil": "SmolVLMImageProcessorPil",
       "torchvision": "SmolVLMImageProcessor"
     },
-    "blt": {},
     "perception_lm": {
       "torchvision": "PerceptionLMImageProcessor"
     },
     "uvdoc": {
       "torchvision": "UVDocImageProcessor"
     },
-    "luke": {},
-    "sam3_tracker": {},
-    "qwen2_audio": {},
-    "lfm2_moe": {},
     "mobilenet_v1": {
       "torchvision": "MobileNetV1ImageProcessor"
     },
-    "modernbert": {},
-    "vision_encoder_decoder": {},
-    "longt5": {},
-    "marian": {},
-    "edgetam": {},
-    "vitdet": {},
     "qwen2_vl": {
       "pil": "Qwen2VLImageProcessorPil",
       "torchvision": "Qwen2VLImageProcessor"
     },
-    "omdet_turbo": {},
-    "youtu": {},
     "janus": {
       "pil": "JanusImageProcessorPil",
       "torchvision": "JanusImageProcessor"
@@ -1123,24 +960,18 @@
       "pil": "DeformableDetrImageProcessorPil",
       "torchvision": "DeformableDetrImageProcessor"
     },
-    "jetmoe": {},
-    "musicgen": {},
-    "whisper": {},
     "seggpt": {
       "pil": "SegGptImageProcessorPil",
       "torchvision": "SegGptImageProcessor"
     },
-    "glm4": {},
     "sam": {
       "pil": "SamImageProcessorPil",
       "torchvision": "SamImageProcessor"
     },
-    "rag": {},
     "videomae": {
       "pil": "VideoMAEImageProcessorPil",
       "torchvision": "VideoMAEImageProcessor"
     },
-    "data2vec": {},
     "idefics2": {
       "pil": "Idefics2ImageProcessorPil",
       "torchvision": "Idefics2ImageProcessor"
@@ -1149,13 +980,6 @@
       "pil": "AriaImageProcessorPil",
       "torchvision": "AriaImageProcessor"
     },
-    "ernie4_5_moe": {},
-    "qwen3_vl_moe": {},
-    "gpt_neo": {},
-    "blenderbot_small": {},
-    "cvt": {},
-    "bloom": {},
-    "mra": {},
     "poolformer": {
       "pil": "PoolFormerImageProcessorPil",
       "torchvision": "PoolFormerImageProcessor"
@@ -1164,7 +988,6 @@
       "pil": "TextNetImageProcessorPil",
       "torchvision": "TextNetImageProcessor"
     },
-    "nemotron_h": {},
     "ernie4_5_vl_moe": {
       "pil": "Ernie4_5_VLMoeImageProcessorPil",
       "torchvision": "Ernie4_5_VLMoeImageProcessor"
@@ -1177,92 +1000,41 @@
       "pil": "FlavaImageProcessorPil",
       "torchvision": "FlavaImageProcessor"
     },
-    "funnel": {},
-    "modernbert_decoder": {},
-    "lasr": {},
-    "reformer": {},
-    "fnet": {},
-    "hiera": {},
     "lightglue": {
       "pil": "LightGlueImageProcessorPil",
       "torchvision": "LightGlueImageProcessor"
     },
-    "instructblip": {},
-    "internvl": {},
-    "lilt": {},
     "oneformer": {
       "pil": "OneFormerImageProcessorPil",
       "torchvision": "OneFormerImageProcessor"
     },
-    "qwen3_omni_moe": {},
-    "minimax": {},
-    "x_clip": {},
     "pp_ocrv5_server_rec": {
       "torchvision": "PPOCRV5ServerRecImageProcessor"
     },
-    "dinov2_with_registers": {},
-    "regnet": {},
-    "audioflamingo3": {},
-    "wav2vec2_bert": {},
-    "rt_detr_v2": {},
-    "encoder_decoder": {},
-    "instructblipvideo": {},
     "vitpose": {
       "pil": "VitPoseImageProcessorPil",
       "torchvision": "VitPoseImageProcessor"
     },
-    "minimax_m2": {},
-    "qwen3_next": {},
-    "dac": {},
-    "colmodernvbert": {},
     "chmv2": {
       "torchvision": "CHMv2ImageProcessor"
     },
-    "emu3": {},
-    "flaubert": {},
-    "prophetnet": {},
-    "unispeech": {},
-    "hubert": {},
-    "zamba": {},
     "perceiver": {
       "pil": "PerceiverImageProcessorPil",
       "torchvision": "PerceiverImageProcessor"
     },
-    "xglm": {},
-    "ctrl": {},
-    "pegasus": {},
-    "aya_vision": {},
     "chinese_clip": {
       "torchvision": "ChineseCLIPImageProcessor"
     },
-    "distilbert": {},
-    "vits": {},
-    "dinat": {},
-    "mbart": {},
-    "gpt_bigcode": {},
     "pp_doclayout_v2": {
       "torchvision": "PPDocLayoutV2ImageProcessor"
     },
-    "video_llava": {},
-    "jais2": {},
     "slanext": {
       "torchvision": "SLANeXtImageProcessor"
     },
-    "smollm3": {},
-    "dbrx": {},
     "owlv2": {
       "pil": "Owlv2ImageProcessorPil",
       "torchvision": "Owlv2ImageProcessor"
     },
-    "diffllama": {},
-    "qwen3_5_moe": {},
-    "bitnet": {},
-    "lw_detr": {},
-    "squeezebert": {},
-    "timm_backbone": {},
-    "olmo": {},
-    "mpt": {},
-    "dots1": {},
     "deit": {
       "pil": "DeiTImageProcessorPil",
       "torchvision": "DeiTImageProcessor"
@@ -1275,39 +1047,22 @@
       "pil": "DonutImageProcessorPil",
       "torchvision": "DonutImageProcessor"
     },
-    "moonshine_streaming": {},
     "owlvit": {
       "pil": "OwlViTImageProcessorPil",
       "torchvision": "OwlViTImageProcessor"
     },
-    "gemma": {},
-    "falcon_h1": {},
-    "autoformer": {},
-    "rembert": {},
-    "wavlm": {},
-    "glm_ocr": {},
     "efficientloftr": {
       "pil": "EfficientLoFTRImageProcessorPil",
       "torchvision": "EfficientLoFTRImageProcessor"
     },
-    "sam3_tracker_video": {},
-    "xlm_roberta": {},
     "mobilenet_v2": {
       "pil": "MobileNetV2ImageProcessorPil",
       "torchvision": "MobileNetV2ImageProcessor"
     },
-    "xmod": {},
-    "patchtsmixer": {},
-    "unispeech_sat": {},
-    "wav2vec2": {},
-    "wav2vec2_conformer": {},
-    "longformer": {},
-    "decision_transformer": {},
-    "blip": {},
-    "mpnet": {},
-    "olmo2": {},
-    "d_fine": {},
-    "olmo3": {},
+    "blip": {
+      "pil": "BlipImageProcessorPil",
+      "torchvision": "BlipImageProcessor"
+    },
     "vilt": {
       "pil": "ViltImageProcessorPil",
       "torchvision": "ViltImageProcessor"
@@ -1315,9 +1070,6 @@
     "sam3": {
       "torchvision": "Sam3ImageProcessor"
     },
-    "canine": {},
-    "granite_speech": {},
-    "deberta_v2": {},
     "layoutlmv3": {
       "pil": "LayoutLMv3ImageProcessorPil",
       "torchvision": "LayoutLMv3ImageProcessor"
@@ -1326,33 +1078,12 @@
       "pil": "GLPNImageProcessorPil",
       "torchvision": "GLPNImageProcessor"
     },
-    "codegen": {},
-    "pegasus_x": {},
     "sam2": {
       "torchvision": "Sam2ImageProcessor"
     },
-    "deepseek_v2": {},
-    "openai": {},
-    "csm": {},
-    "univnet": {},
-    "convnextv2": {},
-    "align": {},
-    "olmoe": {},
-    "groupvit": {},
-    "deepseek_v3": {},
-    "seamless_m4t_v2": {},
-    "albert": {},
-    "upernet": {},
-    "rwkv": {},
-    "evolla": {},
-    "blenderbot": {},
     "pp_doclayout_v3": {
       "torchvision": "PPDocLayoutV3ImageProcessor"
     },
-    "speech_to_text": {},
-    "pp_lcnet_v3": {},
-    "paligemma": {},
-    "umt5": {},
     "lfm2_vl": {
       "torchvision": "Lfm2VlImageProcessor"
     },
@@ -1360,16 +1091,10 @@
       "pil": "ConditionalDetrImageProcessorPil",
       "torchvision": "ConditionalDetrImageProcessor"
     },
-    "layoutlm": {},
-    "mgp_str": {},
-    "mm_grounding_dino": {},
     "pvt": {
       "pil": "PvtImageProcessorPil",
       "torchvision": "PvtImageProcessor"
     },
-    "gemma2": {},
-    "git": {},
-    "mistral3": {},
     "dpt": {
       "pil": "DPTImageProcessorPil",
       "torchvision": "DPTImageProcessor"
@@ -1382,28 +1107,13 @@
       "pil": "ViTImageProcessorPil",
       "torchvision": "ViTImageProcessor"
     },
-    "pp_ocrv5_mobile_det": {},
-    "mixtral": {},
-    "yoso": {},
-    "lxmert": {},
-    "olmo_hybrid": {},
-    "phi": {},
-    "vipllava": {},
-    "bart": {},
-    "encodec": {},
-    "musicgen_melody": {},
-    "roc_bert": {},
     "got_ocr2": {
       "pil": "GotOcr2ImageProcessorPil",
       "torchvision": "GotOcr2ImageProcessor"
     },
-    "gpt_oss": {},
-    "led": {},
     "pp_ocrv5_server_det": {
       "torchvision": "PPOCRV5ServerDetImageProcessor"
     },
-    "timm_wrapper": {},
-    "shieldgemma2": {},
     "mllama": {
       "pil": "MllamaImageProcessorPil",
       "torchvision": "MllamaImageProcessor"
@@ -1412,58 +1122,32 @@
       "pil": "BitImageProcessorPil",
       "torchvision": "BitImageProcessor"
     },
-    "mlcd": {},
-    "falcon_mamba": {},
-    "sew_d": {},
-    "pop2piano": {},
     "pi0": {
       "torchvision": "PI0ImageProcessor"
     },
-    "bamba": {},
-    "lfm2": {},
-    "swiftformer": {},
-    "switch_transformers": {},
     "video_llama_3": {
       "pil": "VideoLlama3ImageProcessorPil",
       "torchvision": "VideoLlama3ImageProcessor"
     },
-    "dinov2": {},
-    "glm": {},
     "idefics3": {
       "pil": "Idefics3ImageProcessorPil",
       "torchvision": "Idefics3ImageProcessor"
     },
-    "qwen3_vl": {},
     "superpoint": {
       "pil": "SuperPointImageProcessorPil",
       "torchvision": "SuperPointImageProcessor"
     },
-    "cwm": {},
-    "blip_2": {},
-    "phimoe": {},
-    "parakeet": {},
-    "fsmt": {},
-    "llava_next_video": {},
-    "arcee": {},
-    "qwen3_moe": {},
     "convnext": {
       "pil": "ConvNextImageProcessorPil",
       "torchvision": "ConvNextImageProcessor"
     },
-    "moonshine": {},
-    "sew": {},
-    "table_transformer": {},
-    "glm4v_moe": {},
     "paddleocr_vl": {
       "pil": "PaddleOCRVLImageProcessorPil",
       "torchvision": "PaddleOCRVLImageProcessor"
     },
-    "phi3": {},
     "mask2former": {
       "pil": "Mask2FormerImageProcessorPil",
       "torchvision": "Mask2FormerImageProcessor"
-    },
-    "resnet": {},
-    "biogpt": {}
+    }
   }
 }
