@@ -259,6 +259,7 @@ class ChineseCLIPTextSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
 
     def forward(
         self,
