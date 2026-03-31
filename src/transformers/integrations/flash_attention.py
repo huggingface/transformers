@@ -1,12 +1,10 @@
 import torch
 
-from ..modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
+from ..modeling_flash_attention_utils import _flash_attention_forward
 from ..utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-_use_top_left_mask = flash_attn_supports_top_left_mask()
 
 
 def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtype:
@@ -76,7 +74,6 @@ def flash_attention_forward(
         softmax_scale=scaling,
         sliding_window=sliding_window,
         softcap=softcap,
-        use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,

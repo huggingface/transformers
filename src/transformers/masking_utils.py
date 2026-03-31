@@ -733,6 +733,7 @@ class AttentionMaskInterface(GeneralInterface):
         "flash_attention_2": flash_attention_mask,
         "flash_attention_3": flash_attention_mask,
         "flash_attention_4": flash_attention_mask,
+        "flash_attention_torch": flash_attention_mask,
         "flex_attention": flex_attention_mask,
     }
 

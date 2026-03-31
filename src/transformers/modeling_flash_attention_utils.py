@@ -25,6 +25,7 @@ from .utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
+    is_flash_attn_torch_available,
     is_torch_cuda_available,
     is_torch_mlu_available,
     is_torch_npu_available,
@@ -106,6 +107,12 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
     },
+    "torch": {
+        "flash_attn_version": "torch",
+        "general_availability_check": is_flash_attn_torch_available,
+        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("torch") is not None,
+        "supported_devices": ((is_torch_cuda_available, "cuda"),),  # Too uncertain on all features, restricting for now
+    }
 }
 
 
@@ -123,9 +130,17 @@ _process_flash_kwargs_fn = None
 _hf_api_to_flash_mapping = {
     "dropout": "dropout_p",
     "sliding_window": "window_size",
+    "is_causal": "causal",
 }
 # alternative names within the different flash attention APIs, e.g. for attention sinks
-_flash_api_alternative_names = {"s_aux": "learnable_sink"}
+_flash_api_alternative_names = {
+    "s_aux": "learnable_sink",
+    "cu_seqlens_q": "cu_seq_q",
+    "cu_seqlens_k": "cu_seq_k",
+    "max_seqlen_q": "max_q",
+    "max_seqlen_k": "max_k",
+    "softmax_scale": "scale",
+}
 
 
 def _lazy_imports(
@@ -150,17 +165,31 @@ def _lazy_imports(
     is_paged = implementation.startswith("paged|")
     implementation = implementation.split("|")[1] if is_paged else implementation
 
-    if (implementation == "flash_attention_2" and is_fa2) or (
+    if implementation in ["sdpa", "flash_attention_torch"]:
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+        from torch.nn.attention import varlen as flash_attn_varlen_func
+        from torch.nn.functional import scaled_dot_product_attention as sdpa
+
+        def flash_attention_wrapper(*args, **kwargs):
+            with sdpa_kernel(SDPBackend.FLASH_ATTENTION):  # Force FA backend to be used
+                return sdpa(*args, **kwargs)
+
+        flash_attn_func = flash_attention_wrapper
+        flash_attn_with_kvcache = None  # not supported yet
+
+    elif (implementation == "flash_attention_2" and is_fa2) or (
         implementation is None and is_fa2 and not is_fa3 and not is_fa4
     ):
         from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
         from flash_attn.bert_padding import pad_input, unpad_input
+
     elif is_torch_npu_available():
         # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
         # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
         from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
         from .integrations.npu_flash_attention import npu_flash_attn_with_kvcache as flash_attn_with_kvcache
+
     else:
         if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
@@ -168,6 +197,7 @@ def _lazy_imports(
             from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
 
             flash_attn_with_kvcache = None  # not supported yet
+
         # Kernels fallback
         else:
             from .integrations.hub_kernels import load_and_register_attn_kernel
@@ -565,19 +595,30 @@ class FlashAttentionKwargs(TypedDict, total=False):
     max_length_k: int | None
 
 
+def _consolidate_flash_kwarg_alternative_name(kwargs_dict, obj, original_name, supports_mapping):
+    if obj is None:
+        return None
+
+    global _flash_api_alternative_names
+    for name in [original_name, _flash_api_alternative_names.get(original_name, original_name)]:
+        if supports_mapping[name]:
+            kwargs_dict[name] = obj
+            return name
+
+
 def _process_flash_attention_kwargs(
-    query_length: int,
-    key_length: int,
     is_causal: bool,
     dropout: float = 0.0,
     softmax_scale: float | None = None,
     sliding_window: int | None = None,
-    use_top_left_mask: bool = False,
     softcap: float | None = None,
     deterministic: bool | None = None,
     s_aux: torch.Tensor | None = None,
     max_seqlen_q: int | torch.IntTensor | None = None,
     max_seqlen_k: int | torch.IntTensor | None = None,
+    cu_seqlens_q: torch.LongTensor | None = None,
+    cu_seqlens_k: torch.LongTensor | None = None,
+    enable_torch_specifics: bool | None = None,
     supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
@@ -588,10 +629,6 @@ def _process_flash_attention_kwargs(
     inspected in `supports_mapping`, see `_lazy_define_process_function` for more details.
 
     Args:
-        query_length (`int`):
-            Length of the query states
-        key_length (`int`):
-            Length of the key states
         is_causal (`bool`):
             Whether we perform causal (decoder) attention or full attention.
         dropout (`float`):
@@ -600,8 +637,6 @@ def _process_flash_attention_kwargs(
             The scaling of QK^T before applying softmax. Default to `1 / sqrt(head_dim)`.
         sliding_window (`int`, *optional*):
             The size of the sliding window, i.e. we look at a max of `sliding_window` tokens back.
-        use_top_left_mask (`bool`):
-            Deprecated behavior of older versions of flash attention requiring different masking.
         softcap (`float`, *optional*):
             Softcap for the attention logits, used e.g. in gemma2.
         deterministic (`bool`, *optional*):
@@ -612,24 +647,47 @@ def _process_flash_attention_kwargs(
             The maximum sequence length in the query tensor during a varlen forward.
         max_seqlen_k (`Union[int, torch.IntTensor]`, *optional*):
             The maximum sequence length in the key/value tensor during a varlen forward.
+        cu_seqlens_q (`torch.LongTensor]`, *optional*):
+            The cumulative sequence lengths within the query tensor during a varlen forward.
+        cu_seqlens_k (`torch.LongTensor]`, *optional*):
+            The cumulative sequence lengths within the key/value tensor during a varlen forward.
+        enable_torch_specifics (`bool`, *optional*):
+            Whether to force torch specific kwargs to be passed (native to the original SDPA backend).
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
     """
-    flash_kwargs = {
-        "causal": is_causal and not (use_top_left_mask and query_length == 1),
-        "softmax_scale": softmax_scale,
-    }
+    flash_kwargs = {}
 
-    if supports_mapping["dropout_p"]:
-        flash_kwargs["dropout_p"] = dropout
+    # Every API determined they needed their own convention...
+    consolidate_flash_kwarg_alternative_name = partial(
+        _consolidate_flash_kwarg_alternative_name,
+        kwargs_dict=flash_kwargs,
+        supports_mapping=supports_mapping,
+    )
 
-    if supports_mapping["window_size"] and sliding_window is not None and key_length > sliding_window:
+    for assignable_variable, original_variable_name in zip(
+        [is_causal, softmax_scale, s_aux, cu_seqlens_q, cu_seqlens_k],
+        ["causal", "softmax_scale", "s_aux", "cu_seqlens_q", "cu_seqlens_k"]
+    ):
+        consolidate_flash_kwarg_alternative_name(
+            obj=assignable_variable,
+            original_name=original_variable_name,
+        )
+
+    if supports_mapping["window_size"] and sliding_window is not None:
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
         # and the current token for a total size of 5. However, we usually define our window sizes by
         # their total window size (when causal). Encoder models as of now seldom use SWA and when they
         # do, they must align with this symmetric logic, i.e. for a total of `2*sliding_window + 1`.
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
+
+    if flash_kwargs.get("causal") is None and flash_kwargs.get("window_size") is None:
+        # Special case in torch API that utilizes the window to determine underlying causality
+        flash_kwargs["window_size"] = (-1, 0) if is_causal else (-1, -1)
+
+    if supports_mapping["dropout_p"]:
+        flash_kwargs["dropout_p"] = dropout
 
     if supports_mapping["deterministic"]:
         flash_kwargs["deterministic"] = (
@@ -639,12 +697,6 @@ def _process_flash_attention_kwargs(
     if supports_mapping["softcap"] and softcap is not None:
         flash_kwargs["softcap"] = softcap
 
-    if ((legacy_sink_param := supports_mapping["s_aux"]) or supports_mapping["learnable_sink"]) and s_aux is not None:
-        if legacy_sink_param:
-            flash_kwargs["s_aux"] = s_aux  # e.g. FA3 (vllm)
-        else:
-            flash_kwargs["learnable_sink"] = s_aux  # FA4
-
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
     #
@@ -653,17 +705,26 @@ def _process_flash_attention_kwargs(
     #   - Before compiling: `torch._dynamo.config.capture_scalar_outputs = True`
     # to allow torch compile to handle scalar outputs in those cases.
     same_max_seqlen = max_seqlen_q is max_seqlen_k  # to avoid 2x device syncs
-    if supports_mapping["max_seqlen_q"] and max_seqlen_q is not None:
+
+    assigned_name_q = consolidate_flash_kwarg_alternative_name(obj=max_seqlen_q, original_name="max_seqlen_q")
+    if assigned_name_q is not None:
         if not isinstance(max_seqlen_q, int) and is_tracing(max_seqlen_q):
             max_seqlen_q = max_seqlen_q.item()
-        flash_kwargs["max_seqlen_q"] = max_seqlen_q
+        flash_kwargs[assigned_name_q] = max_seqlen_q
 
-    if supports_mapping["max_seqlen_k"] and max_seqlen_k is not None:
-        if same_max_seqlen and flash_kwargs["max_seqlen_q"] is not None:
-            max_seqlen_k = flash_kwargs["max_seqlen_q"]
-        elif not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
-            max_seqlen_k = max_seqlen_k.item()
-        flash_kwargs["max_seqlen_k"] = max_seqlen_k
+    assigned_name_k = consolidate_flash_kwarg_alternative_name(obj=max_seqlen_k, original_name="max_seqlen_k")
+    if assigned_name_k is not None:
+        if same_max_seqlen:
+            flash_kwargs[assigned_name_k] = flash_kwargs[assigned_name_q]
+        else:
+            if not isinstance(max_seqlen_k, int) and is_tracing(max_seqlen_k):
+                max_seqlen_k = max_seqlen_k.item()
+            flash_kwargs[assigned_name_k] = max_seqlen_k
+
+    # This is to enable `torch.nn.functional.scaled_dot_product_attention` native FA backend
+    if flash_kwargs.get("causal") is None and enable_torch_specifics:
+        flash_kwargs["is_causal"] = is_causal
+        flash_kwargs["enable_gqa"] = True
 
     return flash_kwargs
 
@@ -679,7 +740,6 @@ def _flash_attention_forward(
     position_ids: torch.Tensor | None = None,
     softmax_scale: float | None = None,
     sliding_window: int | None = None,
-    use_top_left_mask: bool = False,
     softcap: float | None = None,
     deterministic: bool | None = None,
     cu_seq_lens_q: torch.LongTensor | None = None,
@@ -721,13 +781,10 @@ def _flash_attention_forward(
     # Extract the flash attention kwargs that have been requested (and are supported by the implementation)
     flash_kwargs = partial(
         process_flash_kwargs_fn,
-        query_length=query_length,
-        key_length=key_states.size(1),
         is_causal=is_causal,
         dropout=dropout,
         softmax_scale=softmax_scale,
         sliding_window=sliding_window,
-        use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
         **kwargs,
@@ -760,9 +817,12 @@ def _flash_attention_forward(
             q,
             k,
             v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+            **flash_kwargs(
+                cu_seqlens_q=cu_seq_lens_q,
+                cu_seqlens_k=cu_seq_lens_k,
+                max_seqlen_q=max_length_q,
+                max_seqlen_k=max_length_k
+            ),
         )
         if isinstance(out_unpad, tuple):
             out_unpad = out_unpad[0]
@@ -789,9 +849,12 @@ def _flash_attention_forward(
             q,
             k,
             v,
-            cu_seqlens_q=cu_seq_lens_q,
-            cu_seqlens_k=cu_seq_lens_k,
-            **flash_kwargs(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k),
+            **flash_kwargs(
+                cu_seqlens_q=cu_seq_lens_q,
+                cu_seqlens_k=cu_seq_lens_k,
+                max_seqlen_q=max_length_q,
+                max_seqlen_k=max_length_k
+            ),
         )
         if isinstance(out, tuple):
             out = out[0]
@@ -800,7 +863,7 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        out = flash_fn(query_states, key_states, value_states, **flash_kwargs())
+        out = flash_fn(query_states, key_states, value_states, **flash_kwargs(enable_torch_specifics=True))
         if isinstance(out, tuple):
             out = out[0]
 
