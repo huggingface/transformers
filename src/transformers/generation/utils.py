@@ -2427,13 +2427,6 @@ class GenerationMixin(ContinuousMixin):
             # TODO (joao): generalize this check with other types of inputs
             if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
                 raise ValueError("`attention_mask` passed to `generate` must be 2D.")
-            if (
-                self.config._attn_implementation == "flash_attention_torch"
-                and (model_kwargs["attention_mask"] == 1).all()
-            ):
-                raise ValueError(
-                    "Flash Attention torch cannot handle generations without valid `attention_mask` with padding."
-                )
 
         kwargs_has_position_ids = model_kwargs.get("position_ids", None) is not None
         accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())

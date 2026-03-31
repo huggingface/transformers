@@ -1661,13 +1661,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "This might lead to unexpected behaviour as this is not supported on recent versions of Flash Attention."
                 )
 
-        if flash_attn_version == "torch":
-            if getattr(self.config, "sliding_window", None) is not None:
-                logger.warning_once(
-                    f"You are attempting to use Flash Attention {flash_attn_version} with sliding window. "
-                    "This might lead to unexpected behaviour as this only supported in a limited way with torch natives."
-                )
-
         # People often move dtypes after init so we only warn in those cases
         dtype = self.config.dtype
         if dtype is None:
@@ -4879,7 +4872,7 @@ class AttentionInterface(GeneralInterface):
         attn_implementation: str | None,
         default: Callable,
         # To determine if we can switch between SDPA and Varlen
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
         cu_seq_lens_q: torch.IntTensor | None = None,
         **kwargs,
     ) -> Callable:
