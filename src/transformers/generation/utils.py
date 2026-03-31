@@ -1781,7 +1781,7 @@ class GenerationMixin(ContinuousMixin):
             "reformer",
             "minimax",
             "xlnet",
-            "olmohybrid",
+            "olmohybrid",  # olmo_hybrid cannot use linear attention cache for now as it uses split k,q,v conv states
             "rwkv",
             "xlstm",
         )
@@ -2001,8 +2001,8 @@ class GenerationMixin(ContinuousMixin):
         valid_hardware = self.device.type in ["cuda", "xpu"] or bool(
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
-        # Note: for full mamba models, even a DynamicCache is compileable since all layers are mamba, but we don't want
-        # to ALWAYS compile when calling `generate`, so we check the type
+        # Note: for some models that only use linear attention (e.g. Mamba), even a DynamicCache is compileable since all
+        # layers are, but we don't want to ALWAYS compile when calling `generate`, so we check the type
         using_compilable_cache = cache is not None and cache.is_compileable and type(cache) is not DynamicCache
         can_compile = valid_hardware and using_compilable_cache
 

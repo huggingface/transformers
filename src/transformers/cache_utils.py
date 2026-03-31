@@ -804,7 +804,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         return self.recurrent_states
 
 
-class LinearAttentionAndAttentionLayer(LinearAttentionLayer, DynamicLayer):
+class LinearAttentionAndFullAttentionLayer(LinearAttentionLayer, DynamicLayer):
     # The dynamic Attention part makes it non-compileable
     is_compileable = False
 
@@ -1231,7 +1231,7 @@ class DynamicCache(Cache):
                 elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
                     layers.append(LinearAttentionLayer())
                 elif layer_type == "hybrid":
-                    layers.append(LinearAttentionAndAttentionLayer())
+                    layers.append(LinearAttentionAndFullAttentionLayer())
                 else:
                     layers.append(DynamicLayer())
 

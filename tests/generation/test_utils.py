@@ -81,7 +81,7 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
-        LinearAttentionAndAttentionLayer,
+        LinearAttentionAndFullAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticCache,
@@ -2599,7 +2599,7 @@ class GenerationTesterMixin:
         # Check each layer has the correct shape
         for layer in past_key_values.layers:
             # Mamba + Attention layer cache
-            if type(layer) is LinearAttentionAndAttentionLayer:
+            if type(layer) is LinearAttentionAndFullAttentionLayer:
                 # Remove the seq_length dim for cross-attention cache (it changes based on the model)
                 keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
                 values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
@@ -2664,7 +2664,7 @@ class GenerationTesterMixin:
             self.assertEqual(type(cache1.layers[idx]), type(cache2.layers[idx]))
 
             # Mamba + Attention layer
-            if type(cache1.layers[idx]) is LinearAttentionAndAttentionLayer:
+            if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
                 torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
                 torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
                 torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
