@@ -24,7 +24,8 @@ Usage:
 Plugin system
 -------------
 Each checker module declares a ``CHECKER_CONFIG`` dict (extracted via ``ast.literal_eval``,
-no import needed). See any ``check_*.py`` file for the schema.
+no import needed — this keeps discovery fast and avoids executing checker code at scan time).
+See any ``check_*.py`` file for the schema.
 
 Cache semantics of ``file_globs``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

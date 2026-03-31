@@ -74,8 +74,27 @@ class CheckersCacheTest(unittest.TestCase):
                 (repo_root / "utils" / "fake_checker.py").write_text("# fake checker changed\n", encoding="utf-8")
                 self.assertFalse(cache.is_current("demo"))
 
-    def test_main_skips_cached_runs_unless_no_cache_is_used(self):
-        """Main should reuse cached results by default and rerun when `--no-cache` is passed."""
+    def test_main_skips_cached_runs(self):
+        """Main should reuse cached results for repeated runs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = self._create_fake_repo(tmpdir)
+            with (
+                patch_checkers_paths(repo_root),
+                patch.object(
+                    checkers,
+                    "run_checker",
+                    return_value=(0, "first run"),
+                ) as run_checker,
+            ):
+                self._run_main("demo")
+                self.assertEqual(run_checker.call_count, 1)
+
+                output = self._run_main("demo")
+                self.assertEqual(run_checker.call_count, 1)
+                self.assertIn("(cached)", output)
+
+    def test_main_reruns_with_no_cache(self):
+        """Main should rerun when `--no-cache` is passed."""
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_root = self._create_fake_repo(tmpdir)
             with (
@@ -88,10 +107,6 @@ class CheckersCacheTest(unittest.TestCase):
             ):
                 self._run_main("demo")
                 self.assertEqual(run_checker.call_count, 1)
-
-                output = self._run_main("demo")
-                self.assertEqual(run_checker.call_count, 1)
-                self.assertIn("(cached)", output)
 
                 self._run_main("demo", "--no-cache")
                 self.assertEqual(run_checker.call_count, 2)
