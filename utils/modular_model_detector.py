@@ -319,7 +319,7 @@ def _build_modular_inheritance_map() -> dict[str, set[str]]:
 
             parent: str | None = None
             # Relative import inside models package: from ..llama.modeling_llama import ...
-            if node.level >= 2:
+            if node.level >= 2 and "." in node.module and "modeling_" in node.module:
                 parent = node.module.split(".", 1)[0]
             # Absolute import via transformers.models: from transformers.models.llava.modeling_llava import ...
             elif node.level == 0 and node.module.startswith("transformers.models."):
