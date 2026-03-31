@@ -44,7 +44,6 @@ class GlmAsrProcessorKwargs(ProcessingKwargs, total=False):
         },
         "audio_kwargs": {
             "sampling_rate": 16000,
-            "chunk_length": 30.0,
             "return_attention_mask": True,
             "padding": "max_length",
         },
@@ -103,6 +102,17 @@ class GlmAsrProcessor(ProcessorMixin):
         num_tokens = (audio_lengths - merge_factor) // merge_factor + 1
         return num_tokens
 
+    def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
+        audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
+        audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
+        audio_token_pattern = re.compile(re.escape(self.audio_token))
+        for i, audio_length in enumerate(audio_tokens_lengths):
+            text[i] = audio_token_pattern.sub(self.audio_token * audio_length, text[i])
+        return text
+
+    def _get_audio_tokens_mask(self, input_ids):
+        return input_ids == self.audio_token_id
+
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -156,8 +166,8 @@ class GlmAsrProcessor(ProcessorMixin):
                 raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
             # Determine number of chunks per sample, and flatten
-            window_size = int(audio_kwargs["sampling_rate"] * audio_kwargs["chunk_length"])
-            max_windows = int(self.max_audio_len // audio_kwargs["chunk_length"])
+            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
@@ -183,14 +193,8 @@ class GlmAsrProcessor(ProcessorMixin):
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
 
-            # Compute sequence lengths token counting
-            audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-            audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
-
-            # expand audio tokens in text
-            for i, audio_length in enumerate(audio_tokens_lengths):
-                expanded = re.sub(re.escape(self.audio_token), self.audio_token * audio_length, text[i])
-                text[i] = expanded
+            # Expand audio tokens in text
+            text = self._expand_audio_tokens(text, padding_mask, per_sample_windows)
 
         # Tokenize
         text_inputs = self.tokenizer(text, **text_kwargs)
@@ -198,7 +202,7 @@ class GlmAsrProcessor(ProcessorMixin):
         data = {**text_inputs, **audio_inputs}
         if output_labels:
             labels = data["input_ids"].clone()
-            labels[labels == self.audio_token_id] = -100
+            labels[self._get_audio_tokens_mask(labels)] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
 
@@ -291,18 +295,22 @@ class GlmAsrProcessor(ProcessorMixin):
             **kwargs,
         )
 
-    def batch_decode(self, *args, strip_prefix=False, **kwargs):
+    def decode(self, *args, strip_prefix=False, **kwargs):
         """
-        Forward arguments to [`~PreTrainedTokenizer.batch_decode`] and optionally remove the assistant framing the model
+        Forward arguments to [`~PreTrainedTokenizer.decode`] and optionally remove the assistant framing the model
         was trained to produce.
 
         AF3 transcription requests respond with sentences such as `"The spoken content of the audio is \"...\"."`.
         Setting `strip_prefix=True` trims the fixed prefix for just the transcription text.
         """
-        decoded = self.tokenizer.batch_decode(*args, **kwargs)
+        decoded = self.tokenizer.decode(*args, **kwargs)
         if strip_prefix:
             decoded = [self._strip_assistant_prefix_and_quotes(text) for text in decoded]
         return decoded
+
+    def batch_decode(self, *args, **kwargs):
+        """BC as previous examples used batch_decode"""
+        return self.decode(*args, **kwargs)
 
     def _strip_assistant_prefix_and_quotes(self, text: str) -> str:
         """
@@ -314,6 +322,7 @@ class GlmAsrProcessor(ProcessorMixin):
         for prefix in (
             "The spoken content of the audio is",
             "The transcription of the audio is",
+            "The content of the input audio is",
         ):
             if stripped.startswith(prefix):
                 stripped = stripped[len(prefix) :].strip()

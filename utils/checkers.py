@@ -70,6 +70,7 @@ CHECKERS = {
     "modeling_structure": ("Modeling file structure", "check_modeling_structure.py", [], None),
     "deps_table": ("Dependency versions table", None, None, None),
     "imports": ("Public imports", None, None, None),
+    "import_complexity": ("Import complexity", "check_import_complexity.py", [], None),
     "ruff_check": ("Ruff linting", None, None, None),
     "ruff_format": ("Ruff formatting", None, None, None),
 }
