@@ -39,12 +39,12 @@ import subprocess
 import sys
 import tempfile
 import time
-from huggingface_hub import InferenceClient, hf_hub_download
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+from huggingface_hub import InferenceClient, hf_hub_download
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 TRANSFORMERS_ROOT = Path(__file__).parent.parent
 MODELS_ROOT = TRANSFORMERS_ROOT / "src" / "transformers" / "models"
@@ -72,9 +72,8 @@ def _render_template(path: Path, **kwargs) -> str:
     return path.read_text(encoding="utf-8").format(**kwargs)
 
 
-# ---------------------------------------------------------------------------
-# Step 1: Fetch modeling file from HF Hub
-# ---------------------------------------------------------------------------
+# ── Step 1: Fetch modeling file from HF Hub ───────────────────────────────────
+
 
 def fetch_modeling_file(hub_repo: str, hub_filename: str, model_name: str) -> Path:
     """
@@ -95,9 +94,8 @@ def fetch_modeling_file(hub_repo: str, hub_filename: str, model_name: str) -> Pa
     return target
 
 
-# ---------------------------------------------------------------------------
-# Step 2: Run modular model detector
-# ---------------------------------------------------------------------------
+# ── Step 2: Run modular model detector ────────────────────────────────────────
+
 
 def run_detector(modeling_file: Path, model_name: str) -> tuple[str, Path]:
     """
@@ -115,19 +113,16 @@ def run_detector(modeling_file: Path, model_name: str) -> tuple[str, Path]:
         from modular_model_detector import (
             HUB_DATASET_DEFAULT,
             CodeSimilarityAnalyzer,
-            build_date_data,
             compute_model_class_match_summary,
             generate_modular_prompt,
         )
 
-        dates = build_date_data()
         analyzer = CodeSimilarityAnalyzer(hub_dataset=HUB_DATASET_DEFAULT)
         results = analyzer.analyze_file(
             modeling_file,
             top_k_per_item=12,
             allow_hub_fallback=True,
             use_jaccard=True,
-            dates=dates,
             ignore_models=set(),
         )
         _, ordered_summary = compute_model_class_match_summary(results)
@@ -155,9 +150,8 @@ def run_detector(modeling_file: Path, model_name: str) -> tuple[str, Path]:
     return prompt, prompt_path
 
 
-# ---------------------------------------------------------------------------
-# Step 3: Generate modular file with HF Inference API
-# ---------------------------------------------------------------------------
+# ── Step 3: Generate modular file with HF Inference API ───────────────────────
+
 
 def _build_llm_prompt(prompt: str, modeling_file: Path, model_name: str) -> str:
     """Build the full prompt to send to the LLM."""
@@ -199,14 +193,15 @@ def generate_modular_with_hf(
             retryable = status in (429, 500, 502, 503, 504) or status is None
             if not retryable or attempt == max_retries - 1:
                 raise
-            delay = base_delay * (2 ** attempt)
-            print(f"    HF API error ({e.__class__.__name__}: {e}). Retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})...")
+            delay = base_delay * (2**attempt)
+            print(
+                f"    HF API error ({e.__class__.__name__}: {e}). Retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})..."
+            )
             time.sleep(delay)
 
 
-# ---------------------------------------------------------------------------
-# Step 4: Run modular converter
-# ---------------------------------------------------------------------------
+# ── Step 4: Run modular converter ─────────────────────────────────────────────
+
 
 def run_modular_converter(modular_file: Path) -> None:
     """
@@ -219,24 +214,18 @@ def run_modular_converter(modular_file: Path) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Step 5: Fork, branch, commit, push, PR
-# ---------------------------------------------------------------------------
+# ── Step 5: Fork, branch, commit, push, PR ────────────────────────────────────
+
 
 def _gh_auth_username() -> str:
     """Return the currently logged-in GitHub username via `gh auth status`."""
-    result = subprocess.run(
-        ["gh", "auth", "status"], capture_output=True, text=True
-    )
+    result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
     output = result.stdout + result.stderr
     match = re.search(r"Logged in to \S+ account (\S+)", output)
     if not match:
         match = re.search(r"as (\S+)", output)
     if not match:
-        raise RuntimeError(
-            "Could not determine GitHub username from `gh auth status`. "
-            "Pass --fork-owner explicitly."
-        )
+        raise RuntimeError("Could not determine GitHub username from `gh auth status`. Pass --fork-owner explicitly.")
     return match.group(1)
 
 
@@ -246,26 +235,31 @@ def create_pr(
     fork_owner: str,
 ) -> None:
     """
-    Fork huggingface/transformers (idempotent), then — in a throw-away shallow
-    clone of the fork — create a single-commit branch from upstream main and
-    push it.  The current repo working tree is never touched.
+    Fork huggingface/transformers (idempotent), then create a branch
+    from upstream main and push.
     """
     branch = f"add-{model_name}-model"
     fork_url = f"git@github.com:{fork_owner}/transformers.git"
     upstream_url = "https://github.com/huggingface/transformers.git"
 
-    # Ensure the fork exists (idempotent)
+    # Ensure the fork exists
     _run(["gh", "repo", "fork", "huggingface/transformers", "--clone=false"])
 
     with tempfile.TemporaryDirectory(prefix=f"hf-pr-{model_name}-") as tmp:
         clone_dir = Path(tmp) / "transformers"
 
-        # Shallow clone of upstream main — fast, no history needed
+        # clone of upstream main
         print(f"    Shallow-cloning upstream main into {clone_dir}...")
-        _run([
-            "git", "clone", "--depth=1", "--branch=main",
-            upstream_url, str(clone_dir),
-        ])
+        _run(
+            [
+                "git",
+                "clone",
+                "--depth=1",
+                "--branch=main",
+                upstream_url,
+                str(clone_dir),
+            ]
+        )
 
         # Point origin at the fork so we push there
         _run(["git", "remote", "set-url", "origin", fork_url], cwd=clone_dir)
@@ -279,17 +273,22 @@ def create_pr(
             shutil.rmtree(dest)
         shutil.copytree(model_dir, dest)
 
-        # Single commit
+        # commit
         _run(["git", "add", str(dest)], cwd=clone_dir)
-        _run([
-            "git", "commit", "-m",
-            f"Add {model_name} model (auto-generated modular integration)",
-        ], cwd=clone_dir)
+        _run(
+            [
+                "git",
+                "commit",
+                "-m",
+                f"Add {model_name} model (auto-generated modular integration)",
+            ],
+            cwd=clone_dir,
+        )
 
-        # Push to fork (force in case a previous attempt left a stale branch)
+        # Push to fork
         _run(["git", "push", "--force", "origin", branch], cwd=clone_dir)
 
-    # PR body — write to a temp file to avoid shell quoting issues
+    # PR body
     pr_body = _render_template(PR_BODY_TEMPLATE, model_name=model_name)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
@@ -297,22 +296,31 @@ def create_pr(
         body_file = f.name
 
     try:
-        _run([
-            "gh", "pr", "create",
-            "--repo", "huggingface/transformers",
-            "--head", f"{fork_owner}:{branch}",
-            "--base", "main",
-            "--title", f"Add {model_name} model",
-            "--body-file", body_file,
-            "--draft",
-        ], cwd=TRANSFORMERS_ROOT)
+        _run(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--repo",
+                "huggingface/transformers",
+                "--head",
+                f"{fork_owner}:{branch}",
+                "--base",
+                "main",
+                "--title",
+                f"Add {model_name} model",
+                "--body-file",
+                body_file,
+                "--draft",
+            ],
+            cwd=TRANSFORMERS_ROOT,
+        )
     finally:
         os.unlink(body_file)
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -322,38 +330,40 @@ def main():
     parser.add_argument(
         "--hub-repo",
         help="HF Hub repo ID containing the modeling file (e.g. sarvamai/sarvam-105b). "
-             "Not required when using --from-dir.",
+        "Not required when using --from-dir.",
     )
     parser.add_argument(
         "--modeling-file",
         help="Filename of the modeling file in the hub repo (e.g. modeling_sarvam_moe.py). "
-             "Not required when using --from-dir.",
+        "Not required when using --from-dir.",
     )
     parser.add_argument(
-        "--from-dir", metavar="PATH",
+        "--from-dir",
+        metavar="PATH",
         help="Skip steps 1-4 and go straight to the PR step using files already in PATH "
-             "(e.g. src/transformers/models/sarvam_dry). "
-             "Requires --model-name.",
+        "(e.g. src/transformers/models/sarvam_dry). "
+        "Requires --model-name.",
     )
     parser.add_argument(
-        "--model-name", required=True,
-        help="Model name to use in transformers (e.g. sarvam). "
-             "Determines the directory and file names.",
+        "--model-name",
+        required=True,
+        help="Model name to use in transformers (e.g. sarvam). Determines the directory and file names.",
     )
     parser.add_argument(
         "--fork-owner",
-        help="GitHub username that owns the transformers fork. "
-             "Defaults to the account returned by `gh auth status`.",
+        help="GitHub username that owns the transformers fork. Defaults to the account returned by `gh auth status`.",
     )
     parser.add_argument(
         "--hf-model",
         metavar="MODEL_ID",
+        default="utils/auto_modular_pr.py",
         help="HuggingFace Inference API model id to use for modular code generation. "
-             "E.g. 'Qwen/Qwen2.5-Coder-32B-Instruct' or 'meta-llama/Llama-3.3-70B-Instruct'. "
-             "Uses your HF_TOKEN env var or huggingface-cli login credentials.",
+        "E.g. 'Qwen/Qwen2.5-Coder-32B-Instruct'"
+        "Uses your HF_TOKEN env var or huggingface-cli login credentials.",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Run steps 1-4 (generate files) but skip all git/PR actions.",
     )
     args = parser.parse_args()
@@ -378,9 +388,7 @@ def main():
         if not args.hub_repo or not args.modeling_file:
             raise SystemExit("Provide --hub-repo and --modeling-file, or use --from-dir.")
         if not args.hf_model:
-            raise SystemExit(
-                "Provide --hf-model <model_id> for modular generation via the HuggingFace Inference API."
-            )
+            raise SystemExit("Provide --hf-model <model_id> for modular generation via the HuggingFace Inference API.")
 
         print("\n[1/5] Fetching modeling file from HF Hub...")
         modeling_file = fetch_modeling_file(args.hub_repo, args.modeling_file, args.model_name)
@@ -402,7 +410,7 @@ def main():
 
     # ------------------------------------------------------------------
     if args.dry_run:
-        print(f"\n[5/5] Dry run — skipping git/PR steps.")
+        print("\n[5/5] Dry run — skipping git/PR steps.")
         return
 
     print(f"\n[5/5] Creating fork, branch, commit, and PR from {model_dir}...")
