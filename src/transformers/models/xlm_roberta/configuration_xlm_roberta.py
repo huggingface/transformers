@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="FacebookAI/xlm-mlm-en-2048")
-@strict(accept_kwargs=True)
+@strict
 class XLMRobertaConfig(PreTrainedConfig):
     r"""
     Examples:
@@ -55,7 +55,7 @@ class XLMRobertaConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     use_cache: bool = True
     classifier_dropout: float | int | None = None
     is_decoder: bool = False

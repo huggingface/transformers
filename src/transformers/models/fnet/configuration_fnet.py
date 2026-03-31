@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/fnet-base")
-@strict(accept_kwargs=True)
+@strict
 class FNetConfig(PreTrainedConfig):
     r"""
     use_tpu_fourier_optimizations (`bool`, *optional*, defaults to `False`):
@@ -62,7 +62,7 @@ class FNetConfig(PreTrainedConfig):
     tpu_short_seq_length: int = 512
     pad_token_id: int | None = 3
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = True
 
 

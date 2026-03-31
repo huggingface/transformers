@@ -20,19 +20,17 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/gpt_bigcode")
-@strict(accept_kwargs=True)
+@strict
 class GPTBigCodeConfig(PreTrainedConfig):
     r"""
-    multi_query (`bool`, *optional*, defaults to `True`):
-        Whether to use multi-query attention in the decoder. Ignored when `new_decoder_architecture` is `True`.
     scale_attn_weights (`bool`, *optional*, defaults to `True`):
         Scale attention weights by dividing by sqrt(hidden_size)..
     attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
         Whether to call the fused softmax in float32.
     scale_attention_softmax_in_fp32 (`bool`, *optional*, defaults to `True`):
         Whether to scale the attention softmax in float32.
-    attention_type (`bool`, *optional*, defaults to `True`):
-        Whether to use Multi-Query Attion (`True`) or Multi-Head Attention (`False`).
+    multi_query (`bool`, *optional*, defaults to `True`):
+        Whether to use multi-query attention in the decoder. Ignored when `new_decoder_architecture` is `True`.
 
     Example:
 
@@ -73,7 +71,7 @@ class GPTBigCodeConfig(PreTrainedConfig):
     scale_attn_weights: bool = True
     use_cache: bool = True
     bos_token_id: int | None = 50256
-    eos_token_id: int | None = 50256
+    eos_token_id: int | list[int] | None = 50256
     pad_token_id: int | None = None
     attention_softmax_in_fp32: bool = True
     scale_attention_softmax_in_fp32: bool = True

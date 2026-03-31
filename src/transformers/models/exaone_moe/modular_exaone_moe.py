@@ -43,16 +43,9 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
-@strict(accept_kwargs=True)
+@strict
 class ExaoneMoeConfig(Exaone4Config):
     r"""
-    n_group (`int`, *optional*, defaults to 1):
-        Number of groups for routed experts.
-    mlp_layer_types (`list`, *optional*):
-        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                    \--k dense layers--/
     sliding_window_pattern (`str`, *optional*, defaults to 4):
         The pattern to use for sliding window attention. Can be one of:
             - `None`: No sliding window attention is used
@@ -64,6 +57,13 @@ class ExaoneMoeConfig(Exaone4Config):
             - Layer 0, 1, 2: local attention,
             - Layer 3: global attention,
             ...(repeated)
+    mlp_layer_types (`list`, *optional*):
+        MLP pattern for each layer. Prioritized over `first_k_dense_replace`.
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
+        Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                    \--k dense layers--/
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for routed experts.
 
     Example:
 
@@ -92,7 +92,7 @@ class ExaoneMoeConfig(Exaone4Config):
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 53
+    eos_token_id: int | list[int] | None = 53
     pad_token_id: int | None = 0
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
