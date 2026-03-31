@@ -108,13 +108,18 @@ class Serve:
         )
         from transformers import ContinuousBatchingConfig
 
-        cb_config = ContinuousBatchingConfig(
-            block_size=cb_block_size,
-            num_blocks=cb_num_blocks,
-            max_batch_tokens=cb_max_batch_tokens,
-            max_memory_percent=cb_max_memory_percent,
-            use_cuda_graph=cb_use_cuda_graph,
-        )
+        cb_kwargs = {
+            k: v
+            for k, v in {
+                "block_size": cb_block_size,
+                "num_blocks": cb_num_blocks,
+                "max_batch_tokens": cb_max_batch_tokens,
+                "max_memory_percent": cb_max_memory_percent,
+                "use_cuda_graph": cb_use_cuda_graph,
+            }.items()
+            if v is not None
+        }
+        cb_config = ContinuousBatchingConfig(**cb_kwargs) if cb_kwargs else None
         self._generation_state = GenerationState(
             continuous_batching=continuous_batching,
             compile=compile,
