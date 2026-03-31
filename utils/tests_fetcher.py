@@ -354,7 +354,7 @@ def get_diff(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
                 # In case of renames, we'll look at the tests using both the old and new name.
                 if diff_obj.a_path != diff_obj.b_path:
                     code_diff.extend([diff_obj.a_path, diff_obj.b_path])
-                else:
+                elif not diff_is_docstring_only(repo, commit, diff_obj.a_path):
                     code_diff.append(diff_obj.a_path)
 
     return code_diff
