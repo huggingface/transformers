@@ -103,5 +103,9 @@ class Mamba2Config(PreTrainedConfig):
                 f"({self.num_heads * self.head_dim})."
             )
 
+    @property
+    def layer_types(self):
+        return ["mamba"] * self.num_hidden_layers
+
 
 __all__ = ["Mamba2Config"]
