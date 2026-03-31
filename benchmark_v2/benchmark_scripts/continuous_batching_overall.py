@@ -2,6 +2,7 @@ import argparse
 import json
 import re
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from tabulate import tabulate
@@ -10,7 +11,7 @@ from tabulate import tabulate
 SCRIPT_LOCATION = (Path(__file__).parent.parent.parent / "examples/pytorch/continuous_batching.py").as_posix()
 COMMON_ARGS = "--log-level WARNING --seed 0 --force-max-length".split()
 ERROR_OUTPUT = {"time_seconds": "X", "num_tokens": "X", "throughput_tok_per_sec": "ERROR"}
-RESULTS_FILE = Path(__file__).parent.parent / "benchmark_results/cb_overall_main.json"
+RESULTS_DIR = Path(__file__).parent.parent / "benchmark_results/cb_overall/"
 
 
 def run_and_parse_cb_example(args: str) -> dict:
@@ -35,30 +36,38 @@ def run_and_parse_cb_example(args: str) -> dict:
         return {"args": args, **ERROR_OUTPUT}
 
 
-def build_comparison_table(results: list[dict], main_results: list[dict]) -> list[dict]:
-    """Build a table comparing current results against saved main results."""
-    main_by_args = {r["args"]: r for r in main_results}
+def get_most_recent_file(prefix: str, exclude: Path | None = None) -> Path | None:
+    """Find the most recent results file in RESULTS_DIR matching the given prefix, optionally excluding one."""
+    candidates = sorted(RESULTS_DIR.glob(f"{prefix}__*.json"))
+    if exclude:
+        candidates = [c for c in candidates if c != exclude]
+    return candidates[-1] if candidates else None
+
+
+def build_comparison_table(results: list[dict], baseline_results: list[dict], baseline_label: str) -> list[dict]:
+    """Build a table comparing current results against baseline results."""
+    baseline_by_args = {r["args"]: r for r in baseline_results}
     comparison = [
         {
             "args": "Arguments",
-            "main_tok_per_sec": "Main (tok/s)",
+            "baseline_tok_per_sec": f"{baseline_label} (tok/s)",
             "current_tok_per_sec": "Current (tok/s)",
             "diff_percent": "Diff (%)",
         }
     ]
     for result in results:
-        main = main_by_args.get(result["args"])
-        main_tp = main["throughput_tok_per_sec"] if main else None
+        baseline = baseline_by_args.get(result["args"])
+        baseline_tp = baseline["throughput_tok_per_sec"] if baseline else None
         current_tp = result["throughput_tok_per_sec"]
-        if isinstance(main_tp, (int, float)) and isinstance(current_tp, (int, float)):
-            diff = (current_tp - main_tp) / main_tp * 100
+        if isinstance(baseline_tp, (int, float)) and isinstance(current_tp, (int, float)):
+            diff = (current_tp - baseline_tp) / baseline_tp * 100
             diff_str = f"{diff:+.1f}%"
         else:
             diff_str = "N/A"
         comparison.append(
             {
                 "args": result["args"],
-                "main_tok_per_sec": main_tp if main_tp is not None else "N/A",
+                "baseline_tok_per_sec": baseline_tp if baseline_tp is not None else "N/A",
                 "current_tok_per_sec": current_tp,
                 "diff_percent": diff_str,
             }
@@ -114,12 +123,27 @@ if __name__ == "__main__":
     # The header row is results[0], data rows are results[1:]
     data_results = results[1:]
 
+    # Always save results to a new timestamped file
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    prefix = "main" if args.main else "run"
+    results_file = RESULTS_DIR / f"{prefix}__{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    results_file.write_text(json.dumps(data_results, indent=2))
+    print(f"\nResults saved to {results_file}")
+
+    # Compare against baseline
     if args.main:
-        RESULTS_FILE.write_text(json.dumps(data_results, indent=2))
-        print(f"\nResults saved to {RESULTS_FILE}")
+        # Compare against the previous main baseline (the one that was most recent before this new file)
+        baseline_file = get_most_recent_file("main", exclude=results_file)
+        baseline_label = "Previous main"
     else:
-        if RESULTS_FILE.exists():
-            main_results = json.loads(RESULTS_FILE.read_text())
-            comparison = build_comparison_table(data_results, main_results)
-            print()
-            print(tabulate(comparison, tablefmt="github"))
+        # Compare against the most recent main baseline
+        baseline_file = get_most_recent_file("main")
+        baseline_label = "Main"
+
+    if baseline_file:
+        baseline_results = json.loads(baseline_file.read_text())
+        comparison = build_comparison_table(data_results, baseline_results, baseline_label)
+        print(f"\nComparing against: {baseline_file.name}")
+        print(tabulate(comparison, tablefmt="github"))
+    else:
+        print("\nNo baseline results found for comparison.")
