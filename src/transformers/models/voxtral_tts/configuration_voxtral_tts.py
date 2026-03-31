@@ -209,6 +209,9 @@ class VoxtralTtsConfig(PreTrainedConfig):
         Number of acoustic codebooks.
     rope_theta (`float`, *optional*, defaults to 1000000.0):
         Base frequency for the backbone RoPE embeddings.
+    audio_vocab_size (`int`, *optional*, defaults to 9088):
+        Total number of entries in the audio codebook embedding table. Covers 1 semantic codebook (8192 entries)
+        plus 36 acoustic codebooks (21 levels each, laid out with stride 25).
     sampling_rate (`int`, *optional*, defaults to 24000):
         Audio sampling rate in Hz.
     frame_rate (`float`, *optional*, defaults to 12.5):
@@ -269,6 +272,7 @@ class VoxtralTtsConfig(PreTrainedConfig):
     semantic_codebook_size: int = 8192
     acoustic_codebook_size: int = 21
     n_acoustic_codebook: int = 36
+    audio_vocab_size: int = 9088
     sampling_rate: int = 24000
     frame_rate: float = 12.5
 

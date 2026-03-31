@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+import torch.nn as nn
+
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
-    MistralForCausalLM,
     MistralMLP,
     MistralModel,
     MistralPreTrainedModel,
@@ -40,24 +42,48 @@ class VoxtralTtsDecoderLayer(MistralDecoderLayer):
     pass
 
 
-class VoxtralTtsPreTrainedModel(MistralPreTrainedModel):
-    pass
-
-
 class VoxtralTtsRotaryEmbedding(MistralRotaryEmbedding):
     pass
 
 
-class VoxtralTtsModel(MistralModel):
+class VoxtralTtsAudioEmbeddings(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_codebooks = config.num_codebooks
+        self.embed_audio_tokens = nn.Embedding(config.audio_vocab_size, config.hidden_size)
+        offsets = self._compute_offsets(config)
+        self.register_buffer("audio_tokens_offsets", offsets, persistent=False)
+
+    @staticmethod
+    def _compute_offsets(config):
+        offsets = torch.zeros(config.num_codebooks, dtype=torch.long)
+        if config.n_acoustic_codebook > 1:
+            acoustic_stride = (
+                config.audio_vocab_size - config.semantic_codebook_size - config.acoustic_codebook_size
+            ) // (config.n_acoustic_codebook - 1)
+        else:
+            acoustic_stride = config.acoustic_codebook_size
+        for i in range(config.n_acoustic_codebook):
+            offsets[i + 1] = config.semantic_codebook_size + i * acoustic_stride
+        return offsets
+
+    def forward(self, input_ids):
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=2)
+        return inputs_embeds
+
+
+class VoxtralTtsPreTrainedModel(MistralPreTrainedModel):
     pass
 
 
-class VoxtralTtsForCausalLM(MistralForCausalLM):
-    pass
+class VoxtralTtsBackboneModel(MistralModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.embed_tokens = VoxtralTtsAudioEmbeddings(config)
 
 
 __all__ = [
-    "VoxtralTtsForCausalLM",
-    "VoxtralTtsModel",
     "VoxtralTtsPreTrainedModel",
+    "VoxtralTtsBackboneModel",
 ]

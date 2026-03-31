@@ -22,20 +22,19 @@ from collections.abc import Callable
 from typing import Optional
 
 import torch
-from torch import nn
+import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_voxtral_tts import VoxtralTtsConfig
@@ -249,25 +248,6 @@ class VoxtralTtsDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-@auto_docstring
-class VoxtralTtsPreTrainedModel(PreTrainedModel):
-    config: VoxtralTtsConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["VoxtralTtsDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": VoxtralTtsDecoderLayer,
-        "attentions": VoxtralTtsAttention,
-    }
-
-
 class VoxtralTtsRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -333,14 +313,59 @@ class VoxtralTtsRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+class VoxtralTtsAudioEmbeddings(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_codebooks = config.num_codebooks
+        self.embed_audio_tokens = nn.Embedding(config.audio_vocab_size, config.hidden_size)
+        offsets = self._compute_offsets(config)
+        self.register_buffer("audio_tokens_offsets", offsets, persistent=False)
+
+    @staticmethod
+    def _compute_offsets(config):
+        offsets = torch.zeros(config.num_codebooks, dtype=torch.long)
+        if config.n_acoustic_codebook > 1:
+            acoustic_stride = (
+                config.audio_vocab_size - config.semantic_codebook_size - config.acoustic_codebook_size
+            ) // (config.n_acoustic_codebook - 1)
+        else:
+            acoustic_stride = config.acoustic_codebook_size
+        for i in range(config.n_acoustic_codebook):
+            offsets[i + 1] = config.semantic_codebook_size + i * acoustic_stride
+        return offsets
+
+    def forward(self, input_ids):
+        inputs_embeds = self.embed_audio_tokens(input_ids + self.audio_tokens_offsets)
+        inputs_embeds = inputs_embeds.sum(dim=2)
+        return inputs_embeds
+
+
 @auto_docstring
-class VoxtralTtsModel(VoxtralTtsPreTrainedModel):
-    def __init__(self, config: VoxtralTtsConfig):
+class VoxtralTtsPreTrainedModel(PreTrainedModel):
+    config: VoxtralTtsConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["VoxtralTtsDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": VoxtralTtsDecoderLayer,
+        "attentions": VoxtralTtsAttention,
+    }
+
+
+@auto_docstring
+class VoxtralTtsBackboneModel(VoxtralTtsPreTrainedModel):
+    def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = VoxtralTtsAudioEmbeddings(config)
         self.layers = nn.ModuleList(
             [VoxtralTtsDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -407,78 +432,4 @@ class VoxtralTtsModel(VoxtralTtsPreTrainedModel):
         )
 
 
-@auto_docstring
-class VoxtralTtsForCausalLM(VoxtralTtsPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = VoxtralTtsModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, VoxtralTtsForCausalLM
-
-        >>> model = VoxtralTtsForCausalLM.from_pretrained("meta-voxtral_tts/VoxtralTts-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-voxtral_tts/VoxtralTts-2-7b-hf")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-__all__ = ["VoxtralTtsForCausalLM", "VoxtralTtsModel", "VoxtralTtsPreTrainedModel"]
+__all__ = ["VoxtralTtsPreTrainedModel", "VoxtralTtsBackboneModel"]
