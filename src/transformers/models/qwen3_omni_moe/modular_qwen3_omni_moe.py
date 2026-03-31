@@ -278,7 +278,7 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
     r"""
     num_code_groups (`int`, *optional*, defaults to 32):
@@ -301,7 +301,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
     vocab_size: int = 3072
     hidden_size: int = 1024
