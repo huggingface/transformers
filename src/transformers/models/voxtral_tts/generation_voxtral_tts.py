@@ -112,7 +112,6 @@ class VoxtralTtsGenerationMixin(GenerationMixin):
         ```
         """
         config = self.config
-        device = self.device
         batch_size = input_ids.shape[0] if input_ids is not None else audio_codes.shape[0]
 
         # --- 1. Prepare initial embeddings ---
@@ -180,9 +179,9 @@ class VoxtralTtsGenerationMixin(GenerationMixin):
             acoustic_codes_discrete = torch.clamp(
                 torch.round(acoustic_value), 0, config.acoustic_codebook_size - 1
             ).long()
-            frame_codes = torch.cat(
-                [clamped_semantic.unsqueeze(-1), acoustic_codes_discrete], dim=-1
-            ).unsqueeze(1)  # (B, 1, num_codebooks)
+            frame_codes = torch.cat([clamped_semantic.unsqueeze(-1), acoustic_codes_discrete], dim=-1).unsqueeze(
+                1
+            )  # (B, 1, num_codebooks)
 
             frame_embeds = self.backbone_model.embed_tokens(frame_codes)
 

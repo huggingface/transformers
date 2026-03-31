@@ -183,9 +183,7 @@ class VoxtralTtsModelTester:
         model.eval()
 
         result = model(audio_codes=audio_codes)
-        self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_audio_frames, config.vocab_size)
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_audio_frames, config.vocab_size))
 
 
 @require_torch

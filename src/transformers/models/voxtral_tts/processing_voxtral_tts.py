@@ -191,22 +191,19 @@ class VoxtralTtsProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchFeature:
         r"""
-        Prepare inputs for the Voxtral TTS model.
-
-        Args:
-            text (`str` or `list[str]`):
-                The text to synthesize. Will be tokenized using the underlying tokenizer.
-            voice_preset (`str`, `torch.Tensor`, *optional*):
-                Voice preset to use for generation. Can be:
-                - A preset name (e.g. `"neutral_female"`)
-                - A path to a local `.pt` file containing audio codes
-                - A `torch.Tensor` of pre-computed audio codes
-            return_tensors (`str`, *optional*, defaults to `"pt"`):
-                The type of tensors to return.
-            add_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether to add special tokens when tokenizing the text.
-            **kwargs:
-                Additional keyword arguments passed to the tokenizer.
+        text (`str` or `list[str]`):
+            The text to synthesize. Will be tokenized using the underlying tokenizer.
+        voice_preset (`str`, `torch.Tensor`, *optional*):
+            Voice preset to use for generation. Can be:
+            - A preset name (e.g. `"neutral_female"`)
+            - A path to a local `.pt` file containing audio codes
+            - A `torch.Tensor` of pre-computed audio codes
+        return_tensors (`str`, *optional*, defaults to `"pt"`):
+            The type of tensors to return.
+        add_special_tokens (`bool`, *optional*, defaults to `True`):
+            Whether to add special tokens when tokenizing the text.
+        **kwargs:
+            Additional keyword arguments passed to the tokenizer.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -274,4 +271,3 @@ class VoxtralTtsProcessor(ProcessorMixin):
 
 
 __all__ = ["VoxtralTtsProcessor"]
-
