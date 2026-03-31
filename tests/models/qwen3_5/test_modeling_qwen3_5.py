@@ -596,11 +596,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        return Qwen3_5TextModelTest.test_reverse_loading_mapping(
-            self, check_keys_were_modified=check_keys_were_modified
-        )
-
 
 @require_torch
 class Qwen3_5IntegrationTest(unittest.TestCase):

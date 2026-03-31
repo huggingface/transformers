@@ -1,0 +1,84 @@
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Fusion mapping (experimental feature)
+
+Fusion mapping provides an opt-in way to replace model submodules at load time while preserving the original checkpoint format.
+
+It builds on:
+
+- [Monkey patching](./monkey_patching) to swap module classes before model instantiation.
+- [Dynamic weight loading](./weightconverter) to map weights between the original and fused runtime layouts.
+
+> [!WARNING]
+> Fusion mapping is an experimental loading feature. It changes the runtime module structure and may affect model behavior. Use it only when you explicitly want a fused runtime layout.
+
+## Quick start
+
+Fusion is enabled through [`~PreTrainedModel.from_pretrained`] with `fusion_config`:
+
+```python
+from transformers import Qwen2VLForConditionalGeneration
+
+
+model = Qwen2VLForConditionalGeneration.from_pretrained(
+    "Qwen/Qwen2-VL-2B-Instruct",
+    fusion_config={"patch_embeddings": True},
+)
+```
+
+By default, no fusion is applied.
+
+## How it works
+
+Fusion registration happens before the model is instantiated:
+
+1. [`~PreTrainedModel.from_pretrained`] passes `fusion_config` to `register_fusion_patches(...)`.
+2. The fusion registry validates the requested fusion names.
+3. Each enabled fusion meta-initializes the target model class and discovers compatible modules.
+4. Fused replacement classes are registered through [`~transformers.monkey_patching.register_patch_mapping`].
+5. Matching [`~WeightConverter`] objects are registered so checkpoint loading can map weights into the fused runtime layout.
+6. During [`~PreTrainedModel.save_pretrained`], the reverse conversion path restores the original checkpoint layout.
+
+This lets a fusion use a different runtime module structure while still saving back to the original checkpoint format.
+
+## Current fusion families
+
+Currently, `fusion_config` supports one fusion family:
+
+- `patch_embeddings`
+  Enable with:
+
+  ```python
+  fusion_config = {"patch_embeddings": True}
+  ```
+
+  Effect:
+  Replaces compatible `nn.Conv3d` patch embedding projections with equivalent flattened `nn.Linear` projections at runtime.
+
+## Extending fusion mapping
+
+To add a new fusion family:
+
+1. Add an `is_fusable` predicate.
+   This decides whether a discovered module is compatible with the fusion.
+2. Add a `make_fused_class` factory.
+   This returns the runtime replacement class for a compatible module class.
+3. Add a `make_weight_converter` factory if the fused layout needs checkpoint conversion.
+   This defines how checkpoint weights are mapped between the original and fused layouts.
+4. Register the new `ModuleFusionSpec` in [`fusion_mapping.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/fusion_mapping.py).
+
+Once registered, the new fusion becomes available through `fusion_config`.

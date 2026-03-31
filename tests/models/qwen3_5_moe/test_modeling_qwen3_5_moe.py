@@ -401,11 +401,6 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        return Qwen3_5MoeTextModelTest.test_reverse_loading_mapping(
-            self, check_keys_were_modified=check_keys_were_modified
-        )
-
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         "Qwen3.5 Moe has a special Cache as it alternates with gated deltanet layers"
         self.assertIsInstance(past_key_values, Qwen3_5MoeDynamicCache)

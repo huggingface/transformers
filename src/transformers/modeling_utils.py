@@ -3873,7 +3873,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 its value can either be `True` to enable that fusion with default options or a dictionary of
                 family-specific options. For example, `{"patch_embeddings": True}` enables patch embedding fusion.
                 This should only be used as an inference optimization, as it can slightly change outputs; refer to
-                https://github.com/huggingface/transformers/pull/45041.
+                the fusion mapping guide in `docs/source/en/fusion_mapping.md` for more details.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.

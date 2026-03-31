@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Fusion registration helpers.
+
+See `docs/source/en/fusion_mapping.md` for the design overview and extension guide.
+"""
+
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -37,6 +42,8 @@ _FUSION_DISCOVERY_CACHE: dict[str, dict[type, tuple[dict[str, type[nn.Module]], 
 
 @dataclass(frozen=True)
 class ModuleFusionSpec:
+    """Recipe for a fusion family handled by `register_fusion_patches()`."""
+
     is_fusable: Callable[[nn.Module], bool]
     make_fused_class: Callable[[type[nn.Module], nn.Module], type[nn.Module]]
     make_weight_converter: Callable[[str, nn.Module], WeightConverter]
@@ -190,6 +197,12 @@ def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]])
 def register_fusion_patches(
     cls: "type[PreTrainedModel]", config, fusion_config: Mapping[str, bool | Mapping[str, Any]] | None = None
 ) -> None:
+    """Register requested runtime fusions for `cls`.
+
+    `fusion_config` is validated against `_FUSION_REGISTRY`, so adding a new
+    fusion type is a matter of registering a new `ModuleFusionSpec` here.
+    """
+
     if not fusion_config:
         return
 
