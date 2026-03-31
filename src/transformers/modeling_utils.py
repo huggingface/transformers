@@ -3280,42 +3280,53 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
-        # Detect if embeddings have been untied at runtime (e.g. after PEFT merge or vocab resize
-        # with independent training). If the config still says tie_word_embeddings=True but the
-        # actual tensor storages differ, update the config to prevent weight corruption on reload.
-        if getattr(model_to_save.config, "tie_word_embeddings", False):
-            try:
-                input_embeddings = model_to_save.get_input_embeddings()
+        # Detect if tie_word_embeddings=True but the actual weights have diverged (e.g. after PEFT merge_and_unload)
+        # This mirrors the load-side check at tie_weights() which uses torch.equal
+        # Only auto-fix if the output embeddings are actually declared as tied to the input embeddings
+        # in _tied_weights_keys (some models like Pop2Piano have lm_head but don't tie it)
+        try:
+            if getattr(model_to_save.config, "tie_word_embeddings", False):
                 output_embeddings = model_to_save.get_output_embeddings()
-                if (
-                    input_embeddings is not None
-                    and output_embeddings is not None
-                    and hasattr(input_embeddings, "weight")
-                    and hasattr(output_embeddings, "weight")
-                ):
-                    in_weight = input_embeddings.weight
-                    out_weight = output_embeddings.weight
-                    # If they don't share identical memory, their values might still be identical (e.g. cloned).
-                    # If their values differ entirely (like after PEFT merge), they are functionally untied.
-                    if in_weight.data_ptr() != out_weight.data_ptr():
-                        if in_weight.device != out_weight.device:
-                            is_tied = torch.equal(in_weight.to(out_weight.device), out_weight)
-                        else:
-                            is_tied = torch.equal(in_weight, out_weight)
+                input_embeddings = model_to_save.get_input_embeddings()
+                if output_embeddings is not None and input_embeddings is not None:
+                    out_w = getattr(output_embeddings, "weight", None)
+                    in_w = getattr(input_embeddings, "weight", None)
+                    if out_w is not None and in_w is not None:
+                        # Verify that the model actually declares these weights as tied
+                        # via _tied_weights_keys before attempting auto-fix
+                        tied_keys = getattr(model_to_save, "_tied_weights_keys", None) or {}
+                        out_names = {n for n, p in model_to_save.named_parameters() if p is out_w}
+                        in_names = {n for n, p in model_to_save.named_parameters() if p is in_w}
+                        embeddings_declared_tied = any(
+                            (k in out_names and v in in_names) or (k in in_names and v in out_names)
+                            for k, v in tied_keys.items()
+                        )
+                        if not embeddings_declared_tied:
+                            pass  # lm_head exists but is not tied to input embeddings — skip
+                        elif out_w is not in_w:
+                            # They are separate Python objects — check if values diverged
+                            weights_differ = False
+                            if out_w.shape != in_w.shape:
+                                weights_differ = True
+                            elif out_w.device != in_w.device:
+                                # Cross-device: skip comparison to avoid false positives
+                                # in model-parallel / offloading scenarios
+                                pass
+                            elif out_w.device.type != "meta" and not torch.equal(out_w, in_w):
+                                weights_differ = True
 
-                        if not is_tied:
-                            logger.warning(
-                                "The model config specifies `tie_word_embeddings=True` but the input and output embeddings"
-                                " do not share the same weights (they may have been untied after PEFT adapter merging or"
-                                " vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config to prevent"
-                                " weight corruption on reload."
-                            )
-                            model_to_save.config.tie_word_embeddings = False
-            except NotImplementedError:
-                pass
-            except Exception as e:
-                # Catch any device/meta tensor related errors gracefully
-                logger.debug("Could not check tied embeddings during save: %s", e)
+                            if weights_differ:
+                                model_to_save.config.tie_word_embeddings = False
+                                logger.warning(
+                                    "Detected that the model config has `tie_word_embeddings=True` but the input "
+                                    "and output embeddings have different values (e.g. after PEFT merging or "
+                                    "vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config "
+                                    "to prevent weight corruption on reload."
+                                )
+        except NotImplementedError:
+            pass
+        except Exception as e:
+            logger.debug(f"Could not check tied embeddings consistency during save: {e}")
 
         # Save the config
         if is_main_process:
