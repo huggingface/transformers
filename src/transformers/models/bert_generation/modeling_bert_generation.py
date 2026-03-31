@@ -191,7 +191,6 @@ class BertGenerationCrossAttention(nn.Module):
 
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
-
         # get query proj
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 

@@ -622,9 +622,7 @@ class MoonshineStreamingAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
 
         hidden_shape = (*input_shape, -1, self.head_dim)
-        query_states = (
-            self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        )
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_cross_attention = key_value_states is not None
         if past_key_values is not None:

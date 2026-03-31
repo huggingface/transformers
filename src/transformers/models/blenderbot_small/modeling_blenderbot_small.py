@@ -176,7 +176,6 @@ class BlenderbotSmallAttention(nn.Module):
 
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-
         # get query proj
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 

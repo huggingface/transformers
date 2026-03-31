@@ -143,21 +143,9 @@ class MPNetSelfAttention(nn.Module):
     ):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
-        q = (
-            self.q(hidden_states)
-            .view(hidden_shape)
-            .transpose(1, 2)
-        )
-        k = (
-            self.k(hidden_states)
-            .view(hidden_shape)
-            .transpose(1, 2)
-        )
-        v = (
-            self.v(hidden_states)
-            .view(hidden_shape)
-            .transpose(1, 2)
-        )
+        q = self.q(hidden_states).view(hidden_shape).transpose(1, 2)
+        k = self.k(hidden_states).view(hidden_shape).transpose(1, 2)
+        v = self.v(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(q, k.transpose(-1, -2))

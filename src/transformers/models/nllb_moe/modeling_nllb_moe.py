@@ -460,7 +460,6 @@ class NllbMoeAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         is_updated = False
         if past_key_values is not None:

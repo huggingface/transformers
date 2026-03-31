@@ -197,12 +197,8 @@ class ConvBertSelfAttention(nn.Module):
         mixed_query_layer = self.query(hidden_states)
         query_layer = mixed_query_layer.view(hidden_shape).transpose(1, 2)
 
-
-        key_layer = mixed_key_layer.view(hidden_shape).transpose(
-            1, 2
-        )
+        key_layer = mixed_key_layer.view(hidden_shape).transpose(1, 2)
         value_layer = mixed_value_layer.view(hidden_shape).transpose(1, 2)
-
 
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
@@ -244,7 +240,9 @@ class ConvBertSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
-        conv_out = torch.reshape(conv_out_layer, [input_shape[0], -1, self.num_attention_heads, self.attention_head_size])
+        conv_out = torch.reshape(
+            conv_out_layer, [input_shape[0], -1, self.num_attention_heads, self.attention_head_size]
+        )
         context_layer = torch.cat([context_layer, conv_out], 2)
 
         # conv and context
