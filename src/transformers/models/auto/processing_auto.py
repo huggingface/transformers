@@ -403,7 +403,7 @@ class AutoProcessor:
 
         has_remote_code = processor_auto_map is not None
         has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not type(config).__module__.startswith("transformers.")
+        explicit_local_code = has_local_code and not (processor_class or PROCESSOR_MAPPING[type(config)]).__module__.startswith("transformers.")
         if has_remote_code:
             if "--" in processor_auto_map:
                 upstream_repo = processor_auto_map.split("--")[0]

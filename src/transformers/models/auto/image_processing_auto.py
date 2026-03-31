@@ -724,7 +724,7 @@ class AutoImageProcessor:
         # Handle remote code
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
-        explicit_local_code = has_local_code and not type(config).__module__.startswith("transformers.")
+        explicit_local_code = has_local_code and not (image_processor_class or IMAGE_PROCESSOR_MAPPING[type(config)]).__module__.startswith("transformers.")
         if has_remote_code:
             class_ref = _resolve_auto_map_class_ref(image_processor_auto_map, backend)
             upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
