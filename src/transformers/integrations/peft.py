@@ -222,6 +222,15 @@ class PermuteDims(ConversionOps):
         return f"{self.__class__.__name__}(dims={self.dims})"
 
 
+def _build_lora_tp_plan(model) -> dict[str, str]:
+    lora_tp_plan: dict[str, str] = {}
+    for module in model.modules():
+        tp_info = getattr(module, "_tp_info", None)
+        if tp_info is not None:
+            lora_tp_plan.update(tp_info.tp_plan)
+    return lora_tp_plan
+
+
 # TODO: remove once PEFT < 0.19 no longer supported
 def build_peft_weight_mapping(
     weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str, peft_config=None
@@ -615,6 +624,13 @@ class PeftAdapterMixin:
             weight_mapping=peft_weight_conversions,
             device_map=device_map,
         )
+        # For TP models, extend _tp_plan with LoRA-specific patterns so that
+        # convert_and_load_state_dict_in_model shards LoRA weights when loading from checkpoint.
+        lora_tp_plan = _build_lora_tp_plan(self)
+        if lora_tp_plan:
+            original_tp_plan = self._tp_plan
+            self._tp_plan = lora_tp_plan
+
         loading_info, _ = self._load_pretrained_model(
             model=self,
             state_dict=adapter_state_dict,
@@ -624,6 +640,9 @@ class PeftAdapterMixin:
             # unexpected entries, like "layer.SCB" from a bnb layer.
             expected_keys=[n for n, _ in self.named_parameters()],
         )
+
+        if lora_tp_plan:
+            self._tp_plan = original_tp_plan
 
         if peft_config.inference_mode:
             from peft.tuners.tuners_utils import BaseTunerLayer
@@ -641,6 +660,9 @@ class PeftAdapterMixin:
             return any(marker in key for marker in adapter_key_markers)
 
         loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
+
+        for n, p in self.named_parameters():
+            print(f"{n} => {p.shape}")
 
         log_state_dict_report(
             model=self,
