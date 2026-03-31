@@ -18,21 +18,17 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ...audio_utils import AudioInput, make_list_of_audio
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
-from ...modeling_outputs import (
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-)
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM
-from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
-    _get_feat_extract_output_lengths,
-)
+from ...utils import TransformersKwargs, auto_docstring
+from ..audioflamingo3.modeling_audioflamingo3 import AudioFlamingo3ForConditionalGeneration
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
+from ..qwen3_omni_moe.modeling_qwen3_omni_moe import _get_feat_extract_output_lengths
 
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
@@ -212,48 +208,21 @@ class Qwen3ASRProcessor(ProcessorMixin):
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
 
 
-@auto_docstring
-class Qwen3ASRPreTrainedModel(PreTrainedModel):
-    config: Qwen3ASRConfig
-    base_model_prefix = "model"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
     _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
 
 @auto_docstring(
     custom_intro="""
-    The Qwen3ASR model which consists of an audio backbone and a language model.
+    The Qwen3ASR model which consists of an audio encoder and a language model.
     """
 )
-class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin):
-    config_class = Qwen3ASRConfig
-    _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3DecoderLayer"]
-
+class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.audio_tower = AutoModel.from_config(config.audio_config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.language_model.set_output_embeddings(new_embeddings)
+        del self.multi_modal_projector
 
     def get_audio_features(
         self,
@@ -281,25 +250,24 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             feature_lens=audio_feature_lengths,
             **kwargs,
         )
+        audio_output.pooler_output = audio_output.last_hidden_state
 
         return audio_output
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
-        input_ids=None,
-        input_features=None,
-        attention_mask=None,
-        input_features_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -311,46 +279,19 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
-                input_features, input_features_mask, return_dict=True
-            ).last_hidden_state
-
-            # replace text-audio token placeholders with audio embeddings
-            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-            inputs_embeds = inputs_embeds.masked_scatter(
-                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
-            )
-
-        outputs: CausalLMOutputWithPast = self.language_model(
+        return super().forward(
+            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )
-
-        return outputs
-
-    def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
-        input_features = kwargs.pop("input_features", None)
-        input_features_mask = kwargs.pop("input_features_mask", None)
-
-        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-        if is_first_iteration or not model_inputs.get("use_cache", False):
-            if input_features is not None:
-                model_inputs["input_features"] = input_features
-            if input_features_mask is not None:
-                model_inputs["input_features_mask"] = input_features_mask
-
-        return model_inputs
 
 
 __all__ = [
