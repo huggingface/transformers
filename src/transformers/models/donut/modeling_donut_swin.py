@@ -312,7 +312,7 @@ class DonutSwinPatchMerging(nn.Module):
         input_feature = self.maybe_pad(input_feature, height, width)
         # Interleave rows and columns to produce [batch_size, height/2*width/2, 4*num_channels]
         input_feature = torch.cat(
-            [input_feature[:, row::2, col::2, :] for row in range(2) for col in range(2)], dim=-1
+            [input_feature[:, row::2, col::2, :] for col in range(2) for row in range(2)], dim=-1
         )
         input_feature = input_feature.view(batch_size, -1, 4 * num_channels)
 
