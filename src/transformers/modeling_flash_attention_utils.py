@@ -415,7 +415,9 @@ def _process_flash_attention_kwargs(
         supports_mapping=supports_mapping,
     )
 
-    deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+    deterministic = (
+        deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+    )
     for assignable_variable, original_variable_name in zip(
         [is_causal, dropout, softmax_scale, softcap, deterministic, s_aux, cu_seqlens_q, cu_seqlens_k],
         ["causal", "dropout_p", "softmax_scale", "softcap", "deterministic", "s_aux", "cu_seqlens_q", "cu_seqlens_k"],
