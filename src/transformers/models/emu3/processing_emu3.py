@@ -25,7 +25,7 @@ from ...utils.import_utils import requires
 
 
 if is_vision_available():
-    from .image_processing_emu3 import Emu3ImageProcessorKwargs, smart_resize
+    from .image_processing_pil_emu3 import Emu3ImageProcessorKwargs, smart_resize
 
 
 class Emu3TextKwargs(TextKwargs, total=False):

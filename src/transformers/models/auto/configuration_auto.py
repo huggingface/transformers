@@ -38,6 +38,22 @@ with open(f"{root_path}/auto_mappings.json", "r") as f:
 CONFIG_MAPPING_NAMES = OrderedDict(**all_mappings["CONFIG_MAPPING_NAMES"])
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(**all_mappings["SPECIAL_MODEL_TYPE_TO_MODULE_NAME"])
 
+# Non-standard models that can't be inferred from parsing the code
+CONFIG_MAPPING_NAMES.update(
+    {
+        "nougat": "VisionEncoderDecoderConfig",
+        "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
+        "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
+    }
+)
+
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
+    {
+        "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
+        "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
+    }
+)
+
 # This is tied to the processing `-` -> `_` in `model_type_to_module_name`. For example, instead of putting
 # `transfo-xl` (as in `CONFIG_MAPPING_NAMES`), we should use `transfo_xl`.
 DEPRECATED_MODELS = []

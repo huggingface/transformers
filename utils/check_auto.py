@@ -65,8 +65,6 @@ def build_image_processor_mapping(
 ) -> OrderedDict[str, dict[str, str | None]]:
     processor_mapping = OrderedDict()
     for model_type in config_mapping:
-        if model_type in special_mapping:
-            model_type = special_mapping[model_type]
 
         module = model_type.replace("-", "_")
         fast_processor_name = slow_processor_name = None

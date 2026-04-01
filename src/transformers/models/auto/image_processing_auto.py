@@ -110,6 +110,7 @@ else:
                 "pil": "GroundingDinoImageProcessorPil",
             },
             "mobilevitv2": {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"},
+            "nougat": {"torchvision": "NougatImageProcessor", "pil": "NougatImageProcessorPil"},
             "omdet-turbo": {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"},
             "paligemma": {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"},
             "pixio": {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"},

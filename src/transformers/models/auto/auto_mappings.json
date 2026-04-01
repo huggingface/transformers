@@ -550,6 +550,7 @@
     "qwen3_vl_vision": "Qwen3VLVisionConfig",
     "qwen3_vl_text": "Qwen3VLTextConfig",
     "qwen3_vl": "Qwen3VLConfig",
+    "vibevoice_asr": "VibeVoiceAsrConfig",
     "superpoint": "SuperPointConfig",
     "cwm": "CwmConfig",
     "blip_2_vision_model": "Blip2VisionConfig",
@@ -921,7 +922,7 @@
       "pil": "PromptDepthAnythingImageProcessorPil",
       "torchvision": "PromptDepthAnythingImageProcessor"
     },
-    "grounding_dino": {
+    "grounding-dino": {
       "pil": "GroundingDinoImageProcessorPil",
       "torchvision": "GroundingDinoImageProcessor"
     },
@@ -932,10 +933,6 @@
     "bridgetower": {
       "pil": "BridgeTowerImageProcessorPil",
       "torchvision": "BridgeTowerImageProcessor"
-    },
-    "kosmos2_5": {
-      "pil": "Kosmos2_5ImageProcessorPil",
-      "torchvision": "Kosmos2_5ImageProcessor"
     },
     "imagegpt": {
       "pil": "ImageGPTImageProcessorPil",
@@ -1024,6 +1021,9 @@
     "chmv2": {
       "torchvision": "CHMv2ImageProcessor"
     },
+    "emu3": {
+      "pil": "Emu3ImageProcessor"
+    },
     "perceiver": {
       "pil": "PerceiverImageProcessorPil",
       "torchvision": "PerceiverImageProcessor"
@@ -1048,10 +1048,6 @@
     "efficientnet": {
       "pil": "EfficientNetImageProcessorPil",
       "torchvision": "EfficientNetImageProcessor"
-    },
-    "donut": {
-      "pil": "DonutImageProcessorPil",
-      "torchvision": "DonutImageProcessor"
     },
     "owlvit": {
       "pil": "OwlViTImageProcessorPil",
