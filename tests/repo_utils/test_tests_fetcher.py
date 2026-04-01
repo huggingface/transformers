@@ -39,6 +39,7 @@ from tests_fetcher import (  # noqa: E402
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
+    get_diff,
     get_module_dependencies,
     get_repo_utils_tests,
     get_tree_starting_at,
@@ -312,6 +313,23 @@ class TestFetcherTester(unittest.TestCase):
 
             commit_changes(bert_file, BERT_MODEL_FILE_NEW_CODE, repo)
             assert not diff_is_docstring_only(repo, branching_point, bert_file)
+
+    def test_get_diff_ignores_docstring_only_changes(self):
+        """Files whose diff is only in docstrings/comments should be excluded from get_diff results."""
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            repo = create_tmp_repo(tmp_folder)
+            branching_commit = repo.head.commit
+
+            # Docstring-only change: should NOT appear in diff
+            commit_changes(BERT_MODELING_FILE, BERT_MODEL_FILE_NEW_DOCSTRING, repo)
+            diff = get_diff(repo, repo.head.commit, [branching_commit])
+            assert BERT_MODELING_FILE not in diff
+
+            # Real code change: should appear in diff
+            commit_changes(BERT_MODELING_FILE, BERT_MODEL_FILE_NEW_CODE, repo)
+            diff = get_diff(repo, repo.head.commit, [branching_commit])
+            assert BERT_MODELING_FILE in diff
 
     def test_extract_imports_relative(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
