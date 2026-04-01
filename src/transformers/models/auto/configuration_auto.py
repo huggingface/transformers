@@ -40,7 +40,7 @@ missing_config_mapping_names = {
     "nougat": "VisionEncoderDecoderConfig",
     "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
     "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
-    # Zero idea why two model names map to the same config, but here we go
+    # Zero idea why two model names map to the same config, but here we go. FIXME @raushan!
     # This has to be defined after `Nougat` so we put `missing_config_mapping_names` before auto-dict
     "vision-encoder-decoder": "VisionEncoderDecoderConfig",
 }
