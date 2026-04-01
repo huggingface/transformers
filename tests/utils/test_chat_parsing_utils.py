@@ -213,7 +213,7 @@ re_sub_schema = {
             },
         },
     },
-    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>.*?)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>(?:(?!\<\|tool_call\>).)+)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
 }
 
 prefix_items_schema = {
@@ -433,7 +433,6 @@ class ChatSchemaParserTest(unittest.TestCase):
             parsed,
             {
                 "role": "assistant",
-                "content": "",
                 "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
                 "tool_calls": [
                     {
