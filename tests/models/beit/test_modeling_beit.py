@@ -304,7 +304,8 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             if not any("fpn.fpn1." in k for k in model.state_dict()):
                 conversions = [
-                    c for c in conversions
+                    c
+                    for c in conversions
                     if not (isinstance(c, WeightRenaming) and set(c.source_patterns) & _FPN_SOURCE)
                 ]
             return conversions
