@@ -480,9 +480,11 @@ class AnyToAnyPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        generated_text = list(prompt_text.messages) + [
-                            {"role": "assistant", "content": generated_text}
-                        ]
+                        if getattr(self.tokenizer, "response_schema", False):
+                            assistant_message = self.tokenizer.parse_response(generated_text)
+                        else:
+                            assistant_message = {"role": "assistant", "content": generated_text}
+                        generated_text = list(prompt_text.messages) + [assistant_message]
                 full_texts.append(generated_text)
             generated_outputs = full_texts
 
