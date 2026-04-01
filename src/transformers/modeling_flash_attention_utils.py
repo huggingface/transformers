@@ -316,6 +316,11 @@ def _consolidate_flash_kwarg_alternative_name(
             The potential object to be passed as kwarg, depending on whether it is supported or not.
         original_name (`str`):
             The kwarg name associated with the `obj`. This is based on first conventions from the original FA package.
+        supports_mapping (`dict[str, bool]`):
+            An dict containing the underlying information of the Flash Attention function on its supported parameters.
+            Keys are all valid parameters (and alternative names) across all standards and values are whether any of these
+            parameters could be found in their underlying signatures (in each case). For more information, please check
+            `_lazy_define_process_function` that creates this mapping.
     Return:
         name (`str`, *optional*):
             The associated name the object was added to the kwargs (if it was added; otherwise None).
@@ -394,6 +399,11 @@ def _process_flash_attention_kwargs(
             The cumulative sequence lengths within the query tensor during a varlen forward.
         cu_seqlens_k (`torch.IntTensor]`, *optional*):
             The cumulative sequence lengths within the key/value tensor during a varlen forward.
+        supports_mapping (`dict[str, bool]`):
+            An dict containing the underlying information of the Flash Attention function on its supported parameters.
+            Keys are all valid parameters (and alternative names) across all standards and values are whether any of these
+            parameters could be found in their underlying signatures (in each case). For more information, please check
+            `_lazy_define_process_function` that creates this mapping.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
