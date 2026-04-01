@@ -94,6 +94,7 @@ from .logits_process import (
     TemperatureLogitsWarper,
     TopHLogitsWarper,
     TopKLogitsWarper,
+    TopNSigmaLogitsWarper,
     TopPLogitsWarper,
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
@@ -1218,6 +1219,13 @@ class GenerationMixin(ContinuousMixin):
                 # Applied after temperature scaling (see https://github.com/ggerganov/llama.cpp/pull/3841#issuecomment-2073826084)
                 processors.append(
                     MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
+                )
+            if generation_config.top_n_sigma is not None:
+                processors.append(
+                    TopNSigmaLogitsWarper(
+                        n_sigma=generation_config.top_n_sigma,
+                        min_tokens_to_keep=min_tokens_to_keep,
+                    )
                 )
             if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
                 processors.append(

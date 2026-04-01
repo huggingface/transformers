@@ -768,6 +768,60 @@ class MinPLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+class TopNSigmaLogitsWarper(LogitsProcessor):
+    """
+    [`LogitsProcessor`] that performs top-nσ, i.e. keeps all tokens with logits above a dynamic threshold,
+    computed as `max(logits) - n_sigma * std(logits)`.
+
+    This method operates on raw logits and can be used as an alternative to [`TopPLogitsWarper`],
+    [`TopKLogitsWarper`], and [`MinPLogitsWarper`].
+
+    Args:
+        n_sigma (`float`):
+            Number of standard deviations below the maximum logit used as the filtering threshold. Must be a
+            non-negative float.
+        filter_value (`float`, *optional*, defaults to -inf):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
+    def __init__(self, n_sigma: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+        if not isinstance(n_sigma, (float, int)) or n_sigma < 0.0:
+            raise ValueError(f"`n_sigma` has to be a non-negative float, but is {n_sigma}")
+        if not isinstance(min_tokens_to_keep, int) or (min_tokens_to_keep < 1):
+            raise ValueError(f"`min_tokens_to_keep` has to be a positive integer, but is {min_tokens_to_keep}")
+
+        self.n_sigma = float(n_sigma)
+        self.filter_value = filter_value
+        self.min_tokens_to_keep = min_tokens_to_keep
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        finite_mask = torch.isfinite(scores)
+        scores_for_stats = torch.where(finite_mask, scores, torch.zeros_like(scores))
+        valid_counts = finite_mask.sum(dim=-1, keepdim=True).clamp(min=1)
+
+        mean = scores_for_stats.sum(dim=-1, keepdim=True) / valid_counts
+        centered = torch.where(finite_mask, scores - mean, torch.zeros_like(scores))
+        sigma = torch.sqrt((centered * centered).sum(dim=-1, keepdim=True) / valid_counts)
+
+        min_score = torch.finfo(scores.dtype).min
+        max_values = torch.where(finite_mask, scores, torch.full_like(scores, min_score)).amax(dim=-1, keepdim=True)
+        threshold = max_values - self.n_sigma * sigma
+        tokens_to_remove = (scores < threshold) & finite_mask
+
+        # Keep at least min_tokens_to_keep finite scores (clip k to vocab size if needed)
+        k = min(self.min_tokens_to_keep, scores.shape[-1])
+        top_scores = torch.where(finite_mask, scores, torch.full_like(scores, min_score))
+        sorted_indices = torch.topk(top_scores, k, dim=-1).indices
+        tokens_to_remove.scatter_(-1, sorted_indices, False)
+
+        # Preserve pre-masked non-finite values.
+        tokens_to_remove = tokens_to_remove | ~finite_mask
+        scores_processed = scores.masked_fill(tokens_to_remove, self.filter_value)
+        return scores_processed
+
+
 class TypicalLogitsWarper(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that performs typical decoding. Inspired on how humans use language, it prioritizes tokens

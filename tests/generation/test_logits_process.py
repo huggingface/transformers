@@ -50,6 +50,7 @@ if is_torch_available():
         TemperatureLogitsWarper,
         TopHLogitsWarper,
         TopKLogitsWarper,
+        TopNSigmaLogitsWarper,
         TopPLogitsWarper,
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
@@ -528,6 +529,66 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # first batch should keep two tokens, second batch would keep only 1, but due to `min_tokens_to_keep=2` keeps 2.
         self.assertListEqual((filtered_dist != 0.0).to(torch.long).sum(dim=-1).tolist(), [2, 2])
+
+    def test_top_n_sigma_dist_warper(self):
+        input_ids = None
+
+        scores = torch.tensor(
+            [[5.0, 4.0, 1.0, -1.0], [2.0, 2.0, 2.0, 2.0]],
+            device=torch_device,
+            dtype=torch.float,
+        )
+        top_n_sigma_warp = TopNSigmaLogitsWarper(n_sigma=1.0)
+        filtered_scores = top_n_sigma_warp(input_ids, scores)
+
+        # First row keeps only top 2; second row keeps all due to low dispersion.
+        self.assertListEqual(torch.isinf(filtered_scores[0]).tolist(), [False, False, True, True])
+        self.assertListEqual(torch.isinf(filtered_scores[1]).tolist(), [False, False, False, False])
+
+        # Processor should not change logits in-place.
+        self.assertFalse(torch.all(top_n_sigma_warp(input_ids, scores) == scores))
+
+    def test_top_n_sigma_zero_keeps_only_max(self):
+        input_ids = None
+
+        scores = torch.tensor([[1.0, 5.0, 3.0, 2.0, 5.0]], device=torch_device, dtype=torch.float)
+        top_n_sigma_warp = TopNSigmaLogitsWarper(n_sigma=0.0)
+        filtered_scores = top_n_sigma_warp(input_ids, scores)
+
+        self.assertListEqual(torch.isinf(filtered_scores[0]).tolist(), [True, False, True, True, False])
+
+    def test_top_n_sigma_temperature_invariance(self):
+        input_ids = None
+
+        base_scores = torch.randn(1, 500, device=torch_device, dtype=torch.float)
+        top_n_sigma_warp = TopNSigmaLogitsWarper(n_sigma=1.0)
+
+        mask_t1 = torch.isfinite(top_n_sigma_warp(input_ids, base_scores))
+        mask_t05 = torch.isfinite(top_n_sigma_warp(input_ids, base_scores / 0.5))
+        mask_t2 = torch.isfinite(top_n_sigma_warp(input_ids, base_scores / 2.0))
+
+        self.assertTrue(torch.equal(mask_t1, mask_t05))
+        self.assertTrue(torch.equal(mask_t1, mask_t2))
+
+    def test_top_n_sigma_warper_validation(self):
+        with self.assertRaises(ValueError):
+            TopNSigmaLogitsWarper(n_sigma=-1.0)
+        with self.assertRaises(ValueError):
+            TopNSigmaLogitsWarper(n_sigma="invalid")
+        with self.assertRaises(ValueError):
+            TopNSigmaLogitsWarper(n_sigma=1.0, min_tokens_to_keep=0)
+
+    def test_top_n_sigma_handles_prefiltered_scores(self):
+        input_ids = None
+
+        scores = torch.tensor([[2.0, 1.0, -float("inf"), -float("inf")]], device=torch_device, dtype=torch.float)
+        top_n_sigma_warp = TopNSigmaLogitsWarper(n_sigma=1.0)
+        filtered_scores = top_n_sigma_warp(input_ids, scores)
+
+        # No NaNs and pre-filtered values remain filtered.
+        self.assertFalse(torch.isnan(filtered_scores).any())
+        self.assertTrue(torch.isinf(filtered_scores[0, 2]))
+        self.assertTrue(torch.isinf(filtered_scores[0, 3]))
 
     def test_typical_dist_warper(self):
         input_ids = None

@@ -171,6 +171,9 @@ class GenerationConfig(PushToHubMixin):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
             the 0.99-0.8 range (use the opposite of normal `top_p` values).
+        top_n_sigma (`float`, *optional*):
+            If set, keeps only tokens with logits within `n_sigma` standard deviations of the maximum logit. Must be a
+            non-negative value.
         top_h (`float`, *optional*):
             Entropy budget scaling factor, which controls how much of the distribution’s entropy is preserved when sampling.
             Must be a value between 0 and 1. At each step, tokens are sorted by probability, and the smallest prefix of tokens
@@ -373,6 +376,7 @@ class GenerationConfig(PushToHubMixin):
         self.top_k = kwargs.pop("top_k", None)
         self.top_p = kwargs.pop("top_p", None)
         self.min_p = kwargs.pop("min_p", None)
+        self.top_n_sigma = kwargs.pop("top_n_sigma", None)
         self.top_h = kwargs.pop("top_h", None)
         self.typical_p = kwargs.pop("typical_p", None)
         self.epsilon_cutoff = kwargs.pop("epsilon_cutoff", None)
@@ -606,6 +610,8 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.top_n_sigma is not None and (not isinstance(self.top_n_sigma, (float, int)) or self.top_n_sigma < 0.0):
+            raise ValueError(f"`top_n_sigma` must be non-negative, but is {self.top_n_sigma}.")
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
@@ -649,6 +655,10 @@ class GenerationConfig(PushToHubMixin):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
             if self.min_p is not None:
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
+            if self.top_n_sigma is not None:
+                minor_issues["top_n_sigma"] = greedy_wrong_parameter_msg.format(
+                    flag_name="top_n_sigma", flag_value=self.top_n_sigma
+                )
             if self.top_h is not None:
                 minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
             if self.typical_p is not None and self.typical_p != 1.0:

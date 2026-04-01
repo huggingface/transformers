@@ -423,6 +423,7 @@ else:
             "TemperatureLogitsWarper",
             "TopHLogitsWarper",
             "TopKLogitsWarper",
+            "TopNSigmaLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
@@ -595,6 +596,7 @@ if TYPE_CHECKING:
     from .generation import TextStreamer as TextStreamer
     from .generation import TopHLogitsWarper as TopHLogitsWarper
     from .generation import TopKLogitsWarper as TopKLogitsWarper
+    from .generation import TopNSigmaLogitsWarper as TopNSigmaLogitsWarper
     from .generation import TopPLogitsWarper as TopPLogitsWarper
     from .generation import TypicalLogitsWarper as TypicalLogitsWarper
     from .generation import (

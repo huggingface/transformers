@@ -51,6 +51,7 @@ from transformers.generation import (
     SuppressTokensLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
+    TopNSigmaLogitsWarper,
     TopPLogitsWarper,
     TypicalLogitsWarper,
     UnbatchedClassifierFreeGuidanceLogitsProcessor,
@@ -192,6 +193,8 @@ class GenerationConfigTest(unittest.TestCase):
         # Impossible sets of parameters will raise an exception
         with self.assertRaises(ValueError):
             GenerationConfig(do_sample=False, num_beams=1, num_return_sequences=2)
+        with self.assertRaises(ValueError):
+            GenerationConfig(top_n_sigma=-0.1)
 
         # Passing `generate()`-only flags to `validate` will raise an exception
         with self.assertRaises(ValueError):
@@ -430,6 +433,19 @@ class GenerationConfigSerializationTest(unittest.TestCase):
 
         min_k_logits_wrap = MinPLogitsWarper(min_p=new_config.min_p)
         self.assertEqual(min_k_logits_wrap.min_p, min_p)
+
+    def test_serialize_generation_top_n_sigma(self):
+        """Tests that GenerationConfig is serialized and TopNSigmaLogitsWarper is initialized with top_n_sigma"""
+        top_n_sigma = 1.0
+
+        generation_config = GenerationConfig(top_n_sigma=top_n_sigma, do_sample=True)
+        with tempfile.TemporaryDirectory("test-generation-config") as tmp_dir:
+            generation_config.save_pretrained(tmp_dir)
+            new_config = GenerationConfig.from_pretrained(tmp_dir)
+        self.assertEqual(new_config.top_n_sigma, top_n_sigma)
+
+        top_n_sigma_warper = TopNSigmaLogitsWarper(n_sigma=new_config.top_n_sigma)
+        self.assertEqual(top_n_sigma_warper.n_sigma, top_n_sigma)
 
     def test_serialize_generation_typical_p(self):
         """Tests that GenerationConfig is serialized and TypicalLogitsWarper is initialized with mass"""
