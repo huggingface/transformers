@@ -110,7 +110,7 @@ tokenizer.batch_decode(generated_ids)[0]
 ```
 
 > [!TIP]
-> Bir modeli nasıl ince ayarlayacağını öğrenmek için [Trainer](#trainer-apisi) bölümüne atla.
+> Bir modeli nasıl ince ayarlayacağını öğrenmek için [Trainer](#trainer-api) bölümüne atla.
 
 ## Pipeline
 
