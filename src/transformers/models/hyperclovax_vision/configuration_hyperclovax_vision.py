@@ -107,6 +107,7 @@ class HCXVisionConfig(PreTrainedConfig):
         if isinstance(self.vision_config, dict):
             model_type = self.vision_config.get("model_type", "qwen2_5_vl_vision")
             model_type = "qwen2_5_vl_vision" if model_type == "qwen2_5_vl" else model_type
+            self.vision_config["model_type"] = model_type
             self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
         elif self.vision_config is None:
             self.vision_config = CONFIG_MAPPING["qwen2_5_vl_vision"]()

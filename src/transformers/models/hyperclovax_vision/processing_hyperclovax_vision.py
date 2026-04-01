@@ -87,11 +87,11 @@ class HCXVisionV2Processor(Qwen2VLProcessor):
         )
 
         image_inputs = videos_inputs = {}
-        if images is not None:
+        if images and images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
 
-        if videos is not None:
+        if videos and videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 

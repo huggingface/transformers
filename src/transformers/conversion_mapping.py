@@ -421,13 +421,14 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "hyperclovax": [
-            WeightRenaming(source_patterns=r"model.language_model.model", target_patterns="model"),
-            WeightRenaming(source_patterns=r"model.language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming("model.language_model.model", "model"),
+            WeightRenaming("model.language_model.lm_head", "lm_head"),
         ],
         "hyperclovax_vision": [
-            WeightRenaming("mm_projector", "projector"),
-            WeightRenaming("language_model.model", "language_model"),
             WeightRenaming("language_model.lm_head", "lm_head"),
+            WeightRenaming("mm_projector", "model.projector"),
+            WeightRenaming("language_model.model", "model.language_model"),
+            WeightRenaming("vision_model", "model.vision_model"),
         ],
         "legacy": [
             WeightRenaming(
