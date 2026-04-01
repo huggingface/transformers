@@ -477,6 +477,8 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
+        # Unlike CLIP, this model doesn't handle bc for `self.eos_token_id`, even if ths EOS
+        # token is 2 (it is set to 2 in released weights)
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
