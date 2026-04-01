@@ -59,8 +59,8 @@ class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 12
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 224
@@ -68,7 +68,7 @@ class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     num_channels: int = 3
     qkv_bias: bool = True
     layerscale_value: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     use_swiglu_ffn: bool = False
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None

@@ -50,8 +50,8 @@ class AlignTextConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 2
     initializer_range: float = 0.02
@@ -134,7 +134,7 @@ class AlignVisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     batch_norm_eps: float = 0.001
     batch_norm_momentum: float = 0.99
-    drop_connect_rate: float = 0.2
+    drop_connect_rate: float | int = 0.2
 
     def __post_init__(self, **kwargs):
         self.num_hidden_layers = sum(self.num_block_repeats) * 4

@@ -120,14 +120,14 @@ class ReformerConfig(PreTrainedConfig):
     feed_forward_size: int = 512
     hash_seed: int | None = None
     hidden_act: str = "relu"
-    hidden_dropout_prob: float = 0.05
+    hidden_dropout_prob: float | int = 0.05
     hidden_size: int = 256
     initializer_range: float = 0.02
     is_decoder: bool = False
     layer_norm_eps: float = 1e-12
     local_num_chunks_before: int = 1
     local_num_chunks_after: int = 0
-    local_attention_probs_dropout_prob: float = 0.05
+    local_attention_probs_dropout_prob: float | int = 0.05
     local_attn_chunk_length: int = 64
     lsh_attn_chunk_length: int | None = 64
     lsh_attention_probs_dropout_prob: float | None = 0.0
