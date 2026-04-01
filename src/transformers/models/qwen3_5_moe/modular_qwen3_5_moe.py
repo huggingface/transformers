@@ -35,7 +35,6 @@ from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextDecoderLayer,
-    Qwen3NextDynamicCache,
     Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
@@ -153,10 +152,6 @@ class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
 
 
 class Qwen3_5MoeTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
-    pass
-
-
-class Qwen3_5MoeDynamicCache(Qwen3NextDynamicCache):
     pass
 
 

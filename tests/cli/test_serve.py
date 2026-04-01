@@ -729,6 +729,38 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
             f"(last seen at {last_seen}). Check cancellation propagation.",
         )
 
+    def test_non_streaming_response_json_format(self):
+        """
+        Tests that non-streaming continuous batching responses return proper JSON objects,
+        not double-encoded JSON strings (regression test for JSON serialization fix).
+        """
+        client = OpenAI(base_url=f"http://localhost:{self.port}/v1", api_key="<KEY>")
+
+        # Make a non-streaming request
+        response = client.chat.completions.create(
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            messages=[{"role": "user", "content": "Say hello"}],
+            stream=False,
+            max_tokens=5,
+        )
+
+        # Verify response is a proper ChatCompletion object (not a string)
+        self.assertIsNotNone(response)
+        self.assertIsNotNone(response.id)
+        self.assertIsNotNone(response.choices)
+        self.assertEqual(len(response.choices), 1)
+
+        # Verify the choice has proper structure
+        choice = response.choices[0]
+        self.assertIsNotNone(choice.message)
+        self.assertIsNotNone(choice.message.content)
+        self.assertEqual(choice.message.role, "assistant")
+
+        # Verify content is a string, not a serialized JSON
+        content = choice.message.content
+        self.assertIsInstance(content, str)
+        self.assertTrue(len(content) > 0)
+
 
 @require_openai
 class ServeResponsesMixin:

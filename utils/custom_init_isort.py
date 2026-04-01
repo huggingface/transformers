@@ -41,6 +41,14 @@ from collections.abc import Callable
 from typing import Any
 
 
+CHECKER_CONFIG = {
+    "name": "init_isort",
+    "label": "Import ordering",
+    "file_globs": ["src/transformers/**/__init__.py"],
+    "check_args": ["--check_only"],
+    "fix_args": [],
+}
+
 # Path is defined with the intent you should run this script from the root of the repo.
 PATH_TO_TRANSFORMERS = "src/transformers"
 
