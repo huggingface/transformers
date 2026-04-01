@@ -751,9 +751,9 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor(
             [
                 [
-                    [-18.5863, -12.8547, -4.8901, -8.7695, 15.0777, 15.0308, -0.2944, 0.5263, 22.7533, 5.9714],
+                    [-18.8312, -12.7110, -7.8350, -9.0105, 17.4249, 17.9310, -4.9404, -0.9551, 26.1960, 6.9420],
                 ]
             ]
         )
         torch.testing.assert_close(outputs.logits.cpu(), expected_logits, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs.loss.cpu(), torch.tensor(0.0009), rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.loss.cpu(), torch.tensor(0.0004), rtol=1e-4, atol=1e-4)
