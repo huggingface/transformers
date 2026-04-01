@@ -123,14 +123,6 @@ _import_structure = {
         "MetalLinear",
         "replace_with_metal_linear",
     ],
-    "prism": [
-        "PRISM_BITS",
-        "PrismEmbedding",
-        "PrismLinear",
-        "augment_prism_tied_weights",
-        "replace_with_prism_modules",
-        "unpack_prism_weights",
-    ],
     "moe": [
         "batched_mm_experts_forward",
         "grouped_mm_experts_forward",
@@ -284,14 +276,6 @@ if TYPE_CHECKING:
     from .metal_quantization import (
         MetalLinear,
         replace_with_metal_linear,
-    )
-    from .prism import (
-        PRISM_BITS,
-        PrismEmbedding,
-        PrismLinear,
-        augment_prism_tied_weights,
-        replace_with_prism_modules,
-        unpack_prism_weights,
     )
     from .moe import (
         batched_mm_experts_forward,
