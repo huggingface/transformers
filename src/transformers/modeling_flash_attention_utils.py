@@ -14,6 +14,7 @@
 import importlib
 import inspect
 import os
+import warnings
 from collections.abc import Callable
 from functools import partial
 from typing import Any, TypedDict
@@ -38,20 +39,20 @@ from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 logger = logging.get_logger(__name__)
 
 
-# TODO Deprecate when all models have the attention interface
 def flash_attn_supports_top_left_mask():
-    if is_flash_attn_2_available() or is_flash_attn_3_available() or is_flash_attn_4_available():
-        return False
-
-    from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
-
-    return is_npu_fa2_top_left_aligned_causal_mask()
+    warnings.warn(
+        "`flash_attn_supports_top_left_mask` is deprecated and will be removed in v5.8. "
+        "This is no longer needed as the minimum required FA version is no longer affected by this.",
+        FutureWarning,
+    )
+    return False
 
 
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
     return (
-        is_flash_attn_4_available()
+        is_flash_attn_torch_available()
+        or is_flash_attn_4_available()
         or is_flash_attn_3_available()
         or is_flash_attn_2_available()
         or is_torch_npu_available()
@@ -236,19 +237,6 @@ def _lazy_imports(
                     "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
                 )
 
-    if flash_attn_func is None:
-        logger.warning(
-            f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
-            "the normal generation pipeline without any padding may produce different results as varlen and base FA "
-            "have slight numerical differences."
-        )
-    if flash_attn_with_kvcache is None:
-        logger.warning(
-            f"The loaded flash attention implementation at `{implementation}` does not support block tables, so"
-            " the full performances of continuous batching will not be achieved, only the varlen path will be "
-            "used."
-        )
-
     return flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache, pad_input, unpad_input
 
 
@@ -318,7 +306,7 @@ def _consolidate_flash_kwarg_alternative_name(
 ):
     """
     Consolidates different naming conventions under all FA functions that we support by checking for all alternative names
-    and whether the FA function supports it. Based on that, it is added to the (existing) kwargs or not.
+    and whether the FA function supports it. Based on that, it is added to the (existing) kwargs in-place or not.
 
     Args:
         kwargs_dict (`dict[str, Any]`):
@@ -339,6 +327,24 @@ def _consolidate_flash_kwarg_alternative_name(
         if supports_mapping[name]:
             kwargs_dict[name] = obj
             return name
+
+    # Torch in specific does not set it, ignore
+    if original_name != "causal":
+        # 2 variables with less impact, warn if possible
+        if original_name in ["dropout_p", "deterministic"] and not is_tracing(obj):
+            # Check if it goes against defaults
+            if (original_name == "dropout_p" and obj != 0.0) or (original_name == "deterministic" and obj is True):
+                logger.warning_once(
+                    f"We detected the usage of {original_name} within Flash Attention. It is not supported in this version "
+                    "of Flash Attention. This will be ignored but may lead to unintended behavior."
+                )
+        # Core features that would highly influence the output
+        else:
+            raise ValueError(
+                f"Tried to assign {original_name}={obj} (or alternative names) to the underlying flash attention function. "
+                "But couldn't find it in its signature. Please make sure to disable this feature (e.g. dropout) or use a different "
+                "Flash Attention version (e.g. FA4 for attentions sinks in GPT Oss) that supports it."
+            )
 
 
 def _process_flash_attention_kwargs(
@@ -398,15 +404,15 @@ def _process_flash_attention_kwargs(
         supports_mapping=supports_mapping,
     )
 
+    deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
     for assignable_variable, original_variable_name in zip(
-        [is_causal, softmax_scale, s_aux, cu_seqlens_q, cu_seqlens_k],
-        ["causal", "softmax_scale", "s_aux", "cu_seqlens_q", "cu_seqlens_k"],
+        [is_causal, dropout, softmax_scale, softcap, deterministic, s_aux, cu_seqlens_q, cu_seqlens_k],
+        ["causal", "dropout_p", "softmax_scale", "softcap", "deterministic", "s_aux", "cu_seqlens_q", "cu_seqlens_k"],
     ):
         consolidate_flash_kwarg_alternative_name(
             obj=assignable_variable,
             original_name=original_variable_name,
         )
-    is_flash_attention_torch = flash_kwargs.get("causal") is None  # Due to the unique varlen signature in torch
 
     if supports_mapping["window_size"] and sliding_window is not None:
         # The flash attention API sets inclusive boundaries, i.e. (4, 0) would take 4 tokens to the left
@@ -416,22 +422,11 @@ def _process_flash_attention_kwargs(
         flash_kwargs["window_size"] = (sliding_window - 1, sliding_window - 1)
 
     # Torch varlen can use sliding window but also has to set it to determine causality
-    if is_flash_attention_torch:
+    if flash_kwargs.get("causal") is None:
         if flash_kwargs.get("window_size") is None:
             flash_kwargs["window_size"] = (-1, 0) if is_causal else (-1, -1)
         elif is_causal:
             flash_kwargs["window_size"] = (flash_kwargs["window_size"][0], 0)
-
-    if supports_mapping["dropout_p"]:
-        flash_kwargs["dropout_p"] = dropout
-
-    if supports_mapping["deterministic"]:
-        flash_kwargs["deterministic"] = (
-            deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
-        )
-
-    if supports_mapping["softcap"] and softcap is not None:
-        flash_kwargs["softcap"] = softcap
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
@@ -637,13 +632,17 @@ def _flash_attention_mask_varlen(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: torch.Tensor,
+    attention_mask: torch.Tensor | None,
     query_length: int,
 ):
     """
     Manually unpads the tensors based on the attention mask, runs it through the varlen API and sticks
     back the to the original sequence lengths by padding with zeros where we manually removed padding values.
     """
+    # Default create an all 1 (True) mask if nothing is given
+    if attention_mask is None:
+        attention_mask = torch.ones(size=(key_states.shape[:2]), device=key_states.device, dtype=torch.bool)
+
     q, k, v, indices_q, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _upad_input(
         query_states, key_states, value_states, attention_mask, query_length, unpad_fn
     )
@@ -943,9 +942,14 @@ def _flash_attention_forward(
 
     # No padding
     else:
-        # Case 1: No native base FA, we fallback to simulating varlen (but with no padding) - less numerically equivalent
+        # Case 1: No native base FA, we fallback to simulating varlen (but with no padding)
         if flash_fn is None:
-            attention_mask = torch.ones(size=(key_states.shape[:2]), device=key_states.device, dtype=torch.bool)
+            if not is_tracing(query_states):
+                logger.warning_once(
+                    "We detected that your current underlying Flash Attention implementation does not implement a simple base"
+                    "Flash Attention function (non-varlen). This can lead to slight inefficiencies (generation speed) and "
+                    "changes in generation."
+                )
 
             out = _flash_attention_mask_varlen(
                 flash_varlen_fn=flash_varlen_fn,
