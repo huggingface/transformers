@@ -35,7 +35,6 @@ import copy
 import enum
 import functools
 import inspect
-from contextlib import contextmanager
 from typing import Any
 
 from ..modeling_utils import PreTrainedModel
@@ -233,9 +232,9 @@ def prepare_for_export(
 # ── VLM decomposition ────────────────────────────────────────────────────────
 
 # Well-known submodule attribute names for VLM architectures.
-_VLM_LM_NAMES = ("language_model", "text_model")
-_VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector")
 _VLM_ENCODER_NAMES = ("vision_tower", "vision_model", "vision_encoder", "image_encoder", "audio_encoder", "visual")
+_VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector")
+_VLM_LM_NAMES = ("language_model", "text_model")
 _VLM_SUBMODULE_NAMES = _VLM_ENCODER_NAMES + _VLM_PROJECTOR_NAMES + _VLM_LM_NAMES + ("lm_head",)
 
 
@@ -301,19 +300,13 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     # Vision submodule level: precompute from grid_thw
     grid_thw = inputs.get("grid_thw")
     if grid_thw is None:
-        # PaddleOCR uses image_grid_thw (list) and passes cu_seqlens directly
-        encoder = getattr(model, "encoder", getattr(getattr(model, "vision_model", None), "encoder", None))
-        if "image_grid_thw" in inputs and encoder is not None and hasattr(encoder, "rotary_pos_emb"):
-            image_grid_thw = inputs["image_grid_thw"]
-            device = inputs.get("cu_seqlens", inputs.get("pixel_values")).device
-            split_hids, split_wids = [], []
-            for t, h, w in image_grid_thw:
-                image_pids = torch.arange(t * h * w, device=device) % (h * w)
-                split_hids.append(image_pids // w)
-                split_wids.append(image_pids % w)
-            pids = torch.stack([torch.concat(split_hids), torch.concat(split_wids)], dim=-1)
-            rotary_embeddings = encoder.rotary_pos_emb(pids.max() + 1)[pids].flatten(1).repeat(1, 2)
-            inputs["position_embeddings"] = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        # PaddleOCR: uses image_grid_thw (list) and passes cu_seqlens directly
+        if "image_grid_thw" in inputs:
+            inner = getattr(model, "vision_model", model)
+            encoder = getattr(inner, "encoder", None)
+            if encoder is not None and hasattr(encoder, "rot_pos_emb_vision"):
+                device = inputs.get("cu_seqlens", inputs.get("pixel_values")).device
+                inputs["position_embeddings"] = encoder.rot_pos_emb_vision(inputs["image_grid_thw"], device)
         return
 
     # Only precompute for models whose forward accepts optional precomputed params
@@ -330,9 +323,7 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
 
     # rot_pos_emb (loops over grid_thw values) — inject with the key the forward expects
     if hasattr(model, "rot_pos_emb"):
-        rot_result = cast_leaf_tensors(
-            model.rot_pos_emb(grid_thw), dtype=torch.float32, device=grid_thw.device
-        )
+        rot_result = model.rot_pos_emb(grid_thw)
         if "rotary_pos_emb" in forward_params:
             inputs["rotary_pos_emb"] = rot_result
         elif "image_type_ids" in forward_params:
@@ -350,33 +341,34 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
         inputs["pos_embeds"] = model.fast_pos_embed_interpolate(grid_thw)
 
 
-@contextmanager
+@contextlib.contextmanager
 def _capture_forward(module: torch.nn.Module):
-    """Capture forward call inputs.
+    """Capture forward call kwargs into a list (one dict per call).
 
     Positional args are normalised to kwargs via `inspect.signature` so the
     captured dicts can be passed directly as `kwargs=inputs` to `torch.export`.
     """
+
+    calls: list[dict] = []
     original = module.forward
-    captured_inputs: list[dict] = []
-    signature = inspect.signature(original)
+    sig = inspect.signature(original)
 
     @functools.wraps(original)
     def wrapper(*args, **kwargs):
-        inputs = {}
-        bound = signature.bind(*args, **kwargs)
-        for param_name, value in bound.arguments.items():
-            param = signature.parameters[param_name]
+        captured = {}
+        bound = sig.bind(*args, **kwargs)
+        for name, value in bound.arguments.items():
+            param = sig.parameters[name]
             if param.kind == inspect.Parameter.VAR_KEYWORD:
-                inputs.update(copy.deepcopy(value))
+                captured.update(copy.deepcopy(value))
             elif param.kind != inspect.Parameter.VAR_POSITIONAL:
-                inputs[param_name] = copy.deepcopy(value)
-        captured_inputs.append(inputs)
+                captured[name] = copy.deepcopy(value)
+        calls.append(captured)
         return original(*args, **kwargs)
 
     module.forward = wrapper
     try:
-        yield captured_inputs
+        yield calls
     finally:
         module.forward = original
 
@@ -395,7 +387,7 @@ def decompose_prefill_decode(
         `[("prefill", model, prefill_inputs), ("decode", model, decode_inputs)]`
     """
     try:
-        with _capture_forward(model) as captured_inputs, torch.no_grad():
+        with _capture_forward(model) as calls, torch.no_grad():
             model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
     except Exception as e:
         raise RuntimeError(
@@ -405,8 +397,8 @@ def decompose_prefill_decode(
         ) from e
 
     return [
-        ("prefill", copy.copy(model), captured_inputs[0]),
-        ("decode", copy.copy(model), captured_inputs[1]),
+        ("prefill", copy.copy(model), calls[0]),
+        ("decode", copy.copy(model), calls[1]),
     ]
 
 

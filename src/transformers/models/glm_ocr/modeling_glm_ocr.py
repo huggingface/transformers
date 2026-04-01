@@ -581,8 +581,9 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
+        device = grid_thw.device
         for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
@@ -592,7 +593,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
             hpos_ids = hpos_ids.permute(0, 2, 1, 3)
             hpos_ids = hpos_ids.flatten()
 
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
             wpos_ids = wpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
@@ -611,30 +612,46 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
         r"""
         hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
             The final hidden states of the model.
         grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width of feature shape of each image in LLM.
+        cu_seqlens (`torch.Tensor`, *optional*):
+            Precomputed cumulative sequence lengths (needed for export).
+        rotary_pos_emb (`tuple`, *optional*):
+            Precomputed output of `rot_pos_emb(grid_thw)` (needed for export).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        if rotary_pos_emb is None:
+            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+
+        if cu_seqlens is None:
+            cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+                dim=0,
+                # Select dtype based on the following factors:
+                #  - FA2 requires that cu_seqlens_q must have dtype int32
+                #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+                # See https://github.com/huggingface/transformers/pull/34852 for more information
+                dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+            )
+            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+
+        rotary_emb, image_type_ids = rotary_pos_emb
+        emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
 
         for blk in self.blocks:
             hidden_states = blk(

@@ -824,6 +824,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -837,6 +838,8 @@ class PaddleOCRVisionEncoder(nn.Module):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            Precomputed (cos, sin) rotary position embeddings (needed for export).
         """
         device = inputs_embeds.device
         hidden_states = inputs_embeds
@@ -845,23 +848,9 @@ class PaddleOCRVisionEncoder(nn.Module):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        split_hids = []
-        split_wids = []
-        for t, h, w in image_grid_thw:
-            image_pids = torch.arange(t * h * w, device=device) % (h * w)
-            sample_hids = image_pids // w
-            sample_wids = image_pids % w
-            split_hids.append(sample_hids)
-            split_wids.append(sample_wids)
-        width_position_ids = torch.concat(split_wids, dim=0)
-        height_position_ids = torch.concat(split_hids, dim=0)
 
-        pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
-        max_grid_size = pids.max() + 1
-        rotary_embeddings_max_grid = self.rotary_pos_emb(max_grid_size)
-        rotary_embeddings = rotary_embeddings_max_grid[pids].flatten(1)
-        rotary_embeddings = rotary_embeddings.repeat(1, 2)
-        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        if position_embeddings is None:
+            position_embeddings = self.rot_pos_emb_vision(image_grid_thw, device)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -874,6 +863,17 @@ class PaddleOCRVisionEncoder(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_states,
         )
+
+    def rot_pos_emb_vision(self, image_grid_thw, device):
+        split_hids = []
+        split_wids = []
+        for t, h, w in image_grid_thw:
+            image_pids = torch.arange(t * h * w, device=device) % (h * w)
+            split_hids.append(image_pids // w)
+            split_wids.append(image_pids % w)
+        pids = torch.stack([torch.concat(split_hids), torch.concat(split_wids)], dim=-1)
+        rotary_embeddings = self.rotary_pos_emb(pids.max() + 1)[pids].flatten(1).repeat(1, 2)
+        return (rotary_embeddings.cos(), rotary_embeddings.sin())
 
 
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
@@ -904,6 +904,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -916,6 +917,8 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+                Precomputed (cos, sin) rotary position embeddings (needed for export).
         """
         hidden_states = self.embeddings(pixel_values, image_grid_thw=image_grid_thw)
 
@@ -924,6 +927,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 

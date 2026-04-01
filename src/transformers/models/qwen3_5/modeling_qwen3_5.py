@@ -1132,39 +1132,57 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
+        pos_embeds: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
+            rotary_pos_emb (`torch.Tensor`, *optional*):
+                Precomputed rotary position embeddings (needed for export).
+            pos_embeds (`torch.Tensor`, *optional*):
+                Precomputed interpolated position embeddings (needed for export).
+            cu_seqlens (`torch.Tensor`, *optional*):
+                Precomputed cumulative sequence lengths (needed for export).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
+        if pos_embeds is None:
+            pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
+
         hidden_states = hidden_states + pos_embeds
 
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_emb is None:
+            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+
+        if cu_seqlens is None:
+            cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+                dim=0,
+                # Select dtype based on the following factors:
+                #  - FA2 requires that cu_seqlens_q must have dtype int32
+                #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+                # See https://github.com/huggingface/transformers/pull/34852 for more information
+                dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+            )
+            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         for blk in self.blocks:
             hidden_states = blk(

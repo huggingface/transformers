@@ -236,12 +236,11 @@ class GlmImageVisionEmbeddings(nn.Module):
         )
 
         # Calculate target dimensions for each patch
-        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
-        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
+        num_tokens = embeddings.shape[0]
+        token_positions = torch.arange(num_tokens, device=embeddings.device)
+        seg_ids = (token_positions.unsqueeze(0) >= lengths.cumsum(0).unsqueeze(1)).sum(0)
+        target_h = image_shapes[seg_ids, 1].to(dtype=torch.float32)
+        target_w = image_shapes[seg_ids, 2].to(dtype=torch.float32)
 
         # Normalize coordinates to [-1, 1] range for grid_sample
         norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
@@ -591,8 +590,9 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
+        device = grid_thw.device
         for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
@@ -602,7 +602,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
             hpos_ids = hpos_ids.permute(0, 2, 1, 3)
             hpos_ids = hpos_ids.flatten()
 
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
             wpos_ids = wpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
@@ -619,27 +619,41 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
     @capture_outputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        pixel_values: torch.Tensor,
+        grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
+        image_type_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
             Packed pixel values.
         grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
             The temporal, height and width of feature shape of each image.
+        cu_seqlens (`torch.Tensor`, *optional*):
+            Precomputed cumulative sequence lengths (needed for export).
+        image_type_ids (`torch.Tensor`, *optional*):
+            Precomputed image type ids / coordinates (needed for export).
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
-
         hidden_states = self.patch_embed(pixel_values)
-        image_type_ids = self.rot_pos_emb(grid_thw)
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+        if image_type_ids is None:
+            image_type_ids = self.rot_pos_emb(grid_thw)
+        if cu_seqlens is None:
+            cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+                dim=0,
+                # Select dtype based on the following factors:
+                #  - FA2 requires that cu_seqlens_q must have dtype int32
+                #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+                # See https://github.com/huggingface/transformers/pull/34852 for more information
+                dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+            )
+            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,
             seqlens,
