@@ -49,20 +49,24 @@ class ModuleFusionSpec:
     """
 
     def get_empty_log(self, model_name: str) -> str:
+        """Return the log message emitted when no compatible modules are found."""
         return f"No compatible {type(self).__name__} classes found to fuse for {model_name}"
 
     def is_fusable(self, module: nn.Module) -> bool:
+        """Return whether `module` is compatible with this fusion family."""
         raise NotImplementedError
 
     def make_fused_class(self, original_cls: type[nn.Module], reference_module: nn.Module) -> type[nn.Module]:
+        """Build the runtime replacement class for a compatible module class."""
         raise NotImplementedError
 
     def make_transforms(self, module_name: str, reference_module: nn.Module) -> list[WeightTransform]:
+        """Build the weight transforms needed to load and save the fused runtime layout."""
         raise NotImplementedError
 
 
 class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
-    """Fusion spec for Conv3d patch embeddings that can be flattened into Linear layers."""
+    """Fuse compatible Conv3d patch embeddings into flattened Linear projections."""
 
     def is_fusable(self, module: nn.Module) -> bool:
         if not isinstance(proj := getattr(module, "proj", None), nn.Conv3d):
@@ -137,7 +141,17 @@ def _discover_fusable_modules(
     make_fused_class: Callable[[type[nn.Module], nn.Module], type[nn.Module]],
     make_transforms: Callable[[str, nn.Module], list[WeightTransform]],
 ) -> tuple[dict[str, type[nn.Module]], list[WeightTransform]]:
-    """Meta-initialize `cls` and collect patch mappings plus weight transforms for one fusion family."""
+    """Discover compatible modules for one fusion family on a meta-initialized model.
+
+    This function:
+    - instantiates `cls(config)` on the meta device
+    - scans `named_modules()` for compatible modules
+    - builds the patch mapping used by monkey patching
+    - collects the weight transforms needed for checkpoint conversion
+
+    Results are cached per `(fusion_name, cls)` to avoid repeated
+    meta-initialization.
+    """
 
     cache = _FUSION_DISCOVERY_CACHE.setdefault(fusion_name, {})
     if cls in cache:
@@ -170,9 +184,12 @@ def _register_module_fusion(
 ) -> None:
     """Register one fusion family for `cls`.
 
-    This wires together two parts of the loading stack:
-    - monkey patching, so compatible module classes are replaced before model initialization
-    - checkpoint conversion mapping, so fused runtime modules still load from the original checkpoint layout
+    This function updates the two global registries used by fused loading:
+    - the monkey-patching registry, so compatible module classes are replaced before initialization
+    - the checkpoint conversion mapping, so fused runtime modules still load from the original checkpoint layout
+
+    Notes:
+    - conflicting checkpoint transforms fail fast
     """
 
     fusable_classes, converters = _discover_fusable_modules(
@@ -230,7 +247,7 @@ _FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {"patch_embeddings": PatchEmbedd
 
 
 def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]]) -> list[str]:
-    """Validate `fusion_config` and return the enabled fusion names in user-specified order."""
+    """Validate `fusion_config` and return enabled fusion names in user-specified order."""
 
     enabled_fusions = []
     for fusion_name, fusion_options in fusion_config.items():
@@ -251,8 +268,10 @@ def register_fusion_patches(
 ) -> None:
     """Register requested runtime fusions for `cls`.
 
-    `fusion_config` is validated against `_FUSION_REGISTRY`, so adding a new
-    fusion type is a matter of registering a new `ModuleFusionSpec` here.
+    This function:
+    - validates `fusion_config` against `_FUSION_REGISTRY`
+    - resolves the enabled fusion families in user order
+    - registers monkey patches and checkpoint transforms before model instantiation
     """
 
     if not fusion_config:
