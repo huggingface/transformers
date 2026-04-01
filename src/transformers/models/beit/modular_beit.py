@@ -20,7 +20,7 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -956,6 +956,7 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         return self.encoder.embeddings.patch_embeddings
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -989,8 +990,8 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         batch_size, _, height, width = pixel_values.shape
         patch_height = height // self.config.patch_size
         patch_width = width // self.config.patch_size
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
-        outputs = self.encoder(pixel_values, output_hidden_states=True, **kwargs)
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        outputs = self.encoder(pixel_values, **kwargs)
 
         hidden_states = outputs.hidden_states
         feature_maps = ()
@@ -1008,7 +1009,7 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
