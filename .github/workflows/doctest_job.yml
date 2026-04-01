@@ -9,12 +9,6 @@ on:
       split_keys:
         required: true
         type: string
-      commit_sha:
-        required: true
-        type: string
-      checkout_ref:
-        required: false
-        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -32,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         split_keys: ${{ fromJson(inputs.split_keys) }}
-    runs-on:
+    runs-on: 
       group: aws-g5-4xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
@@ -40,29 +34,11 @@ jobs:
     steps:
       - name: Update clone
         working-directory: /transformers
-        shell: bash
-        env:
-          commit_sha: ${{ inputs.commit_sha }}
-          checkout_ref: ${{ inputs.checkout_ref || inputs.commit_sha }}
-        run: |
-          if [[ "$checkout_ref" == refs/* ]]; then
-            git fetch origin "$checkout_ref"
-            git checkout FETCH_HEAD
-          else
-            git fetch
-            git checkout "$checkout_ref"
-          fi
-
-          current_sha=$(git rev-parse HEAD)
-          echo "Checked out $current_sha"
-          if [[ "$current_sha" != "$commit_sha" ]]; then
-            echo "Expected $commit_sha but checked out $current_sha"
-            exit 1
-          fi
+        run: git fetch && git checkout ${{ github.sha }}
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[docs]
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
 
       - name: GPU visibility
         working-directory: /transformers
