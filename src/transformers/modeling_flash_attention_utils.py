@@ -158,12 +158,12 @@ _hf_api_to_flash_mapping = {
 }
 # alternative names within the different flash attention APIs, e.g. for attention sinks
 _flash_api_alternative_names = {
-    "s_aux": "learnable_sink",
-    "cu_seqlens_q": "cu_seq_q",
-    "cu_seqlens_k": "cu_seq_k",
-    "max_seqlen_q": "max_q",
-    "max_seqlen_k": "max_k",
-    "softmax_scale": "scale",
+    "s_aux": ["learnable_sink"],
+    "cu_seqlens_q": ["cu_seq_q"],
+    "cu_seqlens_k": ["cu_seq_k"],
+    "max_seqlen_q": ["max_q"],
+    "max_seqlen_k": ["max_k"],
+    "softmax_scale": ["scale"],
 }
 
 
@@ -258,8 +258,9 @@ def _lazy_define_process_function(flash_function):
         fa_param = _hf_api_to_flash_mapping.get(param, param)
         supports_mapping[fa_param] = fa_param in flash_parameters
 
-        if (fa_alternative_name := _flash_api_alternative_names.get(param, param)) != fa_param:
-            supports_mapping[fa_alternative_name] = fa_alternative_name in flash_parameters
+        if (fa_alternative_name := _flash_api_alternative_names.get(param, fa_param)) != fa_param:
+            for alternative_name in fa_alternative_name:
+                supports_mapping[alternative_name] = alternative_name in flash_parameters
 
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
@@ -323,7 +324,7 @@ def _consolidate_flash_kwarg_alternative_name(
         return None
 
     global _flash_api_alternative_names
-    for name in [original_name, _flash_api_alternative_names.get(original_name, original_name)]:
+    for name in [original_name] + _flash_api_alternative_names.get(original_name, []):
         if supports_mapping[name]:
             kwargs_dict[name] = obj
             return name

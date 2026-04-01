@@ -3788,7 +3788,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     - `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention))
                     - `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper))
                     - `"flash_attention_4"` (using [Dao-AILab/flash-attention/flash_attn/cute](https://github.com/Dao-AILab/flash-attention/tree/main/flash_attn/cute)).
-                    - `"flash_attention_torch"` (using a combination of `"sdpa"` and [`varlen`](https://docs.pytorch.org/docs/stable/nn.attention.varlen.html)).
+                    - `"flash_attention_torch"` (using [`varlen`](https://docs.pytorch.org/docs/stable/nn.attention.varlen.html)).
                 By default, if available, SDPA will be used. The default is otherwise the manual `"eager"` implementation.
 
                 Accept HF kernel references in the form:
