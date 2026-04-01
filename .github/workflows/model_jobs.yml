@@ -207,7 +207,7 @@ jobs:
     name: Collated Reports
     if: ${{ always() && inputs.runner_type != '' }}
     needs: run_models_gpu
-    uses: huggingface/transformers/.github/workflows/collated-reports.yml@main
+    uses: huggingface/transformers/.github/workflows/collated-reports.yml@c9faacd7d57459157656bdffe049dabb6293f011 # main
     with:
       job: run_models_gpu
       report_repo_id: ${{ inputs.report_repo_id }}
