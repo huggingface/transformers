@@ -25,10 +25,10 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
-    decompose_encoder_decoder,
     decompose_prefill_decode,
+    decompose_vlm,
     get_leaf_tensors,
-    is_multicomponent,
+    is_vlm,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -52,10 +52,6 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # constant tensors (lifted_tensor) missing from the constants dictionary (SpecViolationError).
     # TODO: fix upstream in PyTorch.
     "CHMv2ForDepthEstimation",
-    # PerceiverModel has internal .encoder/.decoder attributes that trigger is_multicomponent(),
-    # but they are unusual low-level components with non-standard interfaces that cannot be
-    # independently exported. TODO: add proper decomposition support for Perceiver.
-    "PerceiverModel",
     # T5Gemma2 hits a VR bound conflict (tgt_bound=VR[64, int_oo] vs src_bound=VR[64, int64_max-2])
     # from get_image_placeholder_mask creating a constraint u0 = 32*s99 during dynamic export.
     # TODO: fix by bounding image placeholder computation to avoid int_oo conflict.
@@ -67,6 +63,14 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # PPDocLayoutV3 passes a ModuleList as a forward argument (order_head), which is not supported
     # by get_auto_dynamic_shapes and torch.export. TODO: refactor to avoid passing modules as inputs.
     "PPDocLayoutV3ForObjectDetection",
+    # Omni models require audio/visual inputs during forward that the test tester doesn't provide.
+    # decompose_vlm runs a forward pass which hits None subscripting on visual_pos_masks.
+    # TODO: provide multimodal test inputs or skip VLM decomposition for omni models.
+    "Qwen2_5OmniThinkerForConditionalGeneration",
+    "Qwen3OmniMoeThinkerForConditionalGeneration",
+    # PaddleOCR vision embeddings use data-dependent ops (arange with tensor values) that
+    # torch.export can't trace. TODO: precompute vision embeddings for export.
+    "PaddleOCRVLForConditionalGeneration",
 }
 
 
@@ -164,8 +168,8 @@ class ExportTesterMixin:
     - `_prepare_for_class(inputs_dict, model_class)` — adjusts inputs per model class.
 
     Tests are parameterised over `dynamic=True` / `dynamic=False` via `DYNAMIC_EXPORT_PARAMS`.
-    Multicomponent models (VLMs, encoder-decoders detected by `is_multicomponent`) are
-    automatically decomposed and each submodule is tested independently.
+    VLMs (detected by `is_vlm`) are automatically decomposed and each
+    submodule is tested independently.
     """
 
     def _skip_if_not_exportable(self):
@@ -211,8 +215,8 @@ class ExportTesterMixin:
         except StopIteration:
             pass
 
-        if is_multicomponent(model):
-            return decompose_encoder_decoder(model, inputs_dict)
+        if is_vlm(model):
+            return decompose_vlm(model, inputs_dict)
         return [("model", model, inputs_dict)]
 
     def _collect_eager_outputs(self, components):
@@ -332,15 +336,14 @@ class ExportGenerateTesterMixin:
       for ``model.generate()``.
 
     Each generative model is decomposed into prefill and decode components via
-    :func:`decompose_prefill_decode`.  Multicomponent models (VLMs) additionally decompose
-    the prefill stage into individual submodules via :func:`decompose_encoder_decoder`.
+    :func:`decompose_prefill_decode`.  VLMs additionally decompose the prefill
+    stage into individual submodules via :func:`decompose_vlm`.
     """
 
     def _prepare_export_generate_model_and_inputs(self, model_class):
         """Decompose a generative model into exportable components.
 
-        For multicomponent models (VLMs, encoder-decoders): decomposes the prefill stage
-        into individual submodules plus the decode stage.
+        For VLMs: decomposes the prefill stage into individual submodules plus the decode stage.
         For decoder-only models: returns prefill and decode components.
 
         Returns:
@@ -356,9 +359,9 @@ class ExportGenerateTesterMixin:
         # create prefill/decode copies of the model
         stages = decompose_prefill_decode(model, inputs_dict)
 
-        if is_multicomponent(model):
-            _, prefill_model, prefill_inputs = stages[0]
-            components = decompose_encoder_decoder(prefill_model, prefill_inputs)
+        if is_vlm(model):
+            prefill_model, prefill_inputs = stages[0][1:]
+            components = decompose_vlm(prefill_model, prefill_inputs)
             return components + stages[1:]  # encoder-decoder components + decode stage
 
         return stages

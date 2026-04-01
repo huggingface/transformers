@@ -150,7 +150,11 @@ def _patch_classifier_cast(module):
 
 def _patch_chunked_vision_attention(module):
     """Replace split → loop → cat with reshaped batch SDPA for vision attention."""
-    if hasattr(module, "qkv") and "zip(*splits)" in inspect.getsource(module.forward):
+    has_attention = hasattr(module, "qkv") or (
+        hasattr(module, "q_proj") and hasattr(module, "k_proj") and hasattr(module, "v_proj")
+    )
+    has_chunked_attention = has_attention and "zip(*splits)" in inspect.getsource(module.forward)
+    if has_chunked_attention:
         return ("forward", functools.partial(_reshaped_vision_attention_forward, module))
 
 
@@ -163,7 +167,6 @@ def _reshaped_vision_attention_forward(
     **kwargs,
 ) -> "torch.Tensor":
     """Export-safe vision attention: reshape segments into batch dim, single SDPA call."""
-    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
 
     seq_length = hidden_states.shape[0]
     num_segments = cu_seqlens.shape[0] - 1
@@ -173,40 +176,47 @@ def _reshaped_vision_attention_forward(
         "Ensure all images have the same resolution (use do_resize=True in the processor) "
         "or pad inputs to a common size.",
     )
-    batched_shape = (num_segments, self.num_heads, seq_length // num_segments, self.head_dim)
 
-    query_states, key_states, value_states = (
-        self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-    )
+    if hasattr(self, "qkv"):
+        query_states, key_states, value_states = (
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        )
+    else:
+        query_states = self.q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        key_states = self.k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        value_states = self.v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
-    model_module = sys.modules[type(self).__module__]
-    eager_attention_forward = getattr(model_module, "eager_attention_forward")
-    apply_rotary_pos_emb_vision = getattr(model_module, "apply_rotary_pos_emb_vision")
+    if position_embeddings is not None:
+        cos, sin = position_embeddings
+        model_module = sys.modules[type(self).__module__]
+        apply_rotary_pos_emb_vision = getattr(model_module, "apply_rotary_pos_emb_vision")
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
-    cos, sin = position_embeddings
-    query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+    seg_len = seq_length // num_segments
 
-    query_states = query_states.transpose(0, 1).unsqueeze(0)
-    key_states = key_states.transpose(0, 1).unsqueeze(0)
-    value_states = value_states.transpose(0, 1).unsqueeze(0)
+    # (seq, heads, dim) → (n_seg, seg_len, heads, dim) → (n_seg, heads, seg_len, dim)
+    def _to_batched(t):
+        return t.unflatten(0, (num_segments, seg_len)).transpose(1, 2)
 
-    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-        self.config._attn_implementation, eager_attention_forward
-    )
+    query_states = _to_batched(query_states)
+    key_states = _to_batched(key_states)
+    value_states = _to_batched(value_states)
 
-    attn_output, _ = attention_interface(
-        self,
-        query_states.reshape(batched_shape),
-        key_states.reshape(batched_shape),
-        value_states.reshape(batched_shape),
-        attention_mask=None,
-        scaling=self.scaling,
-        dropout=0.0 if not self.training else self.attention_dropout,
+    torch._check(query_states.shape[0] != 0)
+    torch._check(query_states.shape[2] != 0)
+    attn_output = torch.nn.functional.scaled_dot_product_attention(
+        query_states,
+        key_states,
+        value_states,
         is_causal=False,
+        scale=self.scaling,
+        dropout_p=0.0 if not self.training else self.attention_dropout,
     )
 
-    attn_output = attn_output.reshape(seq_length, -1).contiguous()
-    return self.proj(attn_output)
+    # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim)
+    attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1).contiguous()
+    out_proj = self.proj if hasattr(self, "proj") else self.out_proj
+    return out_proj(attn_output)
 
 
 _MODEL_PATCHERS = [

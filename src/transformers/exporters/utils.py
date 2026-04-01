@@ -23,8 +23,8 @@ one exporter (Dynamo, ONNX, ExecuTorch):
   and patch non-exportable module behaviours before any export.
 - `decompose_prefill_decode`: run `model.generate()` and capture the forward kwargs
   for the prefill and decode steps.
-- `decompose_encoder_decoder`: capture inputs to every known submodule (vision tower,
-  projector, language model, lm_head, encoder, decoder, …) via a single forward pass,
+- `decompose_vlm`: capture inputs to every known VLM submodule (vision tower,
+  projector, language model, lm_head, …) via a single forward pass,
   returning one `(name, module, inputs)` triplet per component for independent export.
 """
 
@@ -214,32 +214,9 @@ def prepare_for_export(
         if hasattr(module, "_cached_keys"):
             module._cached_keys = None
 
-    # Pre-compute position_ids for models with get_rope_index (Qwen-VL family, GLM-4V, etc.).
-    # get_rope_index uses data-dependent ops (itertools.groupby, nonzero) that are not traceable.
-    # Computing eagerly and injecting into inputs makes the forward skip the branch entirely.
-    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
-        # Only pre-compute for the prefill stage. In the decode stage, input_ids has seq_len=1
-        # while attention_mask covers the full sequence — get_rope_index can't handle that mismatch.
-        input_ids = inputs.get("input_ids")
-        attn_mask = inputs.get("attention_mask")
-        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
-        if is_prefill:
-            with torch.no_grad():
-                position_ids, rope_deltas = model.get_rope_index(
-                    **{
-                        k: inputs[k]
-                        for k in (
-                            "input_ids",
-                            "attention_mask",
-                            "image_grid_thw",
-                            "video_grid_thw",
-                            "mm_token_type_ids",
-                            "second_per_grid_ts",
-                        )
-                        if k in inputs
-                    }
-                )
-            inputs["position_ids"] = position_ids
+    # Pre-compute data-dependent vision tensors (position_ids, rot_pos_emb, etc.)
+    # that use grid_thw-based loops, repeat_interleave, or itertools.groupby.
+    _precompute_vision_inputs(model, inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -253,97 +230,153 @@ def prepare_for_export(
     return model, inputs
 
 
-# ── Model decomposition ──────────────────────────────────────────────────────
+# ── VLM decomposition ────────────────────────────────────────────────────────
 
-# Well-known submodule attribute names across VLM and encoder-decoder architectures.
-# All matching names are found and captured by decompose_encoder_decoder.
-_SUBMODULE_NAMES = (
-    "vision_tower",
-    "vision_model",
-    "vision_encoder",
-    "image_encoder",
-    "audio_encoder",
-    "multi_modal_projector",
-    "connector",
-    "encoder",
-    "decoder",
-    "language_model",
-    "text_model",
-    "lm_head",
-)
+# Well-known submodule attribute names for VLM architectures.
+_VLM_LM_NAMES = ("language_model", "text_model")
+_VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector")
+_VLM_ENCODER_NAMES = ("vision_tower", "vision_model", "vision_encoder", "image_encoder", "audio_encoder", "visual")
+_VLM_SUBMODULE_NAMES = _VLM_ENCODER_NAMES + _VLM_PROJECTOR_NAMES + _VLM_LM_NAMES + ("lm_head",)
 
 
-def _find_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for all known submodule names found on the model.
+def _find_vlm_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
+    """Return `{attr_name: module}` for all known VLM submodule names found on the model.
 
     Checks `model` first, then `model.model` (common wrapper pattern).
-
-    `encoder` and `decoder` are only included when both are present — a bare
-    `self.encoder` (e.g. BeitModel, ViT) is an internal component, not a standalone
-    exportable submodule. VLM names (`vision_tower`, `language_model`, …) are always
-    included individually.
-
-    To support a new architecture whose submodule attributes are not in `_SUBMODULE_NAMES`,
-    add the attribute name(s) to that tuple.
+    Only returns results when at least one modal encoder AND one language model are
+    found — otherwise the model is not a VLM and should be exported as a single unit.
     """
     found: dict[str, torch.nn.Module] = {}
     for root in (model, getattr(model, "model", None)):
         if root is None:
             continue
-        for name in _SUBMODULE_NAMES:
+        for name in _VLM_SUBMODULE_NAMES:
             if name not in found and hasattr(root, name):
                 found[name] = getattr(root, name)
 
-    # Drop bare encoder/decoder unless both are present.
-    if "encoder" in found and "decoder" not in found:
-        del found["encoder"]
-    if "decoder" in found and "encoder" not in found:
-        del found["decoder"]
-
-    if not found:
-        # Help future contributors diagnose missed architectures.
-        child_names = [name for name, _ in model.named_children()]
-        if child_names:
-            logger.debug(
-                "%s has no recognized decomposition submodules. "
-                "Direct children: %s. "
-                "If this is a multicomponent model (VLM, encoder-decoder), "
-                "add its submodule attribute names to _SUBMODULE_NAMES in exporters/utils.py.",
-                type(model).__name__,
-                child_names,
-            )
+    has_encoder = any(name in found for name in _VLM_ENCODER_NAMES)
+    has_lm = any(name in found for name in _VLM_LM_NAMES)
+    if not (has_encoder and has_lm):
+        return {}
 
     return found
 
 
+def is_vlm(model: PreTrainedModel) -> bool:
+    """Returns `True` if the model is a VLM with modal encoders and a language model."""
+    return bool(_find_vlm_submodules(model))
+
+
+@torch.no_grad()
+def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Pre-compute data-dependent vision tensors and inject them into inputs.
+
+    Vision models use `grid_thw`-based loops, `repeat_interleave`, `itertools.groupby`,
+    and `.tolist()` that are not traceable by torch.export. This eagerly computes the
+    results and injects them so the forward can skip the untraceable branch.
+    """
+    # Full-model level: get_rope_index (Qwen-VL, GLM-4V) computes position_ids
+    # from input_ids + grid_thw using data-dependent ops (groupby, nonzero).
+    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
+        input_ids = inputs.get("input_ids")
+        attn_mask = inputs.get("attention_mask")
+        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
+        if is_prefill:
+            position_ids, _ = model.get_rope_index(
+                **{
+                    k: inputs[k]
+                    for k in (
+                        "input_ids",
+                        "attention_mask",
+                        "image_grid_thw",
+                        "video_grid_thw",
+                        "mm_token_type_ids",
+                        "second_per_grid_ts",
+                    )
+                    if k in inputs
+                }
+            )
+            inputs["position_ids"] = position_ids
+
+    # Vision submodule level: precompute from grid_thw
+    grid_thw = inputs.get("grid_thw")
+    if grid_thw is None:
+        # PaddleOCR uses image_grid_thw (list) and passes cu_seqlens directly
+        encoder = getattr(model, "encoder", getattr(getattr(model, "vision_model", None), "encoder", None))
+        if "image_grid_thw" in inputs and encoder is not None and hasattr(encoder, "rotary_pos_emb"):
+            image_grid_thw = inputs["image_grid_thw"]
+            device = inputs.get("cu_seqlens", inputs.get("pixel_values")).device
+            split_hids, split_wids = [], []
+            for t, h, w in image_grid_thw:
+                image_pids = torch.arange(t * h * w, device=device) % (h * w)
+                split_hids.append(image_pids // w)
+                split_wids.append(image_pids % w)
+            pids = torch.stack([torch.concat(split_hids), torch.concat(split_wids)], dim=-1)
+            rotary_embeddings = encoder.rotary_pos_emb(pids.max() + 1)[pids].flatten(1).repeat(1, 2)
+            inputs["position_embeddings"] = (rotary_embeddings.cos(), rotary_embeddings.sin())
+        return
+
+    # Only precompute for models whose forward accepts optional precomputed params
+    forward_params = set(inspect.signature(model.forward).parameters)
+    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "position_embeddings"}
+    if not (precompute_keys & forward_params):
+        return
+
+    # cu_seqlens from repeat_interleave (data-dependent output size)
+    cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+        dim=0, dtype=torch.int32
+    )
+    inputs["cu_seqlens"] = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
+
+    # rot_pos_emb (loops over grid_thw values) — inject with the key the forward expects
+    if hasattr(model, "rot_pos_emb"):
+        rot_result = cast_leaf_tensors(
+            model.rot_pos_emb(grid_thw), dtype=torch.float32, device=grid_thw.device
+        )
+        if "rotary_pos_emb" in forward_params:
+            inputs["rotary_pos_emb"] = rot_result
+        elif "image_type_ids" in forward_params:
+            inputs["image_type_ids"] = rot_result
+
+    # get_window_index (loops + .tolist())
+    if hasattr(model, "get_window_index"):
+        window_index, cu_window_seqlens_list = model.get_window_index(grid_thw)
+        cu_window_seqlens = torch.tensor(cu_window_seqlens_list, device=grid_thw.device, dtype=torch.int32)
+        inputs["cu_window_seqlens"] = torch.unique_consecutive(cu_window_seqlens)
+        inputs["window_index"] = window_index
+
+    # fast_pos_embed_interpolate (loops over grid_thw)
+    if hasattr(model, "fast_pos_embed_interpolate"):
+        inputs["pos_embeds"] = model.fast_pos_embed_interpolate(grid_thw)
+
+
 @contextmanager
-def _capture_forward(module: torch.nn.Module, dest: list, *, capture_once: bool = False):
-    """Append captured forward kwargs to `dest` on each call.
+def _capture_forward(module: torch.nn.Module):
+    """Capture forward call inputs.
 
     Positional args are normalised to kwargs via `inspect.signature` so the
-    captured dict can be passed directly as `kwargs=inputs` to `torch.export`.
+    captured dicts can be passed directly as `kwargs=inputs` to `torch.export`.
     """
     original = module.forward
-
-    sig = inspect.signature(original)
+    captured_inputs: list[dict] = []
+    signature = inspect.signature(original)
 
     @functools.wraps(original)
-    def capturing(*args, **kwargs):
-        if not capture_once or not dest:
-            bound = sig.bind(*args, **kwargs)
-            captured = {}
-            for param_name, value in bound.arguments.items():
-                param = sig.parameters[param_name]
-                if param.kind == inspect.Parameter.VAR_KEYWORD:
-                    captured.update(value)  # unpack **kwargs into top level
-                elif param.kind != inspect.Parameter.VAR_POSITIONAL:
-                    captured[param_name] = value
-            dest.append(copy.deepcopy(captured))
+    def wrapper(*args, **kwargs):
+        inputs = {}
+        bound = signature.bind(*args, **kwargs)
+        for param_name, value in bound.arguments.items():
+            param = signature.parameters[param_name]
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                inputs.update(copy.deepcopy(value))
+            elif param.kind != inspect.Parameter.VAR_POSITIONAL:
+                inputs[param_name] = copy.deepcopy(value)
+        captured_inputs.append(inputs)
         return original(*args, **kwargs)
 
-    module.forward = capturing
+    module.forward = wrapper
     try:
-        yield
+        yield captured_inputs
     finally:
         module.forward = original
 
@@ -361,10 +394,8 @@ def decompose_prefill_decode(
         `list[tuple[str, torch.nn.Module, dict]]`:
         `[("prefill", model, prefill_inputs), ("decode", model, decode_inputs)]`
     """
-    captured: list[dict] = []
-
     try:
-        with _capture_forward(model, captured), torch.no_grad():
+        with _capture_forward(model) as captured_inputs, torch.no_grad():
             model.generate(**copy.deepcopy(inputs), max_new_tokens=2, min_new_tokens=2)
     except Exception as e:
         raise RuntimeError(
@@ -374,19 +405,17 @@ def decompose_prefill_decode(
         ) from e
 
     return [
-        ("prefill", copy.copy(model), captured[0]),
-        ("decode", copy.copy(model), captured[1]),
+        ("prefill", copy.copy(model), captured_inputs[0]),
+        ("decode", copy.copy(model), captured_inputs[1]),
     ]
 
 
-def decompose_encoder_decoder(
-    model: PreTrainedModel, inputs: dict[str, Any]
-) -> list[tuple[str, torch.nn.Module, dict]]:
-    """Capture inputs to each component submodule via a single forward pass.
+def decompose_vlm(model: PreTrainedModel, inputs: dict[str, Any]) -> list[tuple[str, torch.nn.Module, dict]]:
+    """Capture inputs to each VLM submodule via a single forward pass.
 
-    Detects all known submodules by attribute name (vision tower, projector, connector,
-    language model, lm_head, encoder, decoder, …) and captures their forward kwargs
-    during one `model(**inputs)` call.
+    Detects all known VLM submodules by attribute name (vision tower, projector,
+    language model, lm_head, …) and captures their forward kwargs during one
+    `model(**inputs)` call.
 
     Each submodule is returned as a separate `(name, module, inputs)` triplet for
     independent export. The token-merge step (e.g. `masked_scatter` for VLMs) is
@@ -395,43 +424,31 @@ def decompose_encoder_decoder(
 
     Returns:
         `list[tuple[str, torch.nn.Module, dict]]`: One `(attr_name, module, inputs)`
-        triplet per detected submodule, in the order they appear in `_SUBMODULE_NAMES`.
+        triplet per detected submodule, in the order they appear in `_VLM_SUBMODULE_NAMES`.
 
     Raises:
-        `ValueError`: if no known submodules are found on the model.
+        `ValueError`: if no known VLM submodules are found on the model.
     """
-    submodules = _find_submodules(model)
+    submodules = _find_vlm_submodules(model)
     if not submodules:
         raise ValueError(
-            f"decompose_encoder_decoder found no known submodules on {type(model).__name__}. "
-            f"Expected one or more of: {_SUBMODULE_NAMES}."
+            f"decompose_vlm found no VLM submodules on {type(model).__name__}. "
+            f"Expected one or more of: {_VLM_SUBMODULE_NAMES}."
         )
 
-    per_module_captured: dict[str, list[dict]] = {name: [] for name in submodules}
-    ctx_managers = [
-        _capture_forward(module, per_module_captured[name], capture_once=True) for name, module in submodules.items()
-    ]
-
     try:
-        with contextlib.ExitStack() as stack:
-            for cm in ctx_managers:
-                stack.enter_context(cm)
-            stack.enter_context(torch.no_grad())
+        with contextlib.ExitStack() as stack, torch.no_grad():
+            submodule_inputs = {
+                name: stack.enter_context(_capture_forward(module)) for name, module in submodules.items()
+            }
             model(**copy.deepcopy(inputs))
     except Exception as e:
         raise RuntimeError(
-            f"decompose_encoder_decoder failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
+            f"decompose_vlm failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
 
-    result = []
-    for name, module in submodules.items():
-        captured = per_module_captured[name]
-        if not captured:
-            continue  # submodule not called during this forward (e.g. lm_head may not be called on base models)
-        result.append((name, module, captured[0]))
-    return result
-
-
-def is_multicomponent(model: PreTrainedModel) -> bool:
-    """Returns `True` if the model has recognisable submodules that should be exported separately."""
-    return bool(_find_submodules(model))
+    return [
+        (name, module, submodule_inputs[name][-1])
+        for name, module in submodules.items()
+        if submodule_inputs[name]  # skip submodules not called (e.g. lm_head on base models)
+    ]
