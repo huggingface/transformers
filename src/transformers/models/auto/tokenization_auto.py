@@ -344,23 +344,37 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
     "chameleon",
-    "deepseek_vl",
-    "deepseek_vl_v2",
-    "deepseek_vl_hybrid",
+    "chatlm",
     "deepseek_v2",
     "deepseek_v3",
+    "deepseek_vl",
+    "deepseek_vl_hybrid",
+    "deepseek_vl_v2",
     "fuyu",
+    "h2ovl_chat",
     "hyperclovax_vlm",
     "internlm2",
-    "janus",
+    "internvl_chat",
     "jamba",
+    "janus",
+    "kimi_k25",
     "llava",
     "llava_next",
+    "minicpmv",
+    "minimax_m2",
     "modernbert",
+    "molmo",
+    "molmo2",
+    "nemotron",
+    "nvfp4",
     "opencua",
+    "openvla",
     "phi3",
+    "phi3_v",
+    "phimoe",
     "step3p5",
     "vipllava",
+    "cohere_asr",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -574,7 +588,7 @@ class AutoTokenizer:
                     - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                       using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
-                    - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
+                    - a path to a single saved vocabulary file if and only if the tokenizer only requires a
                       single vocabulary file (like Bert or XLNet), e.g.: `./my_model_directory/vocab.txt`. (Not
                       applicable to all derived classes)
             inputs (additional positional arguments, *optional*):
@@ -724,7 +738,13 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
-
+        explicit_local_code = has_local_code and (
+            tokenizer_config_class is not None
+            and not (
+                tokenizer_class_from_name(tokenizer_config_class).__module__.startswith("transformers.")
+                and tokenizer_class_from_name(tokenizer_config_class + "Fast").__module__.startswith("transformers.")
+            )
+        )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
             has_remote_code = False
@@ -744,7 +764,7 @@ class AutoTokenizer:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             # BC v5: register *Fast aliases before remote code loads.
             if tokenizer_config_class:
                 tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))

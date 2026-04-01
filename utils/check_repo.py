@@ -31,6 +31,7 @@ It has no auto-fix mode.
 """
 
 import ast
+import functools
 import os
 import re
 import types
@@ -49,6 +50,22 @@ from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP, _VLM_COMMON_MODEL_NAMES_MAP
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
+
+CHECKER_CONFIG = {
+    "name": "repo",
+    "label": "Repository structure",
+    # Approximate: the checker also introspects the live transformers module at runtime
+    # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
+    "file_globs": [
+        "src/transformers/models/**/*.py",
+        "src/transformers/models/auto/*.py",
+        "src/transformers/**/__init__.py",
+        "tests/**/test_modeling_*.py",
+        "docs/**/*.md",
+    ],
+    "check_args": [],
+    "fix_args": None,
+}
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
@@ -565,6 +582,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
+@functools.lru_cache(maxsize=1)
 def get_model_modules() -> list[str]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
@@ -1191,6 +1209,9 @@ def ignore_undocumented(name: str) -> bool:
     # BLT models are internal building blocks, tested implicitly through BltForCausalLM
     if name.startswith("Blt"):
         return True
+    # image_processing_*_fast are backward-compat module aliases, not public objects.
+    if name.startswith("image_processing_") and name.endswith("_fast"):
+        return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True
     return False
@@ -1340,7 +1361,7 @@ def check_models_have_kwargs():
             class_bases = {}
             all_class_nodes = {}
 
-            for node in ast.walk(tree):
+            for node in tree.body:
                 if isinstance(node, ast.ClassDef):
                     # We only care about base classes that are simple names
                     bases = [b.id for b in node.bases if isinstance(b, ast.Name)]

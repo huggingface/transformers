@@ -18,20 +18,11 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
-from .image_processing_siglip2 import (
-    Siglip2ImageProcessorKwargs,
-    get_image_size_for_max_num_patches,
-)
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
@@ -60,6 +51,69 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
         array = np.pad(array, paddings, mode="constant", constant_values=pad_value)
         mask[-padding_length:] = 0
     return array, mask
+
+
+# Adapted from transformers.models.siglip2.image_processing_siglip2.Siglip2ImageProcessorKwargs
+class Siglip2ImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to `self.patch_size`):
+        The size (resolution) of each patch the image will be split to.
+    max_num_patches (`int`, *optional*, defaults to `self.max_num_patches`):
+        The image will be resized to have at most this number of patches,
+        and then padded in "patch" dimension to match this number exactly.
+    """
+
+    patch_size: int
+    max_num_patches: int
+
+
+# Adapted from transformers.models.siglip2.image_processing_siglip2.get_image_size_for_max_num_patches
+def get_image_size_for_max_num_patches(
+    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
+) -> tuple[int, int]:
+    """
+    Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
+
+    Args:
+        image_height (`int`):
+            Original image height.
+        image_width (`int`):
+            Original image width.
+        patch_size (`int`):
+            Patch size for processing.
+        max_num_patches (`int`):
+            Maximum number of patches.
+        eps (`float`):
+            Small threshold for binary search.
+
+    Returns:
+        Tuple: (target_height, target_width)
+    """
+    import math
+
+    def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
+        scaled_size = size * scale
+        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
+        scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
+        return int(scaled_size)
+
+    # Binary search for optimal scale
+    scale_min, scale_max = eps / 10, 100.0
+    while (scale_max - scale_min) >= eps:
+        scale = (scale_min + scale_max) / 2
+        target_height = get_scaled_image_size(scale, image_height, patch_size)
+        target_width = get_scaled_image_size(scale, image_width, patch_size)
+        num_patches = (target_height / patch_size) * (target_width / patch_size)
+
+        if num_patches <= max_num_patches:
+            scale_min = scale
+        else:
+            scale_max = scale
+
+    scale = scale_min
+    target_height = get_scaled_image_size(scale, image_height, patch_size)
+    target_width = get_scaled_image_size(scale, image_width, patch_size)
+    return target_height, target_width
 
 
 @auto_docstring
@@ -93,7 +147,7 @@ class Siglip2ImageProcessorPil(PilBackend):
         do_resize: bool,
         patch_size: int,
         max_num_patches: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

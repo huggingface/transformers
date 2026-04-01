@@ -23,13 +23,13 @@ from ..mistral.configuration_mistral import MistralConfig
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
-@strict(accept_kwargs=True)
+@strict
 class VoxtralRealtimeTextConfig(MistralConfig):
     model_type = "voxtral_realtime_text"
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
-@strict(accept_kwargs=True)
+@strict
 class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     r"""
     Example:
@@ -80,7 +80,7 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
-@strict(accept_kwargs=True)
+@strict
 class VoxtralRealtimeConfig(PreTrainedConfig):
     r"""
     audio_length_per_tok (`int`, *optional*, defaults to 8):
@@ -101,7 +101,8 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "voxtral_realtime"
     sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}

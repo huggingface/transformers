@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -48,7 +49,6 @@ from ..olmo3.modeling_olmo3 import (
     eager_attention_forward,
 )
 from ..qwen3_next.modeling_qwen3_next import (
-    Qwen3NextDynamicCache,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNormGated,
@@ -75,7 +75,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="allenai/Olmo-Hybrid-7B")
-@strict(accept_kwargs=True)
+@strict
 class OlmoHybridConfig(LlamaConfig):
     r"""
     linear_num_key_heads (`int`, *optional*):
@@ -189,21 +189,48 @@ class OlmoHybridConfig(LlamaConfig):
             raise ValueError("OLMoHybrid expects at least one attention layer.")
 
 
-class OlmoHybridDynamicCache(Qwen3NextDynamicCache):
+class OlmoHybridDynamicCache:
     """
     Cache for hybrid model supporting both attention KV cache and linear attention state.
 
-    Inherits from Qwen3NextDynamicCache. The main difference is that this cache
-    stores separate conv states for q, k, v (instead of a single conv_states list).
+    The main difference is that this cache stores separate conv states for q, k, v (instead of a single conv_states).
     """
 
+    is_compileable = False
+
     def __init__(self, config: OlmoHybridConfig):
-        super().__init__(config)
-        del self.conv_states
+        super().__init__()
+        self.layer_types = config.layer_types
+        self.transformer_layers = [
+            i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
+        ]
+        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
+        self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
+        self.key_cache = [None for _ in range(config.num_hidden_layers)]
+        self.value_cache = [None for _ in range(config.num_hidden_layers)]
         # Replace single conv_states with separate q, k, v conv states
         self.conv_states_q = [None for _ in range(config.num_hidden_layers)]
         self.conv_states_k = [None for _ in range(config.num_hidden_layers)]
         self.conv_states_v = [None for _ in range(config.num_hidden_layers)]
+
+    def __len__(self):
+        return len(self.layer_types)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: dict[str, Any] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.key_cache[layer_idx] is None:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
@@ -240,8 +267,27 @@ class OlmoHybridDynamicCache(Qwen3NextDynamicCache):
                     0, beam_idx.to(device)
                 )
 
-    @property
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        # take any layer that contains cache and not empty tensor
+        layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
+        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx] is None:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns for each layer.
+        """
+        kv_offset = 0
+        past_seen_tokens = self.get_seq_length(layer_idx)
+        kv_length = query_length + past_seen_tokens
+        return kv_length, kv_offset
+
     def has_previous_state(self):
+        """We have a previous state if the last linear (conv) layer was already updated."""
         return self.conv_states_q[self.last_linear_layer] is not None
 
 
@@ -495,7 +541,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
 
         use_cache = cache_params is not None
-        use_precomputed = use_cache and getattr(cache_params, "has_previous_state", False) and seq_len == 1
+        use_precomputed = use_cache and cache_params.has_previous_state() and seq_len == 1
 
         conv_state_q = cache_params.conv_states_q[self.layer_idx] if cache_params else None
         conv_state_k = cache_params.conv_states_k[self.layer_idx] if cache_params else None

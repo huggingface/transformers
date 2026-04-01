@@ -581,7 +581,35 @@ class Serve:
         self,
         continuous_batching: Annotated[
             bool | None,
-            typer.Option(help="Whether to use continuous batching for chat completions."),
+            typer.Option(help="Whether to use continuous batching for chat completions. Configure with --cb-* flags."),
+        ] = None,
+        cb_block_size: Annotated[
+            int | None,
+            typer.Option(help="Size of each KV cache block in tokens for continuous batching. Default: 256."),
+        ] = None,
+        cb_num_blocks: Annotated[
+            int | None,
+            typer.Option(
+                help="Number of blocks in KV cache for continuous batching. Default: auto-inferred from GPU memory."
+            ),
+        ] = None,
+        cb_max_batch_tokens: Annotated[
+            int | None,
+            typer.Option(
+                help="Maximum number of tokens in a batch for continuous batching. Default: auto-inferred from GPU memory."
+            ),
+        ] = None,
+        cb_max_memory_percent: Annotated[
+            float | None,
+            typer.Option(
+                help="Maximum percentage of free GPU memory to use for KV cache in continuous batching (0.0-1.0). Default: 0.8."
+            ),
+        ] = None,
+        cb_use_cuda_graph: Annotated[
+            bool | None,
+            typer.Option(
+                help="Enable CUDA graphs for continuous batching performance. Default: auto-inferred based on attention implementation."
+            ),
         ] = None,
         device: Annotated[
             str,
@@ -657,6 +685,13 @@ class Serve:
         self.force_model = force_model
         self.non_blocking = non_blocking
 
+        # Continuous batching configuration arguments
+        self.cb_block_size = cb_block_size
+        self.cb_num_blocks = cb_num_blocks
+        self.cb_max_batch_tokens = cb_max_batch_tokens
+        self.cb_max_memory_percent = cb_max_memory_percent
+        self.cb_use_cuda_graph = cb_use_cuda_graph
+
         # Seed
         if default_seed is not None:
             set_torch_seed(default_seed)
@@ -680,6 +715,8 @@ class Serve:
         # Thread-safety for load_model_and_processor / load_audio_model_and_processor
         self.model_locks: dict[str, threading.Lock] = {}
         self.model_locks_guard = threading.Lock()
+        # Thread-safety for continuous batching manager init/teardown
+        self._cb_manager_lock = threading.Lock()
 
         # 2. preserves information about the last call and last KV cache, to determine whether we can reuse the KV
         # cache and avoid re-running prefill
@@ -1135,45 +1172,64 @@ class Serve:
         """
 
         model_id_and_revision = self.process_model_name(req["model"])
-        must_discard_cache = model_id_and_revision != self.last_model
 
-        self.last_model = model_id_and_revision
+        with self._cb_manager_lock:
+            must_discard_cache = model_id_and_revision != self.last_model
+            self.last_model = model_id_and_revision
 
-        # When switching models, terminate a continuous batching manager if it is running.
-        if must_discard_cache:
-            if self.running_continuous_batching_manager is not None:
-                self.running_continuous_batching_manager.stop(block=True, timeout=2)
-                self.running_continuous_batching_manager = None
+            # When switching models, terminate a continuous batching manager if it is running.
+            if must_discard_cache:
+                if self.running_continuous_batching_manager is not None:
+                    self.running_continuous_batching_manager.stop(block=True, timeout=2)
+                    self.running_continuous_batching_manager = None
 
-        model, processor = self.load_model_and_processor(model_id_and_revision)
+            model, processor = self.load_model_and_processor(model_id_and_revision)
 
-        # Continuous batching only supports text-only models
-        if self.get_model_modality(model, processor=processor) != Modality.LLM:
-            logger.warning_once(
-                "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
-            )
-            return self.generate_chat_completion(req)
+            # Continuous batching only supports text-only models
+            if self.get_model_modality(model, processor=processor) != Modality.LLM:
+                logger.warning_once(
+                    "Continuous batching is not supported for non-text-only models. Falling back to regular generate."
+                )
+                return self.generate_chat_completion(req)
 
-        tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
+            tokenizer = processor.tokenizer if hasattr(processor, "tokenizer") else processor
 
-        generation_config = create_generation_config_from_req(
-            req,
-            model_generation_config=model.generation_config,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
-            use_cache=False,
-            do_sample=False,
-            scheduler="fifo",
-        )
-
-        if self.running_continuous_batching_manager is None:
-            self.running_continuous_batching_manager = model.init_continuous_batching(
-                generation_config=generation_config
+            generation_config = create_generation_config_from_req(
+                req,
+                model_generation_config=model.generation_config,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.pad_token_id,
+                use_cache=False,
+                do_sample=False,
+                scheduler="fifo",
             )
 
-            # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
-            self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
-            self.running_continuous_batching_manager.start()
+            if self.running_continuous_batching_manager is None:
+                from transformers import ContinuousBatchingConfig
+
+                # Build continuous batching config from CLI arguments
+                cb_config_kwargs = {}
+                if self.cb_block_size is not None:
+                    cb_config_kwargs["block_size"] = self.cb_block_size
+                if self.cb_num_blocks is not None:
+                    cb_config_kwargs["num_blocks"] = self.cb_num_blocks
+                if self.cb_max_batch_tokens is not None:
+                    cb_config_kwargs["max_batch_tokens"] = self.cb_max_batch_tokens
+                if self.cb_max_memory_percent is not None:
+                    cb_config_kwargs["max_memory_percent"] = self.cb_max_memory_percent
+                if self.cb_use_cuda_graph is not None:
+                    cb_config_kwargs["use_cuda_graph"] = self.cb_use_cuda_graph
+
+                cb_config = ContinuousBatchingConfig(**cb_config_kwargs) if cb_config_kwargs else None
+
+                self.running_continuous_batching_manager = model.init_continuous_batching(
+                    generation_config=generation_config,
+                    continuous_batching_config=cb_config,
+                )
+
+                # TODO (Joao, Lysandre): the logits processors should be fixed in continuous batching and correctly applied in non-cb
+                self.running_continuous_batching_manager.logit_processor = LogitsProcessorList()
+                self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
         modality = self.get_model_modality(model, processor=processor)
@@ -1242,6 +1298,9 @@ class Serve:
             while self.running_continuous_batching_manager.is_running() and result is None:
                 result = self.running_continuous_batching_manager.get_result(request_id=_request_id, timeout=1)
 
+            if result is None:
+                raise RuntimeError(f"Request {_request_id} failed: generation loop stopped before producing a result.")
+
             content = tokenizer.decode(result.generated_tokens)
 
             chat_completion_result = ChatCompletion(
@@ -1290,7 +1349,7 @@ class Serve:
             return StreamingResponse(cancellation_wrapper_stream(request_id), media_type="text/event-stream")
         else:
             chunk = cancellation_wrapper_buffer(request_id)
-            json_chunk = chunk.model_dump_json(exclude_none=True)
+            json_chunk = chunk.model_dump(exclude_none=True)
             return JSONResponse(json_chunk, media_type="application/json")
 
     @staticmethod
@@ -1836,9 +1895,7 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        inputs = processor.apply_chat_template(
-            inputs, add_generation_prompt=True, return_tensors="pt", return_dict=True
-        )["input_ids"]
+        inputs = processor.apply_chat_template(inputs, tokenize=True, add_generation_prompt=True, return_tensors="pt")
         inputs = inputs.to(model.device)
         request_id = req.get("previous_response_id", "req_0")
 

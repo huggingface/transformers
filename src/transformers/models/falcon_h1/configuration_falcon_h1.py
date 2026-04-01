@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tiiuae/Falcon-H1-1.5B-Deep-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class FalconH1Config(PreTrainedConfig):
     r"""
     num_logits_to_keep (`int` or `None`, *optional*, defaults to 1):
@@ -30,6 +30,8 @@ class FalconH1Config(PreTrainedConfig):
         logits of the last prompt token are needed for generation. For long sequences, the logits for the entire
         sequence may use a lot of memory so, setting `num_logits_to_keep=1` will reduce memory footprint
         significantly.
+    projectors_bias (`bool`, *optional*, defaults to `False`):
+        Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
     lm_head_multiplier (`float`, *optional*, defaults to 1.0):
         The multiplier for the LM head. This is used to scale the output of the LM head.
     embedding_multiplier (`float`, *optional*, defaults to 1.0):
@@ -49,11 +51,10 @@ class FalconH1Config(PreTrainedConfig):
         The multiplier for the SSM input layer. This is used to scale the output of the SSM input layer.
     ssm_out_multiplier (`float`, *optional*):
         The multiplier for the SSM output layer. This is used to scale the output of the SSM output layer.
-    projectors_bias (`bool`, *optional*, defaults to `False`):
-        Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
     """
 
     model_type = "falcon_h1"
+    attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 128000
@@ -132,7 +133,7 @@ class FalconH1Config(PreTrainedConfig):
 
     @property
     def layers_block_type(self):
-        return ["attention" for i in range(self.num_hidden_layers)]
+        return ["hybrid" for i in range(self.num_hidden_layers)]
 
 
 __all__ = ["FalconH1Config"]

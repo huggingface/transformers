@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Xrenya/pvt-tiny-224")
-@strict(accept_kwargs=True)
+@strict
 class PvtConfig(PreTrainedConfig):
     r"""
     num_encoder_blocks (`int`, *optional*, defaults to 4):

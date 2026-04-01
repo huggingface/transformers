@@ -23,13 +23,21 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.efficientnet.image_processing_efficientnet.EfficientNetImageProcessorKwargs
+class EfficientNetImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
+        Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
+    include_top (`bool`, *optional*, defaults to `self.include_top`):
+        Normalize the image again with the standard deviation only for image classification if set to True.
+    """
+
+    rescale_offset: bool
+    include_top: bool
 
 
 @auto_docstring
@@ -71,7 +79,7 @@ class EfficientNetImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
