@@ -159,6 +159,9 @@ generation.
 [[autodoc]] TopKLogitsWarper
     - __call__
 
+[[autodoc]] TopNSigmaLogitsWarper
+    - __call__
+
 [[autodoc]] TopPLogitsWarper
     - __call__
 
