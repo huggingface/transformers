@@ -623,6 +623,7 @@ class CBGenerateManager(BaseGenerateManager):
     def __init__(self, cb_config: "ContinuousBatchingConfig | None" = None):
         self._cb = None
         self._cb_config = cb_config
+        self._init_lock = threading.Lock()
 
     def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
         """Initialize the CB manager on first call with the request's generation config.
@@ -636,10 +637,14 @@ class CBGenerateManager(BaseGenerateManager):
         if self._cb is not None:
             return
 
-        self._cb = model.init_continuous_batching(
-            generation_config=gen_config, continuous_batching_config=self._cb_config
-        )
-        self._cb.start()
+        with self._init_lock:
+            if self._cb is not None:
+                return
+
+            self._cb = model.init_continuous_batching(
+                generation_config=gen_config, continuous_batching_config=self._cb_config
+            )
+            self._cb.start()
 
     def generate_streaming(
         self,
@@ -748,6 +753,7 @@ class GenerationState:
         self._generate_managers: dict[str, GenerateManager] = {}
         self._cb_manager: CBGenerateManager | None = None
         self._cb_model_id: str | None = None
+        self._cb_manager_lock = threading.Lock()
 
     def use_continuous_batching(self, model: "PreTrainedModel", modality: Modality) -> bool:
         """Check if continuous batching can be used for this model and modality.
@@ -780,14 +786,15 @@ class GenerationState:
             `BaseGenerateManager`: Either a `GenerateManager` or `CBGenerateManager`.
         """
         if use_cb:
-            if self._cb_model_id != model_id:
-                if self._cb_manager is not None:
-                    self._cb_manager.stop()
-                    self._cb_manager = None
-            if self._cb_manager is None:
-                self._cb_manager = CBGenerateManager(cb_config=self._cb_config)
-                self._cb_model_id = model_id
-            return self._cb_manager
+            with self._cb_manager_lock:
+                if self._cb_model_id != model_id:
+                    if self._cb_manager is not None:
+                        self._cb_manager.stop()
+                        self._cb_manager = None
+                if self._cb_manager is None:
+                    self._cb_manager = CBGenerateManager(cb_config=self._cb_config)
+                    self._cb_model_id = model_id
+                return self._cb_manager
         if model_id not in self._generate_managers:
             self._generate_managers[model_id] = GenerateManager()
         return self._generate_managers[model_id]
