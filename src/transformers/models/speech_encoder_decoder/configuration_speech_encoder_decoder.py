@@ -61,7 +61,7 @@ class SpeechEncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    is_encoder_decoder: int | None = True
+    is_encoder_decoder: bool | None = True
 
     def __post_init__(self, **kwargs):
         if "encoder" not in kwargs or "decoder" not in kwargs:
