@@ -346,6 +346,8 @@ def _consolidate_flash_kwarg_alternative_name(
                 "Flash Attention version (e.g. FA4 for attentions sinks in GPT Oss) that supports it."
             )
 
+    return None
+
 
 def _process_flash_attention_kwargs(
     is_causal: bool,
