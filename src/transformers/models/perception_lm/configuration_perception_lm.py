@@ -39,6 +39,7 @@ class PerceptionLMConfig(PreTrainedConfig):
     projector_pooling_ratio: int = 1
     image_token_id: int = 128002
     video_token_id: int = 128003
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
