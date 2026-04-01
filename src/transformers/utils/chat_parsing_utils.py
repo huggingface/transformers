@@ -70,14 +70,17 @@ def recursive_parse(
 
     # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema.get("type")
-    has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-key-value" in node_schema
+    has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-key-value" in node_schema or "x-regex-substitutions" in node_schema
     if has_regex and not isinstance(node_content, str):
         raise TypeError(
-            "Schema node got a non-string input, but has a regex for parsing.\n"
+            "Schema node got a non-string input, but has a regex for parsing or substitution.\n"
             f"Input: {node_content}\n"
             f"Schema: {node_schema}"
         )
 
+    node_subs = node_schema.get("x-regex-substitutions", [])
+    for node_sub in node_subs:
+        node_content = re.sub(node_sub[0], node_sub[1], node_content, flags=re.DOTALL)
     node_regex = node_schema.get("x-regex")
     node_regex_iterator = node_schema.get("x-regex-iterator")
     node_regex_to_dict = node_schema.get("x-regex-key-value")
