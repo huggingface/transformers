@@ -3304,10 +3304,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     ):
                         model_to_save.config.tie_word_embeddings = False
                         logger.warning(
-                            "Detected that the model config has `tie_word_embeddings=True` but the input "
-                            "and output embeddings have different values (e.g. after PEFT merging or "
-                            "vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config "
-                            "to prevent weight corruption on reload."
+                            "Model config has `tie_word_embeddings=True` but input and output embedding "
+                            "weights have diverged. Saving config with `tie_word_embeddings=False`."
                         )
 
         # Save the config

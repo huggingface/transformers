@@ -1621,7 +1621,7 @@ class ModelUtilsTest(TestCasePlus):
             with CaptureLogger(logger) as cl:
                 model.save_pretrained(tmp_dir)
 
-            self.assertIn("Setting `tie_word_embeddings=False`", cl.out)
+            self.assertIn("weights have diverged. Saving config with `tie_word_embeddings=False`", cl.out)
 
             with open(os.path.join(tmp_dir, "config.json")) as f:
                 saved_config = json.load(f)
