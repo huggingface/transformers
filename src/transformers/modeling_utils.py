@@ -3282,47 +3282,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If tie_word_embeddings=True but weights have diverged (e.g. after PEFT merge_and_unload),
         # auto-fix the config before saving, mirroring the load-side check in tie_weights().
-        try:
-            if getattr(model_to_save.config, "tie_word_embeddings", False):
-                output_embeddings = model_to_save.get_output_embeddings()
-                input_embeddings = model_to_save.get_input_embeddings()
-                if output_embeddings is not None and input_embeddings is not None:
-                    out_w = getattr(output_embeddings, "weight", None)
-                    in_w = getattr(input_embeddings, "weight", None)
-                    if out_w is not None and in_w is not None:
-                        # Only auto-fix if lm_head.weight is declared as tied in _tied_weights_keys;
-                        # some models (e.g. Pop2Piano) have lm_head but don't tie it.
-                        tied_keys = getattr(model_to_save, "_tied_weights_keys", None) or {}
-                        out_names = {n for n, p in model_to_save.named_parameters() if p is out_w}
-                        in_names = {n for n, p in model_to_save.named_parameters() if p is in_w}
-                        embeddings_declared_tied = any(
-                            (k in out_names and v in in_names) or (k in in_names and v in out_names)
-                            for k, v in tied_keys.items()
+        if getattr(model_to_save.config, "tie_word_embeddings", False):
+            output_embeddings = model_to_save.get_output_embeddings()
+            if output_embeddings is not None:
+                out_w = getattr(output_embeddings, "weight", None)
+                in_w = getattr(model_to_save.get_input_embeddings(), "weight", None)
+                if out_w is not None and in_w is not None and out_w is not in_w:
+                    tied_keys = getattr(model_to_save, "_tied_weights_keys", None) or {}
+                    out_names = {n for n, p in model_to_save.named_parameters() if p is out_w}
+                    in_names = {n for n, p in model_to_save.named_parameters() if p is in_w}
+                    if any(
+                        (k in out_names and v in in_names) or (k in in_names and v in out_names)
+                        for k, v in tied_keys.items()
+                    ) and (
+                        out_w.shape != in_w.shape
+                        or (
+                            out_w.device == in_w.device
+                            and out_w.device.type != "meta"
+                            and not torch.equal(out_w, in_w)
                         )
-                        weights_differ = (
-                            embeddings_declared_tied
-                            and out_w is not in_w
-                            and (
-                                out_w.shape != in_w.shape
-                                or (
-                                    out_w.device == in_w.device
-                                    and out_w.device.type != "meta"
-                                    and not torch.equal(out_w, in_w)
-                                )
-                            )
+                    ):
+                        model_to_save.config.tie_word_embeddings = False
+                        logger.warning(
+                            "Detected that the model config has `tie_word_embeddings=True` but the input "
+                            "and output embeddings have different values (e.g. after PEFT merging or "
+                            "vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config "
+                            "to prevent weight corruption on reload."
                         )
-                        if weights_differ:
-                            model_to_save.config.tie_word_embeddings = False
-                            logger.warning(
-                                "Detected that the model config has `tie_word_embeddings=True` but the input "
-                                "and output embeddings have different values (e.g. after PEFT merging or "
-                                "vocabulary resizing). Setting `tie_word_embeddings=False` in the saved config "
-                                "to prevent weight corruption on reload."
-                            )
-        except NotImplementedError:
-            pass
-        except Exception as e:
-            logger.debug(f"Could not check tied embeddings consistency during save: {e}")
 
         # Save the config
         if is_main_process:
