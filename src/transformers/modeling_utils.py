@@ -3302,10 +3302,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                         weights_differ = (
                             embeddings_declared_tied
                             and out_w is not in_w
-                            and out_w.shape == in_w.shape
-                            and out_w.device == in_w.device
-                            and out_w.device.type != "meta"
-                            and not torch.equal(out_w, in_w)
+                            and (
+                                out_w.shape != in_w.shape
+                                or (
+                                    out_w.device == in_w.device
+                                    and out_w.device.type != "meta"
+                                    and not torch.equal(out_w, in_w)
+                                )
+                            )
                         )
                         if weights_differ:
                             model_to_save.config.tie_word_embeddings = False
