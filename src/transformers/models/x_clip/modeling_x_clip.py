@@ -837,8 +837,8 @@ class XCLIPCrossAttention(nn.Module):
         batch_size, query_seq_len, hidden_size = queries.shape
         batch_size, key_seq_len, hidden_size = keys.shape
 
-        query_shape = (batch_size, query_seq_len, -1, self.attention_head_size)
-        key_shape = (batch_size, key_seq_len, -1, self.attention_head_size)
+        query_shape = (batch_size, query_seq_len, -1, self.head_dim)
+        key_shape = (batch_size, key_seq_len, -1, self.head_dim)
 
         queries = self.q_proj(queries).view(*query_shape).transpose(1, 2)
         keys = self.k_proj(keys).view(*key_shape).transpose(1, 2)
@@ -1132,7 +1132,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = image_text_contrastive_loss(logits_per_text, logits_per_video)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         return XCLIPOutput(
             loss=loss,

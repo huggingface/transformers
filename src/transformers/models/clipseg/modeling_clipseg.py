@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
@@ -76,15 +76,13 @@ class CLIPSegOutput(ModelOutput):
 
 @dataclass
 @auto_docstring
-class CLIPSegDecoderOutput(ModelOutput):
+class CLIPSegDecoderOutput(BaseModelOutputWithNoAttention):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.
     """
 
     logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -544,12 +542,18 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: tuple[torch.Tensor],
         conditional_embeddings: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CLIPSegDecoderOutput:
+        r"""
+        conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
+            The conditional embeddings for the query images. If provided, the model will use this instead of computing
+            the embeddings from the conditional_pixel_values.
+        """
         activations = hidden_states[::-1]
 
         output = None

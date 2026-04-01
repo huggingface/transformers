@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithNoAttention, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -142,7 +142,7 @@ class CLIPSegOutput(CLIPOutput):
 
 @dataclass
 @auto_docstring
-class CLIPSegDecoderOutput(ModelOutput):
+class CLIPSegDecoderOutput(BaseModelOutputWithNoAttention):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.

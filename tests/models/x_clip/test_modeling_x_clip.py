@@ -401,6 +401,7 @@ class XCLIPTextModelTester:
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
+    model_split_percents = [0.7, 0.9]
 
     def setUp(self):
         self.model_tester = XCLIPTextModelTester(self)
@@ -448,6 +449,7 @@ class XCLIPModelTester:
         vision_kwargs=None,
         projection_dim=64,
         mit_hidden_size=64,
+        prompt_num_attention_heads=4,
         is_training=True,
     ):
         if text_kwargs is None:
@@ -458,6 +460,7 @@ class XCLIPModelTester:
         self.parent = parent
         self.projection_dim = projection_dim
         self.mit_hidden_size = mit_hidden_size
+        self.prompt_num_attention_heads = prompt_num_attention_heads
         self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
@@ -485,6 +488,7 @@ class XCLIPModelTester:
             text_config=self.text_model_tester.get_config().to_dict(),
             vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=self.projection_dim,
+            prompt_num_attention_heads=self.prompt_num_attention_heads,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
