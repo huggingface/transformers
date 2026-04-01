@@ -180,6 +180,42 @@ qwen3_schema = {
     },
 }
 
+re_sub_schema = {
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "thinking": {"type": "string"},
+        "content": {"type": "string"},
+        "tool_calls": {
+            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                            },
+                            "arguments": {
+                                "type": "object",
+                                "x-regex-key-value": r'(?P<key>\w+):(?P<value><\|"\|>.*?<\|"\|>|[^,}]+)',
+                                "additionalProperties": {
+                                    "x-regex-substitutions": [[r'^<\|"\|>|<\|"\|>$', ""]],
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>(?:(?!\<\|tool_call\>).)+)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
+}
+
 prefix_items_schema = {
     # Not intended to be "realistic", just checks that prefixItems can handle a heterogeneous array
     "x-regex-iterator": r"<block>(.*?)<\/block>",
@@ -383,6 +419,27 @@ class ChatSchemaParserTest(unittest.TestCase):
                                 "locations": [{"country": "France", "city": "Paris"}],
                                 "temp_units": "celsius",
                             },
+                        },
+                    }
+                ],
+            },
+        )
+
+    def test_re_sub_schema(self):
+        """Test that a schema doing re substitutions to enable JSON parsing works."""
+        model_out = '<|channel>thought\nThe user is asking for the current temperature in Paris. I should check the available tools to see if there\'s a function that can provide this information.<channel|><|tool_call>call:get_current_temperature{detail_level:0,location:<|"|>Paris, France<|"|>,unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
+        parsed = recursive_parse(model_out, re_sub_schema)
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": "0", "location": "Paris, France", "unit": "celsius"},
                         },
                     }
                 ],

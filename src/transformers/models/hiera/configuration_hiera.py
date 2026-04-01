@@ -76,12 +76,12 @@ class HieraConfig(BackboneConfigMixin, PreTrainedConfig):
     mlp_ratio: float = 4.0
     depths: list[int] | tuple[int, ...] = (2, 3, 16, 3)
     num_heads: list[int] | tuple[int, ...] = (1, 2, 4, 8)
-    embed_dim_multiplier: float = 2.0
+    embed_dim_multiplier: float | int = 2.0
     num_query_pool: int = 3
     query_stride: list[int] | tuple[int, ...] = (2, 2)
     masked_unit_size: list[int] | tuple[int, ...] = (8, 8)
     masked_unit_attention: list[bool] | tuple[bool, ...] = (True, True, False, False)
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     num_channels: int = 3
     hidden_act: str = "gelu"
     initializer_range: float = 0.02

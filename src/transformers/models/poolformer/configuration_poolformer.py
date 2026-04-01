@@ -67,7 +67,7 @@ class PoolFormerConfig(PreTrainedConfig):
     strides: list[int] | tuple[int, ...] = (4, 2, 2, 2)
     padding: list[int] | tuple[int, ...] = (2, 1, 1, 1)
     num_encoder_blocks: int = 4
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     hidden_act: str = "gelu"
     use_layer_scale: bool = True
     layer_scale_init_value: float = 1e-5

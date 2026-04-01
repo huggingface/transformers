@@ -54,6 +54,7 @@ class FalconH1Config(PreTrainedConfig):
     """
 
     model_type = "falcon_h1"
+    attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 128000
@@ -66,7 +67,7 @@ class FalconH1Config(PreTrainedConfig):
     hidden_act: str = "silu"
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
-    use_cache: int | None = True
+    use_cache: bool | None = True
     num_logits_to_keep: int | None = 1
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
@@ -132,7 +133,7 @@ class FalconH1Config(PreTrainedConfig):
 
     @property
     def layers_block_type(self):
-        return ["attention" for i in range(self.num_hidden_layers)]
+        return ["hybrid" for i in range(self.num_hidden_layers)]
 
 
 __all__ = ["FalconH1Config"]

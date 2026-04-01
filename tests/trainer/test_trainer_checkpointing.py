@@ -1663,11 +1663,12 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
         # Finally check that we don't have an old one
         assert not os.path.exists(os.path.join(tmp_dir, "checkpoint-5")), "Found checkpoint-5, limit not respected"
 
-        # Finally check that the right model was loaded in, checkpoint-10
-        # this goes by the last `eval` step check to do so, so it won't be
-        # the last model *saved*
+        # Finally check that the right model was loaded in - it should be the checkpoint
+        # with the best eval metric. With eval at steps 5, 10, 11, the best could be any of them.
         model_state = trainer.model.state_dict()
-        final_model_weights = safetensors.torch.load_file(os.path.join(tmp_dir, "checkpoint-10", "model.safetensors"))
+        # Find which checkpoint has the best metric
+        best_checkpoint_dir = trainer.state.best_model_checkpoint
+        final_model_weights = safetensors.torch.load_file(os.path.join(best_checkpoint_dir, "model.safetensors"))
         for k, v in model_state.items():
             assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
 
@@ -1770,12 +1771,12 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
     def test_best_model_checkpoint_behavior(self):
-        # Case 1. Never evaluated, save_total_limit > 1 and save_steps == 1.
+        # Case 1. No evaluation, save_total_limit > 1 and save_steps == 1.
         # Both best_metric and best_model_checkpoint should be None.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
-                eval_strategy="steps",
+                eval_strategy="no",
                 save_strategy="steps",
                 save_steps=1,
                 metric_for_best_model="accuracy",
@@ -1787,13 +1788,13 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
             assert trainer.state.best_model_checkpoint is None
             assert len(os.listdir(tmpdir)) == trainer.state.global_step
 
-        # Case 2. Never evaluated and save_total_limit == 1.
+        # Case 2. No evaluation and save_total_limit == 1.
         # Both best_metric and best_model_checkpoint should be None.
         # Only the last checkpoint should remain.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
-                eval_strategy="steps",
+                eval_strategy="no",
                 save_strategy="steps",
                 save_steps=1,
                 metric_for_best_model="accuracy",

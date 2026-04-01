@@ -111,7 +111,7 @@ class XCLIPVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     initializer_factor: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
 
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")

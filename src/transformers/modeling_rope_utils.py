@@ -916,7 +916,7 @@ class RotaryEmbeddingConfigMixin:
 
         # Some models need to store model-specific keys, and we don't want to throw warning at them
         if ignore_keys is not None:
-            received_keys -= ignore_keys
+            received_keys -= set(ignore_keys)
 
         missing_keys = required_keys - received_keys
         if missing_keys:

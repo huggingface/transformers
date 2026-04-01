@@ -37,20 +37,12 @@ from ...utils import (
     TensorType,
     auto_docstring,
     is_scipy_available,
-    is_torch_available,
-    is_vision_available,
     requires_backends,
 )
+from ...utils.import_utils import requires
 from ..owlvit.image_processing_owlvit import OwlViTImageProcessor
 from ..owlvit.image_processing_pil_owlvit import OwlViTImageProcessorPil
 
-
-if is_torch_available():
-    import torch
-
-
-if is_vision_available():
-    pass
 
 if is_scipy_available():
     from scipy import ndimage as ndi
@@ -266,7 +258,7 @@ class Owlv2ImageProcessor(OwlViTImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
@@ -320,6 +312,7 @@ class Owlv2ImageProcessor(OwlViTImageProcessor):
 
 
 @auto_docstring
+@requires(backends=("torch",))
 class Owlv2ImageProcessorPil(OwlViTImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = OPENAI_CLIP_MEAN
@@ -333,7 +326,7 @@ class Owlv2ImageProcessorPil(OwlViTImageProcessorPil):
     crop_size = None
     do_center_crop = None
 
-    def pad(self, image: "np.ndarray", constant_value: float = 0.0) -> "np.ndarray":
+    def pad(self, image: np.ndarray, constant_value: float = 0.0) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
         """
@@ -407,10 +400,10 @@ class Owlv2ImageProcessorPil(OwlViTImageProcessorPil):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
