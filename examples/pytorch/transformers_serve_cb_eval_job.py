@@ -16,7 +16,6 @@ import time
 
 from inspect_ai import eval
 from inspect_ai.log import bundle_log_dir
-from inspect_evals.gpqa import gpqa_diamond
 
 
 def wait_for_server_up(server_process, port=8000, timeout=600):
@@ -79,13 +78,19 @@ def main():
         "--limit",
         type=int,
         default=10,
-        help="Number of evaluation samples to run (default: 5)",
+        help="Number of evaluation samples to run (default: 10)",
     )
     parser.add_argument(
         "--max-connections",
         type=int,
         default=10,
-        help="Maximum concurrent connections for evaluation (default: 2)",
+        help="Maximum concurrent connections for evaluation (default: 10)",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0,
+        help="Temperature for generation (default: 0)",
     )
     parser.add_argument(
         "--log-dir",
@@ -127,7 +132,7 @@ def main():
     )
     parser.add_argument(
         "--cb-use-cuda-graph",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         help="Enable CUDA graphs for continuous batching performance",
     )
 
@@ -157,7 +162,10 @@ def main():
 
         serve_cmd.extend(["--cb-max-memory-percent", str(args.cb_max_memory_percent)])
 
-        serve_cmd.append("--cb-use-cuda-graph")
+        if args.cb_use_cuda_graph is True:
+            serve_cmd.append("--cb-use-cuda-graph")
+        elif args.cb_use_cuda_graph is False:
+            serve_cmd.append("--no-cb-use-cuda-graph")
 
     # Always use sdpa attention implementation
     serve_cmd.extend(["--attn-implementation", "kernels-community/flash-attn2"])
@@ -171,6 +179,7 @@ def main():
         print(f"CB Max Batch Tokens: {args.cb_max_batch_tokens if args.cb_max_batch_tokens else 'auto'}")
         print(f"CB Max Memory: {args.cb_max_memory_percent * 100}%")
         print(f"CB CUDA Graph: {args.cb_use_cuda_graph}")
+    print(f"Temperature: {args.temperature}")
     print(f"Command: {' '.join(serve_cmd)}")
     print("=" * 70)
     print("SERVER OUTPUT:")
@@ -182,13 +191,14 @@ def main():
     wait_for_server_up(server_process, port=args.port, timeout=600)
 
     eval(
-        gpqa_diamond,
+        "hf/Idavidrein/gpqa/diamond",
         model=f"openai-api/transformers-serve/{args.model}",
         log_dir=args.log_dir,
         model_base_url=f"http://localhost:{args.port}/v1",
         display="plain",
         limit=args.limit,
         model_args={"stream": False},
+        temperature=args.temperature,
         max_connections=args.max_connections,
         max_tokens=2048,
     )
