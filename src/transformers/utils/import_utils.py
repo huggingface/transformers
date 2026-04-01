@@ -2048,7 +2048,7 @@ class _LazyModule(ModuleType):
         super().__init__(name)
 
         self._object_missing_backend = {}
-        self._explicit_import_shortcut = explicit_import_shortcut if explicit_import_shortcut else {}
+        self._explicit_import_shortcut = explicit_import_shortcut or {}
 
         if any(isinstance(key, frozenset) for key in import_structure):
             self._modules = set()

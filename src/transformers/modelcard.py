@@ -559,7 +559,7 @@ def extract_hyperparameters_from_trainer(trainer):
 
     if trainer.args.optim:
         optimizer_name = trainer.args.optim
-        optimizer_args = trainer.args.optim_args if trainer.args.optim_args else "No additional optimizer arguments"
+        optimizer_args = trainer.args.optim_args or "No additional optimizer arguments"
 
         if "adam" in optimizer_name.lower():
             hyperparameters["optimizer"] = (

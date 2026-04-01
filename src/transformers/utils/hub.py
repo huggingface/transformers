@@ -386,7 +386,7 @@ def cached_files(
             existing_files.append(resolved_file)
 
     if os.path.isdir(path_or_repo_id):
-        return existing_files if existing_files else None
+        return existing_files or None
 
     if cache_dir is None:
         cache_dir = constants.HF_HUB_CACHE
