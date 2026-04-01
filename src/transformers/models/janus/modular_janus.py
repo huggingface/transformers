@@ -1089,10 +1089,12 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
 
         for i in range(num_image_tokens):
-            # Set is_first_iteration=True to force using inputs_embeds instead of input_ids.
-            # Without this, prepare_inputs_for_generation would use input_ids (the full prompt)
-            # instead of our prepared inputs_embeds (1 new token). This causes position_ids to be
-            # computed incorrectly based on cache length, leading to RoPE index out of bounds errors.
+            # Set `is_first_iteration=True` to force using `inputs_embeds` instead of `input_ids`.
+            # Without this, `prepare_inputs_for_generation` would use `input_ids` (the full prompt)
+            # instead of our prepared `inputs_embeds` (1 new token).
+            # This causes CUDA error: device-side assert triggered, seen around the call to ` self.self_attn`.
+            # Set this to `True` is also necessary to match the expected output, see the more detailed comment
+            # https://github.com/huggingface/transformers/pull/45044#discussion_r3020805374.
             model_inputs = self.prepare_inputs_for_generation(
                 inputs_embeds=inputs_embeds, input_ids=input_tokens, is_first_iteration=True, **model_kwargs
             )
