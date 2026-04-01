@@ -34,7 +34,6 @@ import typer
 from huggingface_hub import scan_cache_dir
 from tokenizers.decoders import DecodeStream
 from tqdm import tqdm
-from tqdm.auto import tqdm as base_tqdm
 from typing_extensions import NotRequired
 
 import transformers
@@ -55,6 +54,7 @@ from transformers.utils.import_utils import (
 
 from .._typing import RequestSchema
 from ..tokenization_utils_base import BatchEncoding
+
 
 if TYPE_CHECKING:
     from transformers import (
@@ -473,7 +473,7 @@ class WeightsProxy:
 def set_tqdm_class(callback, mid):
     download_aggregator = DownloadAggregator(callback, mid)
 
-    class ProgressTqdm(base_tqdm):
+    class ProgressTqdm(tqdm):
         """tqdm subclass that routes progress to the correct SSE stage.
 
         Bars with ``unit="B"`` are download bars (one per file shard) — they are
@@ -1743,7 +1743,9 @@ class Serve:
         else:
             raise TypeError("inputs should be a list, dict, or str")
 
-        chat_inputs = processor.apply_chat_template(inputs, tokenize=True, add_generation_prompt=True, return_tensors="pt")
+        chat_inputs = processor.apply_chat_template(
+            inputs, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+        )
         if not hasattr(chat_inputs, "to"):
             raise TypeError("Expected tensor-like output from apply_chat_template")
         inputs = chat_inputs.to(model.device)
