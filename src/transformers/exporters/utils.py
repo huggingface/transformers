@@ -234,8 +234,8 @@ def prepare_for_export(
 # Well-known submodule attribute names for VLM architectures.
 _VLM_ENCODER_NAMES = ("vision_tower", "vision_model", "vision_encoder", "image_encoder", "audio_encoder", "visual")
 _VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector")
-_VLM_LM_NAMES = ("language_model", "text_model")
-_VLM_SUBMODULE_NAMES = _VLM_ENCODER_NAMES + _VLM_PROJECTOR_NAMES + _VLM_LM_NAMES + ("lm_head",)
+_VLM_LM_NAMES = ("language_model", "text_model", "lm_head")
+_VLM_SUBMODULE_NAMES = _VLM_ENCODER_NAMES + _VLM_PROJECTOR_NAMES + _VLM_LM_NAMES
 
 
 def _find_vlm_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
@@ -281,20 +281,9 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
         attn_mask = inputs.get("attention_mask")
         is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
         if is_prefill:
-            position_ids, _ = model.get_rope_index(
-                **{
-                    k: inputs[k]
-                    for k in (
-                        "input_ids",
-                        "attention_mask",
-                        "image_grid_thw",
-                        "video_grid_thw",
-                        "mm_token_type_ids",
-                        "second_per_grid_ts",
-                    )
-                    if k in inputs
-                }
-            )
+            rope_params = set(inspect.signature(model.get_rope_index).parameters)
+            rope_inputs = {k: inputs[k] for k in rope_params if k in inputs}
+            position_ids, _ = model.get_rope_index(**rope_inputs)
             inputs["position_ids"] = position_ids
 
     # Vision submodule level: precompute from grid_thw

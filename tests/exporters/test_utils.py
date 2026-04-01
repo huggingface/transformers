@@ -52,10 +52,6 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # constant tensors (lifted_tensor) missing from the constants dictionary (SpecViolationError).
     # TODO: fix upstream in PyTorch.
     "CHMv2ForDepthEstimation",
-    # T5Gemma2 hits a VR bound conflict (tgt_bound=VR[64, int_oo] vs src_bound=VR[64, int64_max-2])
-    # from get_image_placeholder_mask creating a constraint u0 = 32*s99 during dynamic export.
-    # TODO: fix by bounding image placeholder computation to avoid int_oo conflict.
-    "T5Gemma2ForConditionalGeneration",
     # VoxtralRealtime passes t_cond=None to decoder layers when time_tensor is not in test inputs,
     # causing AdaRMSNorm to receive None and fail in linear(). TODO: fix model to skip ada_rms_norm
     # when t_cond is None, or ensure test inputs always provide a time_tensor.
@@ -68,9 +64,6 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # TODO: provide multimodal test inputs or skip VLM decomposition for omni models.
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen3OmniMoeThinkerForConditionalGeneration",
-    # PaddleOCR vision embeddings use data-dependent ops (arange with tensor values) that
-    # torch.export can't trace. TODO: precompute vision embeddings for export.
-    "PaddleOCRVLForConditionalGeneration",
 }
 
 
