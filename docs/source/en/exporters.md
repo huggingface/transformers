@@ -190,10 +190,10 @@ onnx_program = exporter.export(model, inputs)
 </hfoption>
 </hfoptions>
 
-## Multicomponent models
+## Vision-language models (VLMs)
 
-Vision-language models (VLMs) and encoder-decoder models are best exported as separate components.
-The exporters detect multicomponent models automatically via [`is_multicomponent`] and decompose them
+VLMs are best exported as separate components (vision encoder, projector, language model).
+The exporters detect VLMs automatically via [`is_vlm`] and decompose them
 into individual submodules — each exported as an independent graph.
 
 <hfoptions id="multicomponent">
@@ -202,12 +202,12 @@ into individual submodules — each exported as an independent graph.
 ```python
 >>> from transformers import AutoModelForVision2Seq, AutoProcessor
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_encoder_decoder, is_multicomponent
+>>> from transformers.exporters.utils import decompose_vlm, is_vlm
 
 >>> model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 
->>> components = decompose_encoder_decoder(model, inputs) if is_multicomponent(model) else [("model", model, inputs)]
+>>> components = decompose_vlm(model, inputs) if is_vlm(model) else [("model", model, inputs)]
 >>> # components = [("vision_model", vit, vit_inputs), ("language_model", llm, llm_inputs), ...]
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
@@ -221,12 +221,12 @@ into individual submodules — each exported as an independent graph.
 ```python
 from transformers import AutoModelForVision2Seq, AutoProcessor
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_encoder_decoder, is_multicomponent
+from transformers.exporters.utils import decompose_vlm, is_vlm
 
 model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 
-components = decompose_encoder_decoder(model, inputs) if is_multicomponent(model) else [("model", model, inputs)]
+components = decompose_vlm(model, inputs) if is_vlm(model) else [("model", model, inputs)]
 # components = [("vision_model", vit, vit_inputs), ("language_model", llm, llm_inputs), ...]
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
@@ -240,7 +240,7 @@ for name, submodel, subinputs in components:
 The decomposition is done via a single forward pass with hooks — it captures the exact inputs each
 submodule receives, so the exported graphs have correct signatures without any manual wiring.
 
-Supported submodule attribute names are listed in [`~transformers.exporters.utils._SUBMODULE_NAMES`].
+Supported submodule attribute names are listed in [`~transformers.exporters.utils._VLM_SUBMODULE_NAMES`].
 If a new architecture uses a different attribute name, add it to that tuple.
 
 <Tip warning={true}>
@@ -301,20 +301,20 @@ for name, stage_model, stage_inputs in stages:
 </hfoption>
 </hfoptions>
 
-For multicomponent generative models (VLMs), combine both decompositions: decompose the prefill
-stage into its submodules and keep the decode stage as a single graph.
+For generative VLMs, combine both decompositions: decompose the prefill stage into its
+submodules and keep the decode stage as a single graph.
 
 <hfoptions id="generate-vlm">
 <hfoption id="torch.export (Dynamo)">
 
 ```python
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_encoder_decoder, decompose_prefill_decode, is_multicomponent
+>>> from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode, is_vlm
 
 >>> stages = decompose_prefill_decode(model, inputs)
 >>> _, prefill_model, prefill_inputs = stages[0]
 
->>> components = decompose_encoder_decoder(prefill_model, prefill_inputs) if is_multicomponent(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
+>>> components = decompose_vlm(prefill_model, prefill_inputs) if is_vlm(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
 >>> components += stages[1:]  # add the decode stage
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
@@ -327,12 +327,12 @@ stage into its submodules and keep the decode stage as a single graph.
 
 ```python
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_encoder_decoder, decompose_prefill_decode, is_multicomponent
+from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode, is_vlm
 
 stages = decompose_prefill_decode(model, inputs)
 _, prefill_model, prefill_inputs = stages[0]
 
-components = decompose_encoder_decoder(prefill_model, prefill_inputs) if is_multicomponent(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
+components = decompose_vlm(prefill_model, prefill_inputs) if is_vlm(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
 components += stages[1:]  # add the decode stage
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
@@ -362,8 +362,8 @@ for name, submodel, subinputs in components:
 
 [[autodoc]] transformers.exporters.utils.decompose_prefill_decode
 
-[[autodoc]] transformers.exporters.utils.decompose_encoder_decoder
+[[autodoc]] transformers.exporters.utils.decompose_vlm
 
-[[autodoc]] transformers.exporters.utils.is_multicomponent
+[[autodoc]] transformers.exporters.utils.is_vlm
 
 [[autodoc]] transformers.exporters.utils.get_leaf_tensors
