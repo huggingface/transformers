@@ -1585,7 +1585,7 @@ class ContinuousBatchingConfig:
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
         use_default_compile_configs (`bool`, *optional*, defaults to `False`):
             If True, a default compile config will be used for paths that are not explicitly set.
-        scheduler (`str`, *optional*, defaults to `"fifo"`):
+        scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
@@ -1632,8 +1632,8 @@ class ContinuousBatchingConfig:
     # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
     use_default_compile_configs: bool = False
 
-    # Scheduler type used
-    scheduler: str = "fifo"
+    # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
+    scheduler_type: str = "fifo"
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
@@ -1762,7 +1762,8 @@ class ContinuousBatchingConfig:
     def resolve_compile_configs(
         self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
     ) -> None:
-        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed."""
+        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
+        Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
         logger_ = logging.get_logger("ContinuousBatchingLogger")
 
         # For each config, priority is: explicit config, default config, fallback config, None

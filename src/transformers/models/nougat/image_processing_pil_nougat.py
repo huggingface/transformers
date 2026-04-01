@@ -32,18 +32,27 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
 )
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
+# Adapted from transformers.models.nougat.image_processing_nougat.NougatImageProcessorKwargs
+class NougatImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_crop_margin (`bool`, *optional*, defaults to `self.do_crop_margin`):
+        Whether to crop the image margins.
+    do_thumbnail (`bool`, *optional*, defaults to `self.do_thumbnail`):
+        Whether to resize the image using thumbnail method.
+    do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
+        Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
+    """
 
-from .image_processing_nougat import NougatImageProcessorKwargs
+    do_crop_margin: bool
+    do_thumbnail: bool
+    do_align_long_axis: bool
 
 
 @auto_docstring
@@ -211,7 +220,7 @@ class NougatImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
+        resample: "PILImageResampling | None" = None,
         reducing_gap: int | None = None,
         **kwargs,
     ) -> np.ndarray:
@@ -223,7 +232,7 @@ class NougatImageProcessorPil(PilBackend):
                 Image to resize.
             size (`SizeDict`):
                 Size of the output image.
-            resample (`PILImageResampling | tvF.InterpolationMode | int`, *optional*):
+            resample (`PILImageResampling | int`, *optional*):
                 Resampling filter to use when resizing the image.
         Returns:
             `np.ndarray`: The resized image.
@@ -247,7 +256,7 @@ class NougatImageProcessorPil(PilBackend):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

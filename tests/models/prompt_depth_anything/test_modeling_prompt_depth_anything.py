@@ -216,14 +216,14 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
 
 def prepare_img():
-    url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
+    url = "https://raw.githubusercontent.com/DepthAnything/PromptDA/main/assets/example_images/image.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     return image
 
 
 def prepare_prompt_depth():
     prompt_depth_url = (
-        "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
+        "https://raw.githubusercontent.com/DepthAnything/PromptDA/main/assets/example_images/arkit_depth.png"
     )
     prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
     return prompt_depth

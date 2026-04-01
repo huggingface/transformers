@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
@@ -44,7 +45,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -60,9 +60,6 @@ from ..deepseek_vl.processing_deepseek_vl import DeepseekVLProcessor, DeepseekVL
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 logger = logging.get_logger(__name__)
 
@@ -534,13 +531,13 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
+        high_res_resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -650,8 +647,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        high_res_resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
+        high_res_resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
