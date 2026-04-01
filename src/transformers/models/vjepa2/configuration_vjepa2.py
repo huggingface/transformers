@@ -69,11 +69,11 @@ class VJEPA2Config(PreTrainedConfig):
     in_chans: int = 3
     num_attention_heads: int = 16
     num_hidden_layers: int = 24
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     mlp_ratio: int | float = 4.0
     layer_norm_eps: float = 1e-6
     qkv_bias: bool = True
-    attention_probs_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     hidden_act: str = "gelu"
     initializer_range: float = 0.02
     attention_dropout: float | int = 0.0

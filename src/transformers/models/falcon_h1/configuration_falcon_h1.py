@@ -67,7 +67,7 @@ class FalconH1Config(PreTrainedConfig):
     hidden_act: str = "silu"
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
-    use_cache: int | None = True
+    use_cache: bool | None = True
     num_logits_to_keep: int | None = 1
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
