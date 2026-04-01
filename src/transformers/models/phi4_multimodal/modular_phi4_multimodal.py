@@ -156,7 +156,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
     activation: str = "swish"
     chunk_size: int = -1
     left_chunk: int = 18
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     ext_pw_out_channel: int = 1024
     depthwise_separable_out_channel: int = 1024
     depthwise_multiplier: int = 1

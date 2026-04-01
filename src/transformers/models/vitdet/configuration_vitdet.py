@@ -57,7 +57,7 @@ class VitDetConfig(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 12
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    dropout_prob: float = 0.0
+    dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 224
@@ -65,7 +65,7 @@ class VitDetConfig(BackboneConfigMixin, PreTrainedConfig):
     patch_size: int | list[int] | tuple[int, int] = 16
     num_channels: int = 3
     qkv_bias: bool = True
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     window_block_indices: list[int] | tuple[int, ...] = ()
     residual_block_indices: list[int] | tuple[int, ...] = ()
     use_absolute_position_embeddings: bool = True
