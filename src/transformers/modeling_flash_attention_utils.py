@@ -783,6 +783,8 @@ def _flash_attention_pure_varlen(
     position_ids: torch.Tensor,
     cu_seq_lens_q: torch.IntTensor | None,
     cu_seq_lens_k: torch.IntTensor | None,
+    max_length_q: int | None,
+    max_length_k: int | None,
 ):
     """
     Goes natively through the FA varlen API as the input is already prepared into packed sequences.
@@ -951,6 +953,8 @@ def _flash_attention_forward(
             position_ids=position_ids,
             cu_seq_lens_q=cu_seq_lens_q,
             cu_seq_lens_k=cu_seq_lens_k,
+            max_length_q=max_length_q,
+            max_length_k=max_length_k,
         )
 
     # No padding
