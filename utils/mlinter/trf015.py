@@ -88,8 +88,30 @@ def _class_has_tie_word_embeddings(config_node: ast.ClassDef) -> bool:
     return False
 
 
+def _annotated_config_class_name(class_node: ast.ClassDef) -> str | None:
+    """Return the config type declared on `config: FooConfig`, if present."""
+    for item in class_node.body:
+        if not isinstance(item, ast.AnnAssign) or not isinstance(item.target, ast.Name) or item.target.id != "config":
+            continue
+        annotation = item.annotation
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            annotation_name = _simple_name(annotation.value)
+        else:
+            try:
+                annotation_name = _simple_name(full_name(annotation))
+            except ValueError:
+                continue
+        if annotation_name.endswith("Config"):
+            return annotation_name
+
+    return None
+
+
 def _resolve_config_class_name_from_modeling_class(
-    class_name: str, class_to_bases: dict[str, list[str]], class_to_assignments: dict[str, dict[str, ast.AST]]
+    class_name: str,
+    class_to_bases: dict[str, list[str]],
+    class_to_assignments: dict[str, dict[str, ast.AST]],
+    class_to_nodes: dict[str, ast.ClassDef],
 ) -> str | None:
     """Resolve config_class from a modeling class, following local inheritance."""
 
@@ -107,6 +129,12 @@ def _resolve_config_class_name_from_modeling_class(
                 return _simple_name(full_name(config_class))
             except ValueError:
                 pass
+
+        class_node = class_to_nodes.get(name)
+        if class_node is not None:
+            annotated_config = _annotated_config_class_name(class_node)
+            if annotated_config is not None:
+                return annotated_config
 
         for base_name in class_to_bases.get(name, []):
             if base_name not in class_to_assignments:
@@ -207,6 +235,7 @@ def check(tree: ast.Module, file_path: Path, source_lines: list[str]) -> list[Vi
         return violations
 
     class_to_bases = _collect_class_bases(tree)
+    class_to_nodes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     class_to_assignments = {
         node.name: _get_class_assignments(node) for node in tree.body if isinstance(node, ast.ClassDef)
     }
@@ -234,7 +263,7 @@ def check(tree: ast.Module, file_path: Path, source_lines: list[str]) -> list[Vi
     # Config exists but lacks tie_word_embeddings
     for node in classes_with_tied_keys:
         config_class_name = _resolve_config_class_name_from_modeling_class(
-            node.name, class_to_bases, class_to_assignments
+            node.name, class_to_bases, class_to_assignments, class_to_nodes
         )
         target_config_class_name = _resolve_target_config_class_name(config_classes, node.name, config_class_name)
         if target_config_class_name is None:
