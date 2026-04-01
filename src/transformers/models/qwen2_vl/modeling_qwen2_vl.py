@@ -33,7 +33,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...integrations.flash_attention import flash_attention_forward
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -53,7 +52,6 @@ from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
 )
-from ...utils.import_utils import is_flash_attn_torch_available
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
 
@@ -414,11 +412,11 @@ class VisionAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config, allow_torch=is_flash_attn_torch_available()):
+        if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             # Force FA interface to call underlying SDPA's registered varlen
-            attn_output, _ = flash_attention_forward(
+            attn_output, _ = attention_interface(
                 self,
                 query_states,
                 key_states,
