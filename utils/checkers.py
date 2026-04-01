@@ -557,9 +557,19 @@ def main():
             if cmd_str:
                 print(f"$ {cmd_str}", flush=True)
             if is_ci:
-                rc, output = run_checker(
-                    name, fix=args.fix, line_callback=lambda line: print(line, end="", flush=True)
-                )
+                streamed_output = []
+
+                def print_line(line):
+                    streamed_output.append(line)
+                    print(line, end="", flush=True)
+
+                rc, output = run_checker(name, fix=args.fix, line_callback=print_line)
+                if rc != 0 and output:
+                    streamed_text = "".join(streamed_output)
+                    if output.startswith(streamed_text):
+                        _print_output(output[len(streamed_text) :])
+                    elif output != streamed_text:
+                        _print_output(output)
             else:
                 rc, output = run_checker(name, fix=args.fix)
                 if rc == 0:

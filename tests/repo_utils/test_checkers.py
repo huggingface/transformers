@@ -130,6 +130,7 @@ class CheckersCacheTest(unittest.TestCase):
             repo_root = self._create_fake_repo(tmpdir)
             output = "\n".join(f"line {i}" for i in range(12)) + "\n"
             with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "CIRCLECI": "false"}),
                 patch_checkers_paths(repo_root),
                 patch.object(checkers, "run_checker", return_value=(1, output)),
             ):
@@ -157,6 +158,7 @@ class CheckersCacheTest(unittest.TestCase):
                     print(f"window finished: {self.label} ({success}, {show_lines})")
 
             with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "CIRCLECI": "false"}),
                 patch_checkers_paths(repo_root),
                 patch.object(checkers, "run_checker", return_value=(1, output)),
                 patch.object(checkers, "SlidingWindow", FakeSlidingWindow),
@@ -167,3 +169,30 @@ class CheckersCacheTest(unittest.TestCase):
             self.assertIn("window finished: Demo checker (False, False)", stdout)
             self.assertIn("line 0", stdout)
             self.assertIn("line 11", stdout)
+
+    def test_main_prints_failure_suffix_in_ci(self):
+        """CI failures should still print any extra captured output that was not streamed live."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = self._create_fake_repo(tmpdir)
+            streamed_output = "line 0\nline 1\n"
+            failure_suffix = "summary line\n"
+
+            def run_checker(name, fix=False, line_callback=None):
+                self.assertEqual(name, "demo")
+                self.assertFalse(fix)
+                self.assertIsNotNone(line_callback)
+                for line in streamed_output.splitlines(keepends=True):
+                    line_callback(line)
+                return 1, streamed_output + failure_suffix
+
+            with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "CIRCLECI": "false"}),
+                patch_checkers_paths(repo_root),
+                patch.object(checkers, "run_checker", side_effect=run_checker),
+            ):
+                exit_code, stdout = self._run_main("demo", "--keep-going")
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("line 0", stdout)
+            self.assertIn("line 1", stdout)
+            self.assertIn("summary line", stdout)
