@@ -415,7 +415,6 @@ class VisionAttention(nn.Module):
         if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            # Force FA interface to call underlying SDPA's registered varlen
             attn_output, _ = attention_interface(
                 self,
                 query_states,
