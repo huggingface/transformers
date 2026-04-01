@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-03-25.*
+*This model was released on 2024-02-10 and added to Hugging Face Transformers on 2026-04-01.*
 
 
 # NomicBERT
@@ -56,7 +56,7 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 model_id = "nomic-ai/nomic-embed-text-v1.5"
-revision = "refs/pr/56"
+revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision)
@@ -86,7 +86,7 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 model_id = "nomic-ai/nomic-embed-text-v1.5"
-revision = "refs/pr/56"
+revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision)
@@ -116,7 +116,7 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 model_id = "nomic-ai/nomic-embed-text-v1.5"
-revision = "refs/pr/56"
+revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision)
@@ -146,7 +146,7 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 model_id = "nomic-ai/nomic-embed-text-v1.5"
-revision = "refs/pr/56"
+revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision)

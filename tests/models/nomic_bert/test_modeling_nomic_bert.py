@@ -284,8 +284,8 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         # TODO: remove revision
-        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/56").to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/56")
+        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/57").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/57")
 
         sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
 
