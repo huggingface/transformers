@@ -197,23 +197,23 @@ re_sub_schema = {
                         "type": "object",
                         "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
                         "properties": {
-                            "name": {"type": "string", },
+                            "name": {
+                                "type": "string",
+                            },
                             "arguments": {
                                 "type": "object",
                                 "x-regex-key-value": r'(?P<key>\w+):(?P<value><\|"\|>.*?<\|"\|>|[^,}]+)',
                                 "additionalProperties": {
-                                    "x-regex-substitutions": [
-                                        [r'^<\|"\|>|<\|"\|>$', ""]
-                                    ],
+                                    "x-regex-substitutions": [[r'^<\|"\|>|<\|"\|>$', ""]],
                                 },
-                            }
-                        }
-                    }
-                }
-            }
+                            },
+                        },
+                    },
+                },
+            },
         },
     },
-    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>.*?)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?"
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>.*?)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
 }
 
 prefix_items_schema = {
@@ -431,23 +431,20 @@ class ChatSchemaParserTest(unittest.TestCase):
         parsed = recursive_parse(model_out, re_sub_schema)
         self.assertEqual(
             parsed,
-            {"role": "assistant",
-             "content": "",
-             "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
-             "tool_calls": [
             {
-                "type": "function",
-                "function": {
-                    "name": "get_current_temperature",
-                    "arguments": {
-                                     "detail_level": "0",
-                                     "location": "Paris, France",
-                                     "unit":"celsius"
+                "role": "assistant",
+                "content": "",
+                "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": "0", "location": "Paris, France", "unit": "celsius"},
+                        },
                     }
-                }
-            }
-        ]
-             }
+                ],
+            },
         )
 
     def test_required_fields_present(self):
