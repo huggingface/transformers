@@ -65,7 +65,6 @@ def build_image_processor_mapping(
 ) -> OrderedDict[str, dict[str, str | None]]:
     processor_mapping = OrderedDict()
     for model_type in config_mapping:
-
         module = model_type.replace("-", "_")
         fast_processor_name = slow_processor_name = None
         if os.path.exists(f"src/transformers/models/{module}/image_processing_pil_{module}.py"):
