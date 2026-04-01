@@ -738,7 +738,9 @@ class TestConversionMapping(unittest.TestCase):
         # test linear -> conv3d
         torch.testing.assert_close(convert(linear_to_conv, linear_weight), linear_weight.reshape(2, 3, *kernel_size))
         # test conv3d -> linear -> conv3d round trip
-        torch.testing.assert_close(convert(conv_to_linear.reverse_op, convert(conv_to_linear, conv_weight)), conv_weight)
+        torch.testing.assert_close(
+            convert(conv_to_linear.reverse_op, convert(conv_to_linear, conv_weight)), conv_weight
+        )
 
     def test_register_checkpoint_conversion_mapping(self):
         register_checkpoint_conversion_mapping(

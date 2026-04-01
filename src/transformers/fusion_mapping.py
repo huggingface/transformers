@@ -37,9 +37,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-_FUSION_DISCOVERY_CACHE: dict[
-    str, dict[type, tuple[dict[str, type[nn.Module]], list[WeightTransform]]]
-] = {}
+_FUSION_DISCOVERY_CACHE: dict[str, dict[type, tuple[dict[str, type[nn.Module]], list[WeightTransform]]]] = {}
 
 
 class ModuleFusionSpec:
@@ -197,7 +195,6 @@ def _register_module_fusion(
 
     existing_converters = get_checkpoint_conversion_mapping(model_type)
     if existing_converters is not None:
-
         # WeightConverter matching stops at the first matching source pattern, so
         # conflicting converters must fail fast instead of being appended.
         existing_converter_sources = {tuple(existing.source_patterns): existing for existing in existing_converters}
@@ -207,9 +204,8 @@ def _register_module_fusion(
             if existing_converter is None:
                 continue
 
-            if (
-                type(existing_converter) is not type(converter)
-                or tuple(existing_converter.target_patterns) != tuple(converter.target_patterns)
+            if type(existing_converter) is not type(converter) or tuple(existing_converter.target_patterns) != tuple(
+                converter.target_patterns
             ):
                 raise ValueError(
                     f"Fusion {fusion_name} for model type {model_type} conflicts with an existing conversion mapping "
@@ -230,9 +226,7 @@ def _register_module_fusion(
     register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
 
 
-_FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {
-    "patch_embeddings": PatchEmbeddingsFusionSpec()
-}
+_FUSION_REGISTRY: dict[str, ModuleFusionSpec] = {"patch_embeddings": PatchEmbeddingsFusionSpec()}
 
 
 def _iter_enabled_fusions(fusion_config: Mapping[str, bool | Mapping[str, Any]]) -> list[str]:

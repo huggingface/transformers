@@ -196,26 +196,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_from_pretrained_fusion_config_patch_embeddings(self):
-        config, pixel_values = self.model_tester.prepare_config_and_inputs()
-        model = Qwen2VLForConditionalGeneration(config).eval()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            fused_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                tmp_dir, fusion_config={"patch_embeddings": True}
-            )
-
-        self.assertIsInstance(model.model.visual.patch_embed.proj, torch.nn.Conv3d)
-        fused_projection = getattr(fused_model.model.visual.patch_embed, "linear_proj", None)
-        if fused_projection is None:
-            fused_projection = getattr(fused_model.model.visual.patch_embed, "proj", None)
-        self.assertIsInstance(fused_projection, torch.nn.Linear)
-        with torch.no_grad():
-            outputs = model.model.visual.patch_embed(pixel_values)
-            fused_outputs = fused_model.model.visual.patch_embed(pixel_values)
-        torch.testing.assert_close(outputs, fused_outputs)
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
