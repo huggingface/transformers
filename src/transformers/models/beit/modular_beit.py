@@ -137,12 +137,11 @@ class BeitRelativePositionBias(nn.Module):
         relative_coords[:, :, 1] += window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * window_size[1] - 1
 
-        # Prepend CLS sentinel rows/cols: cls-to-cls, cls-to-token, token-to-cls
         relative_position_index = torch.zeros(size=(window_area + 1,) * 2, dtype=relative_coords.dtype)
         relative_position_index[1:, 1:] = relative_coords.sum(-1)
-        relative_position_index[0, 0] = num_relative_distance - 1  # cls to cls
-        relative_position_index[0:, 0] = num_relative_distance - 2  # token to cls
         relative_position_index[0, 0:] = num_relative_distance - 3  # cls to token
+        relative_position_index[0:, 0] = num_relative_distance - 2  # token to cls
+        relative_position_index[0, 0] = num_relative_distance - 1  # cls to cls
         return relative_position_index
 
     def forward(self, window_size, interpolate_pos_encoding: bool = False, dim_size=None) -> torch.Tensor:
@@ -932,6 +931,8 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
     _checkpoint_conversion_mapping = {
         "^embeddings": "encoder.embeddings",
+        "fpn1.": "fpn.fpn1.",
+        "fpn2.": "fpn.fpn2.",
     }
 
     def __init__(self, config):
