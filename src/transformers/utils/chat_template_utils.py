@@ -382,11 +382,7 @@ def get_json_schema(func: Callable, style: str = "openai") -> dict:
 
     if style == "anthropic":
         # Anthropic style uses 'input_schema' instead of 'parameters' and doesn't wrap in "function" key
-        return {
-            "name": func_name,
-            "description": main_doc,
-            "input_schema": json_schema
-        }
+        return {"name": func_name, "description": main_doc, "input_schema": json_schema}
     else:
         # OpenAI style
         output = {"name": func_name, "description": main_doc, "parameters": json_schema}
