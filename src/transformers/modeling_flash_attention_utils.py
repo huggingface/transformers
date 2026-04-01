@@ -33,6 +33,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils import is_flash_attn_available as utils_is_flash_attn_available
 from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
@@ -48,16 +49,13 @@ def flash_attn_supports_top_left_mask():
     return False
 
 
-# TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
-    return (
-        is_flash_attn_torch_available()
-        or is_flash_attn_4_available()
-        or is_flash_attn_3_available()
-        or is_flash_attn_2_available()
-        or is_torch_npu_available()
-        or is_torch_xpu_available()
+    warnings.warn(
+        "`is_flash_attn_available` has been moved to `utils` (and `utils.import_utils`). "
+        "This alias will be removed in v5.8.",
+        FutureWarning,
     )
+    return utils_is_flash_attn_available()
 
 
 class FlashAttentionKwargs(TypedDict, total=False):

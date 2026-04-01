@@ -59,7 +59,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
     TOKEN,
@@ -755,7 +754,7 @@ class ModelUtilsTest(TestCasePlus):
         # 2. explicit from_pretrained's attn_implementation argument with a config argument
         attn_implementation_available = ["eager", "sdpa"]
 
-        if is_flash_attn_available():
+        if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
         if is_flash_attn_3_available():
@@ -783,7 +782,7 @@ class ModelUtilsTest(TestCasePlus):
         # 3. config created with explicit attn_implementation and from_config overriding with explicit attn_implementation argument
         attn_implementation_available = ["eager", "sdpa"]
 
-        if is_flash_attn_available():
+        if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
         if is_flash_attn_3_available():
