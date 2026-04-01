@@ -59,11 +59,6 @@ EXPORT_SKIP_MODEL_CLASSES = {
     # PPDocLayoutV3 passes a ModuleList as a forward argument (order_head), which is not supported
     # by get_auto_dynamic_shapes and torch.export. TODO: refactor to avoid passing modules as inputs.
     "PPDocLayoutV3ForObjectDetection",
-    # Omni models require audio/visual inputs during forward that the test tester doesn't provide.
-    # decompose_vlm runs a forward pass which hits None subscripting on visual_pos_masks.
-    # TODO: provide multimodal test inputs or skip VLM decomposition for omni models.
-    "Qwen2_5OmniThinkerForConditionalGeneration",
-    "Qwen3OmniMoeThinkerForConditionalGeneration",
 }
 
 

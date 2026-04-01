@@ -150,12 +150,15 @@ def _patch_classifier_cast(module):
 
 def _patch_chunked_vision_attention(module):
     """Replace split → loop → cat with reshaped batch SDPA for vision attention."""
-    has_attention = hasattr(module, "qkv") or (
-        hasattr(module, "q_proj") and hasattr(module, "k_proj") and hasattr(module, "v_proj")
+    has_attention = (
+        hasattr(module, "qkv")
+        or (hasattr(module, "q") and hasattr(module, "k") and hasattr(module, "v"))
+        or (hasattr(module, "q_proj") and hasattr(module, "k_proj") and hasattr(module, "v_proj"))
     )
-    has_chunked_attention = has_attention and "zip(*splits)" in inspect.getsource(module.forward)
-    if has_chunked_attention:
-        return ("forward", functools.partial(_reshaped_vision_attention_forward, module))
+    src = inspect.getsource(module.forward) if has_attention else ""
+    if has_attention and "zip(*splits)" in src:
+        returns_tuple = "return attn_output, attn_weight" in src
+        return ("forward", functools.partial(_reshaped_vision_attention_forward, module, returns_tuple=returns_tuple))
 
 
 def _reshaped_vision_attention_forward(
@@ -164,8 +167,9 @@ def _reshaped_vision_attention_forward(
     cu_seqlens: "torch.Tensor",
     rotary_pos_emb: "torch.Tensor | None" = None,
     position_embeddings: "tuple[torch.Tensor, torch.Tensor] | None" = None,
+    returns_tuple: bool = False,
     **kwargs,
-) -> "torch.Tensor":
+):
     """Export-safe vision attention: reshape segments into batch dim, single SDPA call."""
 
     seq_length = hidden_states.shape[0]
@@ -182,9 +186,12 @@ def _reshaped_vision_attention_forward(
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
     else:
-        query_states = self.q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
-        key_states = self.k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
-        value_states = self.v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        q_proj = getattr(self, "q_proj", getattr(self, "q", None))
+        k_proj = getattr(self, "k_proj", getattr(self, "k", None))
+        v_proj = getattr(self, "v_proj", getattr(self, "v", None))
+        query_states = q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        key_states = k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        value_states = v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
 
     if position_embeddings is not None:
         cos, sin = position_embeddings
@@ -216,7 +223,8 @@ def _reshaped_vision_attention_forward(
     # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim)
     attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1).contiguous()
     out_proj = self.proj if hasattr(self, "proj") else self.out_proj
-    return out_proj(attn_output)
+    attn_output = out_proj(attn_output)
+    return (attn_output, None) if returns_tuple else attn_output
 
 
 _MODEL_PATCHERS = [

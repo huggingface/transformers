@@ -726,10 +726,22 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
+    def get_position_encoding(self, image_grid_thw):
+        """Compute per-image interpolated position encodings (data-dependent loop)."""
+        hidden_dim = self.position_embedding.weight.shape[-1]
+        dummy = torch.empty(1, hidden_dim, device=self.position_embedding.weight.device)
+        pos_encodings = []
+        for image_grid in image_grid_thw:
+            t, h, w = image_grid
+            pos_enc = self.interpolate_pos_encoding(dummy, h, w).squeeze(0).repeat(t, 1)
+            pos_encodings.append(pos_enc)
+        return torch.concat(pos_encodings, dim=0)
+
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        position_encoding: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -737,28 +749,20 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
                 The tensors corresponding to the input images.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
+            position_encoding (`torch.Tensor`, *optional*):
+                Precomputed position encoding (needed for export).
         """
         batch_size, squence_len, channel, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
         pixel_values = pixel_values.reshape(batch_size * squence_len, channel, height, width)
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size, squence_len, -1)
+        embeddings = embeddings.reshape(batch_size, squence_len, -1).squeeze(0)
 
-        start = 0
-        embeddings = embeddings.squeeze(0)
-        tmp_embeddings = []
-        for image_grid in image_grid_thw:
-            t, h, w = image_grid
-            end = start + t * h * w
-            image_embeddings = embeddings[start:end, :]
-            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
-            image_embeddings = image_embeddings + position_embedding
-            tmp_embeddings.append(image_embeddings)
-            start = end
-        embeddings = torch.concat(tmp_embeddings, dim=0)
+        if position_encoding is None:
+            position_encoding = self.get_position_encoding(image_grid_thw)
 
-        return embeddings
+        return embeddings + position_encoding
 
 
 class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
@@ -871,6 +875,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        position_encoding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -885,8 +890,12 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
                 The temporal, height and width of feature shape of each image in LLM.
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Precomputed (cos, sin) rotary position embeddings (needed for export).
+            position_encoding (`torch.Tensor`, *optional*):
+                Precomputed vision position encoding (needed for export).
         """
-        hidden_states = self.embeddings(pixel_values, image_grid_thw=image_grid_thw)
+        hidden_states = self.embeddings(
+            pixel_values, image_grid_thw=image_grid_thw, position_encoding=position_encoding
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
