@@ -43,18 +43,79 @@ Work in phases. Do not try to do everything at once. Focus on one checkpoint, on
 
 **Phase 4 — Human review:** The user reviews all code, opens the PR, and handles reviewer feedback themselves.
 
+## Critical design decisions (decide BEFORE writing code)
+
+### Standalone config vs. inheriting from parent config
+
+**Prefer standalone config** (`MyConfig(PreTrainedConfig)`) over inheriting (`MyConfig(ParentConfig)`) for composite models where only one sub-component changes. Inheriting from a composite parent config causes the modular converter to:
+- Rename ALL sub-configs (e.g., `ParentVisionConfig` → `MyVisionConfig`), each with a new `model_type`
+- Require registering every renamed `model_type` in CONFIG_MAPPING
+- Break `sub_configs` dict serialization when the text/vision config type changes
+- Generate function-level imports that trigger TRF009
+
+A standalone config with explicit `sub_configs` using `AutoConfig` for shared components avoids all of this. Example:
+
+```python
+class MyConfig(PreTrainedConfig):
+    model_type = "my_model"
+    sub_configs = {
+        "vision_config": AutoConfig,          # resolves via model_type in JSON
+        "text_config": MyNewTextConfig,        # your new config class
+        "decoder_config": AutoConfig,          # reuses parent's decoder config
+    }
+```
+
+### Reuse existing attention/encoder layers
+
+For new sub-encoders (e.g., a replacement text encoder), **inherit from existing transformers building blocks** like `SiglipAttention`, `SiglipEncoderLayer`, `SiglipMLP`, or `CLIPAttention` rather than writing custom attention from scratch. Benefits:
+- Free SDPA / FlashAttention / FlexAttention support through existing infrastructure
+- No need to skip 25+ parameterized SDPA test variants
+- `@capture_outputs` and `_can_record_outputs` work automatically for hidden states and attentions
+
+Only write custom attention if the architecture genuinely cannot be expressed through existing layers (e.g., RepMixer conv-based token mixing).
+
+### Use `@capture_outputs` decorator
+
+The modern pattern for models that produce multiple output types (hidden states, attentions, masks, boxes):
+
+```python
+class MyModel(MyPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": MyEncoderLayer,
+        "attentions": MyAttention,
+    }
+
+    @capture_outputs
+    def forward(self, ...):
+        ...
+```
+
+This eliminates manual hidden state/attention collection and makes `test_training`, `test_hidden_states_output`, and gradient checkpointing tests pass without overrides.
+
+### Conditional layers via config flags
+
+If a component (e.g., RepMixer blocks) is architecturally incompatible with standard attention tests, add a config flag to disable it:
+
+```python
+class MyTextConfig(PreTrainedConfig):
+    use_repmixer_blocks: bool = True  # set False in tests for SDPA compat
+```
+
+### Simplify inference-only optimizations
+
+Do NOT implement reparameterization (`reparameterize()` methods that fuse multi-branch convolutions) unless specifically needed for the checkpoint format. If the checkpoint stores unfused weights, the HF model should match that structure. Reparameterization adds complexity without benefit for standard HF usage.
+
 ## Modular converter pitfalls
 
-The modular converter (`utils/modular_model_converter.py`) has limitations that cause hard-to-debug issues. Read these BEFORE writing the modular file:
+The modular converter (`utils/modular_model_converter.py`) has limitations. These apply when you DO inherit from a parent model's classes:
 
 ### Function-level imports for cross-model class references
 
-The converter only traces class references at **class-level attributes and inheritance**. Classes referenced only inside method bodies (e.g., `Sam3VisionModel` used in `__init__`) will NOT be imported in the generated file. Fix: use **function-level imports** inside the method body:
+The converter only traces class references at **class-level attributes and inheritance**. Classes referenced only inside method bodies (e.g., `ParentVisionModel` used in `__init__`) will NOT be imported in the generated file. Fix: use **function-level imports** inside the method body:
 
 ```python
 def __init__(self, config):
     from ..parent_model.modeling_parent import ParentVisionModel, ParentEncoder
-    # Now use them — the converter preserves function-level imports verbatim
     self.vision_encoder = ParentVisionModel(config.vision_config)
 ```
 
@@ -67,10 +128,6 @@ If you replace a sub-config type (e.g., `CLIPTextConfig` → `NewTextConfig`), t
 Fixes:
 - Override `__post_init__` to check `isinstance` and convert: if the loaded config is NOT your new type, create one from `config.to_dict()`.
 - If the sub-config is a new type you defined, register its `model_type` in `CONFIG_MAPPING_NAMES` and `SUBCONFIG_TO_MODEL_TYPE_MAP`.
-
-### Generated sub-config renaming
-
-The converter auto-renames ALL parent sub-configs (e.g., `Sam3VisionConfig` → `Sam3LiteTextVisionConfig`). Each renamed config gets a new `model_type`. You must register ALL new model_types or `AutoModel.from_config()` / `CONFIG_MAPPING` lookups will fail.
 
 ### _init_weights for nn.Parameter attributes
 
@@ -95,7 +152,7 @@ Add entries **alphabetically** in ALL of these locations:
 - [ ] `src/transformers/models/auto/processing_auto.py` — if applicable
 - [ ] `src/transformers/models/auto/tokenization_auto.py` — if applicable
 - [ ] `utils/check_repo.py` `IGNORE_NON_TESTED` — for building-block sub-models (e.g., ViTModel)
-- [ ] `utils/mlinter/rules.toml` TRF009 allowlist — if cross-model imports are needed
+- [ ] `utils/mlinter/rules.toml` TRF009 allowlist — only if cross-model imports are needed
 
 ## Step-by-step process (Phase 1–3)
 
@@ -117,12 +174,13 @@ This is the ONLY modeling file you write. The converter generates `modeling_$0.p
 The modular file must also pass the reviewer standards in [review-standards.md](review-standards.md). Key rules:
 - `nn.ModuleList` not `nn.Sequential` for layer lists
 - `nn.Linear` for projections, not `nn.Parameter(torch.empty(...))`
-- Inherit from existing components when possible (CLIPMLP, SiglipAttention, etc.)
+- Inherit from existing components when possible (`SiglipAttention`, `SiglipEncoderLayer`, `CLIPMLP`, etc.)
 - Make all magic numbers into config attributes
 - Only override PreTrainedModel attributes that actually differ from defaults
 - Data transforms (permute, reshape) go inside layer forward methods, not parent loops
 - `nn.Identity` ternaries for conditional layers
 - Descriptive names, not opaque abbreviations from original codebases
+- Use `@capture_outputs` and `_can_record_outputs` for output collection
 
 ### 3. Create the __init__.py
 
@@ -177,12 +235,13 @@ Test rules:
 - Set `_supports_flash_attn = False` in model class instead of skipping attention tests
 - `gc.collect()` + `backend_empty_cache` in integration test tearDown
 - Small configs in unit tests (hidden_size=32, num_layers=1-2)
+- For composite models with conditional layers (e.g., RepMixer), consider disabling them in tests via a config flag for SDPA/attention compatibility
 
-Common test overrides needed for composite models:
-- `test_hidden_states_output` — if outputs use component-specific fields (e.g., `vision_hidden_states`) instead of generic `hidden_states`
-- `test_training` / `test_training_gradient_checkpointing` — may fail if model uses component-specific output structure
-- `test_eager_matches_sdpa_inference` — parameterized test generating 25+ variants; if the new sub-model doesn't support SDPA, override with `self.skipTest(...)` using `*args, **kwargs` signature, PLUS explicit skips for each numbered variant (the parameterized decorator pre-expands them)
-- `test_config` — if `sub_configs` has wrong types (see pitfalls above), skip `create_and_test_config_from_and_save_pretrained_composite` and run individual config tests instead
+Test overrides commonly needed for composite models:
+- `test_hidden_states_output` — if outputs use component-specific fields (e.g., `vision_hidden_states`) instead of generic `hidden_states`. Using `@capture_outputs` avoids this.
+- `test_training` / `test_training_gradient_checkpointing` — may fail if model uses component-specific output structure. Using `@capture_outputs` avoids this.
+- `test_eager_matches_sdpa_inference` — parameterized test generating 25+ variants; if the new sub-model doesn't support SDPA, override with `self.skipTest(...)` using `*args, **kwargs` signature, PLUS explicit skips for each numbered variant. Reusing existing attention layers (e.g., `SiglipAttention`) avoids this entirely.
+- `test_config` — if `sub_configs` has wrong types, skip `create_and_test_config_from_and_save_pretrained_composite` and run individual config tests instead. Standalone config avoids this.
 
 ### 8. Write documentation
 
