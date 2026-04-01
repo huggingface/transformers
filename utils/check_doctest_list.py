@@ -34,6 +34,21 @@ import argparse
 import os
 
 
+CHECKER_CONFIG = {
+    "name": "doctest_list",
+    "label": "Doctest list",
+    # Over-approximation: the checker validates that paths in .txt list files exist and are
+    # sorted. The broad globs ensure cache invalidation when source files are added/removed.
+    "file_globs": [
+        "utils/not_doctested.txt",
+        "utils/slow_documentation_tests.txt",
+        "src/transformers/**/*.py",
+        "docs/**/*.md",
+    ],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_doctest_list.py
 REPO_PATH = "."

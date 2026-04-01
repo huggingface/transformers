@@ -14,6 +14,7 @@
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -39,8 +40,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_available,
-    is_torchvision_available,
     logging,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
@@ -321,13 +320,6 @@ class AriaProjector(nn.Module):
         out = self.feed_forward(self.layer_norm(attention_out))
 
         return out
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 class AriaImageProcessorKwargs(ImagesKwargs, total=False):
