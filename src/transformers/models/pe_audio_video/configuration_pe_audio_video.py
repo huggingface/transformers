@@ -117,6 +117,7 @@ class PeAudioVideoConfig(PretrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     audio_video_config: dict | PreTrainedConfig | None = None
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
