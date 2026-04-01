@@ -127,8 +127,7 @@ class Chunk(ConversionOps):
         targets = self.get_target_patterns(input_dict, target_patterns)
         sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
-        # Clone to ensure contiguous tensors (chunk returns views that may be non-contiguous)
-        return dict(zip(targets, [c.contiguous().clone() for c in chunks]))
+        return dict(zip(targets, chunks))
 
     def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
         # Here we always return the target patterns

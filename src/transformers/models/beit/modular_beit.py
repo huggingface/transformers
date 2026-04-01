@@ -124,22 +124,25 @@ class BeitRelativePositionBias(nn.Module):
         as introduced in [MiDaS v3.1](https://huggingface.co/papers/2307.14460).
         """
         num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
-        # cls to token & token 2 cls & cls to cls
-        # get pair-wise relative position index for each token inside the window
         window_area = window_size[0] * window_size[1]
-        grid = torch.meshgrid(torch.arange(window_size[0]), torch.arange(window_size[1]), indexing="ij")
-        coords = torch.stack(grid)  # 2, Wh, Ww
-        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+
+        # Pair-wise relative position index for each token inside the window
+        coords_flatten = torch.flatten(
+            torch.stack(torch.meshgrid(torch.arange(window_size[0]), torch.arange(window_size[1]), indexing="ij")),
+            start_dim=1,
+        )  # 2, Wh*Ww
+        relative_coords = (coords_flatten[:, :, None] - coords_flatten[:, None, :]).permute(1, 2, 0).contiguous()
+        # Wh*Ww, Wh*Ww, 2 — shift to start from 0
+        relative_coords[:, :, 0] += window_size[0] - 1
         relative_coords[:, :, 1] += window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+
+        # Prepend CLS sentinel rows/cols: cls-to-cls, cls-to-token, token-to-cls
         relative_position_index = torch.zeros(size=(window_area + 1,) * 2, dtype=relative_coords.dtype)
-        relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
-        relative_position_index[0, 0:] = num_relative_distance - 3
-        relative_position_index[0:, 0] = num_relative_distance - 2
-        relative_position_index[0, 0] = num_relative_distance - 1
+        relative_position_index[1:, 1:] = relative_coords.sum(-1)
+        relative_position_index[0, 0] = num_relative_distance - 1  # cls to cls
+        relative_position_index[0:, 0] = num_relative_distance - 2  # token to cls
+        relative_position_index[0, 0:] = num_relative_distance - 3  # cls to token
         return relative_position_index
 
     def forward(self, window_size, interpolate_pos_encoding: bool = False, dim_size=None) -> torch.Tensor:
@@ -779,6 +782,33 @@ class BeitFCNHead(nn.Module):
         return output
 
 
+class BeitFPNNeck(nn.Module):
+    """
+    4-level feature pyramid neck for BeiT. Produces x4 upsample, x2 upsample,
+    identity, and x2 downsample outputs from the four selected ViT feature maps.
+    """
+
+    def __init__(self, config: BeitConfig):
+        super().__init__()
+        hidden_size = config.hidden_size
+        self.fpn1 = nn.Sequential(
+            nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
+            nn.BatchNorm2d(hidden_size),
+            nn.GELU(),
+            nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
+        )
+        self.fpn2 = nn.Sequential(nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2))
+        self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+    def forward(self, feature_maps: tuple[torch.Tensor, ...]) -> tuple[torch.Tensor, ...]:
+        return (
+            self.fpn1(feature_maps[0]),
+            self.fpn2(feature_maps[1]),
+            feature_maps[2],  # identity: native patch-grid resolution
+            self.fpn4(feature_maps[3]),
+        )
+
+
 @auto_docstring
 class BeitForSemanticSegmentation(BeitPreTrainedModel):
     def __init__(self, config: BeitConfig) -> None:
@@ -787,24 +817,13 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         self.num_labels = config.num_labels
         self.beit = BeitModel(config, add_pooling_layer=False)
 
-        # FPNs
         if len(self.config.out_indices) != 4:
             raise ValueError(
                 "BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers, "
                 "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
                 "a base-sized architecture."
             )
-        self.fpn1 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
-            nn.BatchNorm2d(config.hidden_size),
-            nn.GELU(),
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
-        )
-        self.fpn2 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
-        )
-        self.fpn3 = nn.Identity()
-        self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fpn = BeitFPNNeck(config)
 
         # Semantic segmentation head(s)
         self.decode_head = BeitUperHead(config)
@@ -875,26 +894,23 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         )
 
         encoder_hidden_states = outputs.hidden_states
+        batch_size, _, height, width = pixel_values.shape
+        patch_height = height // self.config.patch_size
+        patch_width = width // self.config.patch_size
 
-        # only keep certain features, and reshape
-        # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
-        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
-        batch_size = pixel_values.shape[0]
-        patch_resolution = self.config.image_size // self.config.patch_size
-        features = [
-            x[:, 1:, :].permute(0, 2, 1).reshape(batch_size, -1, patch_resolution, patch_resolution) for x in features
-        ]
+        # out_indices are 1-based into encoder_hidden_states (index 0 is the initial patch embedding).
+        # Remove the CLS token ([:, 1:]) and reshape from sequence to 2D spatial feature maps.
+        feature_maps = tuple(
+            encoder_hidden_states[i - 1][:, 1:].permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width)
+            for i in self.config.out_indices
+        )
+        feature_maps = self.fpn(feature_maps)
 
-        # apply FPNs
-        ops = [self.fpn1, self.fpn2, self.fpn3, self.fpn4]
-        for i in range(len(features)):
-            features[i] = ops[i](features[i])
-
-        logits = self.decode_head(features)
+        logits = self.decode_head(feature_maps)
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
-            auxiliary_logits = self.auxiliary_head(features)
+            auxiliary_logits = self.auxiliary_head(feature_maps)
 
         loss = None
         if labels is not None:
@@ -931,17 +947,7 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
                     "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
                     "a base-sized architecture."
                 )
-            hidden_size = config.hidden_size
-            self.fpn1 = nn.Sequential(
-                nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
-                nn.BatchNorm2d(hidden_size, eps=config.batch_norm_eps),
-                nn.GELU(),
-                nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
-            )
-
-            self.fpn2 = nn.Sequential(nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2))
-            self.fpn3 = nn.Identity()
-            self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
+            self.fpn = BeitFPNNeck(config)
 
         # initialize weights and apply final processing
         self.post_init()
@@ -998,13 +1004,7 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
                 feature_maps += (hidden_state,)
 
         if self.config.add_fpn:
-            feature_maps = [
-                self.fpn1(feature_maps[0]),
-                self.fpn2(feature_maps[1]),
-                self.fpn3(feature_maps[2]),
-                self.fpn4(feature_maps[3]),
-            ]
-            feature_maps = tuple(feature_maps)
+            feature_maps = self.fpn(feature_maps)
 
         return BackboneOutput(
             feature_maps=feature_maps,

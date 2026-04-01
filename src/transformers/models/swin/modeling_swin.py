@@ -766,6 +766,7 @@ class SwinEncoder(SwinPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -775,6 +776,14 @@ class SwinEncoder(SwinPreTrainedModel):
         output_hidden_states_before_downsampling: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SwinEncoderOutput:
+        r"""
+        input_dimensions (`tuple[int, int]`):
+            Spatial `(height, width)` of the patch grid entering the encoder.
+        always_partition (`bool`, *optional*, defaults to `False`):
+            If `True`, always apply window partitioning regardless of input resolution.
+        output_hidden_states_before_downsampling (`bool`, *optional*, defaults to `False`):
+            If `True`, `reshaped_hidden_states` contains pre-downsampling feature maps.
+        """
         all_reshaped_hidden_states = None
         if output_hidden_states:
             # Prepend the stem: hidden_states is the patch embedding output (B, N, C),
