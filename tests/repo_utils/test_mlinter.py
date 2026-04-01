@@ -860,6 +860,32 @@ class FooForCausalLM(FooPreTrainedModel):
             trf015 = [v for v in violations if v.rule_id == mlinter.TRF015]
             self.assertEqual(trf015, [])
 
+    def test_trf015_resolves_inherited_config_annotation(self):
+        """The tied model should resolve an inherited `config: FooConfig` annotation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            config_source = """
+class CompositeConfig(PreTrainedConfig):
+    sub_configs = {"text_config": FooTextConfig, "vision_config": AutoConfig}
+
+class FooTextConfig(PreTrainedConfig):
+    tie_word_embeddings: bool = True
+"""
+            (model_dir / "configuration_foo.py").write_text(config_source)
+
+            modeling_source = """
+class WrapperPreTrainedModel(PreTrainedModel):
+    config: CompositeConfig
+
+class FooMainModel(WrapperPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+"""
+            file_path = model_dir / "modeling_foo.py"
+            violations = mlinter.analyze_file(file_path, modeling_source, enabled_rules={mlinter.TRF015})
+            trf015 = [v for v in violations if v.rule_id == mlinter.TRF015]
+            self.assertEqual(len(trf015), 1)
+            self.assertIn("CompositeConfig", trf015[0].message)
+
 
 if __name__ == "__main__":
     unittest.main()
