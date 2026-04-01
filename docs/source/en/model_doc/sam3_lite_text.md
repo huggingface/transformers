@@ -52,32 +52,28 @@ The original code can be found [here](https://github.com/SimonZeng7108/efficient
 SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder. It uses the same processor ([`Sam3Processor`]) and supports the same prompting interface. Refer to the [SAM3 documentation](sam3) for detailed usage examples including text prompts, box prompts, batched inference, and more.
 
 ```python
->>> from transformers import Sam3Processor, Sam3LiteTextModel
->>> import torch
->>> from PIL import Image
->>> import requests
+from transformers import AutoModel, AutoProcessor
+from PIL import Image
+import requests
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+model = AutoModel.from_pretrained("yonigozlan/sam3-litetext-s0", device_map="auto")
+processor = AutoProcessor.from_pretrained("yonigozlan/sam3-litetext-s0")
 
->>> model = Sam3LiteTextModel.from_pretrained("nielsr/efficient-sam-3-mobileclip-s0-ctx16").to(device)
->>> processor = Sam3Processor.from_pretrained("nielsr/efficient-sam-3-mobileclip-s0-ctx16")
+image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
->>> image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
->>> image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
->>> inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+outputs = model(**inputs)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+results = processor.post_process_instance_segmentation(
+    outputs,
+    threshold=0.5,
+    mask_threshold=0.5,
+    target_sizes=inputs.get("original_sizes").tolist(),
+)[0]
 
->>> results = processor.post_process_instance_segmentation(
-...     outputs,
-...     threshold=0.5,
-...     mask_threshold=0.5,
-...     target_sizes=inputs.get("original_sizes").tolist(),
-... )[0]
-
->>> print(f"Found {len(results['masks'])} objects")
+print(f"Found {len(results['masks'])} objects")
 ```
 
 ## Sam3LiteTextConfig

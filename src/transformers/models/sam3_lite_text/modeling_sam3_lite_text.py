@@ -1887,6 +1887,8 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
 class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
     input_modalities = ["image", "text"]
     base_model_prefix = "detector_model"
+    _supports_flash_attn = False
+    _supports_flex_attn = False
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",

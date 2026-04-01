@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch SAM3 model."""
+"""Testing suite for the PyTorch SAM3 LiteText model."""
 
 import gc
 import tempfile
@@ -451,66 +451,6 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 decoder_hidden_states = outputs.decoder_hidden_states
                 self.assertIsInstance(decoder_hidden_states, (list, tuple))
 
-    @unittest.skip(reason="SAM3VisionModel has FPN channel mismatch with flex attention")
-    def test_flex_attention_with_grads(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_3_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_3_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_4_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_4_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_kernels_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_kernels_mps_inference_equivalence(self):
-        pass
-
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested.
@@ -841,6 +781,7 @@ def prepare_coco_kitchen_image():
 
 
 @slow
+@require_torch
 class Sam3LiteTextModelIntegrationTest(unittest.TestCase):
     """Integration tests for SAM3 model with real pretrained weights."""
 
@@ -1296,7 +1237,6 @@ class Sam3LiteTextModelIntegrationTest(unittest.TestCase):
             top_pp_box_1, torch.tensor([168.9672, 137.3469, 191.7236, 161.3282]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
-    # TODO add exact values
     def test_semantic_segmentation_output(self):
         """Test that semantic segmentation output is produced."""
         raw_image = prepare_coco_cat_image()
