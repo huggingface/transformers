@@ -15,11 +15,14 @@
 
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 import pytest
 from datasets import load_dataset
 
 from transformers import BeitConfig
+from transformers.conversion_mapping import get_model_conversion_mapping as _base_get_model_conversion_mapping
+from transformers.core_model_loading import WeightRenaming
 from transformers.testing_utils import (
     require_torch,
     require_torch_multi_gpu,
@@ -32,6 +35,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ... import test_modeling_common
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -289,15 +293,27 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        # The conversion mapping has entries for:
-        # - relative_position_bias (per-layer): exists when use_relative_position_bias=True
-        # - shared_relative_position_bias (shared): exists when use_shared_relative_position_bias=True
-        # Both must be enabled so the test can verify all source patterns match at least one key.
-        # Eager attention is required since flex_attention is incompatible with relative position bias.
+        # relative_position_bias keys must exist for all source patterns to match; enable both variants.
+        # FPN renames (`fpn1.`, `fpn2.`) are in the shared `beit` mapping but only apply to models that
+        # actually have FPN weights — strip them for the classes that don't.
+        _FPN_SOURCE = {"fpn1.", "fpn2."}
+
+        def _mapping(model, key_mapping=None, hf_quantizer=None, add_legacy=True):
+            conversions = _base_get_model_conversion_mapping(
+                model, key_mapping=key_mapping, hf_quantizer=hf_quantizer, add_legacy=add_legacy
+            )
+            if not any("fpn.fpn1." in k for k in model.state_dict()):
+                conversions = [
+                    c for c in conversions
+                    if not (isinstance(c, WeightRenaming) and set(c.source_patterns) & _FPN_SOURCE)
+                ]
+            return conversions
+
         self.model_tester.use_relative_position_bias = True
         self.model_tester.use_shared_relative_position_bias = True
         try:
-            super().test_reverse_loading_mapping(check_keys_were_modified)
+            with patch.object(test_modeling_common, "get_model_conversion_mapping", _mapping):
+                super().test_reverse_loading_mapping(check_keys_were_modified)
         finally:
             self.model_tester.use_relative_position_bias = False
             self.model_tester.use_shared_relative_position_bias = False

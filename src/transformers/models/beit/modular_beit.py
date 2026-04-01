@@ -929,11 +929,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     """
 )
 class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "^embeddings": "encoder.embeddings",
-        "fpn1.": "fpn.fpn1.",
-        "fpn2.": "fpn.fpn2.",
-    }
+    _checkpoint_conversion_mapping = {"^embeddings": "encoder.embeddings"}
 
     def __init__(self, config):
         super().__init__(config)
