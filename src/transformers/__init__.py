@@ -264,6 +264,7 @@ _import_structure = {
         "HqqConfig",
         "MetalConfig",
         "Mxfp4Config",
+        "PrismQuantConfig",
         "QuantoConfig",
         "QuarkConfig",
         "SinqConfig",
@@ -780,6 +781,7 @@ if TYPE_CHECKING:
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import MetalConfig as MetalConfig
     from .utils.quantization_config import QuantoConfig as QuantoConfig
+    from .utils.quantization_config import PrismQuantConfig as PrismQuantConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
     from .utils.quantization_config import SinqConfig as SinqConfig
     from .utils.quantization_config import SpQRConfig as SpQRConfig

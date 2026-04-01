@@ -44,6 +44,7 @@ class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gptq"
     AWQ = "awq"
+    PRISM = "prism"
     AQLM = "aqlm"
     VPTQ = "vptq"
     QUANTO = "quanto"
@@ -1551,6 +1552,47 @@ class TorchAoConfig(QuantizationConfigMixin):
         quant_type = config_from_dict(quant_type)
 
         return cls(quant_type=quant_type, **config_dict)
+
+
+@dataclass
+class PrismQuantConfig(QuantizationConfigMixin):
+    """
+    Configuration class for Prism ML affine 1-bit checkpoints.
+
+    Args:
+        bits (`int`, *optional*, defaults to `1`):
+            Prism checkpoints currently use 1-bit affine quantization.
+        group_size (`int`, *optional*, defaults to `128`):
+            Number of input-channel weights sharing the same scale and bias.
+        modules_to_not_convert (`Optional[list[str]]`, *optional*):
+            Module names to keep in their original dense form.
+        kwargs (`dict[str, Any]`, *optional*):
+            Additional Prism-specific metadata carried in the checkpoint config.
+    """
+
+    def __init__(
+        self,
+        bits: int = 1,
+        group_size: int = 128,
+        modules_to_not_convert: list[str] | None = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.PRISM
+        self.bits = bits
+        self.group_size = group_size
+        self.modules_to_not_convert = modules_to_not_convert
+        if kwargs is not None:
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+        self.post_init()
+
+    def post_init(self):
+        if self.bits != 1:
+            raise ValueError(f"Prism only supports 1-bit checkpoints, but got bits={self.bits}")
+        if self.group_size <= 0 or self.group_size % 32 != 0:
+            raise ValueError(
+                f"Prism requires group_size to be a positive multiple of 32, but got group_size={self.group_size}"
+            )
 
 
 @dataclass

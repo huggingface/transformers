@@ -33,6 +33,7 @@ from ..utils.quantization_config import (
     HqqConfig,
     MetalConfig,
     Mxfp4Config,
+    PrismQuantConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
@@ -60,6 +61,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_prism import PrismHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
 from .quantizer_sinq import SinqHfQuantizer
@@ -85,6 +87,7 @@ AUTO_QUANTIZER_MAPPING = {
     "fbgemm_fp8": FbgemmFp8HfQuantizer,
     "torchao": TorchAoHfQuantizer,
     "bitnet": BitNetHfQuantizer,
+    "prism": PrismHfQuantizer,
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
@@ -111,6 +114,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "higgs": HiggsConfig,
     "torchao": TorchAoConfig,
     "bitnet": BitNetQuantConfig,
+    "prism": PrismQuantConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
@@ -132,6 +136,23 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
 )
 
 logger = logging.get_logger(__name__)
+
+
+def infer_legacy_quantization_config(config):
+    legacy_quant = getattr(config, "quantization", None)
+    if not isinstance(legacy_quant, dict):
+        return None
+
+    bits = legacy_quant.get("bits")
+    group_size = legacy_quant.get("group_size")
+    if bits != 1 or not isinstance(group_size, int) or group_size <= 0:
+        return None
+
+    inferred = {"quant_method": QuantizationMethod.PRISM.value, "bits": bits, "group_size": group_size}
+    modules_to_not_convert = legacy_quant.get("modules_to_not_convert")
+    if modules_to_not_convert is not None:
+        inferred["modules_to_not_convert"] = modules_to_not_convert
+    return inferred
 
 
 class AutoQuantizationConfig:
@@ -319,15 +340,19 @@ def register_quantizer(name: str):
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent):
-    pre_quantized = hasattr(config, "quantization_config")
-    if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
+    config_quantization = getattr(config, "quantization_config", None)
+    if config_quantization is None:
+        config_quantization = infer_legacy_quantization_config(config)
+        if config_quantization is not None:
+            config.quantization_config = config_quantization
+
+    pre_quantized = config_quantization is not None
+    if pre_quantized and not AutoHfQuantizer.supports_quant_method(config_quantization):
         pre_quantized = False
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
-            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                config.quantization_config, quantization_config
-            )
+            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(config_quantization, quantization_config)
         else:
             config.quantization_config = quantization_config
 
