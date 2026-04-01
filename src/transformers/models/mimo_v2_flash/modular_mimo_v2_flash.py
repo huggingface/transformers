@@ -381,6 +381,8 @@ class MiMoV2FlashMLP(Qwen2MoeMLP):
     pass
 
 
+# NOTE: @casinca I have to do this in the case users enable backends. The upcoming attention mask (which depends on the
+# backend used) needs to be converted for the sink path which always expects a float mask (gpt-oss eager attn).
 def _prepare_sink_eager_attention_mask(
     attention_mask: torch.Tensor | None,
     query_states: torch.Tensor,
