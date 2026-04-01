@@ -443,21 +443,12 @@ class XCLIPCrossAttention(CLIPAttention):
         batch_size, query_seq_len, hidden_size = queries.shape
         batch_size, key_seq_len, hidden_size = keys.shape
 
-        queries = (
-            self.q_proj(queries)
-            .reshape(batch_size, query_seq_len, self.num_heads, hidden_size // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        keys = (
-            self.k_proj(keys)
-            .reshape(batch_size, key_seq_len, self.num_heads, hidden_size // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
-        values = (
-            self.v_proj(values)
-            .reshape(batch_size, key_seq_len, self.num_heads, hidden_size // self.num_heads)
-            .permute(0, 2, 1, 3)
-        )
+        query_shape = (batch_size, query_seq_len, -1, self.attention_head_size)
+        key_shape = (batch_size, key_seq_len, -1, self.attention_head_size)
+
+        queries = self.q_proj(queries).view(*query_shape).transpose(1, 2)
+        keys = self.k_proj(keys).view(*key_shape).transpose(1, 2)
+        values = self.v_proj(values).view(*key_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -796,7 +787,7 @@ class XCLIPModel(CLIPModel, XCLIPPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = image_text_contrastive_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text, logits_per_video)
 
         return XCLIPOutput(
             loss=loss,

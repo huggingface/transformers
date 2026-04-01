@@ -473,18 +473,10 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.assertIsNotNone(model)
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        # AltCLIP applied legacy conversion which is never reversed, so we won't get
+        # AltCLIP applies legacy conversion which is never reversed, so we won't get
         # matching state dict keys after re-saving it back
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        #  Some MoE models alternate between a classic MLP and a MoE layer, in which case we want to have at
-        # lest one MoE layer here to check the mapping
-        config_to_set = config.get_text_config(decoder=True)
-        config_to_set.first_k_dense_replace = 1  # means that the first layer (idx 0) will be MLP, then MoE
-        config_to_set.moe_layer_start_index = 1  # same as above but for Ernie 4.5...
-        config_to_set.mlp_only_layers = [0]  # same but for qwens
-        config_to_set.num_dense_layers = 1  # lfm2_moe
 
         for model_class in self.all_model_classes:
             # Each individual model is a subtest

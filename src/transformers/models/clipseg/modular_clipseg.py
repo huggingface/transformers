@@ -149,8 +149,6 @@ class CLIPSegDecoderOutput(ModelOutput):
     """
 
     logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -335,12 +333,18 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         hidden_states: tuple[torch.Tensor],
         conditional_embeddings: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CLIPSegDecoderOutput:
+        r"""
+        conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
+            The conditional embeddings for the query images. If provided, the model will use this instead of computing
+            the embeddings from the conditional_pixel_values.
+        """
         activations = hidden_states[::-1]
 
         output = None

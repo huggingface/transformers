@@ -18,15 +18,12 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
 )
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import (
     AlignTextAttention,
     AlignTextEmbeddings,
@@ -34,6 +31,7 @@ from ..align.modeling_align import (
     AlignTextLayer,
     AlignTextSelfAttention,
 )
+from ..altclip.modeling_altclip import AltRobertaModel
 from ..bert.modeling_bert import BertIntermediate, BertOutput, BertPooler, BertSelfOutput
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from ..clip.modeling_clip import (
@@ -44,7 +42,6 @@ from ..clip.modeling_clip import (
     CLIPModel,
     CLIPOutput,
     CLIPPreTrainedModel,
-    CLIPTextModel,
     CLIPVisionEmbeddings,
     CLIPVisionModel,
     _get_vector_norm,
@@ -313,8 +310,7 @@ class ChineseCLIPVisionModel(CLIPVisionModel):
     The text model from CHINESE_CLIP without any head or projection on top.
     """
 )
-class ChineseCLIPTextModel(CLIPTextModel):
-    _input_embed_layer = "word_embeddings"
+class ChineseCLIPTextModel(AltRobertaModel):
     _can_record_outputs = {
         "hidden_states": ChineseCLIPTextLayer,
         "attentions": ChineseCLIPTextSelfAttention,
@@ -333,46 +329,23 @@ class ChineseCLIPTextModel(CLIPTextModel):
 
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        token_type_ids: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+    def forward(self, **super_kwargs):
+        r"""
+        Examples:
 
-        inputs_embeds = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-        )
+        ```python
+        >>> from transformers import AutoTokenizer, ChineseCLIPTextModel
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-        )
+        >>> model = ChineseCLIPTextModel.from_pretrained("openai/chinese_clip-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/chinese_clip-vit-base-patch32")
 
-        encoder_outputs = self.encoder(
-            inputs_embeds,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-        )
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 @auto_docstring

@@ -714,6 +714,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
 class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
     config: ChineseCLIPTextConfig
     input_modalities = ("text",)
+
     _input_embed_layer = "word_embeddings"
     _can_record_outputs = {
         "hidden_states": ChineseCLIPTextLayer,
