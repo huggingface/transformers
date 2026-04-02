@@ -86,4 +86,4 @@ class EfficientvitsamImageProcessorPil(SamImageProcessorPil):
         return output_masks
 
 
-__all__ = ["EfficientvitsamImageProcessorPil", "EfficientvitsamImageProcessorPilKwargs"]
+__all__ = ["EfficientvitsamImageProcessorPil"]

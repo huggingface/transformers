@@ -27,4 +27,4 @@ class EfficientvitsamImageProcessor(EfficientvitsamImageProcessorPil):
     pass
 
 
-__all__ = ["EfficientvitsamImageProcessor", "EfficientvitsamImageProcessorKwargs"]
+__all__ = ["EfficientvitsamImageProcessor"]
