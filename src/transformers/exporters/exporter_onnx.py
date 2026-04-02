@@ -164,10 +164,10 @@ def get_inputs_outputs_names(inputs: dict[str, Any], outputs: Any) -> tuple[list
 # Each _patch_* function is a factory: receives the original op and returns the
 # replacement, closing over the original.
 #
-# _TORCH_PATCH_TABLE is a list of (object, attr, factory) triples.
+# _TORCH_PATCHES is a list of (object, attr, factory) triples.
 # patch_torch_ops installs them and restores on exit.
 #
-# To add a new patch: define a _patch_* factory and append to _TORCH_PATCH_TABLE.
+# To add a new patch: define a _patch_* factory and append to _TORCH_PATCHES.
 
 
 def _patch_where(original):
@@ -358,10 +358,9 @@ def _patch_masked_scatter(original):
 
 
 # (object, attribute, factory) triples installed by patch_torch_ops.
-_TORCH_PATCH_TABLE = []
-
+_TORCH_PATCHES = []
 if is_torch_available():
-    _TORCH_PATCH_TABLE = [
+    _TORCH_PATCHES += [
         (torch, "where", _patch_where),
         (torch, "unsqueeze", _patch_unsqueeze),
         (torch.Tensor, "unsqueeze", _patch_unsqueeze),
@@ -385,7 +384,7 @@ if is_torch_available():
 def patch_torch_ops():
     """Context manager: install torch patches for ONNX export."""
     originals = []
-    for obj, attr, factory in _TORCH_PATCH_TABLE:
+    for obj, attr, factory in _TORCH_PATCHES:
         original = getattr(obj, attr)
         originals.append((obj, attr, original))
         setattr(obj, attr, factory(original))

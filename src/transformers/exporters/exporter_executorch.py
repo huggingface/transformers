@@ -122,7 +122,7 @@ _BACKEND_PREPARE = {
 
 # ── Torch patches ──────────────────────────────────────────────────────────────
 # Same factory pattern as exporter_onnx.py: each _patch_* receives the original
-# and returns the replacement. _TORCH_PATCH_TABLE lists (obj, attr, factory).
+# and returns the replacement. _TORCH_PATCHES lists (obj, attr, factory).
 
 
 def _patch_split(original):
@@ -245,10 +245,9 @@ def _patch_scaled_dot_product_attention(original):
 
 
 # (object, attribute, factory) triples installed by patch_torch_ops.
-_TORCH_PATCH_TABLE = []
-
+_TORCH_PATCHES = []
 if is_torch_available():
-    _TORCH_PATCH_TABLE = [
+    _TORCH_PATCHES += [
         (torch, "split", _patch_split),
         (torch.Tensor, "split", _patch_split),
         (torch, "chunk", _patch_chunk),
@@ -266,7 +265,7 @@ if is_torch_available():
 def patch_torch_ops():
     """Context manager: install torch patches for ExecuTorch export."""
     originals = []
-    for obj, attr, factory in _TORCH_PATCH_TABLE:
+    for obj, attr, factory in _TORCH_PATCHES:
         original = getattr(obj, attr)
         originals.append((obj, attr, original))
         setattr(obj, attr, factory(original))
