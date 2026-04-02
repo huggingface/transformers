@@ -91,9 +91,6 @@ This model was contributed by [Yih-Dar SHIEH](https://huggingface.co/ydshieh). T
 ## Kosmos2VisionConfig
 [[autodoc]] Kosmos2TextConfig
 
-## Kosmos2ImageProcessor
-[[autodoc]] Kosmos2ImageProcessor
-
 ## Kosmos2Processor
 
 [[autodoc]] Kosmos2Processor
