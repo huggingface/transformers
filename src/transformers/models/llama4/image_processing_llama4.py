@@ -18,17 +18,14 @@ from collections import defaultdict
 from functools import lru_cache
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, split_to_tiles
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torchvision_available
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
+from ...utils import TensorType, auto_docstring
 
 
 def get_factors(dividend: int) -> set[int]:

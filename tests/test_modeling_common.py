@@ -3619,6 +3619,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
+                "EvollaModel",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
@@ -3630,6 +3631,9 @@ class ModelTesterMixin:
                 "kosmos-2",
                 "mllama",
                 "lighton_ocr",
+                "parakeet_encoder",
+                "parakeet_ctc",
+                "pi0",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -4864,6 +4868,7 @@ class ModelTesterMixin:
                 or "input_values" in key
                 or "input_features" in key
                 or key in ["padding_mask", "is_longer", "feature_attention_mask"]
+                or (config.model_type == "musicflamingo" and key == "input_ids")
             }
         return config, inputs_dict
 

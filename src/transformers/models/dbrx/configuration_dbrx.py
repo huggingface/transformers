@@ -37,7 +37,7 @@ class DbrxAttentionConfig(PreTrainedConfig):
 
     base_config_key = "attn_config"
 
-    attn_pdrop: float = 0.0
+    attn_pdrop: float | int = 0.0
     clip_qkv: int | float | None = None
     kv_n_heads: int = 1
 

@@ -20,6 +20,7 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
@@ -38,7 +39,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     is_cv2_available,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
@@ -59,9 +59,6 @@ from ..rt_detr.modeling_rt_detr import (
     inverse_sigmoid,
 )
 
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 if is_cv2_available():
     import cv2
@@ -206,7 +203,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
     global_pointer_head_size: int = 64
-    gp_dropout_value: float = 0.1
+    gp_dropout_value: float | int = 0.1
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

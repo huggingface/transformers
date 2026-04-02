@@ -15,6 +15,7 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import functools
 import importlib.machinery
 import importlib.metadata
 import importlib.util
@@ -25,6 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
@@ -214,6 +216,22 @@ def is_cuda_platform() -> bool:
 
         return getattr(torch, "version").cuda is not None
     return False
+
+
+@lru_cache
+def get_cuda_runtime_version() -> tuple[int, int]:
+    """Return the CUDA runtime version as (major, minor).
+
+    Unlike ``torch.version.cuda`` which reports the compile-time version,
+    this queries ``cudaRuntimeGetVersion`` from ``libcudart.so`` to get the
+    actual runtime version installed on the system.
+    """
+    import ctypes
+
+    version = ctypes.c_int()
+    cudart = ctypes.CDLL("libcudart.so")
+    cudart.cudaRuntimeGetVersion(ctypes.byref(version))
+    return version.value // 1000, (version.value % 1000) // 10
 
 
 @lru_cache
@@ -724,6 +742,11 @@ def is_librosa_available() -> bool:
 
 
 @lru_cache
+def is_multipart_available() -> bool:
+    return _is_package_available("multipart")[0]
+
+
+@lru_cache
 def is_essentia_available() -> bool:
     return _is_package_available("essentia")[0]
 
@@ -746,6 +769,11 @@ def is_uvicorn_available() -> bool:
 @lru_cache
 def is_openai_available() -> bool:
     return _is_package_available("openai")[0]
+
+
+@lru_cache
+def is_serve_available() -> bool:
+    return is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
 
 
 @lru_cache
@@ -971,6 +999,16 @@ def is_flash_attn_greater_or_equal(library_version: str) -> bool:
         return version.parse(flash_attn_version) >= version.parse(library_version)
     except packaging.version.InvalidVersion:
         return False
+
+
+@lru_cache
+def is_flash_attn_greater_or_equal_2_10() -> bool:
+    warnings.warn(
+        "`is_flash_attn_greater_or_equal_2_10` is deprecated and will be removed in v5.8. "
+        "Please use `is_flash_attn_greater_or_equal(library_version='2.1.0')` instead if needed.",
+        FutureWarning,
+    )
+    return is_flash_attn_greater_or_equal("2.1.0")
 
 
 @lru_cache
@@ -2519,8 +2557,19 @@ def requires(*, backends=()):
                 raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
 
     def inner_fn(fun):
-        fun.__backends = applied_backends
-        return fun
+        if isinstance(fun, type):
+            # For classes, just attach the metadata — don't wrap, as that would
+            # turn the class into a plain function and break isinstance checks.
+            fun.__backends = applied_backends
+            return fun
+
+        @functools.wraps(fun)
+        def wrapper(*args, **kwargs):
+            requires_backends(fun, applied_backends)
+            return fun(*args, **kwargs)
+
+        wrapper.__backends = applied_backends  # type: ignore [unresolved-attribute]
+        return wrapper
 
     return inner_fn
 
