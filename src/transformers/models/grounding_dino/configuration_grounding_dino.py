@@ -107,7 +107,7 @@ class GroundingDinoConfig(PreTrainedConfig):
     num_feature_levels: int = 4
     encoder_n_points: int = 4
     decoder_n_points: int = 4
-    two_stage: int = True
+    two_stage: bool = True
     class_cost: float = 1.0
     bbox_cost: float = 5.0
     giou_cost: float = 2.0
@@ -117,7 +117,7 @@ class GroundingDinoConfig(PreTrainedConfig):
     disable_custom_kernels: bool = False
     max_text_len: int = 256
     text_enhancer_dropout: float | int = 0.0
-    fusion_droppath: float = 0.1
+    fusion_droppath: float | int = 0.1
     fusion_dropout: float | int = 0.0
     embedding_init_target: bool = True
     query_dim: int = 4

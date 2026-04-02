@@ -459,6 +459,27 @@ class ChatSchemaParserTest(unittest.TestCase):
             },
         )
 
+    def test_re_sub_schema(self):
+        """Test that a schema doing re substitutions to enable JSON parsing works."""
+        model_out = '<|channel>thought\nThe user is asking for the current temperature in Paris. I should check the available tools to see if there\'s a function that can provide this information.<channel|><|tool_call>call:get_current_temperature{detail_level:0,location:<|"|>Paris, France<|"|>,unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
+        parsed = recursive_parse(model_out, re_sub_schema)
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": "0", "location": "Paris, France", "unit": "celsius"},
+                        },
+                    }
+                ],
+            },
+        )
+
     def test_gemma4_tool_call(self):
         model_out = '<|channel>thought\nThe user is asking for the current temperature in Paris. I should check the available tools to see if there\'s a function that can provide this information.<channel|><|tool_call>call:get_current_temperature{detail_level:0,location:<|"|>Paris, France<|"|>,unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
         parsed = recursive_parse(model_out, gemma4_schema)

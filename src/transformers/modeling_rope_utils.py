@@ -817,7 +817,7 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
     def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor"}
+        required_keys = {"rope_type", "factor", "rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
         self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)

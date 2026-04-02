@@ -52,7 +52,7 @@ class JanusVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     mlp_ratio: float | int = 4.0
     attention_bias: bool = True
-    hidden_dropout_rate: float = 0.0
+    hidden_dropout_rate: float | int = 0.0
     projection_dim: int = 2048
     projection_dropout: float | int = 0.0
     use_qk_norm: bool = False
