@@ -74,9 +74,11 @@ transformers serve \
 
 [torch.compile](../perf_torch_compile) traces and compiles the decode loop for faster inference.
 
+> [!NOTE]
+> Compile is incompatible with continuous batching.
+
 ```sh
 transformers serve \
-  --continuous_batching \
   --compile
 ```
 
