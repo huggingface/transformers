@@ -38,11 +38,5 @@ class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
         result["audio_values"] = result["audio_values"].unsqueeze(1)
         return result
 
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        mask = torch.zeros((len(audio_ranges), padded_length), dtype=torch.int32)
-        for i, (start, end) in enumerate(audio_ranges):
-            mask[i, start:end] = 1
-        return {"audio_values_mask": mask}
-
 
 __all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]

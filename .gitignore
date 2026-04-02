@@ -176,3 +176,7 @@ tags
 # Cursor IDE files
 .cursor/
 test-results/
+src/transformers/models/audio_spectrogram_transformer/audio_processing_audio_spectrogram_transformer.py
+.gitignore
+tests/test_wav2vec2_whisper.py
+run_preprocessing_tests.sh

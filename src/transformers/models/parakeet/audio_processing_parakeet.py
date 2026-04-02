@@ -90,30 +90,34 @@ class ParakeetAudioProcessor(TorchAudioBackend):
         return magnitudes
 
     def _needs_manual_framing(self, spectrogram_config):
-        # Preemphasis is handled waveform-level in _pre_stft; no per-frame processing needed.
+        # Preemphasis is handled waveform-level in _stft; no per-frame processing needed.
         return spectrogram_config.remove_dc_offset or spectrogram_config.stft_config.left_align_fft
 
-    def _pre_stft(self, audio, *, spectrogram_config, **kwargs):
+    def _stft(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
         import torch
 
-        if not isinstance(self._audio_lengths, torch.Tensor):
-            self._audio_lengths = torch.tensor(self._audio_lengths, device=audio.device)
+        audio_lengths = torch.tensor(
+            [end - start for start, end in audio_ranges], device=audio.device
+        ) if audio_ranges is not None else None
 
+        # Waveform-level preemphasis with masking to zero out padding
         preemphasis = spectrogram_config.preemphasis
         if preemphasis is not None:
             audio = torch.cat(
                 [audio[:, :1], audio[:, 1:] - preemphasis * audio[:, :-1]], dim=1
             )
-            timemask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < self._audio_lengths.unsqueeze(1)
-            audio = audio.masked_fill(~timemask, 0.0)
-        return audio
+            if audio_lengths is not None:
+                timemask = torch.arange(audio.shape[-1], device=audio.device).unsqueeze(0) < audio_lengths.unsqueeze(1)
+                audio = audio.masked_fill(~timemask, 0.0)
+
+        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
     def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
         import torch
 
         return torch.matmul(self.mel_filters.T, features)
 
-    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+    def _normalize_magnitude(self, features, *, spectrogram_config, audio_ranges=None, **kwargs):
         import torch
 
         # Match FE: log(mel_spec + guard_value) instead of log(clamp(mel_spec, guard_value))
@@ -123,20 +127,21 @@ class ParakeetAudioProcessor(TorchAudioBackend):
         features = features.permute(0, 2, 1)
 
         # Per-utterance normalization
-        stft_cfg = spectrogram_config.stft_config
-        audio_lengths = self._audio_lengths
-        features_lengths = torch.floor_divide(
-            audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
-        )
-        attention_mask = torch.arange(features.shape[1])[None, :] < features_lengths[:, None]
-        mask = attention_mask.unsqueeze(-1)
-        mel_masked = features * mask
-        mean = mel_masked.sum(dim=1) / features_lengths.unsqueeze(-1)
-        mean = mean.unsqueeze(1)
-        variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
-        std = torch.sqrt(variance).unsqueeze(1)
-        features = (features - mean) / (std + 1e-5)
-        features *= mask
+        if audio_ranges is not None:
+            stft_cfg = spectrogram_config.stft_config
+            audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
+            features_lengths = torch.floor_divide(
+                audio_lengths + stft_cfg.n_fft // 2 * 2 - stft_cfg.n_fft, stft_cfg.hop_length
+            )
+            attention_mask = torch.arange(features.shape[1])[None, :] < features_lengths[:, None]
+            mask = attention_mask.unsqueeze(-1)
+            mel_masked = features * mask
+            mean = mel_masked.sum(dim=1) / features_lengths.unsqueeze(-1)
+            mean = mean.unsqueeze(1)
+            variance = ((mel_masked - mean) ** 2 * mask).sum(dim=1) / (features_lengths - 1).unsqueeze(-1)
+            std = torch.sqrt(variance).unsqueeze(1)
+            features = (features - mean) / (std + 1e-5)
+            features *= mask
 
         return features
 

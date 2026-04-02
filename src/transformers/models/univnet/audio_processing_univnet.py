@@ -15,8 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
-from ...feature_extraction_utils import BatchFeature
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class UnivNetAudioProcessor(NumpyAudioBackend):
@@ -35,7 +34,14 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
     normalize_max = 2.3143386840820312
     max_length_s = 10
     spectrogram_config = SpectrogramConfig(
-        stft_config=StftConfig(n_fft=1024),
+        stft_config=StftConfig(
+            n_fft=1024,
+            hop_length=256,
+            center=False,
+            window_fn="hann",
+            periodic=True,
+            power=1.0,
+        ),
         mel_scale_config=MelScaleConfig(
             n_mels=100,
             f_min=0.0,
@@ -43,87 +49,50 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
             mel_scale="slaney",
             norm="slaney",
         ),
+        log_mode="log",
+        mel_floor=1e-5,
     )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.num_max_samples = self.max_length_s * self.sample_rate
-        self.window = window_function(self.n_fft, "hann", periodic=True)
 
-    def mel_spectrogram(self, waveform):
-        # Reflect-pad waveform
+    def _stft(self, audio, *, spectrogram_config, **kwargs):
+        # UnivNet uses reflect padding with (n_fft - hop_length) / 2 instead of center padding
         pad_amount = int((self.n_fft - self.hop_length) / 2)
-        waveform = np.pad(waveform, (pad_amount, pad_amount), mode="reflect")
+        if audio.ndim > 1:
+            audio = np.pad(audio, ((0, 0), (pad_amount, pad_amount)), mode="reflect")
+        else:
+            audio = np.pad(audio, (pad_amount, pad_amount), mode="reflect")
+        return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-        # Complex spectrogram
-        complex_spec = spectrogram(
-            waveform,
-            window=self.window,
-            frame_length=self.n_fft,
-            hop_length=self.hop_length,
-            fft_length=self.n_fft,
-            power=None,
-            center=False,
-            mel_filters=None,
-            mel_floor=None,
-        )
+    def _compute_magnitudes(self, stft_out, power):
+        # UnivNet adds mel_floor inside the sqrt: sqrt(real² + imag² + mel_floor)
+        return np.sqrt(np.real(stft_out) ** 2 + np.imag(stft_out) ** 2 + self.mel_floor)
 
-        # Custom amplitude spectrogram: sqrt(real^2 + imag^2 + mel_floor)
-        amplitude_spec = np.sqrt(np.real(complex_spec) ** 2 + np.imag(complex_spec) ** 2 + self.mel_floor)
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        # UnivNet applies mel filterbank without a floor
+        return np.matmul(self.mel_filters.T, features)
 
-        # Apply mel filter bank
-        mel_spec = np.matmul(self.mel_filters.T, amplitude_spec)
-
-        # Log compression
-        log_mel = np.log(np.clip(mel_spec, a_min=self.compression_clip_val, a_max=None) * self.compression_factor)
-
-        return log_mel.T  # (frames, n_mels)
-
-    def normalize(self, spectrogram_data):
-        return 2 * ((spectrogram_data - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
-
-    def extract_spectrogram(self, audio, *, spectrogram_config):
-        features = []
-        for waveform in audio:
-            waveform = np.squeeze(waveform)
-            mel = self.mel_spectrogram(waveform)
-            if self.do_normalize:
-                mel = self.normalize(mel)
-            features.append(mel.astype(np.float32))
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+        if self.do_normalize:
+            features = 2 * ((features - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
         return features
 
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, generator=None, **kwargs):
-        # Pad raw audio
-        if padding:
-            audio, _audio_ranges = self.pad(audio, padding=True, max_length=max_length)
+    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
+        # UnivNet uses waveform-level padding mask even when extracting spectrograms
+        mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
+        for i, (start, end) in enumerate(audio_ranges):
+            mask[i, start:end] = 1
+        return {"audio_features_mask": mask}
 
-        # Extract mel spectrograms
-        features = self.extract_spectrogram(audio, spectrogram_config=None)
-
-        # Pad features
-        max_feat_len = max(f.shape[0] for f in features)
-        padded = []
-        for f in features:
-            if f.shape[0] < max_feat_len:
-                pad_amount = max_feat_len - f.shape[0]
-                f = np.pad(f, ((0, pad_amount), (0, 0)), mode="constant", constant_values=0.0)
-            padded.append(f)
-
-        output_key = "audio_features"
-        stacked = np.stack(padded, axis=0)
-
-        # Generate noise sequence matching the FE
-        if generator is None:
-            generator = np.random.default_rng()
-        noise = [
-            generator.standard_normal((f.shape[0], 64), dtype=np.float32)
-            for f in padded
-        ]
-
-        return BatchFeature(
-            data={output_key: stacked, "noise_sequence": noise},
-            tensor_type=return_tensors,
-        )
+    def extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
+        features = super().extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+        # Transpose from (..., n_mels, frames) to (..., frames, n_mels)
+        if isinstance(features, list):
+            return [np.swapaxes(f, -2, -1) for f in features]
+        return np.swapaxes(features, -2, -1)
 
 
 __all__ = ["UnivNetAudioProcessor"]

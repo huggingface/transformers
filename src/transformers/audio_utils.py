@@ -78,6 +78,7 @@ class StftConfig:
     onesided: bool | None = None
     periodic: bool = True
     left_align_fft: bool = False
+    window_dtype: str | None = None
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -105,6 +106,7 @@ class MelScaleConfig:
     frequency_bin_mode: str = "rfft"
     computation_dtype: str | None = None
     bands_to_zero: int = 0
+    matmul_order: str = "filters_first"
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self) if getattr(self, f.name) is not None}
@@ -123,7 +125,6 @@ class SpectrogramConfig:
     mel_scale_config: MelScaleConfig | None = None
     log_mode: str = "log10"
     chunk_length: int | None = None
-    global_log_mel_max: float | None = None
     preemphasis: float | None = None
     remove_dc_offset: bool = False
     mel_floor: float = 1e-10
@@ -165,7 +166,6 @@ class SpectrogramConfig:
             mel_scale_config=mel_scale_config,
             log_mode=d.get("log_mode", "log10"),
             chunk_length=d.get("chunk_length"),
-            global_log_mel_max=d.get("global_log_mel_max"),
             preemphasis=d.get("preemphasis"),
             remove_dc_offset=d.get("remove_dc_offset", False),
             mel_floor=d.get("mel_floor", 1e-10),

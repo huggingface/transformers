@@ -14,9 +14,11 @@
 # limitations under the License.
 
 
-import numpy as np
+import math
 
-from . import numpy_mel_spectrogram as _np_spec
+import numpy as np
+import librosa
+
 from .audio_processing_utils import BaseAudioProcessor
 from .audio_utils import SpectrogramConfig, amplitude_to_db, power_to_db
 from .feature_extraction_utils import BatchFeature
@@ -28,7 +30,93 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-    from . import torch_mel_spectrogram as _torch_spec
+
+
+# ── NumPy frequency conversion utilities ──────────────────────────────
+
+def _np_hertz_to_mel(freq, mel_scale="htk"):
+    if mel_scale == "htk":
+        return 2595.0 * np.log10(1.0 + (freq / 700.0))
+    elif mel_scale == "kaldi":
+        return 1127.0 * np.log(1.0 + (freq / 700.0))
+    # slaney
+    min_log_hertz = 1000.0
+    min_log_mel = 15.0
+    logstep = 27.0 / np.log(6.4)
+    mels = 3.0 * freq / 200.0
+    if isinstance(freq, np.ndarray):
+        log_region = freq >= min_log_hertz
+        mels[log_region] = min_log_mel + np.log(freq[log_region] / min_log_hertz) * logstep
+    elif freq >= min_log_hertz:
+        mels = min_log_mel + np.log(freq / min_log_hertz) * logstep
+    return mels
+
+
+def _np_mel_to_hertz(mels, mel_scale="htk"):
+    if mel_scale == "htk":
+        return 700.0 * (np.power(10, mels / 2595.0) - 1.0)
+    elif mel_scale == "kaldi":
+        return 700.0 * (np.exp(mels / 1127.0) - 1.0)
+    # slaney
+    min_log_hertz = 1000.0
+    min_log_mel = 15.0
+    logstep = np.log(6.4) / 27.0
+    freq = 200.0 * mels / 3.0
+    if isinstance(mels, np.ndarray):
+        log_region = mels >= min_log_mel
+        freq[log_region] = min_log_hertz * np.exp(logstep * (mels[log_region] - min_log_mel))
+    elif mels >= min_log_mel:
+        freq = min_log_hertz * np.exp(logstep * (mels - min_log_mel))
+    return freq
+
+
+# ── Torch frequency conversion utilities ──────────────────────────────
+
+def _torch_hertz_to_mel_scalar(freq: float, mel_scale: str = "htk") -> float:
+    if mel_scale == "htk":
+        return 2595.0 * math.log10(1.0 + freq / 700.0)
+    elif mel_scale == "kaldi":
+        return 1127.0 * math.log(1.0 + freq / 700.0)
+    # slaney
+    f_sp = 200.0 / 3
+    min_log_hz = 1000.0
+    min_log_mel = (min_log_hz - 0.0) / f_sp
+    logstep = math.log(6.4) / 27.0
+    if freq >= min_log_hz:
+        return min_log_mel + math.log(freq / min_log_hz) / logstep
+    return (freq - 0.0) / f_sp
+
+
+def _torch_hertz_to_mel(freq: "torch.Tensor", mel_scale: str = "htk") -> "torch.Tensor":
+    if mel_scale == "htk":
+        return 2595.0 * torch.log10(1.0 + freq / 700.0)
+    elif mel_scale == "kaldi":
+        return 1127.0 * torch.log(1.0 + freq / 700.0)
+    # slaney
+    f_sp = 200.0 / 3
+    min_log_hertz = 1000.0
+    min_log_mel = min_log_hertz / f_sp
+    logstep = 27.0 / torch.log(torch.tensor(6.4))
+    mels = freq / f_sp
+    log_region = freq >= min_log_hertz
+    mels[log_region] = min_log_mel + torch.log(freq[log_region] / min_log_hertz) * logstep
+    return mels
+
+
+def _torch_mel_to_hertz(mels: "torch.Tensor", mel_scale: str = "htk") -> "torch.Tensor":
+    if mel_scale == "htk":
+        return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
+    elif mel_scale == "kaldi":
+        return 700.0 * (torch.exp(mels / 1127.0) - 1.0)
+    # slaney
+    f_sp = 200.0 / 3
+    min_log_hz = 1000.0
+    min_log_mel = (min_log_hz - 0.0) / f_sp
+    logstep = math.log(6.4) / 27.0
+    freq = 0.0 + f_sp * mels
+    log_region = mels >= min_log_mel
+    freq[log_region] = min_log_hz * torch.exp(logstep * (mels[log_region] - min_log_mel))
+    return freq
 
 
 class NumpyAudioBackend(BaseAudioProcessor):
@@ -80,38 +168,124 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         return np.pad(audio, pad_width, mode="constant", constant_values=self.padding_value)
 
-    def _stft(
-        self,
-        audio: list[np.ndarray],
-        *,
-        spectrogram_config: SpectrogramConfig,
-        **kwargs,
-    ) -> list[np.ndarray]:
-        """Compute the (power) spectrogram via STFT using the numpy backend."""
-        stft_cfg = spectrogram_config.stft_config
-        n_fft = stft_cfg.n_fft
-        win_length = stft_cfg.win_length or n_fft
-        hop_length = stft_cfg.hop_length or win_length // 2
+    def _create_stft_window(self, win_length, stft_cfg, audio):
+        N = win_length + 1 if stft_cfg.periodic else win_length
+        fac = np.linspace(-np.pi, np.pi, N)
+        name = stft_cfg.window_fn
+        if name in ("hann", "hann_window"):
+            w = 0.5 + 0.5 * np.cos(fac)
+        elif name in ("hamming", "hamming_window"):
+            w = 0.54 + 0.46 * np.cos(fac)
+        elif name == "boxcar":
+            w = np.ones(N)
+        elif name == "povey":
+            w = (0.5 + 0.5 * np.cos(fac)) ** 0.85
+        else:
+            raise ValueError(f"Unknown window function '{name}'")
+        return w[:win_length] if stft_cfg.periodic else w
 
-        window = _np_spec.window_function(win_length, name=stft_cfg.window_fn, periodic=stft_cfg.periodic)
-        needs_manual_framing = (spectrogram_config.preemphasis is not None) or spectrogram_config.remove_dc_offset
-        window, frame_length = _np_spec._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
+        if needs_manual_framing and win_length < n_fft:
+            frame_length = win_length
+        else:
+            if win_length < n_fft:
+                left_pad = (n_fft - win_length) // 2
+                right_pad = n_fft - win_length - left_pad
+                window = np.pad(window, (left_pad, right_pad))
+            frame_length = n_fft
+        return window, frame_length
 
-        frames, num_frames = _np_spec._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
+    def _frame_waveform(self, waveform, frame_length, hop_length, n_fft, center, pad_mode):
+        squeezed = waveform.ndim == 1
+        if squeezed:
+            waveform = waveform[np.newaxis, :]
+        if center:
+            start_k = int(np.ceil(n_fft // 2 / hop_length))
+            tail_k = (waveform.shape[-1] + n_fft // 2 - n_fft) // hop_length + 1
+
+            if tail_k <= start_k:
+                waveform = np.pad(waveform, ((0, 0), (frame_length // 2, frame_length // 2)), mode=pad_mode)
+                num_frames = 1 + (waveform.shape[-1] - frame_length) // hop_length
+                frame_starts = np.arange(num_frames) * hop_length
+                frame_indices = frame_starts[:, np.newaxis] + np.arange(frame_length)
+                frames = waveform[:, frame_indices]
+            else:
+                padding = [(0, 0) for _ in range(waveform.ndim)]
+                padding[-1] = (frame_length // 2, 0)
+                y_pre = np.pad(
+                    waveform[..., : (start_k - 1) * hop_length - n_fft // 2 + n_fft + 1],
+                    padding,
+                    mode=pad_mode,
+                )
+                y_frames_pre = librosa.util.frame(y_pre, frame_length=frame_length, hop_length=hop_length)
+                y_frames_pre = y_frames_pre[..., :start_k]
+                y_frames_pre = np.moveaxis(y_frames_pre, -2, -1)
+                extra = y_frames_pre.shape[-2]
+
+                padding[-1] = (0, frame_length // 2)
+                y_post = np.pad(
+                    waveform[..., (tail_k) * hop_length - n_fft // 2 :],
+                    padding,
+                    mode=pad_mode,
+                )
+                y_frames_post = librosa.util.frame(y_post, frame_length=frame_length, hop_length=hop_length)
+                y_frames_post = np.moveaxis(y_frames_post, -2, -1)
+                extra += y_frames_post.shape[-2]
+
+                start = start_k * hop_length - n_fft // 2
+                y_frames_middle = librosa.util.frame(
+                    waveform[..., start:], frame_length=frame_length, hop_length=hop_length
+                )
+                y_frames_middle = np.moveaxis(y_frames_middle, -2, -1)
+
+                num_frames = y_frames_pre.shape[-2] + y_frames_middle.shape[-2] + y_frames_post.shape[-2]
+                frames = np.concatenate([y_frames_pre, y_frames_middle, y_frames_post], axis=-2)
+        else:
+            num_frames = 1 + (waveform.shape[-1] - frame_length) // hop_length
+            frame_starts = np.arange(num_frames) * hop_length
+            frame_indices = frame_starts[:, np.newaxis] + np.arange(frame_length)
+            frames = waveform[:, frame_indices]
+
+        if squeezed:
+            frames = frames.squeeze(0)
+        return frames, num_frames
+
+    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        frames, _ = self._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
+        compute_dtype = np.result_type(audio.dtype, window.dtype)
+        return frames.astype(compute_dtype, copy=False)
+
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+        frames = frames * window
+        spec = np.fft.rfft(frames, n=n_fft, axis=-1).astype(np.complex64)
+        if stft_cfg.normalized:
+            spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
+        return np.moveaxis(spec, -1, -2)
+
+    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        frames, _ = self._frame_waveform(audio, frame_length, hop_length, n_fft, stft_cfg.center, stft_cfg.pad_mode)
         compute_dtype = np.result_type(audio.dtype, window.dtype)
         frames = frames.astype(compute_dtype, copy=False)
+        frames = frames * window
+        spec = np.fft.rfft(frames, n=n_fft, axis=-1).astype(np.complex64)
+        if stft_cfg.normalized:
+            spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
+        return np.moveaxis(spec, -1, -2)
 
-        frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
-
-        return _np_spec._windowed_fft(frames, window, n_fft, stft_cfg.power, stft_cfg.normalized)
+    def _compute_magnitudes(self, stft_out, power):
+        return np.abs(stft_out, dtype=np.float64) ** power
 
     def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
         """Apply per-frame signal conditioning using the numpy backend."""
-        return _np_spec._apply_frame_processing(
-            frames,
-            preemphasis=spectrogram_config.preemphasis,
-            remove_dc_offset=spectrogram_config.remove_dc_offset,
-        )
+        compute_dtype = frames.dtype
+        if spectrogram_config.remove_dc_offset:
+            frames = frames - frames.mean(axis=-1, keepdims=True)
+        preemphasis = spectrogram_config.preemphasis
+        if preemphasis is not None:
+            preemph_src = preemphasis * frames[..., :-1]
+            frames[..., 1:] = frames[..., 1:] - preemph_src
+            frames[..., 0] = frames[..., 0] * (1 - preemphasis)
+        return frames
 
     def _apply_mel_scale(
         self,
@@ -121,7 +295,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list[np.ndarray]:
         """Apply mel filterbank to spectrogram features using the numpy backend."""
-        return _np_spec._apply_mel_scale(features, self.mel_filters, mel_floor=spectrogram_config.mel_floor)
+        if spectrogram_config.mel_scale_config.matmul_order == "features_first":
+            mel_spec = np.matmul(features, self.mel_filters)
+        else:
+            mel_spec = np.matmul(self.mel_filters.T, features)
+        return np.maximum(spectrogram_config.mel_floor, mel_spec)
 
     def _normalize_magnitude(
         self,
@@ -168,17 +346,42 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        return _np_spec.mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-            frequency_bin_mode=mel_cfg.frequency_bin_mode,
-        )
+        num_frequency_bins = 1 + stft_cfg.n_fft // 2
+        num_mel_filters = mel_cfg.n_mels
+        min_frequency = mel_cfg.f_min
+        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
+        sampling_rate = self.sample_rate
+
+        mel_min = _np_hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_max = _np_hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
+        mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+        filter_freqs = _np_mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
+
+        n_fft = (num_frequency_bins - 1) * 2
+
+        if mel_cfg.triangularize_in_mel_space:
+            fft_bin_width = sampling_rate / n_fft
+            fft_freqs = _np_hertz_to_mel(
+                fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_cfg.mel_scale
+            )
+            filter_freqs = mel_freqs
+        elif mel_cfg.frequency_bin_mode == "rfft":
+            fft_freqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
+        else:
+            fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
+
+        # Triangular filter bank
+        filter_diff = np.diff(filter_freqs)
+        slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
+        down_slopes = -slopes[:, :-2] / filter_diff[:-1]
+        up_slopes = slopes[:, 2:] / filter_diff[1:]
+        mel_filters = np.maximum(0, np.minimum(down_slopes, up_slopes))
+
+        if mel_cfg.norm == "slaney":
+            enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+            mel_filters *= np.expand_dims(enorm, 0)
+
+        return mel_filters
 
     def _to_batch(self, audio):
         return np.stack(audio)
@@ -251,66 +454,70 @@ class TorchAudioBackend(BaseAudioProcessor):
         return F.pad(audio, pad_args, "constant", self.padding_value)
 
     def _needs_manual_framing(self, spectrogram_config):
-        """Whether the STFT requires manual framing (unfold-based) instead of torch.stft.
+        """Extends the base check with ``left_align_fft`` which also requires manual framing."""
+        return super()._needs_manual_framing(spectrogram_config) or spectrogram_config.stft_config.left_align_fft
 
-        Manual framing is needed when per-frame processing must happen between
-        frame extraction and windowing (e.g. per-frame preemphasis, DC offset removal,
-        or left-aligned FFT padding).
-
-        Override in model-specific processors that handle preemphasis at the
-        waveform level (in ``_pre_stft``) and don't need per-frame processing.
-        """
-        return (
-            (spectrogram_config.preemphasis is not None)
-            or spectrogram_config.remove_dc_offset
-            or spectrogram_config.stft_config.left_align_fft
-        )
-
-    def _stft(
-        self,
-        audio: list["torch.Tensor"],  # TODO: this can be either a audio or batch of audio and this should be documented
-        *,
-        spectrogram_config: SpectrogramConfig,
-        **kwargs,
-    ) -> list["torch.Tensor"]:
-        """Compute the (power) spectrogram via STFT using the torch backend."""
-        stft_cfg = spectrogram_config.stft_config
-        computation_dtype = (
-            getattr(torch, spectrogram_config.computation_dtype)
-            if spectrogram_config.computation_dtype
-            else None
-        )
-
-        n_fft = stft_cfg.n_fft
-        win_length = stft_cfg.win_length or n_fft
-        hop_length = stft_cfg.hop_length or win_length // 2
-
-        if computation_dtype is not None:
-            audio = audio.to(computation_dtype)
-
-        needs_manual_framing = self._needs_manual_framing(spectrogram_config)
-
-        window_wkwargs = {**(stft_cfg.wkwargs or {}), "dtype": audio.dtype}
-        window = _torch_spec.window_function(win_length, name=stft_cfg.window_fn, periodic=stft_cfg.periodic, wkwargs=window_wkwargs)
-        window = window.to(device=audio.device)
-        window, frame_length = _torch_spec._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
-
-        if needs_manual_framing:
-            apply_fp = lambda frames: self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
-            magnitudes = _torch_spec._manual_stft(
-                audio, window, frame_length, hop_length, n_fft,
-                n_fft // 2 + 1, stft_cfg.power, stft_cfg.normalized,
-                stft_cfg.center, stft_cfg.pad_mode,
-                apply_frame_processing=apply_fp,
-            )
+    def _create_stft_window(self, win_length, stft_cfg, audio):
+        dtype = getattr(torch, stft_cfg.window_dtype) if stft_cfg.window_dtype else audio.dtype
+        wkwargs = {**(stft_cfg.wkwargs or {}), "dtype": dtype}
+        name = stft_cfg.window_fn
+        if name in ("hann", "hann_window"):
+            window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs)
+        elif name in ("hamming", "hamming_window"):
+            window = torch.hamming_window(win_length, periodic=stft_cfg.periodic, **wkwargs)
+        elif name == "boxcar":
+            window = torch.ones(win_length)
+        elif name == "povey":
+            window = torch.hann_window(win_length, periodic=stft_cfg.periodic, **wkwargs).pow(0.85)
         else:
-            stft_out = _torch_spec._torch_stft(
-                audio, window, frame_length, hop_length, n_fft,
-                stft_cfg.normalized, stft_cfg.center, stft_cfg.pad_mode,
-            )
-            magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power)
+            raise ValueError(f"Unknown window function '{name}'")
+        return window.to(device=audio.device)
 
-        if computation_dtype is not None:
+    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
+        if needs_manual_framing and win_length < n_fft:
+            frame_length = win_length
+        else:
+            if win_length < n_fft:
+                left_pad = (n_fft - win_length) // 2
+                right_pad = n_fft - win_length - left_pad
+                window = torch.nn.functional.pad(window, (left_pad, right_pad))
+            frame_length = n_fft
+        return window, frame_length
+
+    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        if stft_cfg.center:
+            audio = torch.nn.functional.pad(
+                audio, (frame_length // 2, frame_length // 2), mode=stft_cfg.pad_mode
+            )
+        return audio.unfold(-1, frame_length, hop_length)
+
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+        frames = frames * window
+        if frame_length < n_fft:
+            frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
+        spec = torch.fft.rfft(frames, n=n_fft)
+        if stft_cfg.normalized:
+            spec = spec / window.pow(2.0).sum().sqrt()
+        return spec.transpose(-2, -1)
+
+    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        stft_out = torch.stft(
+            audio,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            win_length=frame_length,
+            window=window,
+            center=stft_cfg.center,
+            pad_mode=stft_cfg.pad_mode,
+            normalized=False,
+            return_complex=True,
+        )
+        if stft_cfg.normalized:
+            stft_out = stft_out / window.pow(2.0).sum().sqrt()
+        return stft_out
+
+    def _cast_stft_output(self, magnitudes, spectrogram_config):
+        if spectrogram_config.computation_dtype:
             return magnitudes
         return magnitudes.float()
 
@@ -320,11 +527,15 @@ class TorchAudioBackend(BaseAudioProcessor):
 
     def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
         """Apply per-frame signal conditioning using the torch backend."""
-        return _torch_spec._apply_frame_processing(
-            frames,
-            preemphasis=spectrogram_config.preemphasis,
-            remove_dc_offset=spectrogram_config.remove_dc_offset,
-        )
+        if spectrogram_config.remove_dc_offset:
+            frames = frames - frames.mean(dim=-1, keepdim=True)
+        preemphasis = spectrogram_config.preemphasis
+        if preemphasis is not None:
+            frames = torch.cat([
+                frames[..., :1] * (1 - preemphasis),
+                frames[..., 1:] - preemphasis * frames[..., :-1],
+            ], dim=-1)
+        return frames
 
     def _apply_mel_scale(
         self,
@@ -334,7 +545,12 @@ class TorchAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list["torch.Tensor"]:
         """Apply mel filterbank to spectrogram features using the torch backend."""
-        return _torch_spec._apply_mel_scale(features, self.mel_filters, mel_floor=spectrogram_config.mel_floor)
+        mel_filters = self.mel_filters.to(device=features.device)
+        if spectrogram_config.mel_scale_config.matmul_order == "features_first":
+            mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
+        else:
+            mel_spec = torch.matmul(mel_filters.T, features)
+        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
 
     def _normalize_magnitude(
         self,
@@ -395,19 +611,86 @@ class TorchAudioBackend(BaseAudioProcessor):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
         computation_dtype = getattr(torch, mel_cfg.computation_dtype) if mel_cfg.computation_dtype else None
-        mel_filters = _torch_spec.mel_filter_bank_torch(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-            frequency_bin_mode=mel_cfg.frequency_bin_mode,
-            computation_dtype=computation_dtype,
-            bands_to_zero=mel_cfg.bands_to_zero,
-        )
+        num_frequency_bins = 1 + stft_cfg.n_fft // 2
+        num_mel_filters = mel_cfg.n_mels
+        min_frequency = mel_cfg.f_min
+        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
+        sampling_rate = self.sample_rate
+
+        if mel_cfg.triangularize_in_mel_space and mel_cfg.bands_to_zero == 0:
+            # Kaldi-exact path: matches torchaudio.compliance.kaldi.get_mel_banks.
+            n_fft = (num_frequency_bins - 1) * 2
+            num_fft_bins = n_fft // 2
+            fft_bin_width = sampling_rate / n_fft
+
+            mel_low = 1127.0 * math.log(1.0 + min_frequency / 700.0)
+            mel_high = 1127.0 * math.log(1.0 + max_frequency / 700.0)
+            mel_delta = (mel_high - mel_low) / (num_mel_filters + 1)
+
+            bin_idx = torch.arange(num_mel_filters).unsqueeze(1)
+            left_mel = mel_low + bin_idx * mel_delta
+            center_mel = mel_low + (bin_idx + 1.0) * mel_delta
+            right_mel = mel_low + (bin_idx + 2.0) * mel_delta
+
+            mel = 1127.0 * (1.0 + fft_bin_width * torch.arange(num_fft_bins) / 700.0).log()
+            mel = mel.unsqueeze(0)
+
+            up_slope = (mel - left_mel) / (center_mel - left_mel)
+            down_slope = (right_mel - mel) / (right_mel - center_mel)
+            banks = torch.max(torch.zeros(1), torch.min(up_slope, down_slope))
+            banks = torch.nn.functional.pad(banks, (0, 1), mode="constant", value=0)
+
+            mel_filters = banks.T
+        elif mel_cfg.triangularize_in_mel_space:
+            # Kaldi-style with bands_to_zero > 0
+            n_fft = (num_frequency_bins - 1) * 2
+            mel_min = _torch_hertz_to_mel_scalar(min_frequency, mel_scale=mel_cfg.mel_scale)
+            mel_max = _torch_hertz_to_mel_scalar(max_frequency, mel_scale=mel_cfg.mel_scale)
+            mel_delta = (mel_max - mel_min) / (num_mel_filters + 1)
+            bin_idx = torch.arange(num_mel_filters, dtype=computation_dtype).unsqueeze(1)
+            left_mel = mel_min + bin_idx * mel_delta
+            center_mel = mel_min + (bin_idx + 1.0) * mel_delta
+            right_mel = mel_min + (bin_idx + 2.0) * mel_delta
+
+            fft_bin_width = sampling_rate / n_fft
+            hz_freqs = fft_bin_width * torch.arange(mel_cfg.bands_to_zero, num_frequency_bins, dtype=computation_dtype)
+            mel = _torch_hertz_to_mel(hz_freqs, mel_scale=mel_cfg.mel_scale).unsqueeze(0)
+
+            up_slope = (mel - left_mel) / (center_mel - left_mel)
+            down_slope = (right_mel - mel) / (right_mel - center_mel)
+            mel_filters = torch.max(torch.zeros(1, dtype=computation_dtype), torch.min(up_slope, down_slope))
+
+            mel_filters = mel_filters.T
+            if mel_cfg.bands_to_zero > 0:
+                mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
+        else:
+            n_fft = (num_frequency_bins - 1) * 2
+            mel_min = _torch_hertz_to_mel_scalar(min_frequency, mel_scale=mel_cfg.mel_scale)
+            mel_max = _torch_hertz_to_mel_scalar(max_frequency, mel_scale=mel_cfg.mel_scale)
+            mel_freqs = torch.linspace(mel_min, mel_max, num_mel_filters + 2, dtype=computation_dtype)
+            filter_freqs = _torch_mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
+
+            if mel_cfg.frequency_bin_mode == "rfft":
+                fft_freqs = torch.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
+            else:
+                fft_freqs = torch.linspace(0, sampling_rate // 2, num_frequency_bins)
+            if computation_dtype is not None:
+                fft_freqs = fft_freqs.to(computation_dtype)
+
+            # Triangular filter bank
+            filter_diff = filter_freqs[1:] - filter_freqs[:-1]
+            slopes = filter_freqs.unsqueeze(0) - fft_freqs.unsqueeze(1)
+            down_slopes = -slopes[:, :-2] / filter_diff[:-1]
+            up_slopes = slopes[:, 2:] / filter_diff[1:]
+            mel_filters = torch.clamp(torch.minimum(down_slopes, up_slopes), min=0)
+
+            if mel_cfg.norm == "slaney":
+                enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+                mel_filters = mel_filters * enorm.unsqueeze(0)
+
+            if mel_cfg.bands_to_zero > 0:
+                mel_filters = torch.nn.functional.pad(mel_filters, (0, 0, mel_cfg.bands_to_zero, 0))
+
         # When computation_dtype is set only on the mel config (not on the
         # spectrogram config), the filters were computed in high precision for
         # accuracy but the spectrogram will be in the default dtype — cast back.

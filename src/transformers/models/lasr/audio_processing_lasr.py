@@ -39,17 +39,12 @@ class LasrAudioProcessor(TorchAudioBackend):
             triangularize_in_mel_space=True,
             bands_to_zero=1,
             computation_dtype="float64",
+            matmul_order="features_first",
         ),
         log_mode="log",
         mel_floor=1e-5,
         computation_dtype="float64",
     )
-
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # LASR uses (time, freq) @ (freq, mels) -> (time, mels) ordering,
-        # matching the upstream FE's unfold-based output layout.
-        mel_spec = torch.matmul(features.transpose(-2, -1), self.mel_filters.to(device=features.device, dtype=features.dtype))
-        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
 
     def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
         stft_cfg = spectrogram_config.stft_config

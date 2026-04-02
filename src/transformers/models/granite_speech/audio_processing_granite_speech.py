@@ -94,7 +94,7 @@ class GraniteSpeechAudioProcessor(TorchAudioBackend):
         data = {
             "audio_features": features,
             "audio_embed_sizes": audio_embed_sizes,
-            "input_features_mask": input_features_mask,
+            "audio_features_mask": input_features_mask,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
 

@@ -14,8 +14,6 @@
 
 import torch
 
-from spectrograms import numpy_mel_spectrogram as _np_spec
-
 from ...audio_processing_backends import TorchAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
@@ -33,67 +31,28 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
             n_mels=128,
             mel_scale="slaney",
             norm="slaney",
+            computation_dtype="float64",
         ),
         log_mode="log10",
-        global_log_mel_max=1.5,
     )
+    global_log_mel_max = 1.5
 
-    def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
-        if spectrogram_config is None:
-            spectrogram_config = self.spectrogram_config
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
+        features = features[..., :-1]
 
-        stft_cfg = spectrogram_config.stft_config
-        global_log_mel_max = spectrogram_config.global_log_mel_max
-
-        if isinstance(audio, list):
-            waveform = torch.stack(audio)
+        if self.global_log_mel_max is not None:
+            spec_max = torch.tensor(self.global_log_mel_max, device=features.device, dtype=features.dtype)
         else:
-            waveform = audio
-
-        device = waveform.device
-        window = torch.hann_window(stft_cfg.n_fft, device=device)
-        stft = torch.stft(
-            waveform, stft_cfg.n_fft, stft_cfg.hop_length,
-            window=window, return_complex=True, center=True,
-        )
-        magnitudes = stft[..., :-1].abs() ** 2
-
-        mel_filters = self.mel_filters.to(device, torch.float32)
-        mel_spec = mel_filters.T @ magnitudes
-
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-
-        processed = []
-        for i in range(log_spec.shape[0]):
-            spec = log_spec[i]
-            if global_log_mel_max is not None:
-                spec_max = torch.tensor(global_log_mel_max, device=spec.device, dtype=spec.dtype)
-            else:
-                spec_max = spec.max()
-            spec = torch.maximum(spec, spec_max - 8.0)
-            spec = (spec + 4.0) / 4.0
-            processed.append(spec)
-        return processed
+            spec_max = features.amax(dim=(-2, -1), keepdim=True)
+        features = torch.maximum(features, spec_max - 8.0)
+        features = (features + 4.0) / 4.0
+        return features
 
     def _get_features_lengths(self, audio_lengths, spectrogram_config, include_center_frame=False):
         stft_cfg = spectrogram_config.stft_config
         win_length = stft_cfg.win_length or stft_cfg.n_fft
         return (audio_lengths - win_length) // stft_cfg.hop_length + 1
-
-    def _mel_filter_bank(self, spectrogram_config):
-        stft_cfg = spectrogram_config.stft_config
-        mel_cfg = spectrogram_config.mel_scale_config
-        mel_filters_np = _np_spec.mel_filter_bank(
-            num_frequency_bins=1 + stft_cfg.n_fft // 2,
-            num_mel_filters=mel_cfg.n_mels,
-            min_frequency=mel_cfg.f_min,
-            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
-            sampling_rate=self.sample_rate,
-            norm=mel_cfg.norm,
-            mel_scale=mel_cfg.mel_scale,
-            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
-        )
-        return torch.from_numpy(mel_filters_np).to(torch.float32)
 
 
 __all__ = ["VoxtralRealtimeAudioProcessor"]

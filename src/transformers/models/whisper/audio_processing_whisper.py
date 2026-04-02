@@ -21,7 +21,7 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 class WhisperAudioProcessor(TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    return_attention_mask = False
+    return_padding_mask = False
     truncation = True
     max_length = 480000  # 30 seconds at 16000 Hz
     spectrogram_config = SpectrogramConfig(
@@ -48,12 +48,6 @@ class WhisperAudioProcessor(TorchAudioBackend):
         features = (features + 4.0) / 4.0
 
         return features
-
-    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
-        # Override to match WhisperFeatureExtractor's mel transformation order for numerical compatibility.
-        stacked = torch.stack(features) if isinstance(features, list) else features
-        mel_spec = torch.matmul(self.mel_filters.T, stacked)
-        return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
 
 
 __all__ = ["WhisperAudioProcessor"]
