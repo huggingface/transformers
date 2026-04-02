@@ -24,6 +24,7 @@ import transformers
 import transformers.models.auto
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.bert.configuration_bert import BertConfig
+from transformers.models.internvl.configuration_internvl import InternVLConfig
 from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, get_tests_dir
 
@@ -161,3 +162,85 @@ class AutoConfigTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Should have a `model_type` key"):
                 AutoConfig.from_pretrained(tmp_dir)
+
+    def test_legacy_internvl_chat_prefers_local_config(self):
+        legacy_configs = (
+            (
+                {
+                    "model_type": "qwen2",
+                    "hidden_size": 8,
+                    "intermediate_size": 16,
+                    "num_attention_heads": 2,
+                    "num_hidden_layers": 2,
+                    "num_key_value_heads": 1,
+                    "vocab_size": 32,
+                    "max_position_embeddings": 64,
+                    "tie_word_embeddings": False,
+                },
+                "qwen2",
+                151648,
+            ),
+            (
+                {
+                    "model_type": "internlm2",
+                    "architectures": ["InternLM2ForCausalLM"],
+                    "hidden_size": 16,
+                    "intermediate_size": 32,
+                    "num_attention_heads": 4,
+                    "num_hidden_layers": 2,
+                    "num_key_value_heads": 2,
+                    "vocab_size": 32,
+                    "max_position_embeddings": 64,
+                    "rope_theta": 1000000.0,
+                    "rope_scaling": {"type": "dynamic", "factor": 2.0},
+                    "bias": False,
+                    "tie_word_embeddings": False,
+                },
+                "llama",
+                92546,
+            ),
+        )
+
+        for llm_config, expected_text_model_type, expected_image_token_id in legacy_configs:
+            with self.subTest(text_model_type=llm_config["model_type"]), tempfile.TemporaryDirectory() as tmp_dir:
+                config_dict = {
+                    "architectures": ["InternVLChatModel"],
+                    "auto_map": {
+                        "AutoConfig": "configuration_internvl_chat.InternVLChatConfig",
+                        "AutoModel": "modeling_internvl_chat.InternVLChatModel",
+                    },
+                    "downsample_ratio": 0.5,
+                    "llm_config": llm_config,
+                    "model_type": "internvl_chat",
+                    "select_layer": -1,
+                    "vision_config": {
+                        "attention_probs_dropout_prob": 0.0,
+                        "hidden_act": "gelu",
+                        "hidden_size": 8,
+                        "image_size": 32,
+                        "initializer_factor": 1.0,
+                        "initializer_range": 0.02,
+                        "intermediate_size": 16,
+                        "layer_norm_eps": 1e-6,
+                        "model_type": "intern_vit_6b",
+                        "norm_type": "layer_norm",
+                        "num_attention_heads": 2,
+                        "num_channels": 3,
+                        "num_hidden_layers": 2,
+                        "patch_size": 4,
+                        "qk_normalization": False,
+                        "qkv_bias": True,
+                    },
+                }
+                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
+                    json.dump(config_dict, f)
+
+                config = AutoConfig.from_pretrained(tmp_dir, trust_remote_code=True)
+
+                self.assertIsInstance(config, InternVLConfig)
+                self.assertEqual(config.model_type, "internvl_chat")
+                self.assertEqual(config.text_config.model_type, expected_text_model_type)
+                self.assertEqual(config.image_token_id, expected_image_token_id)
+                self.assertEqual(config.vision_feature_layer, -1)
+                if expected_text_model_type == "llama":
+                    self.assertEqual(config.text_config.rope_parameters["rope_type"], "dynamic")

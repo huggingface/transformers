@@ -27,6 +27,7 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
+    GotOcr2ImageProcessorPil,
     ViTImageProcessor,
     ViTImageProcessorPil,
 )
@@ -78,6 +79,50 @@ class AutoImageProcessorTest(unittest.TestCase):
 
             config = AutoImageProcessor.from_pretrained(tmpdirname)
             self.assertIsInstance(config, CLIPImageProcessor)
+
+    @require_vision
+    def test_legacy_internvl_chat_prefers_local_image_processor_over_feature_extractor(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"feature_extractor_type": "CLIPFeatureExtractor", "processor_class": "InternVLProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump(
+                {
+                    "model_type": "internvl_chat",
+                    "auto_map": {"AutoConfig": "legacy.configuration_internvl_chat.InternVLChatConfig"},
+                    "force_image_size": 448,
+                    "select_layer": -1,
+                    "llm_config": {"model_type": "qwen2"},
+                    "vision_config": {"image_size": 448, "patch_size": 14},
+                },
+                open(config_tmpfile, "w"),
+            )
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname, trust_remote_code=True, backend="pil")
+            self.assertIsInstance(config, GotOcr2ImageProcessorPil)
+
+    @require_vision
+    def test_legacy_internvl_chat_without_preprocessor_config_uses_local_image_processor(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {
+                    "model_type": "internvl_chat",
+                    "auto_map": {"AutoConfig": "legacy.configuration_internvl_chat.InternVLChatConfig"},
+                    "force_image_size": 448,
+                    "select_layer": -1,
+                    "llm_config": {"model_type": "qwen2"},
+                    "vision_config": {"image_size": 448, "patch_size": 14},
+                },
+                open(config_tmpfile, "w"),
+            )
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname, trust_remote_code=True, backend="pil")
+            self.assertIsInstance(config, GotOcr2ImageProcessorPil)
+            self.assertEqual(config.size, {"height": 448, "width": 448})
 
     @require_torchvision
     def test_image_processor_from_new_filename(self):

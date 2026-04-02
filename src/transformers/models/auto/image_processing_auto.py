@@ -54,6 +54,23 @@ DEFAULT_TO_PIL_BACKEND_IMAGE_PROCESSORS = [
     "SmolVLMImageProcessor",
 ]
 
+
+def _is_legacy_internvl_chat_config(config: PreTrainedConfig | None) -> bool:
+    return isinstance(config, PreTrainedConfig) and getattr(config, "model_type", None) == "internvl_chat"
+
+
+def _get_legacy_internvl_processor_init_kwargs(config: PreTrainedConfig) -> dict[str, dict[str, int]]:
+    image_size = getattr(config, "force_image_size", None) or getattr(config.vision_config, "image_size", None)
+    if isinstance(image_size, (list, tuple)):
+        size = {"height": image_size[0], "width": image_size[1]}
+    elif image_size is not None:
+        size = {"height": image_size, "width": image_size}
+    else:
+        return {}
+
+    return {"size": size, "crop_size": size}
+
+
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
@@ -144,6 +161,7 @@ else:
             ("imagegpt", {"torchvision": "ImageGPTImageProcessor", "pil": "ImageGPTImageProcessorPil"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("internvl", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
+            ("internvl_chat", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("janus", {"torchvision": "JanusImageProcessor", "pil": "JanusImageProcessorPil"}),
             ("kosmos-2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("kosmos-2.5", {"torchvision": "Kosmos2_5ImageProcessor", "pil": "Kosmos2_5ImageProcessorPil"}),
@@ -664,31 +682,68 @@ class AutoImageProcessor:
         else:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
+        def _ensure_config():
+            nonlocal config
+            if not isinstance(config, PreTrainedConfig):
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
+                )
+            return config
+
+        def _maybe_build_legacy_internvl_image_processor(image_processor_class):
+            if not missing_image_processor_dict:
+                return None
+
+            config_obj = _ensure_config()
+            if _is_legacy_internvl_chat_config(config_obj):
+                return image_processor_class(**_get_legacy_internvl_processor_init_kwargs(config_obj))
+            return None
+
         # Load the image processor config
 
+        missing_image_processor_dict = False
         try:
             config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
                 pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
             )
         except Exception as initial_exception:
+            missing_image_processor_dict = True
             # Fallback for Hub TimmWrapper checkpoints (image processing in config.json, not preprocessor_config.json)
             try:
                 config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
                     pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
                 )
             except Exception:
-                raise initial_exception
+                if _is_legacy_internvl_chat_config(_ensure_config()):
+                    config_dict = {}
+                else:
+                    raise initial_exception
 
-            if not is_timm_config_dict(config_dict):
-                raise initial_exception
+            if config_dict and not is_timm_config_dict(config_dict):
+                if _is_legacy_internvl_chat_config(_ensure_config()):
+                    config_dict = {}
+                else:
+                    raise initial_exception
 
-        image_processor_type = config_dict.get("image_processor_type", None)
+        image_processor_type = config_dict.get("image_processor_type")
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
             image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
 
+        # Legacy `internvl_chat` checkpoints serialize a generic CLIP feature extractor in
+        # `preprocessor_config.json`, but should now use the native InternVL image processor.
+        if (
+            image_processor_type is None
+            and image_processor_auto_map is None
+            and not isinstance(config, PreTrainedConfig)
+        ):
+            _ensure_config()
+        prefer_model_config_mapping = _is_legacy_internvl_chat_config(config)
+
         # Backward compat: infer from feature extractor config
-        if image_processor_type is None and image_processor_auto_map is None:
+        if image_processor_type is None and image_processor_auto_map is None and not prefer_model_config_mapping:
             feature_extractor_class = config_dict.pop("feature_extractor_type", None)
             if feature_extractor_class is not None:
                 image_processor_type = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
@@ -698,12 +753,7 @@ class AutoImageProcessor:
 
         # If not in image processor config, try the model config
         if image_processor_type is None and image_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    trust_remote_code=trust_remote_code,
-                    **kwargs,
-                )
+            _ensure_config()
             image_processor_type = getattr(config, "image_processor_type", None)
             if hasattr(config, "auto_map") and "AutoImageProcessor" in config.auto_map:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
@@ -740,6 +790,9 @@ class AutoImageProcessor:
             image_processor_class.register_for_auto_class()
             return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif image_processor_class is not None:
+            legacy_processor = _maybe_build_legacy_internvl_image_processor(image_processor_class)
+            if legacy_processor is not None:
+                return legacy_processor
             return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
@@ -747,6 +800,9 @@ class AutoImageProcessor:
             image_processor_class = _load_class_with_fallback(image_processor_mapping, backend)
 
             if image_processor_class is not None:
+                legacy_processor = _maybe_build_legacy_internvl_image_processor(image_processor_class)
+                if legacy_processor is not None:
+                    return legacy_processor
                 return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             available = [k for k, v in image_processor_mapping.items() if v is not None]

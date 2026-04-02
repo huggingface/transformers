@@ -25,6 +25,7 @@ from transformers.core_model_loading import (
     ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
     PermuteForRope,
+    SplitInternLM2QKV,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -397,6 +398,74 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         reversed_state_dict = revert_weight_conversion(model, model.state_dict())
 
         # Make sure both saved state_dict are identical
+        self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
+
+    def test_internlm2_grouped_qkv_conversion(self):
+        class GroupedSelfAttn(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.q_proj = DummyParamModule((8, 8))
+                self.k_proj = DummyParamModule((4, 8))
+                self.v_proj = DummyParamModule((4, 8))
+
+        class GroupedLayer(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.self_attn = GroupedSelfAttn()
+
+        class GroupedLanguageModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.layers = nn.ModuleList([GroupedLayer()])
+
+        class GroupedRoot(nn.Module):
+            base_model_prefix = "model"
+
+            def __init__(self):
+                super().__init__()
+                self.model = nn.Module()
+                self.model.language_model = GroupedLanguageModel()
+
+        model = GroupedRoot()
+        model.config = SimpleNamespace(
+            model_type="internvl_chat",
+            text_config=SimpleNamespace(hidden_size=8, num_attention_heads=4, num_key_value_heads=2, head_dim=2),
+        )
+
+        raw_qkv = torch.arange(16 * 8, dtype=torch.float32).reshape(16, 8)
+        state_dict = {"model.language_model.layers.0.attention.wqkv.weight": raw_qkv.clone()}
+
+        weight_mapping = [
+            WeightConverter(
+                r"\.attention\.wqkv\.",
+                [
+                    ".self_attn.q_proj.",
+                    ".self_attn.k_proj.",
+                    ".self_attn.v_proj.",
+                ],
+                operations=[SplitInternLM2QKV()],
+            )
+        ]
+
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping)
+        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config, tp_plan=None)
+
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        qkv = raw_qkv.reshape(2, 4, 2, 8)
+        expected_q = qkv[:, :2].reshape(-1, 8)
+        expected_k = qkv[:, -2].reshape(-1, 8)
+        expected_v = qkv[:, -1].reshape(-1, 8)
+        model_state = model.state_dict()
+
+        torch.testing.assert_close(model_state["model.language_model.layers.0.self_attn.q_proj.weight"], expected_q)
+        torch.testing.assert_close(model_state["model.language_model.layers.0.self_attn.k_proj.weight"], expected_k)
+        torch.testing.assert_close(model_state["model.language_model.layers.0.self_attn.v_proj.weight"], expected_v)
+
+        reversed_state_dict = revert_weight_conversion(model, model.state_dict())
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
