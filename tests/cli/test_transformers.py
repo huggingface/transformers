@@ -24,7 +24,9 @@ def test_top_level_help(cli):
 
 
 def test_top_level_help_does_not_load_subcommands(cli):
-    with patch("transformers_cli.importlib.import_module", side_effect=AssertionError("subcommands should stay lazy")):
+    with patch(
+        "transformers_cli.run.importlib.import_module", side_effect=AssertionError("subcommands should stay lazy")
+    ):
         output = cli("--help")
 
     assert output.exit_code == 0
