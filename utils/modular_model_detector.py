@@ -112,6 +112,7 @@ import numpy as np
 import torch
 from datasets import Dataset, load_dataset, load_from_disk
 from huggingface_hub import logging as huggingface_hub_logging
+from huggingface_hub import snapshot_download
 from tqdm import tqdm
 
 import transformers
@@ -137,14 +138,10 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 MODELS_ROOT = Path("src/transformers/models")
 DATASET_DIR = "code_index_dataset"
 HUB_DATASET_DEFAULT = "itazap/transformers_code_embeddings_v3"
-HUB_MODULAR_DATASET = "itazap/modular-model-eval"
 
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
 BATCH_SIZE = 16
 MAX_LENGTH = 4096
-
-
-# ── Code sanitization helpers ───────────────────────────────────────────────────
 
 
 def _normalize(string: str | None) -> str:
@@ -290,314 +287,6 @@ def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str 
     return sanitized
 
 
-# ── Modular-inheritance helpers ───────────────────────────────────────────────
-
-
-def _build_modular_inheritance_map() -> dict[str, set[str]]:
-    """
-    Build a map of modular models to the base models they inherit from.
-
-    The map is inferred from import statements in ``modular_*.py`` files under ``MODELS_ROOT``.
-    Only imports of the form ``from ..<model>.modeling_... import ...`` are considered, and
-    self-references are ignored.
-    """
-    inheritance: dict[str, set[str]] = {}
-    for modular_path in MODELS_ROOT.rglob("modular_*.py"):
-        model_id = modular_path.parent.name
-        bases = inheritance.setdefault(model_id, set())
-        try:
-            source = modular_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom) or not node.module:
-                continue
-
-            parent: str | None = None
-            # Relative import inside models package: from ..llama.modeling_llama import ...
-            if node.level >= 2 and "." in node.module and "modeling_" in node.module:
-                parent = node.module.split(".", 1)[0]
-            # Absolute import via transformers.models: from transformers.models.llava.modeling_llava import ...
-            elif node.level == 0 and node.module.startswith("transformers.models."):
-                parts = node.module.split(".")
-                if len(parts) >= 3:
-                    parent = parts[2]
-
-            if parent and parent != model_id and parent != "auto":
-                bases.add(parent)
-    return inheritance
-
-
-def _is_descendant(model_id: str, ancestor: str, inheritance_map: dict[str, set[str]]) -> bool:
-    """
-    Return True if ``model_id`` transitively inherits from ``ancestor`` according to ``inheritance_map``.
-    """
-    if model_id == ancestor:
-        return False
-
-    visited: set[str] = set()
-    stack = [model_id]
-    while stack:
-        current = stack.pop()
-        if current in visited:
-            continue
-        visited.add(current)
-        for base in inheritance_map.get(current, ()):
-            if base == ancestor:
-                return True
-            if base not in visited:
-                stack.append(base)
-    return False
-
-
-def _compare_models(
-    a: tuple[str, set[str]],
-    b: tuple[str, set[str]],
-    inheritance_map: dict[str, set[str]],
-    model_class_scores: dict[str, dict[str, float]],
-) -> int:
-    """
-    Comparison function for sorting models by:
-    1) number of matched classes (descending)
-    2) ancestry (base models before descendants)
-    3) mean score (descending)
-    4) lexicographic model id
-    """
-    model_a, classes_a = a
-    model_b, classes_b = b
-
-    # Primary: number of matched classes (descending)
-    if len(classes_a) != len(classes_b):
-        return -1 if len(classes_a) > len(classes_b) else 1
-
-    # Secondary: ancestry-aware ordering (put ancestor first)
-    if _is_descendant(model_a, model_b, inheritance_map):
-        return 1  # a after b
-    if _is_descendant(model_b, model_a, inheritance_map):
-        return -1  # a before b
-
-    # Tertiary: mean score (descending)
-    scores_a = model_class_scores.get(model_a, {})
-    scores_b = model_class_scores.get(model_b, {})
-    mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
-    mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
-    if mean_a != mean_b:
-        return -1 if mean_a > mean_b else 1
-
-    # Final: lexicographic model id for deterministic ordering
-    if model_a < model_b:
-        return -1
-    if model_a > model_b:
-        return 1
-    return 0
-
-
-def compute_model_class_match_summary(
-    results: dict[str, dict],
-    inheritance_map: dict[str, set[str]] | None = None,
-) -> tuple[int, list[dict[str, float | int | str | list[str]]]]:
-    """
-    Build the "Model class match summary" from raw ``analyze_file`` results.
-
-    Returns:
-        `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
-        `model_id`, `num_matched`, `pct`, `mean_score`, `matched_classes`,
-        in the same order as printed by the CLI
-        (models with most matched classes, ancestry-aware, then by mean score).
-    """
-    grouped: dict[str, list[tuple[str, dict]]] = {"class": [], "function": []}
-    for query_name, data in results.items():
-        kind = data.get("kind", "function")
-        grouped.setdefault(kind, []).append((query_name, data))
-
-    class_entries = grouped.get("class", [])
-    if not class_entries:
-        return 0, []
-
-    total_classes = len(class_entries)
-    model_class_matches: dict[str, set[str]] = {}
-    model_class_scores: dict[str, dict[str, float]] = {}
-    for query_name, data in class_entries:
-        # For each query class, compute the best score per identifier across
-        # all available metrics (embedding, jaccard) and attribute it to the
-        # corresponding model so the strongest signal drives the summary.
-        best_per_identifier: dict[str, float] = {}
-
-        # 1) embedding scores
-        for identifier, score in data.get("embedding", []):
-            best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
-
-        # 2) jaccard scores (if present); override embedding if higher
-        for identifier, score in data.get("jaccard", []):
-            best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
-
-        # 3) Aggregate per model using the best score for that identifier
-        for identifier, best_score in best_per_identifier.items():
-            try:
-                relative_path, _ = identifier.split(":", 1)
-            except ValueError:
-                continue
-            model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-            model_class_matches.setdefault(model_id, set()).add(query_name)
-            per_model_scores = model_class_scores.setdefault(model_id, {})
-            if query_name not in per_model_scores or best_score > per_model_scores[query_name]:
-                per_model_scores[query_name] = best_score
-
-    if inheritance_map is None:
-        inheritance_map = _build_modular_inheritance_map()
-    model_items = list(model_class_matches.items())
-    redundant_models: set[str] = set()
-    for i, (model_i, classes_i) in enumerate(model_items):
-        if not classes_i:
-            continue
-        for j, (model_j, classes_j) in enumerate(model_items):
-            if i == j:
-                continue
-            if classes_i.issubset(classes_j) and len(classes_j) > len(classes_i):
-                redundant_models.add(model_i)
-                break
-
-    filtered_items = [(m, cls_set) for m, cls_set in model_items if m not in redundant_models]
-
-    sorted_models = sorted(
-        filtered_items,
-        key=cmp_to_key(lambda a, b: _compare_models(a, b, inheritance_map, model_class_scores)),
-    )
-    ordered_summary: list[dict[str, float | int | str | list[str]]] = []
-    for model_id, matched in sorted_models:
-        pct = 100.0 * len(matched) / total_classes
-        scores_for_model = model_class_scores.get(model_id, {})
-        mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
-        matched_classes = sorted(matched)
-        ordered_summary.append(
-            {
-                "model_id": model_id,
-                "num_matched": len(matched),
-                "pct": round(pct, 1),
-                "mean_score": round(mean_score, 4),
-                "matched_classes": matched_classes,
-            }
-        )
-    return total_classes, ordered_summary
-
-
-_RELEASE_RE = re.compile(
-    r"(?:^|[\*_`\s>])(?:this|the)\s+model\s+was\s+released\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
-)
-_ADDED_TO_HF_RE = re.compile(
-    r"added\s+to\s+Hugging\s+Face\s+Transformers\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
-)
-
-
-def build_date_data() -> dict[str, str]:
-    """
-    Scan Markdown files in `root_dir` and build {model_id: date_released}.
-
-    - model_id is the filename without extension (e.g., "llama" for "llama.md")
-    - date_released is the first YYYY-MM-DD matched after "...was released on ..."
-    - Ignores non-*.md files and directories.
-
-    Returns:
-        dict[str, str]: mapping of model_id -> ISO date string (YYYY-MM-DD).
-                        Files without a match are simply omitted.
-    """
-
-    root_dir = transformers.__file__.split("src/transformers")[0]
-    root = Path(root_dir).joinpath("docs/source/en/model_doc")
-    result: dict[str, str] = {}
-
-    for md_path in root.glob("*.md"):
-        try:
-            text = md_path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            # Skip unreadable files quietly
-            logging.info(f"Failed to read md for {md_path}")
-
-        m = _ADDED_TO_HF_RE.search(text) or _RELEASE_RE.search(text)
-        if m:
-            model_id = md_path.stem  # e.g., "llama" from "llama.md"
-            result[model_id] = m.group(1)
-
-    return result
-
-
-# ── Formatting helpers ──────────────────────────────────────────────
-
-
-def _format_table(headers: list[str], rows: list[tuple[str, ...] | None], row_styles: list[str] | None = None) -> str:
-    if not rows:
-        return f"{ANSI_ROW}(no matches){ANSI_RESET}"
-
-    widths = [len(header) for header in headers]
-    for row in rows:
-        if row is None:
-            continue
-        for idx, cell in enumerate(row):
-            widths[idx] = max(widths[idx], len(cell))
-
-    header_line = " | ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers))
-    divider = "-+-".join("-" * widths[idx] for idx in range(len(headers)))
-    total_width = sum(widths) + 3 * (len(headers) - 1)
-
-    styled_rows = []
-    style_idx = 0
-    for row in rows:
-        if row is None:
-            styled_rows.append(f"{ANSI_SECTION}{'-' * total_width}{ANSI_RESET}")
-            continue
-
-        line = " | ".join(cell.ljust(widths[col_idx]) for col_idx, cell in enumerate(row))
-        style = ANSI_ROW
-        if row_styles and style_idx < len(row_styles) and row_styles[style_idx]:
-            style = row_styles[style_idx]
-        styled_rows.append(f"{style}{line}{ANSI_RESET}")
-        style_idx += 1
-
-    return "\n".join([f"{ANSI_SECTION}{header_line}{ANSI_RESET}", divider] + styled_rows)
-
-
-@cache
-def _load_definition_line_map(relative_path: str) -> dict[str, int]:
-    """Return {definition_name: line_number} for top-level definitions in the given file."""
-    file_path = MODELS_ROOT / relative_path
-    try:
-        source = file_path.read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError):
-        return {}  # gracefully keep going
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return {}
-
-    line_map: dict[str, int] = {}
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            line_map[node.name] = getattr(node, "lineno", None) or 1
-        elif isinstance(node, ast.Assign):
-            continue
-    return line_map
-
-
-def _resolve_definition_location(relative_path: str, definition: str) -> tuple[str, str]:
-    """Return full path and formatted line number string for the given definition."""
-    full_path = MODELS_ROOT / relative_path
-    line = _load_definition_line_map(relative_path).get(definition)
-    line_str = str(line) if line is not None else "?"
-    return str(full_path), line_str
-
-
-def _colorize_heading(text: str) -> str:
-    return f"{ANSI_HEADER}{ANSI_BOLD}{text}{ANSI_RESET}"
-
-
-# ── CodeSimilarityAnalyzer ────────────────────────────────────────────────────
-
-
 class CodeSimilarityAnalyzer:
     """
     Analyzer for detecting code similarities between model implementations.
@@ -630,10 +319,9 @@ class CodeSimilarityAnalyzer:
             else torch.float32
         )
         self.dataset: Dataset | None = None
-        self.modular_dataset: Dataset | None = None
         self._gpu_lock = threading.Lock()
 
-    # --- index I/O ---
+    # ---------- HUB IO ----------
 
     def _attach_faiss_index(self) -> None:
         """Attach an in-memory FAISS IndexFlatIP to the dataset's embedding column."""
@@ -653,16 +341,9 @@ class CodeSimilarityAnalyzer:
             self.dataset = load_from_disk(str(local_path))
         else:
             logging.info(f"downloading index from hub: {self.hub_dataset}")
-            self.dataset = load_dataset(self.hub_dataset, split="train", cache_dir=str(Path.cwd() / ".hf_cache"))
+            self.dataset = load_dataset(self.hub_dataset, split="train")
 
         self._attach_faiss_index()
-
-    def ensure_modular_dataset(self) -> None:
-        """Ensure the modular model metadata is loaded from Hub."""
-        if self.modular_dataset is not None:
-            return
-        logging.info(f"loading modular metadata from hub: {HUB_MODULAR_DATASET}")
-        self.modular_dataset = load_dataset(HUB_MODULAR_DATASET, split="train")
 
     def push_index_to_hub(self) -> None:
         """Upload the dataset to the Hub dataset repository."""
@@ -674,73 +355,7 @@ class CodeSimilarityAnalyzer:
             self.dataset.drop_index("embedding")
         self.dataset.push_to_hub(self.hub_dataset)
 
-    # --- index building ---
-
-    def build_index(self) -> None:
-        """Build the code similarity index from all modeling files and save to disk."""
-        logging.info("collecting files")
-        files = list(self.models_root.rglob("modeling_*.py"))
-        logging.info(f"parsing {len(files)} files")
-
-        identifiers: list[str] = []
-        sanitized_sources: list[str] = []
-        tokens_list: list[list[str]] = []
-
-        for file_path in tqdm(files, desc="Parsing modeling files", unit="file"):
-            model_hint = self._infer_model_from_relative_path(file_path)
-            (
-                _,
-                definitions_sanitized,
-                definitions_tokens,
-                _,
-            ) = self._extract_definitions(file_path, self.models_root, model_hint)
-            for identifier in definitions_sanitized.keys():
-                identifiers.append(identifier)
-                sanitized_sources.append(definitions_sanitized[identifier])
-                tokens_list.append(definitions_tokens[identifier])
-
-        logging.info(
-            f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
-        )
-        embeddings = self.encode(sanitized_sources)
-
-        logging.info("Building dataset...")
-        self.dataset = Dataset.from_dict(
-            {
-                "identifier": identifiers,
-                "embedding": embeddings.tolist(),
-                "tokens": tokens_list,
-            }
-        )
-        logging.info(f"Saving dataset to {DATASET_DIR}...")
-        self.dataset.save_to_disk(DATASET_DIR)
-        self._attach_faiss_index()
-
-    def build_modular_dataset(self) -> None:
-        """Build the modular model metadata dataset and push to Hub."""
-        inheritance_map = _build_modular_inheritance_map()
-        date_data = build_date_data()
-
-        model_names, modular_files, bases_list, dates_list = [], [], [], []
-        for modular_path in sorted(MODELS_ROOT.rglob("modular_*.py")):
-            model_id = modular_path.parent.name
-            model_names.append(model_id)
-            modular_files.append(str(modular_path.relative_to(MODELS_ROOT)))
-            bases_list.append(sorted(inheritance_map.get(model_id, set())))
-            dates_list.append(date_data.get(model_id, ""))
-
-        dataset = Dataset.from_dict(
-            {
-                "model_name": model_names,
-                "modular_file": modular_files,
-                "bases": bases_list,
-                "date_released": dates_list,
-            }
-        )
-        dataset.push_to_hub(HUB_MODULAR_DATASET)
-        logging.info(f"Pushed modular dataset ({len(model_names)} models) to {HUB_MODULAR_DATASET}")
-
-    # --- parsing & encoding ---
+    # ---------- parsing & encoding ----------
 
     def _extract_definitions(
         self, file_path: Path, relative_to: Path | None = None, model_hint: str | None = None
@@ -856,7 +471,47 @@ class CodeSimilarityAnalyzer:
                 torch.cuda.empty_cache()
         return np.vstack(output) if output else np.zeros((0, 0), dtype="float32")
 
-    # --- search ---
+    # ---------- build & search ----------
+
+    def build_index(self) -> None:
+        """Build the code similarity index from all modeling files and save to disk."""
+        logging.info("collecting files")
+        files = list(self.models_root.rglob("modeling_*.py"))
+        logging.info(f"parsing {len(files)} files")
+
+        identifiers: list[str] = []
+        sanitized_sources: list[str] = []
+        tokens_list: list[list[str]] = []
+
+        for file_path in tqdm(files, desc="Parsing modeling files", unit="file"):
+            model_hint = self._infer_model_from_relative_path(file_path)
+            (
+                _,
+                definitions_sanitized,
+                definitions_tokens,
+                _,
+            ) = self._extract_definitions(file_path, self.models_root, model_hint)
+            for identifier in definitions_sanitized.keys():
+                identifiers.append(identifier)
+                sanitized_sources.append(definitions_sanitized[identifier])
+                tokens_list.append(definitions_tokens[identifier])
+
+        logging.info(
+            f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
+        )
+        embeddings = self.encode(sanitized_sources)
+
+        logging.info("Building dataset...")
+        self.dataset = Dataset.from_dict(
+            {
+                "identifier": identifiers,
+                "embedding": embeddings.tolist(),
+                "tokens": tokens_list,
+            }
+        )
+        logging.info(f"Saving dataset to {DATASET_DIR}...")
+        self.dataset.save_to_disk(DATASET_DIR)
+        self._attach_faiss_index()
 
     def _topk_embedding(
         self,
@@ -864,9 +519,8 @@ class CodeSimilarityAnalyzer:
         self_model_normalized: str,
         self_name: str,
         k: int,
-        ignore_models: set[str] | None = None,
         dates: dict[str, str] | None = None,
-        query_date: str | None = None,
+        ignore_models: set[str] | None = None,
     ) -> list[tuple[str, float]]:
         assert self.dataset is not None
         buffer_size = min(k + 200, len(self.dataset))
@@ -874,8 +528,6 @@ class CodeSimilarityAnalyzer:
         output = []
         if ignore_models is None:
             ignore_models = set()
-        if dates is None:
-            dates = {}
         for score, identifier in zip(scores_arr, examples["identifier"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
@@ -885,14 +537,19 @@ class CodeSimilarityAnalyzer:
             # Skip if in ignore list
             if _normalize(parent_model) in ignore_models:
                 continue
-            date = dates.get(parent_model, "")
-            # Skip candidates released after the query model
-            if query_date and date and date > query_date:
-                continue
-            output.append((identifier, float(score), date or "9999-99-99"))
+            output.append((identifier, float(score)))
         # Sort by score (descending), then by release date (ascending, oldest first) for tie-breaking
-        output.sort(key=lambda x: (-x[1], x[2]))
-        return [(identifier, score) for identifier, score, _ in output[:k]]
+        if dates:
+
+            def sort_key(item):
+                identifier, score = item
+                relative_path = identifier.split(":")[0]
+                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
+                release = dates.get(model_id, "9999-99-99")  # Unknown dates sort last
+                return (-score, release)
+
+            output.sort(key=sort_key)
+        return output[:k]
 
     def _topk_jaccard(
         self,
@@ -901,8 +558,6 @@ class CodeSimilarityAnalyzer:
         self_name: str,
         k: int,
         ignore_models: set[str] | None = None,
-        dates: dict[str, str] | None = None,
-        query_date: str | None = None,
     ) -> list[tuple[str, float]]:
         """
         Find top-k most similar definitions using Jaccard similarity on token sets.
@@ -913,8 +568,6 @@ class CodeSimilarityAnalyzer:
             self_name (`str`): Name of the query definition to exclude.
             k (`int`): Number of top results to return.
             ignore_models (`set[str]` or `None`, *optional*): Set of normalized model IDs to exclude.
-            dates (`dict[str, str]` or `None`, *optional*): Mapping of model_id to release date.
-            query_date (`str` or `None`, *optional*): Release date of the query model; candidates released after this are excluded.
 
         Returns:
             `list[tuple[str, float]]`: List of (identifier, score) tuples.
@@ -922,8 +575,6 @@ class CodeSimilarityAnalyzer:
         assert self.dataset is not None
         if ignore_models is None:
             ignore_models = set()
-        if dates is None:
-            dates = {}
         scores = []
         for identifier, token_list in zip(self.dataset["identifier"], self.dataset["tokens"]):
             parent_relative_path, match_name = identifier.split(":", 1)
@@ -931,11 +582,8 @@ class CodeSimilarityAnalyzer:
             # Skip only if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
+            # Skip if in ignore list
             if _normalize(parent_model) in ignore_models:
-                continue
-            # Skip candidates released after the query model
-            candidate_date = dates.get(parent_model, "")
-            if query_date and candidate_date and candidate_date > query_date:
                 continue
             tokens = set(token_list)
             if not tokens or not query_tokens:
@@ -973,6 +621,7 @@ class CodeSimilarityAnalyzer:
         top_k_per_item: int = 10,
         allow_hub_fallback: bool = True,
         use_jaccard=False,
+        dates: dict[str, str] | None = None,
         ignore_models: set[str] | None = None,
     ) -> dict[str, dict[str, list]]:
         """
@@ -982,6 +631,7 @@ class CodeSimilarityAnalyzer:
             modeling_file (`Path`): Path to the modeling file to analyze.
             top_k_per_item (`int`, *optional*, defaults to 5): Number of top matches to return per definition.
             allow_hub_fallback (`bool`, *optional*, defaults to `True`): Whether to download index from Hub if not found locally.
+            dates (`dict[str, str]` or `None`, *optional*): Mapping of model_id to release date for tie-breaking.
             ignore_models (`set[str]` or `None`, *optional*): Set of normalized model IDs to exclude from results.
 
         Returns:
@@ -1010,13 +660,8 @@ class CodeSimilarityAnalyzer:
         )
         query_embeddings = self.encode(query_sources_sanitized)
 
-        self.ensure_modular_dataset()
-        dates = {m: d for m, d in zip(self.modular_dataset["model_name"], self.modular_dataset["date_released"]) if d}
-        inheritance_map = {
-            m: set(b) for m, b in zip(self.modular_dataset["model_name"], self.modular_dataset["bases"])
-        }
+        inheritance_map = _build_modular_inheritance_map()
         model_symbol_by_name, model_symbol_by_suffix = self._build_model_symbol_index()
-        query_date = dates.get(self_model, "")
 
         output = {}
         for i, query_identifier in enumerate(query_identifiers):
@@ -1026,9 +671,8 @@ class CodeSimilarityAnalyzer:
                 self_model_normalized,
                 query_name,
                 top_k_per_item,
-                ignore_models,
                 dates,
-                query_date,
+                ignore_models,
             )
 
             # Expand results with parent models from modular inheritance.
@@ -1070,7 +714,7 @@ class CodeSimilarityAnalyzer:
             entry = {"kind": kind, "embedding": embedding_top}
             if use_jaccard:
                 jaccard_top = self._topk_jaccard(
-                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item, ignore_models, dates, query_date
+                    query_tokens_list[i], self_model_normalized, query_name, top_k_per_item, ignore_models
                 )
                 jaccard_set = {identifier for identifier, _ in jaccard_top}
                 intersection = set(embedding_set & jaccard_set)
@@ -1080,180 +724,306 @@ class CodeSimilarityAnalyzer:
         return output
 
 
-# ── Prompt generation ─────────────────────────────────────────────────────────
+_RELEASE_RE = re.compile(
+    r"(?:^|[\*_`\s>])(?:this|the)\s+model\s+was\s+released\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
+)
 
 
-def generate_modular_prompt(
-    modeling_file: Path,
-    ordered_summary: list[dict],
-    results: dict[str, dict],
-    models_root: Path,
-) -> str:
+def build_date_data() -> dict[str, str]:
     """
-    Generate a prompt for an AI agent to create the modular file for a model.
+    Scan Markdown files in `root_dir` and build {model_id: date_released}.
 
-    Args:
-        modeling_file: Path to the modeling file being analyzed.
-        ordered_summary: Output of ``compute_model_class_match_summary`` (list of dicts).
-        results: Raw ``analyze_file`` results dict.
-        models_root: Root directory of models (``src/transformers/models``).
+    - model_id is the filename without extension (e.g., "llama" for "llama.md")
+    - date_released is the first YYYY-MM-DD matched after "...was released on ..."
+    - Ignores non-*.md files and directories.
 
     Returns:
-        A string prompt ready to be fed to an AI agent.
+        dict[str, str]: mapping of model_id -> ISO date string (YYYY-MM-DD).
+                        Files without a match are simply omitted.
     """
-    model_name = modeling_file.stem.replace("modeling_", "")
-    modular_output_path = modeling_file.parent / f"modular_{model_name}.py"
-    top_base = ordered_summary[0]["model_id"] if ordered_summary else None
-    top_summary = ordered_summary[0] if ordered_summary else {}
-    top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
-    top_pct = float(top_summary.get("pct", 0.0)) if top_summary else 0.0
-    top_matched_classes = [str(c) for c in top_summary.get("matched_classes", [])] if top_summary else []
-    top_matched_class_set = set(top_matched_classes)
 
-    # Compute the "safe" simple prefix: CamelCase of the model name.
-    safe_prefix = "".join(part.capitalize() for part in model_name.split("_"))
+    root_dir = transformers.__file__.split("src/transformers")[0]
+    root = Path(root_dir).joinpath("docs/source/en/model_doc")
+    result: dict[str, str] = {}
 
-    # Replicate the modular converter's common_partial_suffix logic so we can predict
-    # which prefix the converter will extract for each (new_class, base_class) pair.
-    def _common_partial_suffix(str1: str, str2: str) -> str:
-        common = ""
-        for i in range(1, min(len(str1), len(str2)) + 1):
-            if str1[-i] == str2[-i]:
-                common = str1[-i] + common
-            else:
-                break
-        # Full-string suffix is not considered a common suffix
-        if common == str1 or common == str2:
-            common = ""
-        return common
+    for md_path in root.glob("*.md"):
+        try:
+            text = md_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            # Skip unreadable files quietly
+            logging.info(f"Failed to read md for {md_path}")
 
-    # Read base model class names so we can simulate prefix extraction.
-    # The converter extracts the new-model prefix via:
-    #   suffix = common_partial_suffix(new_class, base_class)
-    #   extracted_prefix = new_class.replace(suffix, "")   [only when suffix starts with uppercase]
-    # If different (new_class, base_class) pairs yield different extracted_prefixes,
-    # the converter will use the most common one and may fail with a KeyError when renaming.
-    source_class_names = [k for k, v in results.items() if v.get("kind", "function") == "class"]
-    base_class_names: list[str] = []
-    if top_base is not None:
-        base_modeling = models_root / top_base / f"modeling_{top_base}.py"
-        if base_modeling.exists():
-            import ast as _ast
+        m = _RELEASE_RE.search(text)
+        if m:
+            model_id = md_path.stem  # e.g., "llama" from "llama.md"
+            result[model_id] = m.group(1)
 
-            try:
-                tree = _ast.parse(base_modeling.read_text(encoding="utf-8"))
-                base_class_names = [node.name for node in _ast.walk(tree) if isinstance(node, _ast.ClassDef)]
-            except SyntaxError:
-                pass
+    return result
 
-    # For each source class starting with safe_prefix, find which base class gives the longest
-    # common suffix, then compute the extracted prefix as the converter would.
-    extracted_prefix_per_class: dict[str, str] = {}
-    for cname in source_class_names:
-        if not cname.startswith(safe_prefix):
+
+def _format_table(headers: list[str], rows: list[tuple[str, ...] | None], row_styles: list[str] | None = None) -> str:
+    if not rows:
+        return f"{ANSI_ROW}(no matches){ANSI_RESET}"
+
+    widths = [len(header) for header in headers]
+    for row in rows:
+        if row is None:
             continue
-        best_suffix = ""
-        for bcls in base_class_names:
-            s = _common_partial_suffix(cname, bcls)
-            if len(s) > len(best_suffix) and s and s[0].isupper():
-                best_suffix = s
-        if best_suffix:
-            extracted_prefix_per_class[cname] = cname.replace(best_suffix, "")
+        for idx, cell in enumerate(row):
+            widths[idx] = max(widths[idx], len(cell))
 
-    # Detect conflicts: if the converter would extract different prefixes from different pairs.
-    unique_extracted = set(extracted_prefix_per_class.values())
-    conflicting_examples: list[tuple[str, str]] = []  # (class_name, extracted_prefix)
-    if len(unique_extracted) > 1:
-        # Group by extracted prefix and pick one representative per distinct prefix
-        seen: set[str] = set()
-        for cname, epfx in sorted(extracted_prefix_per_class.items()):
-            if epfx not in seen:
-                conflicting_examples.append((cname, epfx))
-                seen.add(epfx)
+    header_line = " | ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers))
+    divider = "-+-".join("-" * widths[idx] for idx in range(len(headers)))
+    total_width = sum(widths) + 3 * (len(headers) - 1)
 
-    # Build a list of available base class names for the prompt so the LLM uses the correct
-    # casing and doesn't hallucinate non-existent class names.
-    base_class_list_str = ""
-    if base_class_names:
-        base_class_list_str = "\n".join(f"  - `{n}`" for n in sorted(base_class_names))
+    styled_rows = []
+    style_idx = 0
+    for row in rows:
+        if row is None:
+            styled_rows.append(f"{ANSI_SECTION}{'-' * total_width}{ANSI_RESET}")
+            continue
 
-    # List all classes with their best score against the top base model.
-    # For classes explicitly matched to the top model, always instruct inheritance.
-    class_lines: list[str] = []
+        line = " | ".join(cell.ljust(widths[col_idx]) for col_idx, cell in enumerate(row))
+        style = ANSI_ROW
+        if row_styles and style_idx < len(row_styles) and row_styles[style_idx]:
+            style = row_styles[style_idx]
+        styled_rows.append(f"{style}{line}{ANSI_RESET}")
+        style_idx += 1
+
+    return "\n".join([f"{ANSI_SECTION}{header_line}{ANSI_RESET}", divider] + styled_rows)
+
+
+def _parse_release_date(value: str) -> datetime | None:
+    """Return a datetime parsed from YYYY-MM-DD strings, otherwise None."""
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return None
+
+
+@cache
+def _load_definition_line_map(relative_path: str) -> dict[str, int]:
+    """Return {definition_name: line_number} for top-level definitions in the given file."""
+    file_path = MODELS_ROOT / relative_path
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return {}  # gracefully keep going
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+
+    line_map: dict[str, int] = {}
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            line_map[node.name] = getattr(node, "lineno", None) or 1
+        elif isinstance(node, ast.Assign):
+            continue
+    return line_map
+
+
+def _resolve_definition_location(relative_path: str, definition: str) -> tuple[str, str]:
+    """Return full path and formatted line number string for the given definition."""
+    full_path = MODELS_ROOT / relative_path
+    line = _load_definition_line_map(relative_path).get(definition)
+    line_str = str(line) if line is not None else "?"
+    return str(full_path), line_str
+
+
+def _colorize_heading(text: str) -> str:
+    return f"{ANSI_HEADER}{ANSI_BOLD}{text}{ANSI_RESET}"
+
+
+def _build_modular_inheritance_map() -> dict[str, set[str]]:
+    """
+    Build a map of modular models to the base models they inherit from.
+
+    The map is inferred from import statements in ``modular_*.py`` files under ``MODELS_ROOT``.
+    Only imports of the form ``from ..<model>.modeling_... import ...`` are considered, and
+    self-references are ignored.
+    """
+    inheritance: dict[str, set[str]] = {}
+    for modular_path in MODELS_ROOT.rglob("modular_*.py"):
+        model_id = modular_path.parent.name
+        bases = inheritance.setdefault(model_id, set())
+        try:
+            source = modular_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+
+            parent: str | None = None
+            # Relative import inside models package: from ..llama.modeling_llama import ...
+            if node.level >= 2:
+                parent = node.module.split(".", 1)[0]
+            # Absolute import via transformers.models: from transformers.models.llava.modeling_llava import ...
+            elif node.level == 0 and node.module.startswith("transformers.models."):
+                parts = node.module.split(".")
+                if len(parts) >= 3:
+                    parent = parts[2]
+
+            if parent and parent != model_id:
+                bases.add(parent)
+    return inheritance
+
+
+def _is_descendant(model_id: str, ancestor: str, inheritance_map: dict[str, set[str]]) -> bool:
+    """
+    Return True if ``model_id`` transitively inherits from ``ancestor`` according to ``inheritance_map``.
+    """
+    if model_id == ancestor:
+        return False
+
+    visited: set[str] = set()
+    stack = [model_id]
+    while stack:
+        current = stack.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        for base in inheritance_map.get(current, ()):
+            if base == ancestor:
+                return True
+            if base not in visited:
+                stack.append(base)
+    return False
+
+
+def _compare_models(
+    a: tuple[str, set[str]],
+    b: tuple[str, set[str]],
+    inheritance_map: dict[str, set[str]],
+    model_class_scores: dict[str, dict[str, float]],
+) -> int:
+    """
+    Comparison function for sorting models by:
+    1) number of matched classes (descending)
+    2) ancestry (base models before descendants)
+    3) mean score (descending)
+    4) lexicographic model id
+    """
+    model_a, classes_a = a
+    model_b, classes_b = b
+
+    # Primary: number of matched classes (descending)
+    if len(classes_a) != len(classes_b):
+        return -1 if len(classes_a) > len(classes_b) else 1
+
+    # Secondary: ancestry-aware ordering (put ancestor first)
+    if _is_descendant(model_a, model_b, inheritance_map):
+        return 1  # a after b
+    if _is_descendant(model_b, model_a, inheritance_map):
+        return -1  # a before b
+
+    # Tertiary: mean score (descending)
+    scores_a = model_class_scores.get(model_a, {})
+    scores_b = model_class_scores.get(model_b, {})
+    mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
+    mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
+    if mean_a != mean_b:
+        return -1 if mean_a > mean_b else 1
+
+    # Final: lexicographic model id for deterministic ordering
+    if model_a < model_b:
+        return -1
+    if model_a > model_b:
+        return 1
+    return 0
+
+
+def compute_model_class_match_summary(
+    results: dict[str, dict],
+) -> tuple[int, list[dict[str, float | int | str | list[str]]]]:
+    """
+    Build the "Model class match summary" from raw ``analyze_file`` results.
+
+    Returns:
+        `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
+        `model_id`, `num_matched`, `pct`, `mean_score`, `matched_classes`,
+        in the same order as printed by the CLI
+        (models with most matched classes, ancestry-aware, then by mean score).
+    """
+    grouped: dict[str, list[tuple[str, dict]]] = {"class": [], "function": []}
     for query_name, data in results.items():
-        if data.get("kind", "function") != "class":
-            continue
-        if query_name in top_matched_class_set and top_base is not None:
-            class_lines.append(f"- `{query_name}` → inherit from `{top_base}`")
-            continue
+        kind = data.get("kind", "function")
+        grouped.setdefault(kind, []).append((query_name, data))
 
-        best_score_for_top_base = float("-inf")
+    class_entries = grouped.get("class", [])
+    if not class_entries:
+        return 0, []
+
+    total_classes = len(class_entries)
+    model_class_matches: dict[str, set[str]] = {}
+    model_class_scores: dict[str, dict[str, float]] = {}
+    for query_name, data in class_entries:
+        # For each query class, compute the best score per identifier across
+        # all available metrics (embedding, jaccard) and attribute it to the
+        # corresponding model so the strongest signal drives the summary.
+        best_per_identifier: dict[str, float] = {}
+
+        # 1) embedding scores
         for identifier, score in data.get("embedding", []):
+            best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
+
+        # 2) jaccard scores (if present); override embedding if higher
+        for identifier, score in data.get("jaccard", []):
+            best_per_identifier[identifier] = max(best_per_identifier.get(identifier, float("-inf")), score)
+
+        # 3) Aggregate per model using the best score for that identifier
+        for identifier, best_score in best_per_identifier.items():
             try:
                 relative_path, _ = identifier.split(":", 1)
             except ValueError:
                 continue
-            mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
-            if mid == top_base and score > best_score_for_top_base:
-                best_score_for_top_base = score
-        if best_score_for_top_base > float("-inf"):
-            class_lines.append(f"- `{query_name}` → inherit from `{top_base}` (score {best_score_for_top_base:.4f})")
-        else:
-            class_lines.append(f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no match in `{top_base}`)")
+            model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+            model_class_matches.setdefault(model_id, set()).add(query_name)
+            per_model_scores = model_class_scores.setdefault(model_id, {})
+            if query_name not in per_model_scores or best_score > per_model_scores[query_name]:
+                per_model_scores[query_name] = best_score
 
-    class_list = "\n".join(class_lines) if class_lines else "(no classes found)"
+    inheritance_map = _build_modular_inheritance_map()
+    model_items = list(model_class_matches.items())
+    redundant_models: set[str] = set()
+    for i, (model_i, classes_i) in enumerate(model_items):
+        if not classes_i:
+            continue
+        for j, (model_j, classes_j) in enumerate(model_items):
+            if i == j:
+                continue
+            if classes_i.issubset(classes_j) and len(classes_j) > len(classes_i):
+                redundant_models.add(model_i)
+                break
 
-    # Build the prefix-consistency warning section when needed.
-    prefix_warning = ""
-    if conflicting_examples:
-        ex_lines = "\n".join(f"  - `{cname}` → extracted prefix `{epfx}`" for cname, epfx in conflicting_examples)
-        # The "correct" prefix to use is the simple safe_prefix (model name in CamelCase).
-        prefix_warning = f"""
-CRITICAL — single prefix rule:
-The modular converter determines the new-model prefix by computing the longest common suffix \
-between each (new_class, base_class) pair, then stripping that suffix from the new class name. \
-If different pairs yield different prefixes, the converter will fail with a KeyError.
+    filtered_items = [(m, cls_set) for m, cls_set in model_items if m not in redundant_models]
 
-Analysis of your source classes against `{top_base}` base classes reveals CONFLICTING prefixes:
-{ex_lines}
-
-This means some new class names share a longer common suffix with their base counterpart than \
-others, causing different prefix extractions across pairs.
-
-Use **`{safe_prefix}`** as the prefix for ALL class names in the modular file \
-(e.g. `{safe_prefix}RMSNorm`, `{safe_prefix}MLP`, `{safe_prefix}Model`, `{safe_prefix}Attention`). \
-Do NOT add extra qualifiers (like `MLA`, `MoE`, etc.) to the prefix. \
-Use the plain `{safe_prefix}` prefix throughout, even if the source file used compound names.
-"""
-
-    base_classes_section = ""
-    if base_class_list_str:
-        base_classes_section = f"""
-Available classes in `{top_base}` (use EXACTLY these names — do not invent new ones):
-{base_class_list_str}
-"""
-
-    prompt = f"""\
-Create `{modular_output_path}` for the `{model_name}` model.
-
-Top matched model for class inheritance:
-- `{top_base}`: {top_num_matched} matched classes ({top_pct:.1f}%), matched classes [{", ".join(top_matched_classes)}]
-
-For the matched classes listed above, inherit from `{top_base}` and only override what differs. \
-See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
-
-For classes marked "copy as-is", reproduce them exactly from `{modeling_file.name}` without inheriting \
-from `{top_base}`. Also copy any module-level helper functions they depend on.
-The copied and inherited classes must remain mutually compatible: method signatures, parameter names, \
-and return types must match what each side expects when they call into one another.
-{base_classes_section}{prefix_warning}
-Matched classes:
-{class_list}
-"""
-    return prompt
-
-
-# ── Main ───────────────────────────────────────────────────────────
+    sorted_models = sorted(
+        filtered_items,
+        key=cmp_to_key(lambda a, b: _compare_models(a, b, inheritance_map, model_class_scores)),
+    )
+    ordered_summary: list[dict[str, float | int | str | list[str]]] = []
+    for model_id, matched in sorted_models:
+        pct = 100.0 * len(matched) / total_classes
+        scores_for_model = model_class_scores.get(model_id, {})
+        mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
+        matched_classes = sorted(matched)
+        ordered_summary.append(
+            {
+                "model_id": model_id,
+                "num_matched": len(matched),
+                "pct": round(pct, 1),
+                "mean_score": round(mean_score, 4),
+                "matched_classes": matched_classes,
+            }
+        )
+    return total_classes, ordered_summary
 
 
 def main():
@@ -1261,12 +1031,6 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="hf-code-sim")
     parser.add_argument("--build", default=False, action="store_true")
-    parser.add_argument(
-        "--build-modular",
-        default=False,
-        action="store_true",
-        help="Build and push the modular model metadata dataset.",
-    )
     parser.add_argument("--modeling-file", type=str, help='You can just specify "vits" if you are lazy like me.')
     parser.add_argument(
         "--push-new-index", action="store_true", help="After --build, push index files to a Hub dataset."
@@ -1285,10 +1049,10 @@ def main():
         "--generate-prompt",
         metavar="OUTPUT_FILE",
         nargs="?",
-        const="__AUTO__",
+           const="__AUTO__",
         default=None,
         help="Generate an AI agent prompt to create the modular file. "
-        "Pass a file path to save it, or omit the value to save to <model>_MODULAR_PROMPT.",
+               "Pass a file path to save it, or omit the value to save to <model>_MODULAR_PROMPT.",
     )
     parser.add_argument(
         "--ignore-models",
@@ -1310,13 +1074,10 @@ def main():
             analyzer.push_index_to_hub()
         return
 
-    if args.build_modular:
-        analyzer.build_modular_dataset()
-        return
-
     if not args.modeling_file:
         raise SystemExit("Provide --modeling-file or use --build")
 
+    dates = build_date_data()
     modeling_file = args.modeling_file
     if os.sep not in modeling_file:
         modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
@@ -1326,18 +1087,8 @@ def main():
     if args.ignore_models:
         ignore_models_set = {_normalize(model.strip()) for model in args.ignore_models.split(",") if model.strip()}
 
-    analyzer.ensure_local_index()
-    analyzer.ensure_modular_dataset()
-    dates = {
-        m: d for m, d in zip(analyzer.modular_dataset["model_name"], analyzer.modular_dataset["date_released"]) if d
-    }
-
     results = analyzer.analyze_file(
-        Path(modeling_file),
-        top_k_per_item=12,
-        allow_hub_fallback=True,
-        use_jaccard=args.use_jaccard,
-        ignore_models=ignore_models_set,
+        Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
     )
     modeling_filename = Path(modeling_file).name
     release_key = modeling_filename.split("modeling_")[-1][:-3]
@@ -1345,12 +1096,15 @@ def main():
 
     aggregate_scores: dict[str, float] = {}
     for data in results.values():
+        best_per_file: dict[str, float] = {}
         for identifier, score in data.get("embedding", []):
             try:
                 relative_path, _ = identifier.split(":", 1)
             except ValueError:
                 continue
-            aggregate_scores[relative_path] = aggregate_scores.get(relative_path, 0.0) + score
+            best_per_file[relative_path] = max(best_per_file.get(relative_path, float("-inf")), score)
+        for relative_path, best_score in best_per_file.items():
+            aggregate_scores[relative_path] = aggregate_scores.get(relative_path, 0.0) + best_score
 
     best_candidate_path: str | None = None
     if aggregate_scores:
@@ -1448,11 +1202,7 @@ def main():
                     for idx, (_, model_id, _, score, release_value) in enumerate(embedding_details):
                         if highest_score - score > 0.1:
                             continue
-                        parsed = (
-                            datetime.strptime(release_value, "%Y-%m-%d")
-                            if isinstance(release_value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_value)
-                            else None
-                        )
+                        parsed = _parse_release_date(release_value)
                         if parsed is None:
                             continue
                         if oldest_date is None or parsed < oldest_date:
@@ -1531,10 +1281,7 @@ def main():
     # Model class match summary
     class_entries = grouped.get("class", [])
     if class_entries:
-        inheritance_map = {
-            m: set(b) for m, b in zip(analyzer.modular_dataset["model_name"], analyzer.modular_dataset["bases"])
-        }
-        total_classes, ordered_summary = compute_model_class_match_summary(results, inheritance_map)
+        total_classes, ordered_summary = compute_model_class_match_summary(results)
         if total_classes and ordered_summary:
             logging.info(_colorize_heading("Model class match summary"))
             logging.info("")
@@ -1570,5 +1317,79 @@ def main():
                     logging.info("Wrote prompt to %s", args.generate_prompt)
 
 
+def generate_modular_prompt(
+    modeling_file: Path,
+    ordered_summary: list[dict],
+    results: dict[str, dict],
+    models_root: Path,
+) -> str:
+    """
+    Generate a prompt for an AI agent to create the modular file for a model.
+
+    Args:
+        modeling_file: Path to the modeling file being analyzed.
+        ordered_summary: Output of ``compute_model_class_match_summary`` (list of dicts).
+        results: Raw ``analyze_file`` results dict.
+        models_root: Root directory of models (``src/transformers/models``).
+
+    Returns:
+        A string prompt ready to be fed to an AI agent.
+    """
+    model_name = modeling_file.stem.replace("modeling_", "")
+    modular_output_path = modeling_file.parent / f"modular_{model_name}.py"
+    top_base = ordered_summary[0]["model_id"] if ordered_summary else None
+    top_summary = ordered_summary[0] if ordered_summary else {}
+    top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
+    top_pct = float(top_summary.get("pct", 0.0)) if top_summary else 0.0
+    top_matched_classes = [str(c) for c in top_summary.get("matched_classes", [])] if top_summary else []
+    top_matched_class_set = set(top_matched_classes)
+
+    # List all classes with their best score against the top base model.
+    # For classes explicitly matched to the top model, always instruct inheritance.
+    class_lines: list[str] = []
+    for query_name, data in results.items():
+        if data.get("kind", "function") != "class":
+            continue
+        if query_name in top_matched_class_set and top_base is not None:
+            class_lines.append(f"- `{query_name}` → inherit from `{top_base}`")
+            continue
+
+        best_score_for_top_base = float("-inf")
+        for identifier, score in data.get("embedding", []):
+            try:
+                relative_path, _ = identifier.split(":", 1)
+            except ValueError:
+                continue
+            mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
+            if mid == top_base and score > best_score_for_top_base:
+                best_score_for_top_base = score
+        if best_score_for_top_base > float("-inf"):
+            class_lines.append(f"- `{query_name}` → inherit from `{top_base}` (score {best_score_for_top_base:.4f})")
+        else:
+            class_lines.append(f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no match in `{top_base}`)")
+
+    class_list = "\n".join(class_lines) if class_lines else "(no classes found)"
+
+    prompt = f"""\
+Create `{modular_output_path}` for the `{model_name}` model.
+
+Top matched model for class inheritance:
+- `{top_base}`: {top_num_matched} matched classes ({top_pct:.1f}%), matched classes [{", ".join(top_matched_classes)}]
+
+For the matched classes listed above, inherit from `{top_base}` and only override what differs. \
+See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+
+For classes marked "copy as-is", reproduce them exactly from `{modeling_file.name}` without inheriting \
+from `{top_base}`. Also copy any module-level helper functions they depend on.
+The copied and inherited classes must remain mutually compatible: method signatures, parameter names, \
+and return types must match what each side expects when they call into one another.
+
+Matched classes:
+{class_list}
+"""
+    return prompt
+
+
 if __name__ == "__main__":
     main()
+
