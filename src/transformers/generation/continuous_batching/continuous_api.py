@@ -322,7 +322,7 @@ class ContinuousBatchProcessor:
         cancelled_states = self.scheduler.clear_cancelled_requests()
         # Also free CPU-offloaded cache for cancelled states
         for state in cancelled_states:
-            self.offloading_manager.free_request_cpu_cache(state) # TODO: do we need whole states or just request ids?
+            self.offloading_manager.free_request_cpu_cache(state)
         if not self.scheduler.has_pending_requests():
             return False
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))

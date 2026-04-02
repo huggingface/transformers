@@ -50,7 +50,7 @@ class OffloadingManager:
         self.cache = cache
         self.scheduler = scheduler
 
-        # All offloading transfers run on the compute stream (blocking, like the fork copy path)
+        # All offloading transfers run on the compute stream (stream-ordered, like the fork copy path)
         self._compute_stream: torch.cuda.Stream | None = inputs_and_outputs.compute_stream
 
         # Compute the size of the CPU swap pool in blocks
@@ -161,8 +161,6 @@ class OffloadingManager:
             # so the scheduler has at least 1 token to schedule and enters the allocation path.
             if state._status == RequestStatus.DECODING:
                 state.remaining_prefill_tokens = state.tokens_to_process[:]
-            # We set the allocated blocks to 0 so the scheduler re-allocates all blocks using position_offset.
-            state.allocated_blocks = 0
             # Here, the new state is the same as the old one, but with the status set to PENDING
             state._status = RequestStatus.PENDING
             new_state = state
@@ -174,7 +172,7 @@ class OffloadingManager:
         scheduler.add_waiting_request(new_state)
         logger.info(
             f"{'Offloaded' if offloaded_to_cpu else 'Soft reset'} request {request_id} with {len(state.initial_tokens)}"
-            f"initial tokens and {len(state.generated_tokens)} generated tokens."
+            f" initial tokens and {len(state.generated_tokens)} generated tokens."
         )
         scheduler.block_new_requests = True
 
@@ -195,7 +193,8 @@ class OffloadingManager:
             if not state.is_cpu_offloaded:
                 continue
             # Accumulate CPU indices for this request
-            cpu_indices, group_counts = self._return_cpu_blocks(state.request_id)
+            cpu_indices = self._request_id_to_cpu_blocks.pop(state.request_id)
+            group_counts = self._request_id_to_group_block_counts.pop(state.request_id)
             all_cpu_indices.extend(cpu_indices)
             # Accumulate GPU indices for this request, but since there may be extra block due to re-allocation, slice to
             # match the number of blocks offloaded.
@@ -207,6 +206,9 @@ class OffloadingManager:
             # Restore the state to non-offloaded state
             state._is_cpu_offloaded = False
             state.allocated_blocks = max_allocated_blocks
+            # If prefix sharing is on, these freshly allocated blocks will be deduplicated at the next update
+            if cache.allow_block_sharing:
+                future_state.complete_blocks += state.position_offset // cache.block_size
             logger.info(f"Restored CPU-offloaded request {state.request_id}")
 
         # Early return if there are no copy to perform
@@ -282,7 +284,7 @@ class OffloadingManager:
             for cpu_value_cache, gpu_value_cache in zip(self._cpu_value_cache, self.cache.value_cache):
                 cpu_value_cache[cpu_ids] = gpu_value_cache.view(*self._gpu_cache_block_shape)[gpu_ids].to("cpu")
 
-        # Memoize state change
+        # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream.
         self._request_id_to_cpu_blocks[request_id] = cpu_indices
         self._request_id_to_group_block_counts[request_id] = group_block_counts
         state._is_cpu_offloaded = True

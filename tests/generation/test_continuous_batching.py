@@ -1126,7 +1126,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             self.assertTrue(mock_offload.called, "_offload_to_cpu was not called despite few blocks being available.")
 
     @require_torch_accelerator
-    def test_cpu_offloading_disabled_by_default(self) -> None:
+    def test_cpu_offloading_disabled_when_zero(self) -> None:
         """Test that cpu_offload_space=0 produces the same output as the legacy path."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
