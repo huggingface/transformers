@@ -122,7 +122,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
         Indexed of layers for deepstack embeddings.
     """
 
-    model_type = "qwen3_vl_moe"
+    model_type = "qwen3_vl_moe_vision"
     base_config_key = "vision_config"
 
     depth: int = 27
