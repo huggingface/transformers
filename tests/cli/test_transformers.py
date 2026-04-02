@@ -11,31 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
-
-import pytest
-from typer.testing import CliRunner
-
-import transformers_cli
+from unittest.mock import patch
 
 
-@pytest.fixture
-def cli():
-    def _cli_invoke(*args):
-        runner = CliRunner()
+def test_top_level_help(cli):
+    output = cli("--help")
+    assert output.exit_code == 0
+    assert "Transformers CLI" in output.output
+    assert "Main commands" in output.output
+    assert "chat" in output.output
+    assert "serve" in output.output
 
-        old_out_close = sys.stdout.close
-        old_err_close = sys.stderr.close
 
-        def _noop(*a, **k):
-            return None
+def test_top_level_help_does_not_load_subcommands(cli):
+    with patch("transformers_cli.importlib.import_module", side_effect=AssertionError("subcommands should stay lazy")):
+        output = cli("--help")
 
-        sys.stdout.close = _noop
-        sys.stderr.close = _noop
-        try:
-            return runner.invoke(transformers_cli.app, list(args), catch_exceptions=False)
-        finally:
-            sys.stdout.close = old_out_close
-            sys.stderr.close = old_err_close
-
-    return _cli_invoke
+    assert output.exit_code == 0
