@@ -302,6 +302,27 @@ def _patch_bucketize(original):
     return patch
 
 
+def _patch_searchsorted(original):
+    """Decompose searchsorted via broadcast comparison + sum — no ONNX op for searchsorted.
+
+    For sorted inputs the insertion index equals the count of elements satisfying
+    the comparison (< for left, <= for right). This is O(N*M) instead of the
+    real binary-search O(M log N) but only uses ops with ONNX translations.
+    """
+
+    def patch(sorted_sequence, values, *, out_int32=False, right=False, side=None, out=None, sorter=None):
+        if side is not None:
+            right = side == "right"
+        if right:
+            mask = sorted_sequence.unsqueeze(-1) <= values.unsqueeze(-2)
+        else:
+            mask = sorted_sequence.unsqueeze(-1) < values.unsqueeze(-2)
+        result = mask.sum(-2)
+        return result.to(torch.int32) if out_int32 else result
+
+    return patch
+
+
 def _patch_full(original):
     """Force dtype=torch.long when fill_value is int and no dtype specified (ONNX defaults to float32)."""
 
@@ -373,6 +394,7 @@ if is_torch_available():
         (torch.Tensor, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
         (torch.Tensor, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
         (torch, "bucketize", _patch_bucketize),
+        (torch, "searchsorted", _patch_searchsorted),
         (torch.Tensor, "masked_scatter", _patch_masked_scatter),
         (torch, "full", _patch_full),
         (torch.masked, "mean", _patch_masked_mean),
