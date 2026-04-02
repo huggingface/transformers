@@ -822,7 +822,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
         position_embeddings = self.pos_emb(
             torch.arange(encoder_hidden_states.shape[1], device=encoder_hidden_states.device)
         )
-        encoder_hidden_states += position_embeddings
+        encoder_hidden_states += position_embeddings.to(encoder_hidden_states.device)
         encoder_hidden_states = self.proj(encoder_hidden_states)
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")

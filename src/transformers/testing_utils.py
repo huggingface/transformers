@@ -93,6 +93,7 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_flashoptim_available,
     is_flute_available,
     is_fouroversix_available,
@@ -115,6 +116,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_multipart_available,
     is_natten_available,
     is_nltk_available,
     is_numba_available,
@@ -140,6 +142,7 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_serve_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -215,6 +218,14 @@ _COMMON_MODEL_NAMES_MAP = {
     "question_answering_class": "ForQuestionAnswering",
     "sequence_classification_class": "ForSequenceClassification",
     "token_classification_class": "ForTokenClassification",
+}
+
+# Used in VLMModelTester (and related classes/methods) to infer the common model classes from the base model class
+_VLM_COMMON_MODEL_NAMES_MAP = {
+    "config_class": "Config",
+    "text_config_class": "TextConfig",
+    "vision_config_class": "VisionConfig",
+    "conditional_generation_class": "ForConditionalGeneration",
 }
 
 
@@ -671,6 +682,37 @@ def require_flash_attn_3(test_case):
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
 
 
+def require_flash_attn_4(test_case):
+    """
+    Decorator marking a test that requires Flash Attention 4.
+
+    These tests are skipped when Flash Attention 4 isn't installed.
+    """
+    return unittest.skipUnless(is_flash_attn_4_available(), "test requires Flash Attention 4")(test_case)
+
+
+def require_all_flash_attn(test_case):
+    flash_attn_available = is_flash_attn_2_available()
+    kernels_available = is_kernels_available()
+    try:
+        from kernels import get_kernel
+
+        get_kernel(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"])
+    except Exception as _:
+        kernels_available = False
+
+    return unittest.skipUnless(
+        all(
+            (
+                flash_attn_available | kernels_available,
+                is_flash_attn_3_available(),
+                is_flash_attn_4_available(),
+            )
+        ),
+        "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
@@ -1095,6 +1137,16 @@ def require_fp8(test_case):
     )
 
 
+def require_cuda_capability_at_least(major, minor):
+    """Decorator to skip tests when CUDA capability is below the given version."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return unittest.skip("CUDA not available")
+    capability = torch.cuda.get_device_capability()
+    return unittest.skipIf(capability < (major, minor), f"Requires CUDA capability >= {major}.{minor}")
+
+
 def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
     return unittest.skipUnless(
@@ -1372,6 +1424,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_multipart(test_case):
+    """
+    Decorator marking a test that requires python-multipart
+    """
+    return unittest.skipUnless(is_multipart_available(), "test requires python-multipart")(test_case)
+
+
 def require_liger_kernel(test_case):
     """
     Decorator marking a test that requires liger_kernel
@@ -1453,6 +1512,13 @@ def require_openai(test_case):
     Decorator marking a test that requires openai
     """
     return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
+
+
+def require_serve(test_case):
+    """
+    Decorator marking a test that requires the serving dependencies (fastapi, uvicorn, pydantic, openai).
+    """
+    return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
 def require_mistral_common(test_case):
@@ -2407,14 +2473,16 @@ def pytest_xdist_worker_id():
 
 def get_torch_dist_unique_port():
     """
-    Returns a port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
+    Returns a free port number that can be fed to `torch.distributed.launch`'s `--master_port` argument.
 
-    Under `pytest-xdist` it adds a delta number based on a worker id so that concurrent tests don't try to use the same
-    port at once.
+    Binds to port 0 to let the OS assign an available port, avoiding collisions from hardcoded ports
+    and TCP TIME_WAIT issues between sequential subprocess launches.
     """
-    port = 29500
-    uniq_delta = pytest_xdist_worker_id()
-    return port + uniq_delta
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
 def nested_simplify(obj, decimals=3):

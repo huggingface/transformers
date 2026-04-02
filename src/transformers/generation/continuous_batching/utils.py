@@ -13,12 +13,13 @@
 # limitations under the License.
 from collections import OrderedDict
 from math import ceil
+from typing import Any
 
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
 
-from .requests import logger
+from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
 
 class CudaGraphBuffer:
@@ -30,17 +31,29 @@ class CudaGraphBuffer:
         self.max_size = max_size
         self._storage: OrderedDict[tuple[int, int], torch.cuda.CUDAGraph] = OrderedDict()
 
+    def __del__(self) -> None:
+        original_max_size = self.max_size
+        self.max_size = 1  # 0 would cause an infinite loop, 1 is enough to clear all graphs
+        self.plan_for_new_graph(silent=True)
+        self.max_size = original_max_size
+
     def get_graph(self, q_len: int, kv_len: int) -> torch.cuda.CUDAGraph | None:
         graph = self._storage.get((q_len, kv_len))
         if graph is not None:
             self._storage.move_to_end((q_len, kv_len))
         return graph
 
-    def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
-        if len(self._storage) >= self.max_size:
+    def plan_for_new_graph(self, silent: bool = False) -> None:
+        while len(self._storage) >= self.max_size:
             evicted_key, evicted_graph = self._storage.popitem(last=False)
-            logger.info(f"Evicting graph for {evicted_key = }")
+            if not silent:
+                logger.info(f"Evicting graph for {evicted_key = }")
             evicted_graph.reset()
+
+    def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
+        # In our use case, this should not have any effect because we plan for a new graph before it is captured
+        self.plan_for_new_graph()
+        logger.info(f"Setting graph for {q_len = }, {kv_len = }")
         self._storage[(q_len, kv_len)] = graph
 
 
@@ -146,3 +159,30 @@ def build_attention_mask(
             masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
+
+
+def create_warmup_future_states(
+    num: int,
+    status: RequestStatus,
+    num_query_tokens: int,
+    num_cache_tokens: int,
+    cache: Any,  # not annotated to avoid circular import
+) -> list[FutureRequestState]:
+    """An utility function to create a list of FutureRequestStates for the warmup of CB."""
+    # Setup
+    request_ids = [f"__warmup_{status.name}_{i}__" for i in range(num)]
+    total_tokens = num_query_tokens + num_cache_tokens
+    blocks_needed = ceil(total_tokens / cache.block_size)
+    # Main loop
+    future_states = []
+    for req_id in request_ids:
+        state = RequestState(request_id=req_id, initial_tokens=[0] * total_tokens, max_new_tokens=1)
+        state._status = status  # bypass the property setter to avoid the lifecycle side effects
+        state.tokens_to_process = [0] * num_query_tokens
+        state.position_offset = num_cache_tokens
+        # Stop if allocation fails for any request
+        allocated = cache.allocate_blocks(blocks_needed, state.request_id, 0)
+        if allocated is None:
+            return future_states
+        future_states.append(FutureRequestState(state, has_new_token=True, complete_blocks=0))
+    return future_states

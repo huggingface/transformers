@@ -53,6 +53,7 @@ else:
     FusedRMSNormGated = None
     ShortConvolution = None
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -60,8 +61,7 @@ class OlmoHybridDynamicCache:
     """
     Cache for hybrid model supporting both attention KV cache and linear attention state.
 
-    Inherits from Qwen3NextDynamicCache. The main difference is that this cache
-    stores separate conv states for q, k, v (instead of a single conv_states list).
+    The main difference is that this cache stores separate conv states for q, k, v (instead of a single conv_states).
     """
 
     is_compileable = False
@@ -154,7 +154,6 @@ class OlmoHybridDynamicCache:
         kv_length = query_length + past_seen_tokens
         return kv_length, kv_offset
 
-    @property
     def has_previous_state(self):
         """We have a previous state if the last linear (conv) layer was already updated."""
         return self.conv_states_q[self.last_linear_layer] is not None
@@ -724,7 +723,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
 
         use_cache = cache_params is not None
-        use_precomputed = use_cache and getattr(cache_params, "has_previous_state", False) and seq_len == 1
+        use_precomputed = use_cache and cache_params.has_previous_state() and seq_len == 1
 
         conv_state_q = cache_params.conv_states_q[self.layer_idx] if cache_params else None
         conv_state_k = cache_params.conv_states_k[self.layer_idx] if cache_params else None
@@ -994,9 +993,9 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
         # RoPE or NoPE
         position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
 
-        for decoder_layer in self.layers:
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
-            layer_position_embeddings = position_embeddings if decoder_layer.layer_type == "full_attention" else None
+        for i, decoder_layer in enumerate(self.layers):
+            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
+            layer_position_embeddings = position_embeddings if self.config.layer_types[i] == "full_attention" else None
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1023,7 +1022,7 @@ class OlmoHybridModel(OlmoHybridPreTrainedModel):
             2. Attending to all inputs
         """
         linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.get_seq_length() > 0) or (
+        if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             linear_attn_mask = None

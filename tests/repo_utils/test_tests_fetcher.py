@@ -17,8 +17,9 @@ import shutil
 import sys
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from git import Repo
 
@@ -34,15 +35,19 @@ from tests_fetcher import (  # noqa: E402
     clean_code,
     create_reverse_dependency_map,
     create_reverse_dependency_tree,
+    create_test_list_from_filter,
     diff_is_docstring_only,
     extract_imports,
     get_all_tests,
+    get_diff,
     get_module_dependencies,
+    get_repo_utils_tests,
     get_tree_starting_at,
     infer_tests_to_run,
     init_test_examples_dependencies,
     parse_commit_message,
     print_tree_deps_of,
+    should_run_repo_utils_tests,
 )
 
 
@@ -161,9 +166,11 @@ def create_tmp_repo(tmp_dir, models=None):
 
     repo.index.add(["examples", "src", "tests"])
     repo.index.commit("Initial commit")
-    repo.create_head("main")
+    if "main" not in repo.heads:
+        repo.create_head("main")
     repo.head.reference = repo.refs.main
-    repo.delete_head("master")
+    if "master" in repo.heads:
+        repo.delete_head("master")
     return repo
 
 
@@ -249,6 +256,51 @@ class TestFetcherTester(unittest.TestCase):
         assert "tests/models/albert/test_modeling_albert.py" not in all_tests
         assert "tests/repo_utils/test_tests_fetcher.py" not in all_tests
 
+    def test_get_repo_utils_tests_on_full_repo(self):
+        repo_utils_tests = get_repo_utils_tests()
+        assert "tests/repo_utils/test_mlinter.py" in repo_utils_tests
+        assert "tests/repo_utils/test_tests_fetcher.py" in repo_utils_tests
+
+    def test_should_run_repo_utils_tests(self):
+        assert should_run_repo_utils_tests(["utils/mlinter/mlinter.py"])
+        assert not should_run_repo_utils_tests(["src/transformers/modeling_utils.py"])
+
+    def test_create_test_list_from_filter_routes_repo_utils_tests(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(
+                [
+                    "tests/models/bert/test_modeling_bert.py",
+                    "tests/repo_utils/test_mlinter.py",
+                    "tests/repo_utils/test_tests_fetcher.py",
+                ],
+                out_path=tmp_folder,
+            )
+
+            with open(Path(tmp_folder) / "tests_repo_utils_test_list.txt", encoding="utf-8") as f:
+                repo_utils_tests = f.read().splitlines()
+
+            assert repo_utils_tests == [
+                "tests/repo_utils/test_mlinter.py",
+                "tests/repo_utils/test_tests_fetcher.py",
+            ]
+
+    def test_infer_tests_to_run_adds_repo_utils_for_utils_changes(self):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(tests_fetcher, "commit_flags", {"test_all": False}, create=True))
+            stack.enter_context(
+                patch.object(tests_fetcher, "get_modified_python_files", return_value=["utils/mlinter/mlinter.py"])
+            )
+            stack.enter_context(patch.object(tests_fetcher, "create_reverse_dependency_map", return_value={}))
+            stack.enter_context(
+                patch.object(tests_fetcher, "get_impacted_files_from_tiny_model_summary", return_value=[])
+            )
+            mock_create_test_list = stack.enter_context(patch.object(tests_fetcher, "create_test_list_from_filter"))
+            stack.enter_context(patch.object(tests_fetcher, "get_doctest_files", return_value=[]))
+            infer_tests_to_run("unused.txt", diff_with_last_commit=True)
+
+        test_files_to_run = mock_create_test_list.call_args.args[0]
+        assert "tests/repo_utils/test_mlinter.py" in test_files_to_run
+
     def test_diff_is_docstring_only(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -261,6 +313,23 @@ class TestFetcherTester(unittest.TestCase):
 
             commit_changes(bert_file, BERT_MODEL_FILE_NEW_CODE, repo)
             assert not diff_is_docstring_only(repo, branching_point, bert_file)
+
+    def test_get_diff_ignores_docstring_only_changes(self):
+        """Files whose diff is only in docstrings/comments should be excluded from get_diff results."""
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            repo = create_tmp_repo(tmp_folder)
+            branching_commit = repo.head.commit
+
+            # Docstring-only change: should NOT appear in diff
+            commit_changes(BERT_MODELING_FILE, BERT_MODEL_FILE_NEW_DOCSTRING, repo)
+            diff = get_diff(repo, repo.head.commit, [branching_commit])
+            assert BERT_MODELING_FILE not in diff
+
+            # Real code change: should appear in diff
+            commit_changes(BERT_MODELING_FILE, BERT_MODEL_FILE_NEW_CODE, repo)
+            diff = get_diff(repo, repo.head.commit, [branching_commit])
+            assert BERT_MODELING_FILE in diff
 
     def test_extract_imports_relative(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -494,7 +563,7 @@ src/transformers/configuration_utils.py
 
     def test_init_test_examples_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
-            tmp_folder = Path(tmp_folder)
+            tmp_folder = Path(tmp_folder).resolve()
             create_tmp_repo(tmp_folder)
 
             expected_example_deps = {

@@ -34,8 +34,11 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
+    can_return_tuple,
     logger,
 )
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..bart.modeling_bart import (
     BartAttention,
     BartDecoderLayer,
@@ -53,7 +56,7 @@ class BioGptLearnedPositionalEmbedding(OPTLearnedPositionalEmbedding):
         position_ids: torch.LongTensor | None = None,
     ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        super().forward(attention_mask, past_key_values_length, position_ids)
+        return super().forward(attention_mask, past_key_values_length, position_ids)
 
 
 class BioGptScaledWordEmbedding(BartScaledWordEmbedding):
@@ -92,40 +95,27 @@ class BioGptDecoderLayer(BartDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
         use_cache: bool | None = True,
         position_ids: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
-                cache in the correct position and to infer the complete sequence length.
         """
         residual = hidden_states
 
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             position_ids=position_ids,
-            cache_position=cache_position,
             **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -141,12 +131,7 @@ class BioGptDecoderLayer(BartDecoderLayer):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 @auto_docstring
@@ -157,8 +142,11 @@ class BioGptPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "hidden_states": BioGptDecoderLayer,
+        "attentions": BioGptAttention,
+    }
 
 
 @auto_docstring
@@ -184,6 +172,8 @@ class BioGptModel(BioGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -193,41 +183,13 @@ class BioGptModel(BioGptPreTrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # retrieve input_ids and inputs_embeds
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input)
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-                )
-                use_cache = False
+            inputs_embeds = self.embed_tokens(input_ids)
 
         # initialize past_key_values
         if use_cache and past_key_values is None:
@@ -235,10 +197,6 @@ class BioGptModel(BioGptPreTrainedModel):
 
         batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
 
         if attention_mask is None:
             # required mask seq length can be calculated via length of past cache
@@ -249,74 +207,40 @@ class BioGptModel(BioGptPreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            inputs_embeds=inputs_embeds,
+            input_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=self_attn_cache,
         )
 
         # embed positions
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0)
 
         positions = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = None
-
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             if self.training:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
                 use_cache=use_cache,
                 position_ids=position_ids,
-                cache_position=cache_position,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
         hidden_states = self.layer_norm(hidden_states)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
-                if v is not None
-            )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
         )
 
 
@@ -343,6 +267,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.output_projection = new_embeddings
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -353,10 +278,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
@@ -366,8 +287,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.biogpt(
             input_ids,
             attention_mask=attention_mask,
@@ -375,25 +294,16 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.output_projection(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -421,6 +331,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -432,10 +343,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
         r"""
@@ -444,8 +351,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.biogpt(
             input_ids,
             past_key_values=past_key_values,
@@ -453,10 +358,7 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
@@ -466,7 +368,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.num_labels)
@@ -476,10 +377,6 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + transformer_outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -513,6 +410,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -523,10 +421,6 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         position_ids: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | SequenceClassifierOutputWithPast:
@@ -536,8 +430,6 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         transformer_outputs = self.biogpt(
             input_ids,
             past_key_values=past_key_values,
@@ -545,10 +437,7 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
+            **kwargs,
         )
         hidden_states = transformer_outputs[0]
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
@@ -595,9 +484,6 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,

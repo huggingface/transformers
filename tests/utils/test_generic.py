@@ -284,7 +284,7 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 )
                 if config_return_dict is None and return_dict is None:
                     expected_type = tuple
-                message = f"output should be a {expected_type.__name__} when config.use_return_dict={config_return_dict} and return_dict={return_dict}"
+                message = f"output should be a {expected_type.__name__} when config.return_dict={config_return_dict} and return_dict={return_dict}"
                 self.assertIsInstance(output, expected_type, message)
 
     @pytest.mark.torch_compile_test

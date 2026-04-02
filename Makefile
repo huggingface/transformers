@@ -1,67 +1,98 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style check-repo fix-repo test test-examples benchmark
-
-check_dirs := examples tests src utils scripts benchmark benchmark_v2
-exclude_folders :=  ""
-
-# Directories to type-check with ty
-ty_check_dirs := src/transformers/utils src/transformers/generation
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test test-examples benchmark codex claude clean-ai
 
 
-# this runs all linting/formatting scripts, most notably ruff
+# Runs all linting/formatting scripts, most notably ruff
 style:
-	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
-	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
-	python utils/custom_init_isort.py
-	python utils/sort_auto_mappings.py
-	python utils/check_types.py $(ty_check_dirs)
+	@python utils/checkers.py \
+		ruff_check,\
+		ruff_format,\
+		init_isort,\
+		auto_mappings \
+		--fix
 
-# Check that the repo is in a good state (both style and consistency CI checks)
-# Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
+# Runs ty type checker and model structure rules
+typing:
+	@python utils/checkers.py \
+		types,\
+		modeling_structure
+
+# Runs typing, ruff linting/formatting, import-order checks and auto-mappings
+check-code-quality:
+	@python utils/checkers.py \
+		types,\
+		modeling_structure,\
+		ruff_check,\
+		ruff_format,\
+		init_isort,\
+		auto_mappings
+
+# Runs a full repository consistency check.
+check-repository-consistency:
+	@python utils/checkers.py \
+		imports,\
+		import_complexity,\
+		copies,\
+		modular_conversion,\
+		doc_toc,\
+		docstrings,\
+		dummies,\
+		repo,\
+		inits,\
+		pipeline_typing,\
+		config_docstrings,\
+		config_attributes,\
+		doctest_list,\
+		update_metadata,\
+		add_dates,\
+		deps_table
+
+# Runs typing and formatting checks + repository consistency check (ignores errors)
 check-repo:
-	ruff check $(check_dirs) setup.py conftest.py
-	ruff format --check $(check_dirs) setup.py conftest.py
-	python utils/check_types.py $(ty_check_dirs)
-	-python utils/custom_init_isort.py --check_only
-	-python utils/sort_auto_mappings.py --check_only
-	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
-	-python utils/check_copies.py
-	-python utils/check_modular_conversion.py
-	-python utils/check_doc_toc.py
-	-python utils/check_docstrings.py
-	-python utils/check_dummies.py
-	-python utils/check_repo.py
-	-python utils/check_modeling_structure.py
-	-python utils/check_inits.py
-	-python utils/check_pipeline_typing.py
-	-python utils/check_config_docstrings.py
-	-python utils/check_config_attributes.py
-	-python utils/check_doctest_list.py
-	-python utils/update_metadata.py --check-only  
-	-python utils/add_dates.py --check-only
-	-@{ \
-		md5sum src/transformers/dependency_versions_table.py > md5sum.saved; \
-		python setup.py deps_table_update; \
-		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes. This requires Python 3.10.\n" && exit 1); \
-		rm md5sum.saved; \
-	}
-
+	@python utils/checkers.py \
+		ruff_check,\
+		ruff_format,\
+		types,\
+		modeling_structure,\
+		init_isort,\
+		auto_mappings,\
+		imports,\
+		import_complexity,\
+		copies,\
+		modular_conversion,\
+		doc_toc,\
+		docstrings,\
+		dummies,\
+		repo,\
+		inits,\
+		pipeline_typing,\
+		config_docstrings,\
+		config_attributes,\
+		doctest_list,\
+		update_metadata,\
+		add_dates,\
+		deps_table \
+		--keep-going
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
-# Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
-fix-repo: style
-	-python setup.py deps_table_update
-	-python utils/check_doc_toc.py --fix_and_overwrite
-	-python utils/check_copies.py --fix_and_overwrite
-	-python utils/check_modular_conversion.py --fix_and_overwrite
-	-python utils/check_dummies.py --fix_and_overwrite
-	-python utils/check_pipeline_typing.py --fix_and_overwrite
-	-python utils/check_doctest_list.py --fix_and_overwrite
-	-python utils/check_docstrings.py --fix_and_overwrite
-	-python utils/add_dates.py
-
+fix-repo:
+	@python utils/checkers.py \
+		ruff_check,\
+		ruff_format,\
+		init_isort,\
+		auto_mappings,\
+		doc_toc,\
+		copies,\
+		modular_conversion,\
+		dummies,\
+		pipeline_typing,\
+		doctest_list,\
+		docstrings,\
+		add_dates,\
+		deps_table \
+		--fix --keep-going
 
 # Run tests for the library, requires pytest-random-order
 test:
@@ -74,6 +105,19 @@ test-examples:
 # Run benchmark
 benchmark:
 	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
+
+codex:
+	mkdir -p .agents
+	rm -rf .agents/skills
+	ln -snf ../.ai/skills .agents/skills
+
+claude:
+	mkdir -p .claude
+	rm -rf .claude/skills
+	ln -snf ../.ai/skills .claude/skills
+
+clean-ai:
+	rm -rf .agents/skills .claude/skills
 
 
 # Release stuff

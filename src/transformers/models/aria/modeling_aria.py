@@ -885,10 +885,6 @@ class AriaModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class AriaModel(AriaPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "language_model",
-    }
-
     def __init__(self, config: AriaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -902,8 +898,8 @@ class AriaModel(AriaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @can_return_tuple
     @merge_with_config_defaults
+    @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -911,7 +907,7 @@ class AriaModel(AriaPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
+        vision_feature_layer: int | list[int] = -1,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -1031,12 +1027,6 @@ class AriaModel(AriaPreTrainedModel):
     """
 )
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        r"^language_model.model": "model.language_model",
-        r"^vision_tower": "model.vision_tower",
-        r"^multi_modal_projector": "model.multi_modal_projector",
-        r"^language_model.lm_head": "lm_head",
-    }
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: AriaConfig):
@@ -1059,7 +1049,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
-        vision_feature_layer: int = -1,
+        vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(
