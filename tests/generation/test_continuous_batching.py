@@ -1119,7 +1119,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     NUM_BLOCKS = 4
     MAX_BATCH_TOKENS = 64
 
-    @parameterized.expand([(f"config_{i}", *cfg) for i, cfg in enumerate(CONFIGS)])
+    @parameterized.expand(CONFIGS)
     def test_memory_prediction(
         self,
         block_size: int,
