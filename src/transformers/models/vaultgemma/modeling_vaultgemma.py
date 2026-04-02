@@ -288,8 +288,8 @@ class VaultGemmaRotaryEmbedding(nn.Module):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.parameter.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.parameter.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -345,7 +345,7 @@ class VaultGemmaTextScaledWordEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.scalar_embed_scale = embed_scale
-        self.register_buffer("embed_scale", torch.tensor(embed_scale), persistent=False)
+        self.embed_scale = nn.parameter.Buffer(torch.tensor(embed_scale), persistent=False)
 
     def forward(self, input_ids: torch.Tensor):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
@@ -377,6 +377,13 @@ class VaultGemmaPreTrainedModel(PreTrainedModel):
             init.zeros_(module.weight)
         elif isinstance(module, VaultGemmaTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
+        if isinstance(module, VaultGemmaRotaryEmbedding):
+            rope_init_fn = module.compute_default_rope_parameters
+            if module.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
+            inv_freq, _ = rope_init_fn(module.config)
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
 
 
 @auto_docstring

@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -159,8 +160,8 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
         inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.parameter.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.parameter.Buffer(inv_freq.clone(), persistent=False)
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -314,7 +315,16 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Gemma2RotaryEmbedding):
+            rope_init_fn = module.compute_default_rope_parameters
+            if module.rope_type != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
+            inv_freq, _ = rope_init_fn(module.config)
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
 
 
 class Gemma2Model(GemmaModel):
