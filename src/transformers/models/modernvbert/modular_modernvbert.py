@@ -81,7 +81,7 @@ class ModernVBertConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     initializer_cutoff_factor: float = 2.0
     classifier_pooling: Literal["cls", "mean"] = "cls"
-    classifier_dropout: float = 0.0
+    classifier_dropout: float | int = 0.0
     classifier_bias: bool = False
     tie_word_embeddings: bool = False
 

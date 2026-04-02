@@ -86,8 +86,8 @@ class BridgeTowerTextConfig(PreTrainedConfig):
     initializer_factor: float | int = 1
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 514
     type_vocab_size: int = 1
     layer_norm_eps: float = 1e-05

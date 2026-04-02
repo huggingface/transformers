@@ -125,6 +125,7 @@ else:
             ("fuyu", {"torchvision": "FuyuImageProcessor", "pil": "FuyuImageProcessorPil"}),
             ("gemma3", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
+            ("gemma4", {"torchvision": "Gemma4ImageProcessor", "pil": "Gemma4ImageProcessorPil"}),
             ("git", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("glm46v", {"torchvision": "Glm46VImageProcessor", "pil": "Glm46VImageProcessorPil"}),
             ("glm4v", {"torchvision": "Glm4vImageProcessor", "pil": "Glm4vImageProcessorPil"}),
@@ -725,7 +726,7 @@ class AutoImageProcessor:
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
         explicit_local_code = has_local_code and not (
-            image_processor_class or IMAGE_PROCESSOR_MAPPING[type(config)]
+            image_processor_class or _load_class_with_fallback(IMAGE_PROCESSOR_MAPPING[type(config)], backend)
         ).__module__.startswith("transformers.")
         if has_remote_code:
             class_ref = _resolve_auto_map_class_ref(image_processor_auto_map, backend)
