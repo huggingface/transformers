@@ -74,7 +74,6 @@ class Gemma4TextModelTester(CausalLMModelTester):
             "sliding_attention",
             "full_attention",
         ]  # similarly we want to test sharing on both types
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
 
         # To make model small
         self.vocab_size_per_layer_input = 99
