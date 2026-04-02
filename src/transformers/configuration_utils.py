@@ -21,7 +21,7 @@ import os
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 
 from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
@@ -43,10 +43,6 @@ from .utils import (
 )
 from .utils.generic import is_timm_config_dict
 from .utils.type_validators import dtype_validator
-
-
-if TYPE_CHECKING:
-    pass
 
 
 logger = logging.get_logger(__name__)
