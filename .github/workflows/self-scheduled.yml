@@ -44,6 +44,14 @@ on:
       pr_number:
         required: false
         type: string
+      test_path_prefix:
+        required: false
+        default: "tests"
+        type: string
+      test_file_suffix:
+        required: false
+        default: ""
+        type: string
     outputs:
       is_infrastructure_ok:
         description: "Whether the CI infrastructure (slack reporting and failure checking) succeeded"
@@ -105,10 +113,16 @@ jobs:
         env:
           job: ${{ inputs.job }}
           subdirs: ${{ inputs.subdirs }}
+          test_path_prefix: ${{ inputs.test_path_prefix }}
+          test_file_suffix: ${{ inputs.test_file_suffix }}
           NUM_SLICES: 2
         run: |
           if [ "$job" = "run_models_gpu" ]; then
-            python3 ../utils/split_model_tests.py --subdirs "$subdirs" --num_splits "$NUM_SLICES" > folder_slices.txt
+            if [ -n "$test_file_suffix" ]; then
+              python3 -c 'import glob, json, os, pathlib; prefix = os.environ["test_path_prefix"]; suffix = os.environ["test_file_suffix"]; marker = "```py runnable"; files = sorted(glob.glob(f"/transformers/{prefix}/*{suffix}")); models = [pathlib.Path(f).stem for f in files if marker in pathlib.Path(f).read_text()]; print(json.dumps([[m] for m in models]))' > folder_slices.txt
+            else
+              python3 ../utils/split_model_tests.py --subdirs "$subdirs" --num_splits "$NUM_SLICES" > folder_slices.txt
+            fi
             echo "folder_slices=$(cat folder_slices.txt)" >> $GITHUB_OUTPUT
             python3 -c "import ast; folder_slices = ast.literal_eval(open('folder_slices.txt').read()); open('slice_ids.txt', 'w').write(str(list(range(len(folder_slices)))))"
             echo "slice_ids=$(cat slice_ids.txt)" >> $GITHUB_OUTPUT
@@ -149,6 +163,8 @@ jobs:
       runner_type: ${{ inputs.runner_type }}
       report_repo_id: ${{ inputs.report_repo_id }}
       pytest_marker: ${{ inputs.pytest_marker }}
+      test_path_prefix: ${{ inputs.test_path_prefix }}
+      test_file_suffix: ${{ inputs.test_file_suffix }}
     secrets: inherit
 
   run_trainer_and_fsdp_gpu:
