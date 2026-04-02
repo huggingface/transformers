@@ -282,7 +282,7 @@ class NomicBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 @require_torch
 class NomicBertModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_no_head_absolute_embedding(self):
+    def test_inference_no_head_absolute_embedding_v1_5(self):
         # TODO: remove revision
         model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/57").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1.5", revision="refs/pr/57")
@@ -313,6 +313,44 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
                         ],
                     ]
                 ),
+            }
+        ).get_expectation()
+
+        torch.testing.assert_close(output[:, 1:4, 1:4].cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_no_head_absolute_embedding_v1(self):
+        # TODO: remove revision
+        model = AutoModel.from_pretrained("nomic-ai/nomic-embed-text-v1", revision="refs/pr/34").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("nomic-ai/nomic-embed-text-v1", revision="refs/pr/34")
+
+        sentences = ["Plants create oxygen.", "Photosynthesis is a process where plants create oxygen."]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True, truncation=True).to(torch_device)
+
+        with torch.no_grad():
+            output = model(**inputs)[0]
+
+        expected_shape = torch.Size((2, 13, 768))
+        self.assertEqual(output.shape, expected_shape)
+
+        # TODO: these are my local numbers on 4060 with remote code
+        expected_slice = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [
+                        [
+                            [ 1.2961, -1.1757,  1.2094],
+                            [ 1.1350,  0.5400,  1.4580],
+                            [-0.2897, -0.5351,  2.0092]
+                        ],
+                        [
+                            [-0.2866, -0.9786,  0.8613],
+                            [-0.3104, -0.3421,  0.4867],
+                            [-0.4336, -0.8528, -0.2509],
+                        ]
+                    ]
+                )
             }
         ).get_expectation()
 
