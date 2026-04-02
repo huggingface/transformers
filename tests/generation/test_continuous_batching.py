@@ -847,11 +847,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)[0]
 
         async def collect_results():
-            results = []
+            token_counts = []
             future = asyncio.get_running_loop().create_future()
 
             def on_result(output):
-                results.append(output)
+                token_counts.append(len(output.generated_tokens))
                 if output.is_finished():
                     future.set_result(True)
 
@@ -859,15 +859,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             manager.register_result_handler(request_id, on_result)
 
             await asyncio.wait_for(future, timeout=30)
-            return results
+            return token_counts
 
-        results = asyncio.run(collect_results())
+        token_counts = asyncio.run(collect_results())
 
         # Streaming via handler: incremental token count, same as request_id_iter
-        self.assertEqual(len(results[0].generated_tokens), 1)
-        self.assertEqual(len(results[1].generated_tokens), 2)
-        self.assertEqual(len(results[2].generated_tokens), 3)
-        self.assertTrue(results[-1].is_finished())
+        self.assertEqual(token_counts, [1, 2, 3])
         # Queue should be empty — everything went through the handler
         self.assertTrue(manager.output_router.output_queue.empty())
 
