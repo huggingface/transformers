@@ -1294,16 +1294,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if key not in self.__dict__:
             # Also check the class hierarchy (handles class-level defaults, e.g. in
             # dynamically loaded remote code where __getattr__ may be called before
-            # the instance attribute is set). Skip descriptors (e.g. properties): if
-            # we reached __getattr__ for a property it means the property's __get__
-            # already raised AttributeError, so returning the raw descriptor object
-            # would be wrong.
+            # the instance attribute is set)
             for cls in type(self).__mro__:
                 if key in vars(cls):
-                    val = vars(cls)[key]
-                    if not isinstance(val, property):
-                        return val
-                    break
+                    return vars(cls)[key]
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         return super().__getattr__(key)
 
