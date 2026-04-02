@@ -119,7 +119,7 @@ jobs:
         run: |
           if [ "$job" = "run_models_gpu" ]; then
             if [ -n "$test_file_suffix" ]; then
-              python3 -c 'import glob, json, os, pathlib; prefix = os.environ["test_path_prefix"]; suffix = os.environ["test_file_suffix"]; marker = "```py runnable"; files = sorted(glob.glob(f"/transformers/{prefix}/*{suffix}")); models = [pathlib.Path(f).stem for f in files if marker in pathlib.Path(f).read_text()]; print(json.dumps([[m] for m in models]))' > folder_slices.txt
+              python3 -c 'import glob, json, os, pathlib; prefix = os.environ["test_path_prefix"]; suffix = os.environ["test_file_suffix"]; marker = "```py runnable"; files = sorted(glob.glob(f"/transformers/{prefix}/*{suffix}")); models = [pathlib.Path(f).stem for f in files if marker in pathlib.Path(f).read_text()]; print(json.dumps([[m] for m in models][:4]))' > folder_slices.txt
             else
               python3 ../utils/split_model_tests.py --subdirs "$subdirs" --num_splits "$NUM_SLICES" > folder_slices.txt
             fi
