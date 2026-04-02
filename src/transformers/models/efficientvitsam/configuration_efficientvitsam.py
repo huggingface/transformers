@@ -102,6 +102,25 @@ class EfficientvitsamMaskDecoderConfig(SamMaskDecoderConfig):
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam")
 @strict
 class EfficientvitsamVisionConfig(PreTrainedConfig):
+    r"""
+    norm (`str`, *optional*, defaults to `"bn2d"`):
+        Normalization layer used throughout the EfficientViT backbone and neck.
+    act_func (`str`, *optional*, defaults to `"gelu"`):
+        Activation function used throughout the EfficientViT backbone and neck.
+    neck_hidden_sizes (`tuple[int, ...]` or `list[int]`, *optional*):
+        Channel sizes of the multi-scale backbone features consumed by the SAM neck.
+    neck_feature_names (`tuple[str, ...]` or `list[str]`, *optional*):
+        Names of the backbone feature maps consumed by the SAM neck.
+    head_width (`int`, *optional*, defaults to 256):
+        Hidden width of the SAM neck and projection head.
+    head_depth (`int`, *optional*, defaults to 4):
+        Number of middle blocks used in the SAM neck.
+    head_expand_ratio (`float`, *optional*, defaults to 1.0):
+        Expansion ratio used by the SAM neck middle blocks.
+    head_middle_op (`str`, *optional*, defaults to `"fmb"`):
+        Block type used in the SAM neck middle stack.
+    """
+
     base_config_key = "vision_config"
     model_type = "efficientvitsam_vision_model"
 
@@ -164,6 +183,13 @@ class EfficientvitsamVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="mit-han-lab/efficientvit-sam")
 @strict
 class EfficientvitsamConfig(PreTrainedConfig):
+    r"""
+    prompt_encoder_config (Union[`dict`, `EfficientvitsamPromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`EfficientvitsamPromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `EfficientvitsamMaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`EfficientvitsamMaskDecoderConfig`].
+    """
+
     model_type = "efficientvitsam"
     sub_configs = {
         "prompt_encoder_config": EfficientvitsamPromptEncoderConfig,
