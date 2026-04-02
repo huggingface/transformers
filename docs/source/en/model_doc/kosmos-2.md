@@ -89,7 +89,7 @@ This model was contributed by [Yih-Dar SHIEH](https://huggingface.co/ydshieh). T
 [[autodoc]] Kosmos2TextConfig
 
 ## Kosmos2VisionConfig
-[[autodoc]] Kosmos2TextConfig
+[[autodoc]] Kosmos2VisionConfig
 
 ## Kosmos2Processor
 
