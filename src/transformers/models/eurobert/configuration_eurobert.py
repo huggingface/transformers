@@ -80,7 +80,7 @@ class EuroBertConfig(PreTrainedConfig):
     bos_token_id: int | None = 128000
     eos_token_id: int | list[int] | None = 128001
     pretraining_tp: int = 1
-    tie_word_embeddings: int = False
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float = 0.0

@@ -167,10 +167,10 @@ class SpeechT5Config(PreTrainedConfig):
     num_conv_pos_embeddings: int = 128
     num_conv_pos_embedding_groups: int = 16
     apply_spec_augment: bool = True
-    mask_time_prob: float = 0.05
+    mask_time_prob: float | int = 0.05
     mask_time_length: int = 10
     mask_time_min_masks: int = 2
-    mask_feature_prob: float = 0.0
+    mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
     mask_feature_min_masks: int = 0
     pad_token_id: int | None = 1

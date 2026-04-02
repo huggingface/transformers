@@ -114,10 +114,16 @@ class RichInterface:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
+            completion_tokens = 0
+            start_time = time.time()
             finish_reason: str | None = None
             async for token in await stream:
                 outputs = token.choices[0].delta.content
                 finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
+
+                usage = getattr(token, "usage", None)
+                if usage is not None:
+                    completion_tokens = getattr(usage, "completion_tokens", completion_tokens)
 
                 if not outputs:
                     continue
@@ -154,6 +160,11 @@ class RichInterface:
                 # Update the Live console output
                 live.update(markdown, refresh=True)
 
+        elapsed = time.time() - start_time
+        if elapsed > 0 and completion_tokens > 0:
+            tok_per_sec = completion_tokens / elapsed
+            self._console.print()
+            self._console.print(f"[dim]{completion_tokens} tokens in {elapsed:.1f}s ({tok_per_sec:.1f} tok/s)[/dim]")
         self._console.print()
 
         return text, finish_reason
@@ -544,14 +555,16 @@ class Chat:
                     else:
                         chat.append({"role": "user", "content": user_input})
 
+                    extra_body = {
+                        "generation_config": config.to_json_string(),
+                        "model": self.model_id,
+                    }
+
                     stream = client.chat_completion(
                         chat,
                         stream=True,
                         model=self.model_id,
-                        extra_body={
-                            "generation_config": config.to_json_string(),
-                            "model": self.model_id,
-                        },
+                        extra_body=extra_body,
                     )
 
                     model_output, finish_reason = await interface.stream_output(stream)

@@ -85,7 +85,7 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder>=0.3.0",
+    "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@main",
     "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -183,6 +183,7 @@ if PYTHON_MINOR_VERSION < 13:
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich", "ty", "tomli")
+extras["docs"] = deps_list("hf-doc-builder")
 extras["kernels"] = deps_list("kernels")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
@@ -233,6 +234,7 @@ extras["testing"] = (
         "sacrebleu",  # needed in trainer tests, see references to `run_translation.py`
         "filelock",  # filesystem locks, e.g., to prevent parallel downloads
     )
+    + extras["docs"]
     + extras["quality"]
     + extras["retrieval"]
     + extras["sentencepiece"]
