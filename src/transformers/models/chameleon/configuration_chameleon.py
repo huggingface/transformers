@@ -107,7 +107,7 @@ class ChameleonConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
-    attention_bias: int | None = False
+    attention_bias: bool | None = False
     attention_dropout: float | int | None = 0.0
     model_parallel_size: int | None = 1
     swin_norm: bool | None = False
