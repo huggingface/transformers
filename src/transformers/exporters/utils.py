@@ -47,9 +47,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-if TYPE_CHECKING:
-    if is_torch_available():
-        from ..modeling_utils import PreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 
 # Output flags that should be set on model.config, not passed as forward() kwargs.
