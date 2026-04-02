@@ -23,21 +23,16 @@ limitations under the License.
 
 ## Overview
 
-The NomicBERT model currently has no academic papers specifically written about it, however, the [nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) card clearly describes the model’s architecture and training approach: it extends BERT to a 2048 token context length, and modifies the BERT training procedure. Notable changes include: 
+The NomicBERT was proposed in [Nomic Embed: Training a Reproducible Long Context Text Embedder](https://arxiv.org/abs/2402.01613) by 
+Zach Nussbaum, John X. Morris, Brandon Duderstadt, and Andriy Mulyar. It is Bert-inspired model with the most notable extension applying 
+[Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to an encoder model. 
 
-- Use [Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to allow for context length extrapolation.
-- Use SiLU activations, which have [been shown](https://huggingface.co/papers/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
-- No dropout
+The abstract from the paper is the following:
 
-> [!TIP]
-> - NomicBERT can handle long sequences efficiently (up to 2048 tokens by default).
-> - For masked language modeling, use `NomicBertForMaskedLM`.
-> - Use smaller configs for testing locally to save memory and speed up unit tests.
-> - Supports various heads: classification, QA, token classification, multiple choice, etc.
-
+*This technical report describes the training of nomic-embed-text-v1, the first fully reproducible, open-source, open-weights, open-data, 8192 context length English text embedding model that outperforms both OpenAI Ada-002 and OpenAI text-embedding-3-small on the short-context MTEB benchmark and the long context LoCo benchmark. We release the training code and model weights under an Apache 2.0 license. In contrast with other open-source models, we release the full curated training data and code that allows for full replication of nomic-embed-text-v1. [...]*
 
 This model was contributed by community members ([Sonny Cooper](https://github.com/ed22699)).
-The original code for nomic-embed-text-v1.5 can be found [here](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5).
+The original code for nomic-embed-text-v1.5 and nomic-embed-text-v1 can be found [here](https://github.com/nomic-ai/contrastors).
 
 ## Usage examples
 The examples below demonstrate how to generate dense vector embeddings for different tasks using `[AutoModel]`. Each task requires a specific instruction prefix to optimize the embedding space for that use case.
@@ -164,6 +159,21 @@ print(embeddings)
 
 </hfoption>
 </hfoptions>
+
+## Extending the base context length
+You can also increase the context length of the base model by giving dynamic rope parameters:
+
+```python
+
+model_id = "nomic-ai/nomic-embed-text-v1.5"
+revision = "refs/pr/57"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, model_max_length=8192)
+
+# dynamic RoPE for increased context
+rope_parameters = {"rope_theta": 1000.0, "rope_type": "dynamic", "factor": 2.0}
+model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters) 
+```
 
 ## Notes
 
