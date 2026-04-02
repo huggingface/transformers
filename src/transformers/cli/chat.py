@@ -110,7 +110,9 @@ class RichInterface:
         self.user_id = user_id
         self.base_url = base_url
 
-    async def stream_output(self, stream: Awaitable[AsyncIterator[ChatCompletionStreamOutput]]) -> tuple[str, str | Any | None]:
+    async def stream_output(
+        self, stream: Awaitable[AsyncIterator[ChatCompletionStreamOutput]]
+    ) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
