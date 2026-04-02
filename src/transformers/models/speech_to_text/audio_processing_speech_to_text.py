@@ -116,7 +116,7 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
         stacked = np.stack(normalized, axis=0)
         data = {"audio_features": stacked}
 
-        if self.return_attention_mask:
+        if self.return_padding_mask:
             attention_mask = np.zeros((len(lengths), max_len), dtype=np.int32)
             for i, length in enumerate(lengths):
                 attention_mask[i, :length] = 1

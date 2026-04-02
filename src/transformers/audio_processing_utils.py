@@ -60,7 +60,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     truncation = None
     pad_to_multiple_of = None
 
-    return_attention_mask = True  # TODO: we should either get a more appropriate name, either always return input mask
+    return_padding_mask = True
     spectrogram_config = None
     do_extract_spectrogram = None
 
@@ -157,16 +157,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
         # pad and truncate
         audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
         padded_length = audio[0].shape[-1]
-        self._audio_lengths = [end - start for start, end in audio_ranges]
 
         if do_extract_spectrogram:
             audio = self._to_batch(audio) if do_batch_spectrogram else audio
-            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config)
+            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges)
             output = {"audio_features": feature}
         else:
             output = {"audio_values": self._to_batch(audio)}
 
-        if self.return_attention_mask:
+        if self.return_padding_mask:
             output.update(self._get_mask(
                 audio_ranges, padded_length, do_extract_spectrogram=do_extract_spectrogram, spectrogram_config=spectrogram_config
             ))
@@ -329,48 +328,127 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # The full feature-extraction pipeline executed by `extract_spectrogram`:
     #
     #   1. _extract_spectrogram   (STFT → power/magnitude spectrogram)
-    #      a. _pre_stft               – waveform-level pre-processing (hook, no-op by default)
-    #      b. _prepare_window_and_framing – build/pad window, decide frame length
-    #      c. _frame_waveform          – slice waveform into overlapping frames
-    #      d. _apply_frame_processing  – per-frame conditioning: dither, DC offset, preemphasis (hook)
-    #      e. windowing + FFT + power
+    #      a. _stft                        – orchestrates steps b–g (overridable for fully custom STFTs)
+    #      b.   _needs_manual_framing      – decide framing strategy (hook)
+    #      c.   _create_stft_window        – create the STFT window (backend)
+    #      d.   _prepare_window_and_framing– pad/reshape window, decide frame length (backend)
+    #      e.   manual path (needs_manual_framing=True):
+    #             _frame_audio             – center pad + frame extraction (backend)
+    #             _apply_frame_processing  – per-frame conditioning (hook)
+    #             _window_and_fft          – window + zero-pad + FFT + normalize → complex (backend)
+    #           native path (needs_manual_framing=False):
+    #             _native_stft             – native STFT returning complex output (backend)
+    #      f.   _compute_magnitudes        – complex → real magnitudes (backend, shared by both paths)
+    #      g.   _cast_stft_output          – cast output dtype (hook, no-op by default)
     #   2. _apply_mel_scale       (mel filterbank projection)
     #   3. _normalize_magnitude   (log / dB scaling, optional per-utterance norm)
     #
     # Backend subclasses (NumpyAudioBackend, TorchAudioBackend) implement the
     # full pipeline.  Model-specific processors can override individual hooks
-    # (_pre_stft, _apply_frame_processing) or the entire _extract_spectrogram
-    # when the base STFT path is insufficient (e.g., Parakeet's custom magnitude
-    # computation).
+    # (_apply_frame_processing) or the entire _stft when the base STFT path
+    # is insufficient.
+    #
+    # ``audio_ranges`` is passed through as a kwarg from ``_preprocess`` so that
+    # model-specific overrides (e.g., Parakeet waveform-level preemphasis,
+    # Phi4 boundary masking) can access original audio lengths without stashing
+    # state on ``self``.
 
     def _extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         """Orchestrate the STFT pipeline.
 
         Runs the sub-steps listed above in order. Override this only when the
-        pipeline ordering itself needs to change (e.g., Parakeet needs audio-length
-        detection before ``_pre_stft``). Otherwise, override individual hooks.
+        pipeline ordering itself needs to change. Otherwise, override individual hooks.
         """
-        audio = self._pre_stft(audio, spectrogram_config=spectrogram_config, **kwargs)
         return self._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
-
-    def _pre_stft(self, audio, *, spectrogram_config, **kwargs):
-        """Hook: waveform-level pre-processing before STFT.
-
-        Called before framing. Default: no-op (returns audio unchanged).
-        Override for processing on the full waveform, e.g. length-aware
-        preemphasis with masking (Parakeet).
-        """
-        return audio
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
         """Compute the STFT and return a power/magnitude spectrogram.
 
-        Implemented by backend subclasses. Internally runs:
-        window creation → padding → framing → ``_apply_frame_processing`` →
-        windowing → FFT → power.
-
-        Override in model-specific processors that need a fully custom STFT
+        Orchestrates the sub-steps listed in the pipeline documentation above.
+        Backend subclasses implement the individual leaf methods; model-specific
+        processors can override this entirely for a fully custom STFT
         (e.g., Gemma3n's unfold-based STFT with extra-sample framing).
+        """
+        stft_cfg = spectrogram_config.stft_config
+        n_fft = stft_cfg.n_fft
+        win_length = stft_cfg.win_length or n_fft
+        hop_length = stft_cfg.hop_length or win_length // 2
+        needs_manual_framing = self._needs_manual_framing(spectrogram_config)
+
+        if spectrogram_config.computation_dtype:
+            dtype_str = spectrogram_config.computation_dtype
+            if isinstance(audio, np.ndarray):
+                audio = audio.astype(dtype_str)
+            else:
+                import torch
+                audio = audio.to(getattr(torch, dtype_str))
+        window = self._create_stft_window(win_length, stft_cfg, audio)
+        window, frame_length = self._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+
+        if needs_manual_framing:
+            frames = self._frame_audio(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+            frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
+            stft_out = self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg)
+        else:
+            stft_out = self._native_stft(audio, window, frame_length, hop_length, n_fft, stft_cfg)
+
+        magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power)
+        return self._cast_stft_output(magnitudes, spectrogram_config)
+
+    def _create_stft_window(self, win_length, stft_cfg, audio):
+        """Create the STFT window. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _prepare_window_and_framing(self, window, win_length, n_fft, needs_manual_framing):
+        """Pad/reshape window and determine frame length. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _frame_audio(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        """Extract overlapping frames from the audio signal.
+
+        Handles center padding and dtype promotion. Returns frames of shape
+        (..., num_frames, frame_length). Implemented by backend subclasses.
+        """
+        raise NotImplementedError
+
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+        """Apply window, zero-pad, FFT, and normalize. Returns complex STFT of shape (..., freq, time).
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _native_stft(self, audio, window, frame_length, hop_length, n_fft, stft_cfg):
+        """Native STFT (e.g. torch.stft). Returns complex output. Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _compute_magnitudes(self, stft_out, power):
+        """Convert complex STFT output to a real-valued magnitude spectrogram.
+        Implemented by backend subclasses. Overridable for custom magnitude computation (e.g. Parakeet)."""
+        raise NotImplementedError
+
+    def _cast_stft_output(self, magnitudes, spectrogram_config):
+        """Cast STFT output to the desired output dtype. Default: no-op."""
+        return magnitudes
+
+    def _needs_manual_framing(self, spectrogram_config):
+        """Whether the STFT requires manual framing (unfold-based) instead of a native STFT.
+
+        Manual framing is needed when per-frame processing must happen between
+        frame extraction and windowing (e.g. per-frame preemphasis, DC offset removal,
+        or left-aligned FFT padding).
+
+        Override in model-specific processors that handle preemphasis at the
+        waveform level (in ``_stft``) and don't need per-frame processing.
+        """
+        return (
+            (spectrogram_config.preemphasis is not None)
+            or spectrogram_config.remove_dc_offset
+        )
+
+    def _compute_magnitudes(self, stft_out, power):
+        """Convert complex STFT output to a real-valued magnitude spectrogram.
+
+        Only used in the non-manual-framing STFT path.  Override for
+        non-standard magnitude computation (e.g. Parakeet's view_as_real path).
         """
         raise NotImplementedError
 

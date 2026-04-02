@@ -23,7 +23,8 @@ from ...utils import is_torch_available
 class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend if not is_torch_available() else TorchAudioBackend):
     sample_rate = 16000
     force_mono = True
-    return_attention_mask = False
+    return_padding_mask = False
+    padding = False
 
     max_length_frames = 1024
     do_normalize = True
@@ -55,18 +56,22 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend if not is_torc
         mel_floor=1.192092955078125e-07,
     )
 
-    def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
-        if isinstance(audio, np.ndarray) and audio.ndim > 1:
-            audio = [audio[i] for i in range(audio.shape[0])]
-        elif hasattr(audio, 'dim') and audio.dim() > 1:
-            audio = [audio[i] for i in range(audio.shape[0])]
-        elif not isinstance(audio, list):
-            audio = [audio]
+    def _preprocess(
+        self,
+        audio,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        return_tensors,
+        spectrogram_config=None,
+        do_extract_spectrogram=None,
+        **kwargs,
+    ):
+        # Extract mel spectrogram features from raw audio using the base spectrogram pipeline
+        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
 
-        if spectrogram_config is None:
-            spectrogram_config = self.spectrogram_config
-        features = super().extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
-        # (n_mels, frames) -> (frames, n_mels)
+        # extract_spectrogram returns list of (n_mels, frames); transpose to (frames, n_mels)
         features = [f.T for f in features]
 
         # Pad or truncate to max_length_frames
@@ -84,12 +89,8 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend if not is_torc
         if self.do_normalize:
             padded = [(f - self.ast_mean) / (self.ast_std * 2) for f in padded]
 
-        return np.stack(padded, axis=0)
-
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        # AST does all processing at the feature level in extract_spectrogram
-        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
-        return BatchFeature({"audio_values": features}, tensor_type=return_tensors)
+        stacked = np.stack(padded, axis=0)
+        return BatchFeature({"audio_values": stacked}, tensor_type=return_tensors)
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessor"]

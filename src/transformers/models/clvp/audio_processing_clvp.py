@@ -15,7 +15,7 @@
 import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, spectrogram, window_function
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 
 
 class ClvpAudioProcessor(NumpyAudioBackend):
@@ -47,36 +47,14 @@ class ClvpAudioProcessor(NumpyAudioBackend):
         super().__init__(**kwargs)
         self.mel_norms = mel_norms
 
-    def extract_spectrogram(self, audio, *, spectrogram_config=None, **kwargs):
-        if spectrogram_config is None:
-            spectrogram_config = self.spectrogram_config
-
-        if isinstance(audio, np.ndarray) and audio.ndim > 1:
-            audio = [audio[i] for i in range(audio.shape[0])]
-        elif not isinstance(audio, list):
-            audio = [audio]
-
-        stft_cfg = spectrogram_config.stft_config
-        features = []
-        for waveform in audio:
-            waveform = np.squeeze(waveform)
-            log_spec = spectrogram(
-                waveform,
-                window_function(stft_cfg.n_fft, "hann"),
-                frame_length=stft_cfg.n_fft,
-                hop_length=stft_cfg.hop_length,
-                power=2.0,
-                mel_filters=self.mel_filters,
-                log_mel=None,
-            )
-            log_spec = np.log(np.clip(log_spec, a_min=1e-5, a_max=None))
-
-            if self.mel_norms is not None:
-                log_spec = log_spec / np.array(self.mel_norms)[:, None]
-
-            features.append(log_spec.astype(np.float32))
-
-        return np.stack(features, axis=0) if len(features) > 1 else features
+    def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
+        # Compute log and mel_norms division in float64 before casting to float32
+        # to match the legacy feature extractor's precision
+        mel_floor = spectrogram_config.mel_floor
+        features = np.log(np.maximum(mel_floor, features))
+        if self.mel_norms is not None:
+            features = features / np.array(self.mel_norms)[:, None]
+        return features.astype(np.float32)
 
     def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
         """CLVP uses raw-audio-level mask even for spectrogram output."""
