@@ -121,6 +121,7 @@ _import_structure = {
     "hyperparameter_search": [],
     "image_processing_utils_fast": [],
     "image_transforms": [],
+    "exporters": [],
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
