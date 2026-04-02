@@ -102,6 +102,7 @@ Transformers integrates third-party optimizers for specialized training scenario
 | Optimizer | Install | `optim="value"` | Description |
 |---|---|---|---|
 | APOLLO | `apollo-torch` | `apollo_adamw` | Memory-efficient full-param via random projections; rank-1 sufficient |
+| FlashOptim | `flashoptim` | `flash_adamw`, `flash_adam`, `flash_sgd`, `flash_sgdw`, `flash_lion` | Reduces optimizer memory with low-precision master weights |
 | GrokAdamW | `grokadamw` | `grokadamw` | Targets delayed generalization (grokking) |
 | LOMO / AdaLomo | `lomo-optim` | `lomo` / `adalomo` | Fuses gradient + update step for low-memory full-param fine-tuning |
 | Schedule Free | `schedulefree` | `schedule_free_adamw`, `schedule_free_radam`, `schedule_free_sgd` | Eliminates LR annealing; pair with `lr_scheduler_type="constant"` |
@@ -147,6 +148,37 @@ args = TrainingArguments(
     optim="apollo_adamw",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
     optim_args="proj=random,rank=1,scale=128.0,scale_type=tensor,update_proj_gap=200",
+    ...  # remaining args from the TrainingArguments intro config
+)
+```
+
+</hfoption>
+<hfoption id="FlashOptim">
+
+```bash
+pip install flashoptim
+```
+
+[FlashOptim](https://huggingface.co/papers/2602.23349) reduces optimizer memory by storing master weights in lower precision. It supports AdamW, Adam, SGD, SGDW, and Lion variants.
+
+> [!TIP]
+> FlashOptim requires bf16 or fp16 model weights. It automatically disables `master_weight_bits` and warns if your model uses fp32.
+
+```diff
+args = TrainingArguments(
++   optim="flash_adamw",
++   bf16=True,
+    ...  # remaining args from the TrainingArguments intro config
+)
+```
+
+`master_weight_bits` controls the precision of the optimizer's master weight copy. By default, it stores the master copy in 24 bits. Set it to `"None"` to remove the master copy entirely for maximum memory savings at the cost of a slightly higher loss.
+
+```diff
+args = TrainingArguments(
++   optim="flash_adamw",
++   optim_args="master_weight_bits=None",
++   bf16=True,
     ...  # remaining args from the TrainingArguments intro config
 )
 ```
