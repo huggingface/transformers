@@ -433,7 +433,6 @@ class Mamba2Mixer(nn.Module):
                 )
                 cache_params.update_conv_state(conv_states, layer_idx=self.layer_idx)
 
-
             hidden_states_B_C = self.act(self.conv1d(hidden_states_B_C)[..., :seq_len].transpose(1, 2))
 
         hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
