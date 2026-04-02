@@ -576,6 +576,14 @@ class ProcessorMixin(PushToHubMixin):
     This is a mixin used to provide saving/loading functionality for all processor classes.
     """
 
+    # Dynamically set sub-processor attributes. Not every processor has all of these;
+    # they are populated via setattr in __init__ based on each subclass's `attributes`.
+    tokenizer: Any
+    feature_extractor: Any
+    image_processor: Any
+    video_processor: Any
+    chat_template: str | dict[str, str] | None
+
     # Names need to be attr_class for attr in attributes
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs

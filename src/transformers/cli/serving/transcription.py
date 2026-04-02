@@ -131,7 +131,7 @@ class TranscriptionHandler:
         """Load audio bytes and convert to model inputs."""
         import librosa
 
-        sampling_rate = audio_processor.feature_extractor.sampling_rate  # type: ignore[union-attr]
+        sampling_rate = audio_processor.feature_extractor.sampling_rate
         audio_array, _ = librosa.load(io.BytesIO(file_bytes), sr=sampling_rate, mono=True)
         audio_inputs = audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt").to(
             audio_model.device
@@ -169,7 +169,7 @@ class TranscriptionHandler:
         tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)  # type: ignore[union-attr]
+        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**audio_inputs, "streamer": streamer}
 
         def _run():
