@@ -951,6 +951,8 @@ class BaseHandler:
                                 file.close()  # close handle immediately after creation
                                 image.save(file.name)
                                 url = file.name
+                            # We don't delete the file as tne caller need it (via the `url` key).
+                            # TODO: Better approach to avoid file accumulation.
                             parsed["content"].append({"type": "image", "url": url})
 
             processor_inputs.append(parsed)
