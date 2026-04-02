@@ -235,9 +235,17 @@ def prepare_for_export(
 # ── VLM decomposition ────────────────────────────────────────────────────────
 
 # Well-known submodule attribute names for VLM architectures.
-_VLM_ENCODER_NAMES = ("vision_tower", "vision_model", "vision_encoder", "image_encoder", "audio_encoder", "visual")
-_VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector")
 _VLM_LM_NAMES = ("language_model", "text_model", "lm_head")
+_VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
+_VLM_ENCODER_NAMES = (
+    "vision_encoder",
+    "image_encoder",
+    "audio_encoder",
+    "vision_model",
+    "vision_tower",
+    "audio_tower",
+    "visual",
+)
 _VLM_SUBMODULE_NAMES = _VLM_ENCODER_NAMES + _VLM_PROJECTOR_NAMES + _VLM_LM_NAMES
 
 
@@ -253,7 +261,7 @@ def _find_vlm_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
         if root is None:
             continue
         for name in _VLM_SUBMODULE_NAMES:
-            if name not in found and hasattr(root, name):
+            if name not in found and getattr(root, name, None) is not None:
                 found[name] = getattr(root, name)
 
     has_encoder = any(name in found for name in _VLM_ENCODER_NAMES)

@@ -595,7 +595,13 @@ def patch_fx_graph(graph_module: torch.fx.GraphModule) -> None:
             for fix in _FX_NODE_FIXES:
                 if fix(gm, node):
                     break
-        gm.graph.eliminate_dead_code()
+        # PyTorch DCE can crash on orphaned symbolic size nodes (KeyError/SystemError
+        # in erase_node._update_args_kwargs). Harmless: remaining dead code is cleaned
+        # up by the ONNX optimizer.
+        try:
+            gm.graph.eliminate_dead_code()
+        except (SystemError, KeyError):
+            pass
         gm.recompile()
 
 
