@@ -103,6 +103,28 @@ class EfficientvitsamMaskDecoderConfig(SamMaskDecoderConfig):
 @strict
 class EfficientvitsamVisionConfig(PreTrainedConfig):
     r"""
+    variant (`str`, *optional*, defaults to `"l0"`):
+        EfficientViT-SAM preset name used to populate the backbone and neck defaults.
+    prompt_image_size (`int`, *optional*, defaults to 1024):
+        Prompt canvas size used by the SAM prompt encoder and post-processing path.
+    output_channels (`int`, *optional*, defaults to 256):
+        Number of output channels produced by the EfficientViT image encoder for the SAM decoder.
+    width_list (`tuple[int, ...]` or `list[int]`, *optional*):
+        Per-stage channel widths for the EfficientViT backbone.
+    depth_list (`tuple[int, ...]` or `list[int]`, *optional*):
+        Per-stage block depths for the EfficientViT backbone.
+    block_list (`tuple[str, ...]` or `list[str]`, *optional*):
+        Per-stage block types for the EfficientViT backbone.
+    expand_list (`tuple[float, ...]` or `list[float]`, *optional*):
+        Per-stage expansion ratios for the EfficientViT backbone blocks.
+    fewer_norm_list (`tuple[bool, ...]` or `list[bool]`, *optional*):
+        Per-stage flags controlling the reduced-normalization backbone variants used by EfficientViT-SAM.
+    qkv_dim (`int`, *optional*, defaults to 32):
+        Query/key/value projection dimension used in the EfficientViT attention blocks.
+    num_pos_feats (`int`, *optional*, defaults to 128):
+        Number of positional features used by the SAM positional embedding.
+    scale (`float`, *optional*, defaults to 1.0):
+        Initialization scale for the SAM positional embedding.
     norm (`str`, *optional*, defaults to `"bn2d"`):
         Normalization layer used throughout the EfficientViT backbone and neck.
     act_func (`str`, *optional*, defaults to `"gelu"`):
