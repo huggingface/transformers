@@ -165,8 +165,9 @@ class BlipTextSelfAttention(nn.Module):
             key_layer = curr_past_key_values.layers[self.layer_idx].keys
             value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
-            key_layer = self.key(current_states).view(hidden_shape).transpose(1, 2)
-            value_layer = self.value(current_states).view(hidden_shape).transpose(1, 2)
+            kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)

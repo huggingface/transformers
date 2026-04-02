@@ -138,8 +138,9 @@ class GLPNEfficientSelfAttention(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
 
-        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
+        kv_shape = (*hidden_states.shape[:-1], -1, self.attention_head_size)
+        key_layer = self.key(hidden_states).view(kv_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(kv_shape).transpose(1, 2)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
