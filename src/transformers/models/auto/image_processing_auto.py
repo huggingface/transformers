@@ -112,6 +112,14 @@ else:
                 {"torchvision": "EfficientLoFTRImageProcessor", "pil": "EfficientLoFTRImageProcessorPil"},
             ),
             ("efficientnet", {"torchvision": "EfficientNetImageProcessor", "pil": "EfficientNetImageProcessorPil"}),
+            (
+                "efficientvitsam",
+                {"torchvision": "EfficientvitsamImageProcessor", "pil": "EfficientvitsamImageProcessorPil"},
+            ),
+            (
+                "efficientvitsam",
+                {"torchvision": "EfficientvitsamImageProcessor", "pil": "EfficientvitsamImageProcessorPil"},
+            ),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
@@ -544,7 +552,7 @@ def _resolve_auto_map_class_ref(auto_map, backend):
     """
     if isinstance(auto_map, dict):
         return auto_map.get(backend) or next(iter(auto_map.values()))
-    if isinstance(auto_map, (list, tuple)):
+    if isinstance(auto_map, list | tuple):
         if backend == "torchvision" and len(auto_map) > 1 and auto_map[1] is not None:
             return auto_map[1]
         return auto_map[0]

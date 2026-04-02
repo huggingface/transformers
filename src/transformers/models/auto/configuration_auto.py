@@ -136,6 +136,9 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("edgetam_vision_model", "EdgeTamVisionConfig"),
         ("efficientloftr", "EfficientLoFTRConfig"),
         ("efficientnet", "EfficientNetConfig"),
+        ("efficientvitsam", "EfficientvitsamConfig"),
+        ("efficientvitsam", "EfficientvitsamConfig"),
+        ("efficientvitsam_vision_model", "EfficientvitsamVisionConfig"),
         ("electra", "ElectraConfig"),
         ("emu3", "Emu3Config"),
         ("encodec", "EncodecConfig"),
@@ -647,6 +650,9 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("edgetam_vision_model", "EdgeTamVisionModel"),
         ("efficientloftr", "EfficientLoFTR"),
         ("efficientnet", "EfficientNet"),
+        ("efficientvitsam", "Efficientvitsam"),
+        ("efficientvitsam_vision_model", "EfficientvitsamVisionModel"),
+        ("efficientvitsam_vision_model", "EfficientvitsamVisionModel"),
         ("electra", "ELECTRA"),
         ("emu3", "Emu3"),
         ("encodec", "EnCodec"),
@@ -1126,6 +1132,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("qwen3_vl_moe_text", "qwen3_vl_moe"),
         ("qwen3_5_text", "qwen3_5"),
         ("qwen3_5_moe_text", "qwen3_5_moe"),
+        ("efficientvitsam_vision_model", "efficientvitsam"),
         ("sam_vision_model", "sam"),
         ("sam2_vision_model", "sam2"),
         ("sam2_hiera_det_model", "sam2"),
@@ -1290,7 +1297,7 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
 
 
 def _get_class_name(model_class: str | list[str]):
-    if isinstance(model_class, (list, tuple)):
+    if isinstance(model_class, list | tuple):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
 
