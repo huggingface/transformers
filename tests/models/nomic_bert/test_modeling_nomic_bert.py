@@ -297,6 +297,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((2, 13, 768))
         self.assertEqual(output.shape, expected_shape)
 
+        # fmt: off
         expected_slice = Expectations(
             {
                 ("cuda", None): torch.tensor(
@@ -315,6 +316,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
                 ),
             }
         ).get_expectation()
+        # fmt: on
 
         torch.testing.assert_close(output[:, 1:4, 1:4].cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)
 
@@ -334,7 +336,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((2, 13, 768))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO: these are my local numbers on 4060 with remote code
+        # fmt: off
         expected_slice = Expectations(
             {
                 ("cuda", None): torch.tensor(
@@ -342,7 +344,7 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
                         [
                             [ 1.2961, -1.1757,  1.2094],
                             [ 1.1350,  0.5400,  1.4580],
-                            [-0.2897, -0.5351,  2.0092]
+                            [-0.2897, -0.5351,  2.0092],
                         ],
                         [
                             [-0.2866, -0.9786,  0.8613],
@@ -353,5 +355,6 @@ class NomicBertModelIntegrationTest(unittest.TestCase):
                 )
             }
         ).get_expectation()
+        # fmt: on
 
         torch.testing.assert_close(output[:, 1:4, 1:4].cpu().detach(), expected_slice, rtol=1e-3, atol=1e-3)
