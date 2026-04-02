@@ -14,6 +14,8 @@
 # limitations under the License.
 """Auto exporter factory for HuggingFace exporters."""
 
+from __future__ import annotations
+
 from ..utils import logging
 from ..utils.export_config import ExportConfigMixin, ExportFormat
 from .base import HfExporter

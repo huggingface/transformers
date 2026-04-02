@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import math
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -57,7 +59,7 @@ class ExecutorchExporter(DynamoExporter):
 
     required_packages = ["torch", "executorch"]
 
-    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExecutorchProgramManager":
+    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ExecutorchProgramManager:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
         prepare_for_backend = _BACKEND_PREPARE.get(self.export_config.backend)
         if prepare_for_backend is None:
@@ -84,7 +86,7 @@ class ExecutorchExporter(DynamoExporter):
 # To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
 
 
-def prepare_for_xnnpack(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
 
     model.requires_grad_(False)
@@ -95,7 +97,7 @@ def prepare_for_xnnpack(model: "PreTrainedModel", sample_inputs: dict[str, Any])
     return model, sample_inputs, partitioner
 
 
-def prepare_for_cuda(model: "PreTrainedModel", sample_inputs: dict[str, Any]):
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
     """GPU inference via the ExecuTorch CUDA backend.
 
     Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.

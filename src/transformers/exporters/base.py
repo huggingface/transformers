@@ -14,6 +14,8 @@
 # limitations under the License.
 """Abstract base class for all Transformers exporters."""
 
+from __future__ import annotations
+
 import importlib.util
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
@@ -60,7 +62,7 @@ class HfExporter(ABC):
                 )
 
     @abstractmethod
-    def export(self, model: "PreTrainedModel", sample_inputs: dict):
+    def export(self, model: PreTrainedModel, sample_inputs: dict):
         """
         Export the model and return the backend-specific program object.
 

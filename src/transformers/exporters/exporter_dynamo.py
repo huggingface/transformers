@@ -28,6 +28,8 @@ Helper sections in this file:
    for all tensor and cache inputs when `DynamoConfig.dynamic=True`.
 """
 
+from __future__ import annotations
+
 import copy
 import functools
 import importlib
@@ -79,7 +81,7 @@ class DynamoExporter(HfExporter):
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
 
-    def export(self, model: "PreTrainedModel", sample_inputs: dict[str, Any]) -> "ExportedProgram":
+    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ExportedProgram:
         model, sample_inputs = prepare_for_export(model, sample_inputs)
 
         dynamic_shapes = self.export_config.dynamic_shapes
@@ -163,10 +165,10 @@ def _patch_chunked_vision_attention(module):
 
 def _reshaped_vision_attention_forward(
     self,
-    hidden_states: "torch.Tensor",
-    cu_seqlens: "torch.Tensor",
-    rotary_pos_emb: "torch.Tensor | None" = None,
-    position_embeddings: "tuple[torch.Tensor, torch.Tensor] | None" = None,
+    hidden_states: torch.Tensor,
+    cu_seqlens: torch.Tensor,
+    rotary_pos_emb: torch.Tensor | None = None,
+    position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     returns_tuple: bool = False,
     **kwargs,
 ):
@@ -236,7 +238,7 @@ _MODEL_PATCHERS = [
 
 
 @contextmanager
-def patch_untraceable_patterns(model: "PreTrainedModel"):
+def patch_untraceable_patterns(model: PreTrainedModel):
     """Temporarily replace untraceable model patterns with export-safe equivalents.
 
     Iterates every module, applies matching patchers from `_MODEL_PATCHERS`,
@@ -420,7 +422,7 @@ def _iter_subclasses(cls: type):
         yield from _iter_subclasses(subclass)
 
 
-def register_cache_pytrees_for_model(model: "PreTrainedModel"):
+def register_cache_pytrees_for_model(model: PreTrainedModel):
     """Register all relevant cache types as pytree nodes for torch.export."""
     # All transformers Cache subclasses
     for cache_type in _iter_subclasses(Cache):
@@ -442,7 +444,7 @@ def register_cache_pytrees_for_model(model: "PreTrainedModel"):
 
 
 @contextmanager
-def patch_forward_signature(model: "PreTrainedModel", inputs: dict[str, Any]):
+def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
     """Temporarily replace `model.forward` with a flat explicit signature derived from `inputs`.
 
     `torch.export` infers the exported function signature from `model.forward.__signature__`.
