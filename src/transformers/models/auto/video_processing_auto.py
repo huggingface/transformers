@@ -344,6 +344,24 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
+        def _get_raw_model_type():
+            if isinstance(config, PreTrainedConfig):
+                return getattr(config, "model_type", None)
+
+            resolved_config_file = cached_file(
+                pretrained_model_name_or_path,
+                CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                **kwargs,
+            )
+            if resolved_config_file is None:
+                return None
+
+            raw_config_dict = safe_load_json_file(resolved_config_file)
+            return raw_config_dict.get("model_type")
+
         def _ensure_config():
             nonlocal config
             if not isinstance(config, PreTrainedConfig):
@@ -356,8 +374,8 @@ class AutoVideoProcessor:
             if not missing_video_processor_dict:
                 return None
 
-            config_obj = _ensure_config()
-            if _is_legacy_internvl_chat_config(config_obj):
+            if _get_raw_model_type() == "internvl_chat":
+                config_obj = _ensure_config()
                 return video_processor_class(**_get_legacy_internvl_processor_init_kwargs(config_obj))
             return None
 
@@ -366,7 +384,7 @@ class AutoVideoProcessor:
             config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
         except Exception as initial_exception:
             missing_video_processor_dict = True
-            if _is_legacy_internvl_chat_config(_ensure_config()):
+            if _get_raw_model_type() == "internvl_chat":
                 config_dict = {}
             else:
                 raise initial_exception

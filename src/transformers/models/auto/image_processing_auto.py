@@ -682,6 +682,24 @@ class AutoImageProcessor:
         else:
             image_processor_filename = IMAGE_PROCESSOR_NAME
 
+        def _get_raw_model_type():
+            if isinstance(config, PreTrainedConfig):
+                return getattr(config, "model_type", None)
+
+            resolved_config_file = cached_file(
+                pretrained_model_name_or_path,
+                CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                **kwargs,
+            )
+            if resolved_config_file is None:
+                return None
+
+            raw_config_dict = safe_load_json_file(resolved_config_file)
+            return raw_config_dict.get("model_type")
+
         def _ensure_config():
             nonlocal config
             if not isinstance(config, PreTrainedConfig):
@@ -696,8 +714,8 @@ class AutoImageProcessor:
             if not missing_image_processor_dict:
                 return None
 
-            config_obj = _ensure_config()
-            if _is_legacy_internvl_chat_config(config_obj):
+            if _get_raw_model_type() == "internvl_chat":
+                config_obj = _ensure_config()
                 return image_processor_class(**_get_legacy_internvl_processor_init_kwargs(config_obj))
             return None
 
@@ -716,13 +734,13 @@ class AutoImageProcessor:
                     pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
                 )
             except Exception:
-                if _is_legacy_internvl_chat_config(_ensure_config()):
+                if _get_raw_model_type() == "internvl_chat":
                     config_dict = {}
                 else:
                     raise initial_exception
 
             if config_dict and not is_timm_config_dict(config_dict):
-                if _is_legacy_internvl_chat_config(_ensure_config()):
+                if _get_raw_model_type() == "internvl_chat":
                     config_dict = {}
                 else:
                     raise initial_exception
@@ -734,13 +752,7 @@ class AutoImageProcessor:
 
         # Legacy `internvl_chat` checkpoints serialize a generic CLIP feature extractor in
         # `preprocessor_config.json`, but should now use the native InternVL image processor.
-        if (
-            image_processor_type is None
-            and image_processor_auto_map is None
-            and not isinstance(config, PreTrainedConfig)
-        ):
-            _ensure_config()
-        prefer_model_config_mapping = _is_legacy_internvl_chat_config(config)
+        prefer_model_config_mapping = _get_raw_model_type() == "internvl_chat"
 
         # Backward compat: infer from feature extractor config
         if image_processor_type is None and image_processor_auto_map is None and not prefer_model_config_mapping:

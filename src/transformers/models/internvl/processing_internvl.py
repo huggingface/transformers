@@ -36,11 +36,6 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
             "padding_side": "left",
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {
-            "crop_to_patches": True,
-            "min_patches": 1,
-            "max_patches": 12,
-        },
         "videos_kwargs": {
             "return_tensors": "pt",
         },
