@@ -80,13 +80,16 @@ DUMMY_PATCHABLE_CLASSES = {"DummyPatchEmbedding": DummyPatchEmbedding}
 for class_name, patchable_class in DUMMY_PATCHABLE_CLASSES.items():
     setattr(DUMMY_TRANSFORMERS_MODULE, class_name, patchable_class)
 
+
 class DummyFusionModel(PreTrainedModel):
     config_class = DummyFusionConfig
 
     def __init__(self, config):
         super().__init__(config)
         # Instantiate through the fake module so `apply_patches()` sees the replacement.
-        self.patch_embed = DUMMY_TRANSFORMERS_MODULE.DummyPatchEmbedding(stride=config.vision_config.patch_embed_stride, bias=True)
+        self.patch_embed = DUMMY_TRANSFORMERS_MODULE.DummyPatchEmbedding(
+            stride=config.vision_config.patch_embed_stride, bias=True
+        )
         self.post_init()
 
 
