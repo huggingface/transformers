@@ -465,15 +465,17 @@ def _fix_index_put_inplace(gm: torch.fx.GraphModule, node: torch.fx.Node) -> boo
     return True
 
 
-_ASSERTION_OPS = frozenset(
-    {
-        torch.ops.aten._assert_async.default,
-        torch.ops.aten._assert_async.msg,
-        torch.ops.aten._assert_scalar.default,
-        torch.ops.aten._assert_tensor_metadata.default,
-        torch.ops.aten.sym_constrain_range_for_size.default,
-    }
-)
+_ASSERTION_OPS = set()
+if is_torch_available():
+    _ASSERTION_OPS.update(
+        {
+            torch.ops.aten._assert_async.default,
+            torch.ops.aten._assert_async.msg,
+            torch.ops.aten._assert_scalar.default,
+            torch.ops.aten._assert_tensor_metadata.default,
+            torch.ops.aten.sym_constrain_range_for_size.default,
+        }
+    )
 
 
 def _fix_assertion(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
@@ -643,10 +645,13 @@ def _aten_index_put(
     return op.Reshape(result, op.Shape(self))
 
 
-_ONNX_TRANSLATION_TABLE = {
-    torch.ops.aten.index_put.default: _aten_index_put,
-}
-
+_ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
+if is_onnxscript_available():
+    _ONNX_TRANSLATION_TABLE.update(
+        {
+            torch.ops.aten.index_put.default: _aten_index_put,
+        }
+    )
 
 # ── Stage 4: ONNX IR patches ──────────────────────────────────────────────────
 # Post-export fixes to the ONNX IR for ORT compatibility.

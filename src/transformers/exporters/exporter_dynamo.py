@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
-from ..utils.import_utils import is_torch_available, torch_compilable_check
+from ..utils.import_utils import is_detectron2_available, is_torch_available, torch_compilable_check
 from .base import HfExporter
 from .utils import prepare_for_export
 
@@ -427,6 +427,7 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
     # All transformers Cache subclasses
     for cache_type in _iter_subclasses(Cache):
         _register_pytree_node(cache_type)
+
     # Model-specific cache classes not inheriting from Cache (e.g. custom per-model caches)
     for _, obj in inspect.getmembers(inspect.getmodule(model)):
         if (
@@ -436,6 +437,12 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
             and not issubclass(obj, Cache)
         ):
             _register_pytree_node(obj)
+
+    # detectron2 ImageList (used by layoutlmv2)
+    if is_detectron2_available() and model.config.model_type == "layoutlmv2":
+        from detectron2.structures.image_list import ImageList
+
+        _register_pytree_node(ImageList)
 
 
 # ── Dynamic shapes ──────────────────────────────────────────────────────────
