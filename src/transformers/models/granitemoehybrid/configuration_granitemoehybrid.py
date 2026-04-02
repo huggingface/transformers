@@ -51,9 +51,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granitemoehybrid"
-    attribute_map = {
-        "layers_block_type": "layer_types",
-    }
+    attribute_map = {"layers_block_type": "layer_types"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 32000
@@ -121,11 +119,6 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
         if self.mamba_d_head * self.mamba_n_heads != mamba_intermediate:
             raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
-
-    # overwrite the function to use in `HybridMambaAttentionDynamicCache`
-    @property
-    def layers_block_type(self):
-        return self.layer_types
 
 
 __all__ = ["GraniteMoeHybridConfig"]

@@ -82,9 +82,9 @@ class GPT2Config(PreTrainedConfig):
     n_head: int = 12
     n_inner: int | None = None
     activation_function: str = "gelu_new"
-    resid_pdrop: float = 0.1
-    embd_pdrop: float = 0.1
-    attn_pdrop: float = 0.1
+    resid_pdrop: float | int = 0.1
+    embd_pdrop: float | int = 0.1
+    attn_pdrop: float | int = 0.1
     layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02
     summary_type: str = "cls_index"

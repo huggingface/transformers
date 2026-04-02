@@ -16,6 +16,15 @@ from rich.console import Console
 from rich.syntax import Syntax
 
 
+CHECKER_CONFIG = {
+    "name": "modular_conversion",
+    "label": "Modular file conversions",
+    # Globs the modular sources; also reads generated modeling_*.py at runtime for diffing.
+    "file_globs": ["src/transformers/models/**/modular_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
 logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 console = Console()

@@ -105,6 +105,9 @@ RUN python3 -m pip install --no-cache-dir python-Levenshtein
 # For `FastSpeech2ConformerTokenizer` tokenizer
 RUN python3 -m pip install --no-cache-dir g2p-en
 
+# For serving tests (audio pipelines)
+RUN python3 -m pip install --no-cache-dir librosa python-multipart
+
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
 

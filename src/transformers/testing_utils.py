@@ -115,6 +115,7 @@ from .utils import (
     is_liger_kernel_available,
     is_lomo_available,
     is_mistral_common_available,
+    is_multipart_available,
     is_natten_available,
     is_nltk_available,
     is_numba_available,
@@ -140,6 +141,7 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
+    is_serve_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -1414,6 +1416,13 @@ def require_librosa(test_case):
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
 
 
+def require_multipart(test_case):
+    """
+    Decorator marking a test that requires python-multipart
+    """
+    return unittest.skipUnless(is_multipart_available(), "test requires python-multipart")(test_case)
+
+
 def require_liger_kernel(test_case):
     """
     Decorator marking a test that requires liger_kernel
@@ -1495,6 +1504,13 @@ def require_openai(test_case):
     Decorator marking a test that requires openai
     """
     return unittest.skipUnless(is_openai_available(), "test requires openai")(test_case)
+
+
+def require_serve(test_case):
+    """
+    Decorator marking a test that requires the serving dependencies (fastapi, uvicorn, pydantic, openai).
+    """
+    return unittest.skipUnless(is_serve_available(), "test requires serving dependencies")(test_case)
 
 
 def require_mistral_common(test_case):

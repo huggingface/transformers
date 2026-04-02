@@ -58,7 +58,7 @@ class CpmAntConfig(PreTrainedConfig):
     dim_head: int = 128
     dim_ff: int = 10240
     num_hidden_layers: int = 48
-    dropout_p: float = 0.0
+    dropout_p: float | int = 0.0
     position_bias_num_buckets: int = 512
     position_bias_max_distance: int = 2048
     eps: float = 1e-6

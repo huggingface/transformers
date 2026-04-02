@@ -60,15 +60,15 @@ class MobileViTConfig(PreTrainedConfig):
     hidden_act: str = "silu"
     conv_kernel_size: int = 3
     output_stride: int = 32
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.0
-    classifier_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.0
+    classifier_dropout_prob: float | int = 0.1
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-5
     qkv_bias: bool = True
     aspp_out_channels: int = 256
     atrous_rates: list[int] | tuple[int, ...] = (6, 12, 18)
-    aspp_dropout_prob: float = 0.1
+    aspp_dropout_prob: float | int = 0.1
     semantic_loss_ignore_index: int = 255
 
 
