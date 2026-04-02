@@ -5,7 +5,7 @@ on:
     - cron: "17 4 * * *"
   push:
     branches:
-      - run_doc_tests*
+      - new_doctest_workflow
   workflow_dispatch:
 
 jobs:
