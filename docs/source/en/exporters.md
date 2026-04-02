@@ -16,44 +16,57 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-Transformers ships three built-in exporters that convert any [`PreTrainedModel`] to a portable,
-runtime-optimised format without leaving the library.
+Export any [`PreTrainedModel`] to ONNX, ExecuTorch, or a standalone PyTorch program — same model,
+same two lines of code, any runtime.
 
-| Exporter               | Output                         | Target                               |
+```python
+exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))  # or OnnxExporter, ExecutorchExporter
+exported = exporter.export(model, inputs)
+```
+
+Because the exporters live inside Transformers, they evolve with the models. Every architecture
+change, new attention pattern, or custom cache type is supported at export time from day one —
+no waiting for a downstream library to catch up.
+
+| Exporter               | Output                         | Runtime                              |
 | ---------------------- | ------------------------------ | ------------------------------------ |
 | [`DynamoExporter`]     | `torch.export.ExportedProgram` | Any PyTorch runtime, AOT compilation |
 | [`OnnxExporter`]       | `torch.onnx.ONNXProgram`       | ONNX Runtime, TensorRT, OpenVINO, …  |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager`     | Mobile and edge devices (ExecuTorch) |
 
-All three share the same calling convention — create an exporter with a config, call `.export(model, inputs)` —
-and all inherit from a common base so multicomponent and generative decomposition works identically across backends.
-
-> [!TIP]
-> The exporters described here operate directly on `PreTrainedModel` instances and require no additional
-> libraries beyond `torch` (and `onnxscript`/`executorch` for the respective backends).
-
 ## Installation
+
+<hfoptions id="exporters-install">
+<hfoption id="Dynamo">
 
 ```bash
 pip install transformers torch
 ```
 
-For ONNX export:
+</hfoption>
+<hfoption id="ONNX">
 
 ```bash
-pip install onnxscript onnxruntime
+pip install transformers torch onnxscript onnxruntime
 ```
 
-For ExecuTorch export:
+</hfoption>
+<hfoption id="ExecuTorch">
 
 ```bash
-pip install executorch
+pip install transformers torch executorch
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Quick start
 
+All exporters share the same interface: create an exporter with a config, call `.export(model, inputs)`.
+Switch between runtimes by swapping the exporter class — nothing else changes.
+
 <hfoptions id="exporters-quickstart">
-<hfoption id="torch.export (Dynamo)">
+<hfoption id="Dynamo">
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -61,14 +74,13 @@ from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer("Hello, world!", return_tensors="pt")
+inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
 exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
-exported = exporter.export(model, dict(inputs))
+exported = exporter.export(model, inputs)
 
-# run the exported graph
-outputs = exported.module()(**dict(inputs))
-print(outputs.logits.shape)
+# run the exported graph directly
+outputs = exported.module()(**inputs)
 ```
 
 </hfoption>
@@ -80,13 +92,20 @@ from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer("Hello, world!", return_tensors="pt")
+inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-onnx_program = exporter.export(model, dict(inputs))
+onnx_program = exporter.export(model, inputs)
 
-# run with the built-in ORT session
-outputs = onnx_program(**dict(inputs))
+# save and load with ONNX Runtime
+onnx_program.save("model.onnx")
+
+import onnxruntime as ort
+import numpy as np
+
+session = ort.InferenceSession("model.onnx")
+ort_inputs = {k: v.numpy() for k, v in inputs.items()}
+outputs = session.run(None, ort_inputs)
 ```
 
 </hfoption>
@@ -98,30 +117,26 @@ from transformers.exporters.exporter_executorch import ExecutorchExporter, Execu
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = tokenizer("Hello, world!", return_tensors="pt")
+inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack"))
-exporter.export(model, dict(inputs))
+et_program = exporter.export(model, inputs)
+
+# save for on-device deployment
+et_program.save("model.pte")
 ```
 
 </hfoption>
 </hfoptions>
 
-## Configuration
-
-Each exporter accepts a typed config dataclass. All configs inherit from [`DynamoConfig`], so the
-`dynamic`, `strict`, `dynamic_shapes`, and `prefer_deferred_runtime_asserts_over_guards` fields
-are available on every exporter. See the [Exporters API reference](./main_classes/exporters) for
-the full field descriptions.
-
 ## Dynamic shapes
 
-Set `dynamic=True` on any config to export with symbolic (dynamic) input shapes. All tensor dimensions
-are automatically marked as `Dim.AUTO`, which means the exported graph accepts inputs of any size at
+Set `dynamic=True` on any config to export with symbolic input shapes. All tensor dimensions
+are automatically marked as dynamic, so the exported graph accepts inputs of any size at
 runtime without retracing.
 
 <hfoptions id="dynamic-shapes">
-<hfoption id="torch.export (Dynamo)">
+<hfoption id="Dynamo">
 
 ```python
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
@@ -156,7 +171,7 @@ This is passed directly to `torch.export.export` — see the
 [torch.export documentation](https://pytorch.org/docs/stable/export.html) for the expected format.
 
 <hfoptions id="explicit-dynamic-shapes">
-<hfoption id="torch.export (Dynamo)">
+<hfoption id="Dynamo">
 
 ```python
 >>> import torch
@@ -190,68 +205,6 @@ onnx_program = exporter.export(model, inputs)
 </hfoption>
 </hfoptions>
 
-## Vision-language models (VLMs)
-
-VLMs are best exported as separate components (vision encoder, projector, language model).
-The exporters detect VLMs automatically via [`is_vlm`] and decompose them
-into individual submodules — each exported as an independent graph.
-
-<hfoptions id="multicomponent">
-<hfoption id="torch.export (Dynamo)">
-
-```python
->>> from transformers import AutoModelForVision2Seq, AutoProcessor
->>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_vlm, is_vlm
-
->>> model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
->>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-
->>> components = decompose_vlm(model, inputs) if is_vlm(model) else [("model", model, inputs)]
->>> # components = [("vision_model", vit, vit_inputs), ("language_model", llm, llm_inputs), ...]
-
->>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> for name, submodel, subinputs in components:
-...     exported = exporter.export(submodel, subinputs)
-```
-
-</hfoption>
-<hfoption id="ONNX">
-
-```python
-from transformers import AutoModelForVision2Seq, AutoProcessor
-from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_vlm, is_vlm
-
-model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-
-components = decompose_vlm(model, inputs) if is_vlm(model) else [("model", model, inputs)]
-# components = [("vision_model", vit, vit_inputs), ("language_model", llm, llm_inputs), ...]
-
-exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-for name, submodel, subinputs in components:
-    onnx_program = exporter.export(submodel, subinputs)
-```
-
-</hfoption>
-</hfoptions>
-
-The decomposition is done via a single forward pass with hooks — it captures the exact inputs each
-submodule receives, so the exported graphs have correct signatures without any manual wiring.
-
-Supported submodule attribute names are listed in [`~transformers.exporters.utils._VLM_SUBMODULE_NAMES`].
-If a new architecture uses a different attribute name, add it to that tuple.
-
-<Tip warning={true}>
-
-The exported components are **independent graphs**, not a turnkey inference pipeline.
-The caller is responsible for running each encoder, fusing the multimodal embeddings, projecting
-them into the language model's input space, and orchestrating the generation loop.
-We are actively working to reduce the amount of glue required between components.
-
-</Tip>
-
 ## Generative models (prefill / decode)
 
 For autoregressive generation, the model's `forward` has different shapes at the prefill step
@@ -259,7 +212,7 @@ For autoregressive generation, the model's `forward` has different shapes at the
 [`decompose_prefill_decode`] runs `model.generate()` for two tokens and captures both.
 
 <hfoptions id="generate">
-<hfoption id="torch.export (Dynamo)">
+<hfoption id="Dynamo">
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -301,20 +254,32 @@ for name, stage_model, stage_inputs in stages:
 </hfoption>
 </hfoptions>
 
-For generative VLMs, combine both decompositions: decompose the prefill stage into its
-submodules and keep the decode stage as a single graph.
+## Vision-language models (VLMs)
 
-<hfoptions id="generate-vlm">
-<hfoption id="torch.export (Dynamo)">
+VLMs are exported as separate components — vision encoder, projector, language model — each as
+an independent graph. [`decompose_vlm`] detects VLM submodules automatically and captures their
+inputs via a single forward pass with hooks.
+
+For generative VLMs, first decompose into prefill/decode, then decompose the prefill stage
+into its submodules. The decode stage stays as a single graph.
+
+<hfoptions id="multicomponent">
+<hfoption id="Dynamo">
 
 ```python
+>>> from transformers import AutoModelForVision2Seq, AutoProcessor
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
 >>> from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode, is_vlm
 
+>>> model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+>>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+
+>>> # step 1: split into prefill and decode stages
 >>> stages = decompose_prefill_decode(model, inputs)
 >>> _, prefill_model, prefill_inputs = stages[0]
 
->>> components = decompose_vlm(prefill_model, prefill_inputs) if is_vlm(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
+>>> # step 2: decompose the prefill into vision encoder, projector, language model
+>>> components = decompose_vlm(prefill_model, prefill_inputs)
 >>> components += stages[1:]  # add the decode stage
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
@@ -326,13 +291,19 @@ submodules and keep the decode stage as a single graph.
 <hfoption id="ONNX">
 
 ```python
+from transformers import AutoModelForVision2Seq, AutoProcessor
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode, is_vlm
 
+model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+
+# step 1: split into prefill and decode stages
 stages = decompose_prefill_decode(model, inputs)
 _, prefill_model, prefill_inputs = stages[0]
 
-components = decompose_vlm(prefill_model, prefill_inputs) if is_vlm(prefill_model) else [("prefill", prefill_model, prefill_inputs)]
+# step 2: decompose the prefill into vision encoder, projector, language model
+components = decompose_vlm(prefill_model, prefill_inputs)
 components += stages[1:]  # add the decode stage
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
@@ -342,6 +313,17 @@ for name, submodel, subinputs in components:
 
 </hfoption>
 </hfoptions>
+
+Supported submodule attribute names are listed in [`~transformers.exporters.utils._VLM_SUBMODULE_NAMES`].
+If a new architecture uses a different attribute name, add it to that tuple.
+
+<Tip warning={true}>
+
+The exported components are **independent graphs**, not a turnkey inference pipeline.
+The caller is responsible for running each encoder, projecting embeddings, and orchestrating
+the generation loop. We are actively working to reduce the glue required between components.
+
+</Tip>
 
 ## API reference
 
@@ -356,7 +338,15 @@ for name, submodel, subinputs in components:
 [[autodoc]] transformers.exporters.exporter_executorch.ExecutorchExporter
     - export
 
+### Configuration
+
+Each exporter accepts a typed config dataclass. All configs inherit from [`DynamoConfig`], so the
+`dynamic`, `strict`, `dynamic_shapes`, and `prefer_deferred_runtime_asserts_over_guards` fields
+are available on every exporter.
+
 ### Utilities
+
+[[autodoc]] transformers.exporters.utils.get_leaf_tensors
 
 [[autodoc]] transformers.exporters.utils.prepare_for_export
 
@@ -365,5 +355,3 @@ for name, submodel, subinputs in components:
 [[autodoc]] transformers.exporters.utils.decompose_vlm
 
 [[autodoc]] transformers.exporters.utils.is_vlm
-
-[[autodoc]] transformers.exporters.utils.get_leaf_tensors
