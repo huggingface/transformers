@@ -17,15 +17,16 @@ import types
 import unittest
 from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch.nn as nn
 
-from transformers import PretrainedConfig, conversion_mapping
+from transformers import PretrainedConfig, conversion_mapping, fusion_mapping, monkey_patching
 from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import Conv3dToLinear, WeightConverter
-from transformers.fusion_mapping import _FUSION_DISCOVERY_CACHE, register_fusion_patches
+from transformers.fusion_mapping import register_fusion_patches
 from transformers.modeling_utils import PreTrainedModel
-from transformers.monkey_patching import apply_patches, clear_patch_mapping, get_patch_mapping
+from transformers.monkey_patching import apply_patches, get_patch_mapping
 
 
 DUMMY_TRANSFORMERS_MODULE_NAME = "transformers.test_fusion_mapping_dummy"
@@ -79,13 +80,15 @@ class FusionMappingTest(unittest.TestCase):
     fusion_config = {"patch_embeddings": True}
 
     def setUp(self):
-        clear_patch_mapping()
-        _FUSION_DISCOVERY_CACHE.clear()
+        self.patch_mapping_patcher = patch.object(monkey_patching, "_monkey_patch_mapping_cache", {})
+        self.patch_mapping_patcher.start()
+        self.discovery_cache_patcher = patch.object(fusion_mapping, "_FUSION_DISCOVERY_CACHE", {})
+        self.discovery_cache_patcher.start()
         self.checkpoint_conversion_mapping_cache = deepcopy(conversion_mapping._checkpoint_conversion_mapping_cache)
 
     def tearDown(self):
-        clear_patch_mapping()
-        _FUSION_DISCOVERY_CACHE.clear()
+        self.patch_mapping_patcher.stop()
+        self.discovery_cache_patcher.stop()
         conversion_mapping._checkpoint_conversion_mapping_cache = deepcopy(self.checkpoint_conversion_mapping_cache)
 
     def test_register_fusion_patches_is_effective_on_dummy_model(self):

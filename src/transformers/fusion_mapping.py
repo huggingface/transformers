@@ -112,7 +112,7 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
         return FusedPatchEmbedding
 
     def make_transforms(self, config: "PretrainedConfig") -> list[WeightTransform]:
-        vision_config = config.vision_config
+        vision_config = getattr(config, "vision_config", config)
         patch_size = vision_config.patch_size
         if isinstance(patch_size, int):
             patch_size = (patch_size, patch_size)
@@ -221,16 +221,8 @@ def _register_module_fusion(
                     f"for source patterns {source_patterns}."
                 )
 
-        existing_converter_keys = {
-            (tuple(existing.source_patterns), tuple(existing.target_patterns), type(existing))
-            for existing in existing_converters
-        }
-        converters = existing_converters + [
-            converter
-            for converter in converters
-            if (tuple(converter.source_patterns), tuple(converter.target_patterns), type(converter))
-            not in existing_converter_keys
-        ]
+        # TODO: allow compatible fusions mentioned https://github.com/huggingface/transformers/pull/45041#discussion_r3028989716
+        converters = existing_converters + converters
 
     register_checkpoint_conversion_mapping(model_type, converters, overwrite=True)
 
