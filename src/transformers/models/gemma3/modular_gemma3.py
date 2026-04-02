@@ -650,9 +650,9 @@ def create_causal_mask_mapping(
         is_image = (token_type_ids == 1).to(inputs_embeds.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
-        vision_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        vision_group_ids = torch.where(is_image, vision_group_ids, -1)
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(vision_group_ids)
+        group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+        group_ids = torch.where(is_image, group_ids, -1)
+        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(group_ids)
 
     return create_masks_for_generate(**mask_kwargs)
 

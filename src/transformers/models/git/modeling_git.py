@@ -73,26 +73,26 @@ class GitVisionModelOutput(ModelOutput):
 
 
 # Copied from transformers.models.gemma3.modeling_gemma3.token_type_ids_mask_function
-def token_type_ids_mask_function(vision_group_ids: torch.Tensor) -> Callable:
+def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
     """
     This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
     not start and end indices.
     Args:
-        vision_group_ids (`torch.Tensor`):
+        group_ids (`torch.Tensor`):
             A tensor of shape `(bs, len)` assigning each token to a vision group. Tokens with the same group
             come from the same input image. Text is denoted by `-1`.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        seq_length = vision_group_ids.shape[-1]
+        seq_length = group_ids.shape[-1]
 
-        # clamp indices because with static cache they can go beyond `vision_group_ids.shape[-1]`
+        # clamp indices because with static cache they can go beyond `group_ids.shape[-1]`
         q_idx_clamped = q_idx.clamp(max=seq_length - 1)
         kv_idx_clamped = kv_idx.clamp(max=seq_length - 1)
 
         # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = vision_group_ids[batch_idx, q_idx_clamped]
-        kv_group = vision_group_ids[batch_idx, kv_idx_clamped]
+        q_group = group_ids[batch_idx, q_idx_clamped]
+        kv_group = group_ids[batch_idx, kv_idx_clamped]
         q_group = torch.where(q_idx < seq_length, q_group, -1)
         kv_group = torch.where(kv_idx < seq_length, kv_group, -1)
         return (q_group == kv_group) & (q_group >= 0)
@@ -147,9 +147,9 @@ def create_causal_mask_mapping(
         is_image = (token_type_ids == 1).to(inputs_embeds.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
-        vision_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        vision_group_ids = torch.where(is_image, vision_group_ids, -1)
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(vision_group_ids)
+        group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+        group_ids = torch.where(is_image, group_ids, -1)
+        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(group_ids)
 
     return create_masks_for_generate(**mask_kwargs)
 
