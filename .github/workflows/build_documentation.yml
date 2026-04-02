@@ -28,7 +28,7 @@ jobs:
       commit_sha: ${{ github.sha }}
       package: transformers
       notebook_folder: transformers_doc
-      languages: ar de es fr hi it ja ko pt zh
+      languages: ar de es fr hi it ja ko pt tr zh
       custom_container: huggingface/transformers-doc-builder
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}
