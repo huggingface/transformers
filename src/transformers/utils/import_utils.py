@@ -742,6 +742,11 @@ def is_librosa_available() -> bool:
 
 
 @lru_cache
+def is_multipart_available() -> bool:
+    return _is_package_available("multipart")[0]
+
+
+@lru_cache
 def is_essentia_available() -> bool:
     return _is_package_available("essentia")[0]
 
@@ -764,6 +769,11 @@ def is_uvicorn_available() -> bool:
 @lru_cache
 def is_openai_available() -> bool:
     return _is_package_available("openai")[0]
+
+
+@lru_cache
+def is_serve_available() -> bool:
+    return is_pydantic_available() and is_fastapi_available() and is_uvicorn_available() and is_openai_available()
 
 
 @lru_cache

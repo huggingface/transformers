@@ -98,7 +98,7 @@ class NemotronHConfig(PreTrainedConfig):
     head_dim: int = 128
     max_position_embeddings: int = 4096
     attention_bias: bool = False
-    attention_dropout: float = 0.0
+    attention_dropout: float | int = 0.0
     sliding_window: int | None = None
     intermediate_size: int = 21504
     mlp_hidden_act: str = "relu2"
