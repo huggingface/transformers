@@ -31,7 +31,7 @@ no waiting for a downstream library to catch up.
 | Exporter               | Output                         | Runtime                              |
 | ---------------------- | ------------------------------ | ------------------------------------ |
 | [`DynamoExporter`]     | `torch.export.ExportedProgram` | Any PyTorch runtime, AOT compilation |
-| [`OnnxExporter`]       | `torch.onnx.ONNXProgram`       | ONNX Runtime, TensorRT, OpenVINO, …  |
+| [`OnnxExporter`]       | `torch.onnx.ONNXProgram`       | Any ONNX runtime (ORT, TensorRT, OpenVINO, …) |
 | [`ExecutorchExporter`] | `ExecutorchProgramManager`     | Mobile and edge devices (ExecuTorch) |
 
 ## Installation
@@ -101,7 +101,6 @@ onnx_program = exporter.export(model, inputs)
 onnx_program.save("model.onnx")
 
 import onnxruntime as ort
-import numpy as np
 
 session = ort.InferenceSession("model.onnx")
 ort_inputs = {k: v.numpy() for k, v in inputs.items()}
@@ -164,6 +163,16 @@ onnx_program(**dict(tokenizer("A much longer input sequence.", return_tensors="p
 ```
 
 </hfoption>
+<hfoption id="ExecuTorch">
+
+```python
+from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+
+exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
+et_program = exporter.export(model, inputs)
+```
+
+</hfoption>
 </hfoptions>
 
 For fine-grained control over which dimensions are dynamic, pass explicit `dynamic_shapes` instead.
@@ -200,6 +209,23 @@ exporter = OnnxExporter(export_config=OnnxConfig(
     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
 ))
 onnx_program = exporter.export(model, inputs)
+```
+
+</hfoption>
+<hfoption id="ExecuTorch">
+
+```python
+import torch
+from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+
+batch = torch.export.Dim("batch", min=1, max=32)
+seq = torch.export.Dim("seq", min=1, max=2048)
+
+exporter = ExecutorchExporter(export_config=ExecutorchConfig(
+    backend="xnnpack",
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
+))
+et_program = exporter.export(model, inputs)
 ```
 
 </hfoption>
@@ -252,6 +278,26 @@ for name, stage_model, stage_inputs in stages:
 ```
 
 </hfoption>
+<hfoption id="ExecuTorch">
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+from transformers.exporters.utils import decompose_prefill_decode
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+
+stages = decompose_prefill_decode(model, inputs)
+# stages = [("prefill", model_copy, prefill_inputs), ("decode", model_copy, decode_inputs)]
+
+exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
+for name, stage_model, stage_inputs in stages:
+    et_program = exporter.export(stage_model, stage_inputs)
+```
+
+</hfoption>
 </hfoptions>
 
 ## Vision-language models (VLMs)
@@ -269,7 +315,7 @@ into its submodules. The decode stage stays as a single graph.
 ```python
 >>> from transformers import AutoModelForVision2Seq, AutoProcessor
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode, is_vlm
+>>> from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode
 
 >>> model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -293,7 +339,7 @@ into its submodules. The decode stage stays as a single graph.
 ```python
 from transformers import AutoModelForVision2Seq, AutoProcessor
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode, is_vlm
+from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode
 
 model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
@@ -309,6 +355,30 @@ components += stages[1:]  # add the decode stage
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
 for name, submodel, subinputs in components:
     onnx_program = exporter.export(submodel, subinputs)
+```
+
+</hfoption>
+<hfoption id="ExecuTorch">
+
+```python
+from transformers import AutoModelForVision2Seq, AutoProcessor
+from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode
+
+model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+
+# step 1: split into prefill and decode stages
+stages = decompose_prefill_decode(model, inputs)
+_, prefill_model, prefill_inputs = stages[0]
+
+# step 2: decompose the prefill into vision encoder, projector, language model
+components = decompose_vlm(prefill_model, prefill_inputs)
+components += stages[1:]  # add the decode stage
+
+exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
+for name, submodel, subinputs in components:
+    et_program = exporter.export(submodel, subinputs)
 ```
 
 </hfoption>
@@ -340,9 +410,11 @@ the generation loop. We are actively working to reduce the glue required between
 
 ### Configuration
 
-Each exporter accepts a typed config dataclass. All configs inherit from [`DynamoConfig`], so the
-`dynamic`, `strict`, `dynamic_shapes`, and `prefer_deferred_runtime_asserts_over_guards` fields
-are available on every exporter.
+[[autodoc]] transformers.utils.export_config.DynamoConfig
+
+[[autodoc]] transformers.utils.export_config.OnnxConfig
+
+[[autodoc]] transformers.utils.export_config.ExecutorchConfig
 
 ### Utilities
 
