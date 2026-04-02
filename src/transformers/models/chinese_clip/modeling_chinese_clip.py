@@ -706,6 +706,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         )
 
 
+# Dont copy from AltCLIP if you don't want to get into infinite recursion!
 @auto_docstring(
     custom_intro="""
     The text model from CHINESE_CLIP without any head or projection on top.
