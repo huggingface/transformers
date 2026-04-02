@@ -180,6 +180,53 @@ qwen3_schema = {
     },
 }
 
+re_sub_schema = {
+    "type": "object",
+    "properties": {
+        "role": {"const": "assistant"},
+        "thinking": {"type": "string"},
+        "content": {"type": "string"},
+        "tool_calls": {
+            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"const": "function"},
+                    "function": {
+                        "type": "object",
+                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                            },
+                            "arguments": {
+                                "type": "object",
+                                "x-regex-key-value": r'(?P<key>\w+):(?P<value><\|"\|>.*?<\|"\|>|[^,}]+)',
+                                "additionalProperties": {
+                                    "x-regex-substitutions": [[r'^<\|"\|>|<\|"\|>$', ""]],
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<content>(?:(?!\<\|tool_call\>).)+)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?",
+}
+
+prefix_items_schema = {
+    # Not intended to be "realistic", just checks that prefixItems can handle a heterogeneous array
+    "x-regex-iterator": r"<block>(.*?)<\/block>",
+    "type": "array",
+    "prefixItems": [
+        {"type": "string"},
+        {"type": "integer"},
+        {"type": "string"},
+    ],
+}
+
 
 @require_jmespath
 class ChatSchemaParserTest(unittest.TestCase):
@@ -377,3 +424,114 @@ class ChatSchemaParserTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_re_sub_schema(self):
+        """Test that a schema doing re substitutions to enable JSON parsing works."""
+        model_out = '<|channel>thought\nThe user is asking for the current temperature in Paris. I should check the available tools to see if there\'s a function that can provide this information.<channel|><|tool_call>call:get_current_temperature{detail_level:0,location:<|"|>Paris, France<|"|>,unit:<|"|>celsius<|"|>}<tool_call|><|tool_response>'
+        parsed = recursive_parse(model_out, re_sub_schema)
+        self.assertEqual(
+            parsed,
+            {
+                "role": "assistant",
+                "thinking": "The user is asking for the current temperature in Paris. I should check the available tools to see if there's a function that can provide this information.",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "get_current_temperature",
+                            "arguments": {"detail_level": "0", "location": "Paris, France", "unit": "celsius"},
+                        },
+                    }
+                ],
+            },
+        )
+
+    def test_required_fields_present(self):
+        """Test that required fields pass validation when present in the output."""
+        schema = {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        model_out = "<think>Let me think.</think><response>Hello!</response>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(
+            parsed,
+            {"role": "assistant", "content": "Hello!", "thinking": "Let me think."},
+        )
+
+    def test_required_field_missing_raises(self):
+        """Test that a missing required field raises ValueError with a helpful message."""
+        schema = {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        # This output has thinking but no <response> tags, so content will be missing
+        model_out = "<think>Let me think about this.</think>Some plain text without response tags"
+        with self.assertRaises(ValueError) as cm:
+            recursive_parse(model_out, schema)
+        self.assertIn("content", str(cm.exception))
+        self.assertIn("missing", str(cm.exception).lower())
+
+    def test_required_not_enforced_when_absent(self):
+        """Test that schemas without 'required' still silently omit missing fields."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "role": {"const": "assistant"},
+                "content": {"type": "string", "x-regex": r"<response>(.*?)</response>"},
+                "thinking": {"type": "string", "x-regex": r"<think>(.*?)</think>"},
+            },
+        }
+        # No <response> tags, but content is not required — should succeed
+        model_out = "<think>Just thinking.</think>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(parsed, {"role": "assistant", "thinking": "Just thinking."})
+
+    def test_prefix_items(self):
+        model_out = "<block>hello</block><block>42</block><block>world</block>"
+        parsed = recursive_parse(model_out, prefix_items_schema)
+        self.assertEqual(parsed, ["hello", 42, "world"])
+
+    def test_prefix_items_wrong_length_raises(self):
+        model_out = "<block>hello</block><block>42</block>"
+        with self.assertRaises(ValueError):
+            recursive_parse(model_out, prefix_items_schema)
+
+    def test_prefix_items_wrong_type_raises(self):
+        model_out = "<block>hello</block><block>world</block><block>42</block>"
+        with self.assertRaises(ValueError):
+            recursive_parse(model_out, prefix_items_schema)
+
+    def test_type_any_passthrough(self):
+        """Test that type 'any' passes content through without transformation."""
+        schema = {
+            "type": "object",
+            "x-regex": r"<data>(?P<value>.*?)</data>",
+            "properties": {
+                "value": {"type": "any"},
+            },
+        }
+        model_out = "<data>some arbitrary content 123</data>"
+        parsed = recursive_parse(model_out, schema)
+        self.assertEqual(parsed, {"value": "some arbitrary content 123"})
+
+    def test_type_any_in_additional_properties(self):
+        """Test that type 'any' works in additionalProperties, matching the docs example."""
+        schema = {
+            "type": "object",
+            "x-parser": "json",
+            "additionalProperties": {"type": "any"},
+        }
+        node_content = '{"location": "San Francisco, CA", "units": "celsius"}'
+        parsed = recursive_parse(node_content, schema)
+        self.assertEqual(parsed, {"location": "San Francisco, CA", "units": "celsius"})

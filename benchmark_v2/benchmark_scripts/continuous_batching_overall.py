@@ -1,3 +1,5 @@
+import argparse
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -6,12 +8,13 @@ from tabulate import tabulate
 
 
 SCRIPT_LOCATION = (Path(__file__).parent.parent.parent / "examples/pytorch/continuous_batching.py").as_posix()
-COMMON_ARGS = "--log-level WARNING --seed 0".split()
+COMMON_ARGS = "--log-level WARNING --seed 0 --force-max-length".split()
 ERROR_OUTPUT = {"time_seconds": "X", "num_tokens": "X", "throughput_tok_per_sec": "ERROR"}
+RESULTS_FILE = Path(__file__).parent.parent / "benchmark_results/cb_overall_main.json"
 
 
 def run_and_parse_cb_example(args: str) -> dict:
-    print(f"Benchmarking with args: {args}")
+    print(f"\nBenchmarking with args: {args}")
     output = subprocess.run(
         ["python", SCRIPT_LOCATION] + args.split() + COMMON_ARGS,
         stdout=subprocess.PIPE,
@@ -32,7 +35,42 @@ def run_and_parse_cb_example(args: str) -> dict:
         return {"args": args, **ERROR_OUTPUT}
 
 
+def build_comparison_table(results: list[dict], main_results: list[dict]) -> list[dict]:
+    """Build a table comparing current results against saved main results."""
+    main_by_args = {r["args"]: r for r in main_results}
+    comparison = [
+        {
+            "args": "Arguments",
+            "main_tok_per_sec": "Main (tok/s)",
+            "current_tok_per_sec": "Current (tok/s)",
+            "diff_percent": "Diff (%)",
+        }
+    ]
+    for result in results:
+        main = main_by_args.get(result["args"])
+        main_tp = main["throughput_tok_per_sec"] if main else None
+        current_tp = result["throughput_tok_per_sec"]
+        if isinstance(main_tp, (int, float)) and isinstance(current_tp, (int, float)):
+            diff = (current_tp - main_tp) / main_tp * 100
+            diff_str = f"{diff:+.1f}%"
+        else:
+            diff_str = "N/A"
+        comparison.append(
+            {
+                "args": result["args"],
+                "main_tok_per_sec": main_tp if main_tp is not None else "N/A",
+                "current_tok_per_sec": current_tp,
+                "diff_percent": diff_str,
+            }
+        )
+    return comparison
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--main", action="store_true", help="Save results as the main baseline to compare against.")
+    args = parser.parse_args()
+
     results = [
         {
             "args": "Arguments",
@@ -72,3 +110,16 @@ if __name__ == "__main__":
     # Print results
     print()
     print(tabulate(results, tablefmt="github"))
+
+    # The header row is results[0], data rows are results[1:]
+    data_results = results[1:]
+
+    if args.main:
+        RESULTS_FILE.write_text(json.dumps(data_results, indent=2))
+        print(f"\nResults saved to {RESULTS_FILE}")
+    else:
+        if RESULTS_FILE.exists():
+            main_results = json.loads(RESULTS_FILE.read_text())
+            comparison = build_comparison_table(data_results, main_results)
+            print()
+            print(tabulate(comparison, tablefmt="github"))

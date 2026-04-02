@@ -62,7 +62,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file as safe_load_file
 
-if is_peft_available():
+if is_peft_available() and is_torch_available():
     from peft import PeftMixedModel, PeftModel
 
 
@@ -572,6 +572,7 @@ class SchedulerType(ExplicitEnum):
        - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
        - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
        - "warmup_stable_decay" = [`get_wsd_schedule`]
+       - "greedy" = [`get_greedy_schedule`]
     """
 
     LINEAR = "linear"
@@ -585,6 +586,7 @@ class SchedulerType(ExplicitEnum):
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
     COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
+    GREEDY = "greedy"
 
 
 class TrainerMemoryTracker:

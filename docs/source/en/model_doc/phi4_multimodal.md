@@ -145,9 +145,10 @@ print(f'>>> Response\n{response}')
 
 [[autodoc]] Phi4MultimodalFeatureExtractor
 
-## Phi4MultimodalImageProcessorFast
+## Phi4MultimodalImageProcessor
 
-[[autodoc]] Phi4MultimodalImageProcessorFast
+[[autodoc]] Phi4MultimodalImageProcessor
+    - preprocess
 
 ## Phi4MultimodalProcessor
 
