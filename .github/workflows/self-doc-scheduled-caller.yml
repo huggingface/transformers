@@ -22,4 +22,5 @@ jobs:
       commit_sha: ${{ github.sha }}
       test_path_prefix: docs/source/en/model_doc
       test_file_suffix: .md
+      machine_types: '["aws-g5-4xlarge-cache"]'
     secrets: inherit

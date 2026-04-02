@@ -52,6 +52,10 @@ on:
         required: false
         default: ""
         type: string
+      machine_types:
+        required: false
+        default: '["aws-g5-4xlarge-cache", "aws-g5-12xlarge-cache"]'
+        type: string
     outputs:
       is_infrastructure_ok:
         description: "Whether the CI infrastructure (slack reporting and failure checking) succeeded"
@@ -76,7 +80,7 @@ jobs:
     if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu", "run_quantization_torch_gpu"]'), inputs.job)
     strategy:
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: ${{ fromJSON(inputs.machine_types) }}
     runs-on:
       group: '${{ matrix.machine_type }}'
     container:
@@ -151,7 +155,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
+        machine_type: ${{ fromJSON(inputs.machine_types) }}
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
