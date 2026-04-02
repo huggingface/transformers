@@ -360,7 +360,7 @@ class Gemma4AudioFeedForward(nn.Module):
         gradient_clipping = min(self.gradient_clipping, torch.finfo(self.ffw_layer_1.linear.weight.dtype).max)
 
         residual = hidden_states
-        hidden_states = torch.clamp(hidden_states, gradient_clipping, gradient_clipping)
+        hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
         hidden_states = self.pre_layer_norm(hidden_states)
 
         hidden_states = self.ffw_layer_1(hidden_states)
