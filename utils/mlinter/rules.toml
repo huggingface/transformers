@@ -200,3 +200,65 @@ def forward(self, ...):
             attention_mask=causal_mask_mapping[self.config.layer_types[i]],
         )
 '''
+
+[rules.TRF012]
+description = "_init_weights must use init primitives, not in-place operations on module weights."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF012.explanation]
+what_it_does = "Checks that _init_weights(self, module) does not use in-place operations (e.g. .normal_(), .zero_()) directly on module weights."
+why_bad = "We rely on internal flags set on parameters to track whether they need re-initialization. In-place ops bypass this mechanism. Use the `init` primitives instead."
+bad_example = '''
+def _init_weights(self, module):
+    module.weight.normal_(mean=0.0, std=0.02)
+'''
+good_example = '''
+from transformers import initialization as init
+
+def _init_weights(self, module):
+    init.normal_(module.weight, mean=0.0, std=0.02)
+'''
+
+[rules.TRF013]
+description = "PreTrainedModel __init__ must call self.post_init()."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF013.explanation]
+what_it_does = "Checks that every PreTrainedModel subclass with an __init__ method calls self.post_init(). In modular files, calling super().__init__() is also accepted since it propagates post_init from the parent."
+why_bad = "post_init performs essential finalization (weight initialization, gradient checkpointing setup, etc.). Omitting it causes subtle runtime bugs."
+bad_example = '''
+class FooModel(FooPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(...)
+'''
+good_example = '''
+class FooModel(FooPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(...)
+        self.post_init()
+'''
+
+[rules.TRF014]
+description = "`trust_remote_code` should never be used in native model integrations."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF014.explanation]
+what_it_does = "Checks whether `trust_remote_code` is passed or used in code (e.g. as kwarg) within native model integration files."
+why_bad = "`trust_remote_code` allows arbitrary loading, including binaries, which should only be a power feature for users, not a standard use-case. Native integrations must not depend on it, as remote code cannot be reviewed or maintained within transformers."
+bad_example = '''
+class FooModel(FooPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
+'''
+good_example = '''
+class FooModel(FooPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = AutoModel.from_pretrained(...)
+'''

@@ -13,29 +13,153 @@
 # limitations under the License.
 """Image processor class for Pix2Struct."""
 
+import io
 import math
+import textwrap
 
 import numpy as np
-from PIL import Image
+from huggingface_hub import hf_hub_download
+from PIL import Image, ImageDraw, ImageFont
 
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format, to_pil_image
 from ...image_utils import ChannelDimension, ImageInput, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
-from .image_processing_pix2struct import (
-    Pix2StructImageProcessorKwargs,
-    render_text,
-    torch_extract_patches,
-)
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
     import torch
 
 
+DEFAULT_FONT_PATH = "ybelkada/fonts"
+
+
+# Adapted from transformers.models.pix2struct.image_processing_pix2struct.Pix2StructImageProcessorKwargs
+class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    max_patches (`int`, *optional*):
+        Maximum number of patches to extract.
+    patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
+    is_vqa (`bool`, *optional*, defaults to `False`):
+        Whether or not the image processor is for the VQA task. If `True` and `header_text` is passed in, text is
+        rendered onto the input images.
+    header_text (`Union[list[str], str]`, *optional*):
+        Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
+    """
+
+    max_patches: int
+    patch_size: dict[str, int]
+    is_vqa: bool
+    header_text: list[str] | str | None
+
+
+# Adapted from transformers.models.pix2struct.image_processing_pix2struct.render_text
+# Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L106
+def render_text(
+    text: str,
+    text_size: int = 36,
+    text_color: str = "black",
+    background_color: str = "white",
+    left_padding: int = 5,
+    right_padding: int = 5,
+    top_padding: int = 5,
+    bottom_padding: int = 5,
+    font_bytes: bytes | None = None,
+    font_path: str | None = None,
+) -> Image.Image:
+    """
+    Render text. This script is entirely adapted from the original script that can be found here:
+    https://github.com/google-research/pix2struct/blob/main/pix2struct/preprocessing/preprocessing_utils.py
+
+    Args:
+        text (`str`, *optional*, defaults to ):
+            Text to render.
+        text_size (`int`, *optional*, defaults to 36):
+            Size of the text.
+        text_color (`str`, *optional*, defaults to `"black"`):
+            Color of the text.
+        background_color (`str`, *optional*, defaults to `"white"`):
+            Color of the background.
+        left_padding (`int`, *optional*, defaults to 5):
+            Padding on the left.
+        right_padding (`int`, *optional*, defaults to 5):
+            Padding on the right.
+        top_padding (`int`, *optional*, defaults to 5):
+            Padding on the top.
+        bottom_padding (`int`, *optional*, defaults to 5):
+            Padding on the bottom.
+        font_bytes (`bytes`, *optional*):
+            Bytes of the font to use. If `None`, the default font will be used.
+        font_path (`str`, *optional*):
+            Path to the font to use. If `None`, the default font will be used.
+    """
+    requires_backends(render_text, "vision")
+    # Add new lines so that each line is no more than 80 characters.
+
+    wrapper = textwrap.TextWrapper(width=80)
+    lines = wrapper.wrap(text=text)
+    wrapped_text = "\n".join(lines)
+
+    if font_bytes is not None and font_path is None:
+        font = io.BytesIO(font_bytes)
+    elif font_path is not None:
+        font = font_path
+    else:
+        font = hf_hub_download(DEFAULT_FONT_PATH, "Arial.TTF")
+    font = ImageFont.truetype(font, encoding="UTF-8", size=text_size)
+
+    # Use a temporary canvas to determine the width and height in pixels when
+    # rendering the text.
+    temp_img = Image.new("RGB", (1, 1))
+    temp_draw = ImageDraw.Draw(temp_img)
+    _, _, w, h = temp_draw.textbbox((0, 0), wrapped_text, font=font)
+
+    text_width = w + left_padding + right_padding
+    text_height = h + top_padding + bottom_padding
+
+    # Create the actual image with the text.
+    img = Image.new("RGB", (text_width, text_height), background_color)
+    draw = ImageDraw.Draw(img)
+    draw.text((left_padding, top_padding), wrapped_text, fill=text_color, font=font)
+
+    return img
+
+
+# Adapted from transformers.models.pix2struct.image_processing_pix2struct.torch_extract_patches
+if is_torch_available():
+    import torch
+
+    # Disable as it causes issues with torch.compile
+    @torch.compiler.disable
+    def torch_extract_patches(image_tensor, patch_height, patch_width):
+        """
+        Extract patches from image tensor. Returns tensor of shape (batch, rows, columns, patch_height*patch_width*channels).
+
+        Args:
+            image_tensor (`torch.Tensor`):
+                Image tensor of shape (batch, channels, height, width).
+            patch_height (`int`):
+                Height of patches to extract.
+            patch_width (`int`):
+                Width of patches to extract.
+        """
+        batch_size, channels, height, width = image_tensor.shape
+        patches = torch.nn.functional.unfold(
+            image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width)
+        )
+        patches = patches.reshape(batch_size, channels, patch_height, patch_width, -1)
+        patches = patches.permute(0, 4, 2, 3, 1).reshape(
+            batch_size, height // patch_height, width // patch_width, channels * patch_height * patch_width
+        )
+        return patches
+
+
 @auto_docstring
+@requires(backends=("torch",))
 class Pix2StructImageProcessorPil(PilBackend):
     rescale_factor = None
     do_normalize = True
@@ -46,11 +170,7 @@ class Pix2StructImageProcessorPil(PilBackend):
     valid_kwargs = Pix2StructImageProcessorKwargs
     model_input_names = ["flattened_patches", "attention_mask"]
 
-    def _standardize_kwargs(
-        self,
-        patch_size: dict[str, int] | SizeDict | None = None,
-        **kwargs,
-    ) -> dict:
+    def _standardize_kwargs(self, patch_size: dict[str, int] | SizeDict | None = None, **kwargs) -> dict:
         """
         Process custom Pix2Struct kwargs, specifically converting patch_size to SizeDict.
         """
@@ -71,11 +191,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         pass
 
     def render_header(
-        self,
-        image: np.ndarray,
-        header: str,
-        font_bytes: bytes | None = None,
-        font_path: str | None = None,
+        self, image: np.ndarray, header: str, font_bytes: bytes | None = None, font_path: str | None = None
     ) -> np.ndarray:
         """
         Render header text on image using numpy arrays.
@@ -138,12 +254,7 @@ class Pix2StructImageProcessorPil(PilBackend):
 
         return (image - mean) / adjusted_stddev
 
-    def extract_flattened_patches(
-        self,
-        image: np.ndarray,
-        max_patches: int,
-        patch_size: SizeDict,
-    ) -> np.ndarray:
+    def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: SizeDict) -> np.ndarray:
         """
         Extract flattened patches from an image. Uses torch for patch extraction.
 
@@ -233,9 +344,7 @@ class Pix2StructImageProcessorPil(PilBackend):
         """
         # Prepare images (converts to numpy arrays)
         images = self._prepare_image_like_inputs(
-            images=images,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
         )
 
         # Handle VQA mode with header rendering

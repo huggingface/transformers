@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
-@strict(accept_kwargs=True)
+@strict
 class FastSpeech2ConformerConfig(PreTrainedConfig):
     r"""
     encoder_num_attention_heads (`int`, *optional*, defaults to 2):
@@ -186,13 +186,13 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
     pitch_embed_kernel_size: int = 1
     pitch_embed_dropout: float | int = 0.0
     stop_gradient_from_pitch_predictor: bool = True
-    encoder_dropout_rate: float = 0.2
-    encoder_positional_dropout_rate: float = 0.2
-    encoder_attention_dropout_rate: float = 0.2
-    decoder_dropout_rate: float = 0.2
-    decoder_positional_dropout_rate: float = 0.2
-    decoder_attention_dropout_rate: float = 0.2
-    duration_predictor_dropout_rate: float = 0.2
+    encoder_dropout_rate: float | int = 0.2
+    encoder_positional_dropout_rate: float | int = 0.2
+    encoder_attention_dropout_rate: float | int = 0.2
+    decoder_dropout_rate: float | int = 0.2
+    decoder_positional_dropout_rate: float | int = 0.2
+    decoder_attention_dropout_rate: float | int = 0.2
+    duration_predictor_dropout_rate: float | int = 0.2
     speech_decoder_postnet_dropout: float | int = 0.5
     max_source_positions: int = 5000
     use_masking: bool = True
@@ -263,7 +263,7 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
-@strict(accept_kwargs=True)
+@strict
 class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     r"""
     model_in_dim (`int`, *optional*, defaults to 80):
@@ -324,9 +324,9 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="espnet/fastspeech2_conformer")
-@strict(accept_kwargs=True)
+@strict
 class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
-    """
+    r"""
     model_config ([`FastSpeech2ConformerConfig | dict`], *optional*):
         Configuration of the text-to-speech model.
     vocoder_config ([`FastSpeech2ConformerHiFiGanConfig | dict`], *optional*):
