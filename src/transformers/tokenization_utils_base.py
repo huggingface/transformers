@@ -1292,6 +1292,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             return self.convert_tokens_to_ids(tokens) if key != key_without_id else tokens
 
         if key not in self.__dict__:
+            # Also check the class hierarchy (handles class-level defaults, e.g. in
+            # dynamically loaded remote code where __getattr__ may be called before
+            # the instance attribute is set)
+            for cls in type(self).__mro__:
+                if key in vars(cls):
+                    return vars(cls)[key]
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         return super().__getattr__(key)
 

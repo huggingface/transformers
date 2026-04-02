@@ -736,9 +736,14 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig"):
+    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
+
+        Args:
+            ignore_keys (`set`, *optional*):
+                Keys to ignore during validation. If provided, sets `ignore_keys_at_rope_validation` on the config.
+                Deprecated: set `config.ignore_keys_at_rope_validation` directly instead.
         """
         # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
         # Note that validation runs every time a new config is created, even if config is non-RoPE
@@ -759,7 +764,8 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
+                effective_ignore_keys = self.ignore_keys_at_rope_validation | (ignore_keys or set())
+                validation_fn(rope_parameters, ignore_keys=effective_ignore_keys)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
