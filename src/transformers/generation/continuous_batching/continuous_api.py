@@ -372,14 +372,14 @@ class ContinuousBatchProcessor:
         pending_outputs = []
         for future_state in requests_in_batch:
             state = future_state.state
-            # Early return if the request is finished
-            if state.status == RequestStatus.FINISHED:
+            # Early return if the request was finished or offloaded between scheduling and update (async mode)
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
                 if self.use_async_batching:
                     # Skip this request, but still consume its token from new_tokens if it had one
                     if future_state.has_new_token:
                         current_logits_index += 1
                     continue
-                raise RuntimeError(f"Tried to update FINISHED request {state.request_id} in sync mode.")
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
             # If the request has a new token, it means prefill has already ended or just finished
             if future_state.has_new_token:
                 # If there is just one temporary token, it means prefill just ended
