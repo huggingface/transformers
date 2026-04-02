@@ -1006,9 +1006,13 @@ class EtaLogitsWarper(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         probabilities = scores.softmax(dim=-1)
-        entropy = torch.distributions.Categorical(logits=scores).entropy()
+        # `softmax(-inf)` yields NaN when all scores are masked. We treat such rows as having zero probability mass
+        # to keep eta warping stable and preserve the fully masked state.
+        safe_probabilities = torch.nan_to_num(probabilities, nan=0.0)
+        safe_log_probabilities = safe_probabilities.clamp_min(torch.finfo(scores.dtype).tiny).log()
+        entropy = -(safe_probabilities * safe_log_probabilities).sum(dim=-1)
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
-        indices_to_remove = probabilities < eta
+        indices_to_remove = safe_probabilities < eta
 
         # Keep the words with the 'min_tokens_to_keep'-highest probabilities
         top_k = min(self.min_tokens_to_keep, scores.size(-1))  # Safety check
