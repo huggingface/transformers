@@ -52,7 +52,6 @@ class IsaacVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
 
     num_patches: int = 256
-
     pixel_shuffle_scale_factor: int = 1
 
 
@@ -109,7 +108,6 @@ class IsaacTextConfig(PreTrainedConfig):
     attention_bias: bool = False
     use_sliding_window: bool = False
     max_window_layers: int = 28
-    layer_types: list[str] | None = None
     attention_dropout: float | int = 0.0
     pad_token_id: int | None = None
     bos_token_id: int | None = None
@@ -120,11 +118,7 @@ class IsaacTextConfig(PreTrainedConfig):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-        if self.layer_types is None:
-            self.layer_types = ["full_attention" for _ in range(self.num_hidden_layers)]
-
         PretrainedConfig.__post_init__(self, **kwargs)
-        self.validate_layer_type()
 
 
 @auto_docstring(checkpoint="PerceptronAI/Isaac-0.1-Base")
@@ -159,9 +153,6 @@ class IsaacConfig(PretrainedConfig):
     max_sequence_length: int = 16384
 
     def __post_init__(self, **kwargs):
-        for key in ("use_cache", "rope_theta", "max_position_embeddings"):
-            kwargs.pop(key, None)
-
         if isinstance(self.text_config, dict):
             self.text_config = self.sub_configs["text_config"](**self.text_config)
         elif self.text_config is None:
@@ -181,7 +172,6 @@ class IsaacConfig(PretrainedConfig):
             )
 
         self.vision_rescale_factor = float(self.vision_rescale_factor)
-
         super().__post_init__(**kwargs)
 
 

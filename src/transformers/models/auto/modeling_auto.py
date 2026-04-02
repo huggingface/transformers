@@ -232,6 +232,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("internvl", "InternVLModel"),
         ("internvl_vision", "InternVLVisionModel"),
         ("isaac", "IsaacModel"),
+        ("isaac_vision", "IsaacVisionModel"),
         ("jais2", "Jais2Model"),
         ("jamba", "JambaModel"),
         ("janus", "JanusModel"),

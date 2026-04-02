@@ -19,54 +19,49 @@
 # limitations under the License.
 
 import re
-from typing import Any, NamedTuple
+from collections import defaultdict
+from typing import Any
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
-from ...utils import TensorType, auto_docstring
+from ...utils import auto_docstring
 from ...utils.import_utils import is_torch_available
+from .image_processing_isaac import IsaacImageProcessorKwargs
+from .modeling_isaac import BoundingBox, Polygon, SinglePoint
 
 
 if is_torch_available():
     import torch
 
 
+# --------------------------------Isaac Processor--------------------------------
+
+
 class IsaacProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs = IsaacImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
+            "truncation": True,
+            "truncation_side": "left",
             "return_attention_mask": True,
+            "return_overflowing_tokens": True,
             "return_mm_token_type_ids": True,
+            "add_special_tokens": False,
         },
     }
 
 
+_point_box_or_polygon_tag = re.compile(
+    r"<(?P<tag>point|point_box|polygon)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
+)
+_attr_re = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
+_coord_re = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
+
+
 @auto_docstring
 class IsaacProcessor(ProcessorMixin):
-    class _SinglePoint(NamedTuple):
-        x: int
-        y: int
-        mention: str | None = None
-        t: float | None = None
-
-    class _BoundingBox(NamedTuple):
-        top_left: Any
-        bottom_right: Any
-        mention: str | None = None
-        t: float | None = None
-
-    class _Polygon(NamedTuple):
-        points: tuple[Any, ...]
-        mention: str | None = None
-        t: float | None = None
-
-    _point_box_or_polygon_tag = re.compile(
-        r"<(?P<tag>point|point_box|polygon)(?P<attrs>[^>]*)>(?P<body>[\s\S]*?)</(?P=tag)>", re.IGNORECASE
-    )
-    _attr_re = re.compile(r"(\w+)\s*=\s*(?:\"([^\"]*)\"|([^\s>]+))")
-    _coord_re = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
-
     def __init__(
         self,
         image_processor,
@@ -74,25 +69,132 @@ class IsaacProcessor(ProcessorMixin):
         chat_template: str | dict[str, str] | None = None,
         max_sequence_length: int = 16384,
     ):
-        """
-        Args:
-            chat_template (`str` or `dict[str, str]`, *optional*):
-                Chat template override forwarded to [`~processing_utils.ProcessorMixin`].
-            max_sequence_length (`int`, *optional*, defaults to 16384):
-                Maximum packed multimodal sequence length produced by the processor.
+        r"""
+        max_sequence_length (`int`, *optional*, defaults to 16384):
+            Maximum packed multimodal sequence length produced by the processor.
         """
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
 
-        self.image_processor = image_processor
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.text_pad_token_id = self.pad_token_id = tokenizer.pad_token_id
+        self.pad_token_id = tokenizer.pad_token_id
         self.image_token = getattr(tokenizer, "image_pad_token", None) or getattr(tokenizer, "image_token", None)
         self.image_token_id = getattr(tokenizer, "image_pad_token_id", None) or getattr(
             tokenizer, "image_token_id", None
         )
-
         self.max_sequence_length = max_sequence_length
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    def __call__(
+        self,
+        text: str | list[str],
+        images: ImageInput,
+        **kwargs,
+    ) -> BatchFeature:
+        output_kwargs = self._merge_kwargs(
+            IsaacProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        # 1. Validate number of that text and images match
+        texts = [text] if isinstance(text, str) else text.copy()
+        fetched_images = self.image_processor.fetch_images(images)
+        batched_images = make_nested_list_of_images(fetched_images)
+        if len(batched_images) != len(texts):
+            num_images_in_text = [text_value.count(self.image_token) for text_value in texts]
+            num_images_in_images = [len(sample_images) for sample_images in batched_images]
+            add_message = ""
+            if sum(num_images_in_text) == sum(num_images_in_images):
+                add_message = " Make sure to pass your images as a nested list, where each sub-list holds images for one text sample."
+            raise ValueError(
+                f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(texts)}).{add_message}"
+            )
+
+        # 2. Process images
+        image_inputs = self.image_processor(images=batched_images, **output_kwargs["images_kwargs"])
+        image_grid_thw = image_inputs["image_grid_thw"]
+
+        # 3. Expand text with image placeholders
+        merge_length = self.image_processor.pixel_shuffle_scale**2
+        vision_segment_lengths = image_grid_thw.prod(dim=-1) // merge_length
+        for batch_idx in range(len(text)):
+            image_idx = 0
+            while self.image_token in text[batch_idx]:
+                num_image_tokens = vision_segment_lengths[batch_idx, image_idx]
+                text[batch_idx] = text[batch_idx].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                image_idx += 1
+            text[batch_idx] = text[batch_idx].replace("<|placeholder|>", self.image_token)
+
+        # 4. Process text
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids")
+        max_length = output_kwargs["text_kwargs"].pop("max_length", None)
+        max_length = self.max_sequence_length if max_length is None else max_length
+        text_inputs = self.tokenizer(text, max_length=max_length, **output_kwargs["text_kwargs"])
+
+        truncated_input_ids: list[list[int] | None] = [None] * len(texts)
+        truncated_attention_mask: list[list[int] | None] = [None] * len(texts)
+        overflow_input_ids_per_sample = defaultdict(int)
+
+        # 5. Drop overflowing token ids
+        for batch_idx, input_ids, attention_mask in zip(
+            text_inputs["overflow_to_sample_mapping"], text_inputs["input_ids"], text_inputs["attention_mask"]
+        ):
+            if truncated_input_ids[batch_idx] is None:
+                truncated_input_ids[batch_idx] = input_ids
+                truncated_attention_mask[batch_idx] = attention_mask
+            else:
+                overflow_input_ids_per_sample[batch_idx] += input_ids.count(self.image_token_id)
+
+        # 6. Do the same for overflowing pixel values. Isaac truncates images based on `max_length`
+        # We can't really truncate pixels, so we pass over an image offset mask. Model will crop off
+        # truncated image pixels at run-time using this mask
+        batch_size, max_images = image_grid_thw.shape[:2]
+        image_metadata = torch.zeros((batch_size, max_images, 2), dtype=torch.long)
+        for batch_idx, image_lengths in enumerate(vision_segment_lengths):
+            remaining_dropped = overflow_input_ids_per_sample[batch_idx]
+            for image_idx, length in enumerate(image_lengths):
+                offset = 0
+                if 0 < remaining_dropped < length:
+                    offset = remaining_dropped
+                    length -= offset
+                    remaining_dropped = 0
+                elif remaining_dropped >= length:
+                    length = 0
+                    remaining_dropped -= length
+
+                # Record which suffix of this image's placeholder span survives left truncation.
+                # The model still encodes the full image and uses this window for both feature gathering and vision RoPE.
+                image_metadata[batch_idx, image_idx, 0] = offset
+                image_metadata[batch_idx, image_idx, 1] = length
+
+        data = {
+            "input_ids": torch.tensor(truncated_input_ids, dtype=torch.long),
+            "attention_mask": torch.tensor(truncated_attention_mask, dtype=torch.long),
+            "image_metadata": image_metadata,
+            **image_inputs,
+        }
+
+        if return_mm_token_type_ids:
+            data["mm_token_type_ids"] = self.create_mm_token_type_ids(data["input_ids"])
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = dict(IsaacProcessorKwargs._defaults.get("images_kwargs", {}))
+            images_kwargs.update(kwargs)
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            pixel_shuffle_scale = images_kwargs.get("pixel_shuffle_scale") or self.image_processor.pixel_shuffle_scale
+            num_image_tokens = [num_patches // pixel_shuffle_scale**2 for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     @property
     def model_input_names(self):
@@ -100,17 +202,15 @@ class IsaacProcessor(ProcessorMixin):
 
     @staticmethod
     def _maybe_float(value: str | None) -> float | None:
-        if value is None:
-            return None
         try:
             return float(value)
-        except ValueError:
+        except (ValueError, TypeError):
             return None
 
     @classmethod
     def _parse_attrs(cls, attr_text: str) -> dict[str, str]:
         attrs = {}
-        for match in cls._attr_re.finditer(attr_text or ""):
+        for match in _attr_re.finditer(attr_text):
             key = match.group(1)
             value = match.group(2) or match.group(3) or ""
             attrs[key] = value
@@ -123,11 +223,11 @@ class IsaacProcessor(ProcessorMixin):
         mention: str | None = None,
         t: str | None = None,
     ) -> Any:
-        match = cls._coord_re.search(body)
+        match = _coord_re.search(body)
         if not match:
             raise ValueError(f"Malformed <point> tag: {body!r}")
         x, y = int(match.group(1)), int(match.group(2))
-        return cls._SinglePoint(x=x, y=y, mention=mention, t=cls._maybe_float(t))
+        return SinglePoint(x=x, y=y, mention=mention, t=cls._maybe_float(t))
 
     @classmethod
     def _parse_box_body(
@@ -136,13 +236,13 @@ class IsaacProcessor(ProcessorMixin):
         mention: str | None = None,
         t: str | None = None,
     ) -> Any:
-        coords = list(cls._coord_re.finditer(body))
+        coords = list(_coord_re.finditer(body))
         if len(coords) < 2:
             raise ValueError(f"Malformed <point_box> tag: {body!r}")
 
-        top_left = cls._SinglePoint(x=int(coords[0].group(1)), y=int(coords[0].group(2)))
-        bottom_right = cls._SinglePoint(x=int(coords[1].group(1)), y=int(coords[1].group(2)))
-        return cls._BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=cls._maybe_float(t))
+        top_left = SinglePoint(x=int(coords[0].group(1)), y=int(coords[0].group(2)))
+        bottom_right = SinglePoint(x=int(coords[1].group(1)), y=int(coords[1].group(2)))
+        return BoundingBox(top_left=top_left, bottom_right=bottom_right, mention=mention, t=cls._maybe_float(t))
 
     @classmethod
     def _parse_polygon_body(
@@ -151,12 +251,12 @@ class IsaacProcessor(ProcessorMixin):
         mention: str | None = None,
         t: str | None = None,
     ) -> Any:
-        coords = list(cls._coord_re.finditer(body))
+        coords = list(_coord_re.finditer(body))
         if len(coords) < 3:
             raise ValueError(f"Malformed <polygon> tag: {body!r}")
 
-        points = tuple(cls._SinglePoint(x=int(coord.group(1)), y=int(coord.group(2))) for coord in coords)
-        return cls._Polygon(points=points, mention=mention, t=cls._maybe_float(t))
+        points = tuple(SinglePoint(x=int(coord.group(1)), y=int(coord.group(2))) for coord in coords)
+        return Polygon(points=points, mention=mention, t=cls._maybe_float(t))
 
     @classmethod
     def clean_text_and_extract_points(
@@ -165,7 +265,7 @@ class IsaacProcessor(ProcessorMixin):
         expected: str | None = None,
     ) -> tuple[str, list[Any]]:
         results: list[Any] = []
-        for match in cls._point_box_or_polygon_tag.finditer(text or ""):
+        for match in _point_box_or_polygon_tag.finditer(text):
             tag = match.group("tag").lower()
             attrs = cls._parse_attrs(match.group("attrs"))
             mention = attrs.get("mention")
@@ -183,24 +283,8 @@ class IsaacProcessor(ProcessorMixin):
                     continue
                 results.append(cls._parse_polygon_body(match.group("body"), mention=mention, t=t))
 
-        clean_text = re.sub(r"\s+", " ", cls._point_box_or_polygon_tag.sub("", text or "")).strip()
+        clean_text = re.sub(r"\s+", " ", _point_box_or_polygon_tag.sub("", text or "")).strip()
         return clean_text, results
-
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
-        vision_data = {}
-        if image_sizes is not None:
-            images_kwargs = dict(IsaacProcessorKwargs._defaults.get("images_kwargs", {}))
-            images_kwargs.update(kwargs)
-
-            num_image_patches = [
-                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
-                for image_size in image_sizes
-            ]
-            pixel_shuffle_scale = images_kwargs.get("pixel_shuffle_scale") or self.image_processor.pixel_shuffle_scale
-            num_image_tokens = [num_patches // pixel_shuffle_scale**2 for num_patches in num_image_patches]
-            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-
-        return MultiModalData(**vision_data)
 
     def post_process_generation(
         self,
@@ -225,161 +309,6 @@ class IsaacProcessor(ProcessorMixin):
             self.post_process_generation(text, expected=expected, cleanup_and_extract=cleanup_and_extract)
             for text in generated_texts
         ]
-
-    def __call__(
-        self,
-        text: str | list[str],
-        images: ImageInput | None = None,
-        return_tensors: str | TensorType | None = TensorType.PYTORCH,
-        **kwargs,
-    ) -> BatchFeature:
-        output_kwargs = self._merge_kwargs(
-            IsaacProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        text_kwargs = output_kwargs["text_kwargs"]
-        truncation = text_kwargs.pop("truncation", None)
-        max_length = text_kwargs.pop("max_length", None)
-        padding = text_kwargs.pop("padding", True)
-        padding_side = text_kwargs.pop("padding_side", "left")
-        return_attention_mask = text_kwargs.pop("return_attention_mask", True)
-        return_mm_token_type_ids = text_kwargs.pop("return_mm_token_type_ids", True)
-        pad_to_multiple_of = text_kwargs.pop("pad_to_multiple_of", None)
-        text_kwargs.pop("return_tensors", None)
-        text_kwargs.pop("return_overflowing_tokens", None)
-        text_kwargs.setdefault("add_special_tokens", False)
-
-        texts = [text] if isinstance(text, str) else text
-        if images is None:
-            batched_images = [[] for _ in texts]
-        else:
-            fetched_images = self.image_processor.fetch_images(images)
-            batched_images = make_nested_list_of_images(fetched_images)
-            if len(batched_images) != len(texts):
-                num_images_in_text = [text_value.count(self.image_token) for text_value in texts]
-                num_images_in_images = [len(sample_images) for sample_images in batched_images]
-                add_message = ""
-                if sum(num_images_in_text) == sum(num_images_in_images):
-                    add_message = " Make sure to pass your images as a nested list, where each sub-list holds images for one text sample."
-
-                raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(batched_images)}) and text ({len(texts)}).{add_message}"
-                )
-
-        pairs = list(zip(texts, batched_images, strict=True))
-        image_inputs = self.image_processor(images=batched_images, return_tensors=TensorType.PYTORCH)
-        image_grid_thw = image_inputs["image_grid_thw"]
-        image_metadata = None
-        vision_segment_lengths = None
-        if image_grid_thw is not None:
-            batch_size, max_images = image_grid_thw.shape[:2]
-            image_metadata = torch.zeros((batch_size, max_images, 2), dtype=torch.long)
-            grid_heights = image_grid_thw[..., 1]
-            grid_widths = image_grid_thw[..., 2]
-            vision_segment_lengths = (grid_heights // self.image_processor.pixel_shuffle_scale) * (
-                grid_widths // self.image_processor.pixel_shuffle_scale
-            )
-
-        expanded_texts = []
-        expected_image_lengths_per_sample = []
-
-        for batch_idx, (text_value, sample_images) in enumerate(pairs):
-            segments = text_value.split(self.image_token)
-            num_images = len(segments) - 1
-            num_provided_images = len(sample_images)
-            if num_images != num_provided_images:
-                raise ValueError(
-                    f"IsaacProcessor expects one image per image token, got {num_images} tokens and {num_provided_images} images in sample with text {text_value} "
-                )
-
-            expected_image_lengths = []
-            expanded_text_parts = [segments[0]]
-            for image_idx in range(num_images):
-                segment_length = int(vision_segment_lengths[batch_idx, image_idx].item())
-                expected_image_lengths.append(segment_length)
-                expanded_text_parts.append(self.image_token * segment_length)
-                expanded_text_parts.append(segments[image_idx + 1])
-
-            expected_image_lengths_per_sample.append(expected_image_lengths)
-            expanded_texts.append("".join(expanded_text_parts))
-
-        effective_max_length = self.max_sequence_length
-        if max_length is not None and (truncation or padding == "max_length"):
-            effective_max_length = max_length
-
-        self.tokenizer.truncation_side = "left"
-        self.tokenizer.padding_side = padding_side
-        tokenized_text_inputs = self.tokenizer(
-            expanded_texts,
-            truncation=True,
-            max_length=effective_max_length,
-            padding=padding,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=True,
-            stride=0,
-            return_tensors=None,
-            **text_kwargs,
-        )
-
-        kept_input_ids_per_sample: list[list[int] | None] = [None] * len(texts)
-        overflow_input_ids_per_sample: list[list[list[int]]] = [[] for _ in texts]
-        overflow_to_sample_mapping = tokenized_text_inputs.get("overflow_to_sample_mapping")
-        if overflow_to_sample_mapping is None:
-            overflow_to_sample_mapping = list(range(len(tokenized_text_inputs["input_ids"])))
-
-        for row_input_ids, sample_idx in zip(
-            tokenized_text_inputs["input_ids"], overflow_to_sample_mapping, strict=True
-        ):
-            sample_idx = int(sample_idx)
-            if kept_input_ids_per_sample[sample_idx] is None:
-                kept_input_ids_per_sample[sample_idx] = row_input_ids
-            else:
-                overflow_input_ids_per_sample[sample_idx].append(row_input_ids)
-
-        for batch_idx, expected_image_lengths in enumerate(expected_image_lengths_per_sample):
-            dropped_image_tokens = sum(
-                overflow_input_ids.count(self.image_token_id)
-                for overflow_input_ids in overflow_input_ids_per_sample[batch_idx]
-            )
-
-            remaining_dropped = dropped_image_tokens
-            for image_idx, expected_length in enumerate(expected_image_lengths):
-                if remaining_dropped <= 0:
-                    offset = 0
-                    length = expected_length
-                elif remaining_dropped < expected_length:
-                    offset = remaining_dropped
-                    length = expected_length - offset
-                    remaining_dropped = 0
-                else:
-                    offset = 0
-                    length = 0
-                    remaining_dropped -= expected_length
-
-                # Record which suffix of this image's placeholder span survives left truncation.
-                # The model still encodes the full image and uses this window for both feature gathering and vision RoPE.
-                image_metadata[batch_idx, image_idx, 0] = offset
-                image_metadata[batch_idx, image_idx, 1] = length
-
-        input_ids = torch.tensor(kept_input_ids_per_sample, dtype=torch.long)
-        attention_mask = input_ids.ne(self.pad_token_id).to(dtype=torch.long)
-
-        data = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": image_inputs["pixel_values"],
-            "image_grid_thw": image_grid_thw,
-            "image_metadata": image_metadata,
-        }
-        if return_mm_token_type_ids:
-            data["mm_token_type_ids"] = input_ids.eq(self.image_token_id).to(dtype=torch.long)
-
-        return BatchFeature(
-            data=data,
-            tensor_type=return_tensors,
-        )
 
 
 __all__ = ["IsaacProcessor"]
