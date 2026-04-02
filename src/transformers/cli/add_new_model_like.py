@@ -119,7 +119,7 @@ class ModelInfos:
     """
 
     def __init__(self, lowercase_name: str):
-        from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES, MODEL_NAMES_MAPPING
+        from ..models.auto.configuration_auto import CONFIG_MAPPING_NAMES
         from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
         from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
         from ..models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
@@ -133,7 +133,6 @@ class ModelInfos:
         if self.lowercase_name not in CONFIG_MAPPING_NAMES:
             raise ValueError(f"{lowercase_name} is not a valid model name")
 
-        self.paper_name = MODEL_NAMES_MAPPING[self.lowercase_name]
         self.config_class = CONFIG_MAPPING_NAMES[self.lowercase_name]
         self.camelcase_name = self.config_class.replace("Config", "")
 
@@ -216,11 +215,6 @@ def add_model_to_auto_mappings(
         repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
         new_content=f'        ("{new_lowercase_name}", "{new_cased_name}Config"),\n',
         add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
-    )
-    add_content_to_file(
-        repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_lowercase_name}", "{new_model_paper_name}"),\n',
-        add_after="MODEL_NAMES_MAPPING = OrderedDict[str, str](\n    [\n        # Add full (and cased) model names here\n",
     )
 
     for filename, to_add in corrected_filenames_to_add:
@@ -666,9 +660,9 @@ def get_user_input():
     """
     Ask the user for the necessary inputs to add the new model.
     """
-    from transformers.models.auto.configuration_auto import MODEL_NAMES_MAPPING
+    from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
 
-    model_types = list(MODEL_NAMES_MAPPING.keys())
+    model_types = list(CONFIG_MAPPING_NAMES.keys())
 
     # Get old model type
     valid_model_type = False

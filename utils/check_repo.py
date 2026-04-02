@@ -519,6 +519,8 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     ]
 )
 
+DOC_MODEL_NAMES_NOT_IN_AUTO = {}
+
 
 # This is to make sure the transformers module imported is the one in the repo.
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
@@ -1289,7 +1291,8 @@ def check_model_type_doc_match():
     model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
     model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
-    model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
+    model_types = list(transformers.models.auto.configuration_auto.CONFIG_MAPPING_NAMES.keys())
+    model_types += list(DOC_MODEL_NAMES_NOT_IN_AUTO)
     model_types = [MODEL_TYPE_TO_DOC_MAPPING.get(m, m) for m in model_types]
 
     errors = []
@@ -1306,8 +1309,8 @@ def check_model_type_doc_match():
         raise ValueError(
             "Some model doc pages do not match any existing model type:\n"
             + "\n".join(errors)
-            + "\nYou can add any missing model type to the `MODEL_NAMES_MAPPING` constant in "
-            "models/auto/configuration_auto.py."
+            + "\nYou can add any missing model type to the `DOC_MODEL_NAMES_NOT_IN_AUTO` constant in "
+            "utils/check_repo.py."
         )
 
 
