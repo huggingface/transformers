@@ -439,7 +439,7 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
             _register_pytree_node(obj)
 
     # detectron2 ImageList (used by layoutlmv2)
-    if is_detectron2_available() and model.config.model_type == "layoutlmv2":
+    if is_detectron2_available() and isinstance(model, PreTrainedModel) and model.config.model_type == "layoutlmv2":
         from detectron2.structures.image_list import ImageList
 
         _register_pytree_node(ImageList)
