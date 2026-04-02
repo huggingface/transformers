@@ -27,6 +27,11 @@ logger = logging.get_logger(__name__)
 @strict
 class NougatConfig(PreTrainedConfig):
     r"""
+    encoder (`dict | PreTrainedConfig`):
+        The config object or dictionary of the encoder backbone.
+    decoder (`dict | PreTrainedConfig`):
+        The config object or dictionary of the decoder backbone.
+
     Examples:
 
     ```python

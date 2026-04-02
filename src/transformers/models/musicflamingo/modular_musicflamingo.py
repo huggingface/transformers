@@ -21,6 +21,7 @@ from torch import Tensor, broadcast_tensors
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -31,6 +32,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3PreTrainedModel,
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
+from ..auto import CONFIG_MAPPING
 from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
 
 
