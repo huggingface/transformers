@@ -23,13 +23,18 @@ limitations under the License.
 
 ## Overview
 
-[Gemma 4](INSET_PAPER_LINK) is a multimodal model with pretrained and instruction-tuned variants, available in 1B, 13B, and 27B parameters. The architecture is mostly the same as the previous Gemma versions. The key differences are a vision processor that can output images of fixed token budget and a spatial 2D RoPE to encode vision-specific information across height and width axis.
+Gemma 4 is a multimodal model with pretrained and instruction-tuned variants, available in E2B, E4B, 31B and 26B-A4B (MoE) parameter sizes. Gemma 4 models provide the following capabilities:
+- Reasoning: All models in the family are designed as highly capable reasoners, with configurable thinking modes.
+- Extended Multimodalities: Processes Text, Image with variable aspect ratio and resolution support (all models), Video, and Audio (featured natively on the E2B and E4B models).
+- Increased Context Window: Small models feature a 128K context window, while the other models support 256K.
+- Enhanced Coding & Agentic Capabilities: Achieves notable improvements in coding benchmarks alongside built-in function-calling support, powering highly capable autonomous agents.
+- Native System Prompt Support: Gemma 4 introduces built-in support for the system role, enabling more structured and controllable conversations.
 
-You can find all the original Gemma 4 checkpoints under the [Gemma 4](https://huggingface.co/collections/google/gemma-4-release-67c6c6f89c4f76621268bb6d) release.
+You can find all the original Gemma 4 checkpoints under the [Gemma 4](https://huggingface.co/collections/google/gemma-4) release.
 
 ### Gemma4 Vision Model
 
-The key difference from previous Gemma releases is the new design to process **images of different sizes** using a **fixed-budget number of tokens**. Unlike many models that squash every image into a fixed square (like 224×224), Gemma 4 keeps the image's natural aspect ratio while making it the right size. There a a couple constraints to follow:
+The key difference from previous Gemma releases for vision is the new design to process **images of different sizes** using a **fixed-budget number of tokens**. Unlike many models that squash every image into a fixed square (like 224×224), Gemma 4 keeps the image's natural aspect ratio while making it the right size. There are a couple constraints to follow:
 - The total number of pixels must fit within a patch budget
 - Both height and width must be divisible by **48** (= patch size 16 × pooling kernel 3)
 
@@ -65,13 +70,12 @@ from transformers import pipeline
 
 pipeline = pipeline(
     task="image-text-to-text",
-    model="google/gemma-4-2b-pt",
-    device=0,
+    model="google/gemma-4-E2B-it",
     dtype=torch.bfloat16
 )
 pipeline(
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
-    text="<start_of_image> What is shown in this image?"
+    images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    text="<|image|>\n\nWhat is shown in this image?"
 )
 ```
 
@@ -83,13 +87,13 @@ import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "google/gemma-4-2b-it",
+    "google/gemma-4-E2B-it",
     dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
 processor = AutoProcessor.from_pretrained(
-    "google/gemma-4-2b-it",
+    "google/gemma-4-E2B-it",
     padding_side="left"
 )
 
@@ -108,62 +112,120 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
     add_generation_prompt=True,
 ).to(model.device)
+input_len = inputs["input_ids"].shape[-1]
 
 output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
-print(processor.decode(output[0], skip_special_tokens=True))
+print(processor.decode(output[0][input_len:], skip_special_tokens=True))
 ```
 
-### Function callin
-
-TODO: add decent examples, I am no good with tools and agents
-
-### Quantization
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
+### Function calling
 
 ```py
-# pip install torchao
 import torch
-from transformers import TorchAoConfig, Gemma4ForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, AutoModelForCausalLM
 
-quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-model = Gemma4ForConditionalGeneration.from_pretrained(
-    "google/gemma-4-2b-it",
-    dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-processor = AutoProcessor.from_pretrained(
-    "google/gemma-2-2b-it",
-    padding_side="left"
-)
+
+WEATHER_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_n_day_weather_forecast",
+        "description": "Get an N-day weather forecast",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["celsius", "fahrenheit"],
+                    "description": "The temperature unit to use",
+                },
+                "num_days": {
+                    "type": "integer",
+                    "description": "The number of days to forecast",
+                },
+            },
+            "required": ["location", "format", "num_days"],
+        },
+    },
+}
 
 messages = [
     {
-        "role": "system",
-        "content": [
-            {"type": "text", "text": "You are a helpful assistant."}
-        ]
-    },
-    {
-        "role": "user", "content": [
-            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-            {"type": "text", "text": "What is shown in this image?"},
-        ]
+        "role": "user",
+        "content": "What's the weather like the next 3 days in San Francisco, CA (using F)?",
     },
 ]
+
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-4-E2B-it",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+processor = AutoProcessor.from_pretrained(
+    "google/gemma-4-E2B-it",
+    padding_side="left"
+)
+
+text = processor.apply_chat_template(
+    messages,
+    tools=[WEATHER_TOOL],
+    tokenize=False,
+    add_generation_prompt=True,
+)
+
+inputs = processor(text=text, return_tensors="pt").to(model.device)
+input_len = inputs["input_ids"].shape[-1]
+
+outputs = model.generate(**inputs, max_new_tokens=200)
+print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
+```
+
+### Audio (E2B and E4B Only)
+
+```py
+import torch
+from transformers import AutoProcessor, AutoModelForMultimodalLM
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Please transcribe the following audio:"},
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+            },
+        ],
+    }
+]
+
+model = AutoModelForMultimodalLM.from_pretrained(
+    "google/gemma-4-E2B-it",
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+processor = AutoProcessor.from_pretrained(
+    "google/gemma-4-E2B-it",
+    padding_side="left"
+)
+
 inputs = processor.apply_chat_template(
     messages,
     tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
     add_generation_prompt=True,
-).to(model.device)
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device, dtype=model.dtype)
 
-output = model.generate(**inputs, max_new_tokens=50, cache_implementation="static")
-print(processor.decode(output[0], skip_special_tokens=True))
+input_len = inputs["input_ids"].shape[-1]
+
+outputs = model.generate(**inputs, max_new_tokens=200)
+print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 ```
 
 ## Gemma4AudioConfig
