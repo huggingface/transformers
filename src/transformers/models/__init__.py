@@ -152,6 +152,7 @@ if TYPE_CHECKING:
     from .gemma2 import *
     from .gemma3 import *
     from .gemma3n import *
+    from .gemma4 import *
     from .git import *
     from .glm import *
     from .glm4 import *
