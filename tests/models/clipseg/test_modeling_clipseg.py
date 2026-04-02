@@ -445,6 +445,10 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_for_image_segmentation(*config_and_inputs)
 
+    @unittest.skip(reason="ClipSeg can;t compile due to the decoder module")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass

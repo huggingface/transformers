@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithNoAttention, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
@@ -76,13 +76,21 @@ class CLIPSegOutput(ModelOutput):
 
 @dataclass
 @auto_docstring
-class CLIPSegDecoderOutput(BaseModelOutputWithNoAttention):
+class CLIPSegDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, ):
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        Rreturned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
+    attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads. Returned when `output_attentions=True` is passed or when `config.output_attentions=True`
     """
 
     logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass

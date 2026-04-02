@@ -142,13 +142,21 @@ class CLIPSegOutput(CLIPOutput):
 
 @dataclass
 @auto_docstring
-class CLIPSegDecoderOutput(BaseModelOutputWithNoAttention):
+class CLIPSegDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, ):
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        Rreturned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
+    attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads. Returned when `output_attentions=True` is passed or when `config.output_attentions=True`
     """
 
     logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
