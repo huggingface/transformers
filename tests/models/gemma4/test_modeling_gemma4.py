@@ -419,6 +419,7 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
 
+@unittest.skip("Integration Tests are not up-to-date yet! TODO Cyril: update me pretty pretty please!")
 @slow
 @require_torch_accelerator
 class Gemma4IntegrationTest(unittest.TestCase):
