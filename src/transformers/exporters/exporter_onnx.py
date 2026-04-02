@@ -50,20 +50,20 @@ from .utils import duplicate_leaf_tensors, get_leaf_tensors
 
 if is_torch_available():
     import torch
+    from torch.export import ExportedProgram
+    from torch.onnx import ONNXProgram
 
     from .. import masking_utils
+
 
 if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
-
-    if is_torch_available():
-        from torch.export import ExportedProgram
-        from torch.onnx import ONNXProgram
 
     if is_onnxscript_available():
         from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal

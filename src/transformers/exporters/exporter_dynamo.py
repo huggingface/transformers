@@ -36,7 +36,7 @@ import importlib
 import inspect
 import sys
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..utils import logging
 from ..utils.export_config import DynamoConfig
@@ -47,13 +47,9 @@ from .utils import prepare_for_export
 
 if is_torch_available():
     import torch
-
-    from ..cache_utils import Cache
-
-
-if TYPE_CHECKING:
     from torch.export import ExportedProgram
 
+    from ..cache_utils import Cache
     from ..modeling_utils import PreTrainedModel
 
 
