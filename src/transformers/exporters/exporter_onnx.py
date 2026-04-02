@@ -358,24 +358,27 @@ def _patch_masked_scatter(original):
 
 
 # (object, attribute, factory) triples installed by patch_torch_ops.
-_TORCH_PATCH_TABLE = [
-    (torch, "where", _patch_where),
-    (torch, "unsqueeze", _patch_unsqueeze),
-    (torch.Tensor, "unsqueeze", _patch_unsqueeze),
-    (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
-    (masking_utils, "_vmap_expansion_sdpa", _patch_broadcast_mask_expansion),
-    (torch.nn.RMSNorm, "forward", _patch_rms_norm_forward),
-    (torch, "randperm", _patch_randperm),
-    (torch, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
-    (torch, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
-    (torch.Tensor, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
-    (torch.Tensor, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
-    (torch, "bucketize", _patch_bucketize),
-    (torch.Tensor, "masked_scatter", _patch_masked_scatter),
-    (torch, "full", _patch_full),
-    (torch.masked, "mean", _patch_masked_mean),
-    (torch.masked, "var", _patch_masked_var),
-]
+_TORCH_PATCH_TABLE = []
+
+if is_torch_available():
+    _TORCH_PATCH_TABLE = [
+        (torch, "where", _patch_where),
+        (torch, "unsqueeze", _patch_unsqueeze),
+        (torch.Tensor, "unsqueeze", _patch_unsqueeze),
+        (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
+        (masking_utils, "_vmap_expansion_sdpa", _patch_broadcast_mask_expansion),
+        (torch.nn.RMSNorm, "forward", _patch_rms_norm_forward),
+        (torch, "randperm", _patch_randperm),
+        (torch, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
+        (torch, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
+        (torch.Tensor, "cummax", lambda orig: _patch_cummax_or_cummin(orig, mode="max")),
+        (torch.Tensor, "cummin", lambda orig: _patch_cummax_or_cummin(orig, mode="min")),
+        (torch, "bucketize", _patch_bucketize),
+        (torch.Tensor, "masked_scatter", _patch_masked_scatter),
+        (torch, "full", _patch_full),
+        (torch.masked, "mean", _patch_masked_mean),
+        (torch.masked, "var", _patch_masked_var),
+    ]
 
 
 @contextmanager
