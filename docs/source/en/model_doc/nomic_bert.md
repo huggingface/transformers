@@ -23,15 +23,15 @@ limitations under the License.
 
 ## Overview
 
-The NomicBERT was proposed in [Nomic Embed: Training a Reproducible Long Context Text Embedder](https://arxiv.org/abs/2402.01613) by 
-Zach Nussbaum, John X. Morris, Brandon Duderstadt, and Andriy Mulyar. It is Bert-inspired model with the most notable extension applying 
+NomicBERT was proposed in [Nomic Embed: Training a Reproducible Long Context Text Embedder](https://arxiv.org/abs/2402.01613) by 
+Zach Nussbaum, John X. Morris, Brandon Duderstadt, and Andriy Mulyar. It is BERT-inspired with the most notable extension applying 
 [Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to an encoder model. 
 
 The abstract from the paper is the following:
 
 *This technical report describes the training of nomic-embed-text-v1, the first fully reproducible, open-source, open-weights, open-data, 8192 context length English text embedding model that outperforms both OpenAI Ada-002 and OpenAI text-embedding-3-small on the short-context MTEB benchmark and the long context LoCo benchmark. We release the training code and model weights under an Apache 2.0 license. In contrast with other open-source models, we release the full curated training data and code that allows for full replication of nomic-embed-text-v1. [...]*
 
-This model was contributed by community members ([Sonny Cooper](https://github.com/ed22699)).
+This model was contributed by community member ([Sonny Cooper](https://github.com/ed22699)).
 The original code for nomic-embed-text-v1.5 and nomic-embed-text-v1 can be found [here](https://github.com/nomic-ai/contrastors).
 
 ## Usage examples
