@@ -49,7 +49,8 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 <options id="usage">
 <hfoption id="AutoModel">
 
-```py
+```py runnable:test_basic
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
@@ -61,6 +62,7 @@ inputs = inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+assert len(decoded_outputs) == 1  # nodoc
 print(decoded_outputs)
 ```
 
@@ -71,10 +73,12 @@ print(decoded_outputs)
 
 The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
 
-```py
+```py runnable:test_advanced
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
-processor = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
 
 inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
@@ -98,13 +102,20 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     return_dict=True,
 )
+
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 One can also use audio arrays directly:
 
-```py
+```py runnable:test_audio_array
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
-from datasets import load_dataset
+from datasets import load_dataset, Audio
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
 model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
@@ -127,22 +138,68 @@ print(decoded_outputs)
 
 You can process multiple audio files at once:
 
-```py
-from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+```py runnable:test_batched
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
+import torch
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
+processor = AutoProcessor.from_pretrained(checkpoint_name)
 
-inputs = processor.apply_transcription_request([
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3",
-])
+conversation = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio",
+                    "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                },
+                {"type": "text", "text": "Please transcribe this audio into text"},
+            ],
+        },
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio",
+                    "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+                },
+                {"type": "text", "text": "Please transcribe this audio into text"},
+            ],
+        },
+    ],
+]
 
-inputs = inputs.to(model.device, dtype=model.dtype)
+model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map="auto", dtype="auto")
+
+inputs = processor.apply_chat_template(
+    conversation, tokenize=True, add_generation_prompt=True, return_dict=True
+).to(model.device, dtype=model.dtype)
+
+inputs_transcription = processor.apply_transcription_request(
+    [
+        "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+        "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+    ],
+).to(model.device, dtype=model.dtype)
+
+for key in inputs:  # doc-builder: ignore-bare-assert
+    assert torch.equal(inputs[key], inputs_transcription[key])
+
 outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
-print(decoded_outputs)
+decoded_outputs = processor.batch_decode(
+    outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
+)
+
+EXPECTED_OUTPUT = [
+    "Yesterday it was thirty five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
+    "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the",
+]
+assert decoded_outputs == EXPECTED_OUTPUT
 ```
 
 ## GlmAsrEncoderConfig

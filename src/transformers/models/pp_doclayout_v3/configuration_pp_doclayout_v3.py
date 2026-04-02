@@ -162,7 +162,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
     global_pointer_head_size: int = 64
-    gp_dropout_value: float = 0.1
+    gp_dropout_value: float | int = 0.1
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(

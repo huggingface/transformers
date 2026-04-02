@@ -52,7 +52,7 @@ class ConvNextConfig(BackboneConfigMixin, PreTrainedConfig):
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     layer_scale_init_value: float = 1e-6
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     image_size: int | list[int] | tuple[int, int] = 224
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
