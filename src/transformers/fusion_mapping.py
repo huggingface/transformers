@@ -18,6 +18,7 @@ See `docs/source/en/fusion_mapping.md` for the design overview and extension gui
 """
 
 import math
+import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +49,8 @@ class ModuleFusionSpec:
     checkpoints between the original and fused layouts.
     """
 
+    target_modules_patterns: tuple[str, ...] = ()
+
     def get_empty_log(self, model_name: str) -> str:
         """Return the log message emitted when no compatible modules are found."""
         return f"No compatible {type(self).__name__} classes found to fuse for {model_name}"
@@ -67,6 +70,8 @@ class ModuleFusionSpec:
 
 class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
     """Fuse compatible Conv3d patch embeddings into flattened Linear projections."""
+
+    target_modules_patterns = (r"(^|\.)patch_embed$",)
 
     def is_fusable(self, module: nn.Module) -> bool:
         if not isinstance(proj := getattr(module, "proj", None), nn.Conv3d):
@@ -142,7 +147,9 @@ def _discover_fusable_modules(
 
     This function:
     - instantiates `cls(config)` on the meta device
-    - scans `named_modules()` for compatible modules
+    - scans `named_modules()` for candidate modules
+    - optionally pre-filters them with `target_modules_patterns`
+    - uses `is_fusable(...)` as the final structural check
     - builds the patch mapping used by monkey patching
 
     Results are cached per `(fusion_name, cls)` to avoid repeated meta-initialization.
@@ -157,9 +164,13 @@ def _discover_fusable_modules(
 
     seen_classes = set()
     patch_mapping = {}
-    for module in model.modules():
+    for module_name, module in model.named_modules():
         module_cls = type(module)
         if module_cls in seen_classes:
+            continue
+        if spec.target_modules_patterns and all(
+            re.search(pattern, module_name) is None for pattern in spec.target_modules_patterns
+        ):
             continue
         if not spec.is_fusable(module):
             continue
