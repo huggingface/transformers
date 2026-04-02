@@ -63,9 +63,9 @@ class CodeGenConfig(PreTrainedConfig):
     rotary_dim: int = 64
     n_inner: int | None = None
     activation_function: str = "gelu_new"
-    resid_pdrop: float = 0.0
-    embd_pdrop: float = 0.0
-    attn_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
+    embd_pdrop: float | int = 0.0
+    attn_pdrop: float | int = 0.0
     layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02
     use_cache: bool = True

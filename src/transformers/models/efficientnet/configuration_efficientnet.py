@@ -84,8 +84,8 @@ class EfficientNetConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     batch_norm_eps: float = 0.001
     batch_norm_momentum: float = 0.99
-    dropout_rate: float = 0.5
-    drop_connect_rate: float = 0.2
+    dropout_rate: float | int = 0.5
+    drop_connect_rate: float | int = 0.2
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
