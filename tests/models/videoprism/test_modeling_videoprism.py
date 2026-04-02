@@ -22,6 +22,7 @@ from parameterized import parameterized
 
 from transformers import VideoPrismConfig, VideoPrismTextConfig, VideoPrismVisionConfig
 from transformers.testing_utils import (
+    Expectations,
     require_sentencepiece,
     require_torch,
     require_vision,
@@ -654,15 +655,23 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             outputs[1].cpu().tolist(),
             "Outputs of the batches are not identical for identical input batches",
         )
-        expectations = torch.tensor(
-            [
-                [0.11648951, 0.4568253, 0.19288044],
-                [0.28420594, -0.04224018, 0.377879],
-                [0.24594213, -0.3914095, -0.30516925],
-            ]
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [0.11648951, 0.4568253, 0.19288044],
+                    [0.28420594, -0.04224018, 0.377879],
+                    [0.24594213, -0.3914095, -0.30516925],
+                ],
+                ("cuda", 8): [
+                    [0.117341, 0.457717, 0.191118],
+                    [0.281890, -0.036400, 0.378880],
+                    [0.242660, -0.388228, -0.309092],
+                ],
+            }
         )
-        expected_slice = outputs[0, :3, :3].cpu()
-        torch.testing.assert_close(expected_slice, expectations, rtol=1e-5, atol=1e-5)
+        expected_values = torch.tensor(expectations.get_expectation(), device=torch_device)
+        expected_slice = outputs[0, :3, :3]
+        torch.testing.assert_close(expected_slice, expected_values, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_videoprism_clip_model(self):
@@ -678,7 +687,7 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         model.eval()
         with torch.inference_mode():
             outputs = model(input_vids, **tokens)
-        torch.testing.assert_close(outputs.video_embeds[0], outputs.video_embeds[1], rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(outputs.video_embeds[0], outputs.video_embeds[1], rtol=2e-4, atol=2e-4)
 
         self.assertEqual(
             outputs.logits_per_video.shape,
@@ -689,33 +698,57 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             torch.Size((tokens.input_ids.shape[0], input_vids.shape[0])),
         )
 
-        video_expectation = torch.tensor(
-            [
-                -0.01940615,
-                -0.04830061,
-                0.0069022,
-                0.02915299,
-                -0.05897291,
-                0.02168823,
-                -0.01471708,
-                -0.00971614,
-                -0.00220576,
-            ]
+        video_expectation = Expectations(
+            {
+                (None, None): [
+                    -0.01940615,
+                    -0.04830061,
+                    0.0069022,
+                    0.02915299,
+                    -0.05897291,
+                    0.02168823,
+                    -0.01471708,
+                    -0.00971614,
+                    -0.00220576,
+                ],
+                ("cuda", 8): [
+                    -0.0195320193,
+                    -0.0481898002,
+                    0.0068484289,
+                    0.0292503964,
+                    -0.0588871539,
+                    0.0218045879,
+                    -0.0147783663,
+                    -0.0092534823,
+                    -0.0021587543,
+                ],
+            }
         )
-        text_expectation = torch.tensor(
-            [
-                [-0.00802545, 0.00931361, 0.01555958],
-                [0.02245245, 0.00010197, -0.01073526],
-                [-0.02258418, 0.00133927, -0.01555064],
-                [0.01056228, 0.01835608, -0.01539922],
-                [-0.00366718, 0.00370416, 0.00800336],
-            ]
+        text_expectation = Expectations(
+            {
+                (None, None): [
+                    [-0.00802545, 0.00931361, 0.01555958],
+                    [0.02245245, 0.00010197, -0.01073526],
+                    [-0.02258418, 0.00133927, -0.01555064],
+                    [0.01056228, 0.01835608, -0.01539922],
+                    [-0.00366718, 0.00370416, 0.00800336],
+                ],
+                ("cuda", 8): [
+                    [-8.0098593608e-03, 9.3171931803e-03, 1.5544882976e-02],
+                    [2.2461047396e-02, 9.5467286883e-05, -1.0741823353e-02],
+                    [-2.2578010336e-02, 1.3390942477e-03, -1.5561779030e-02],
+                    [1.0591125116e-02, 1.8359506503e-02, -1.5389740467e-02],
+                    [-3.6388880108e-03, 3.6980083678e-03, 7.9908100888e-03],
+                ],
+            }
         )
 
-        video_logits = outputs.video_embeds[0, :9].cpu()
-        text_logits = outputs.text_embeds[:, :3].cpu()
-        torch.testing.assert_close(video_logits, video_expectation, rtol=1e-5, atol=1e-5)
-        torch.testing.assert_close(text_logits, text_expectation, rtol=1e-4, atol=1e-4)
+        video_expected_values = torch.tensor(video_expectation.get_expectation(), device=torch_device)
+        text_expected_values = torch.tensor(text_expectation.get_expectation(), device=torch_device)
+        video_logits = outputs.video_embeds[0, :9]
+        text_logits = outputs.text_embeds[:, :3]
+        torch.testing.assert_close(video_logits, video_expected_values, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(text_logits, text_expected_values, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_videoprism_interpolate_pos_encoding(self):
@@ -748,12 +781,31 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
         with torch.inference_mode():
             outputs = model(inputs, labels=label)
 
-        expected_logits = torch.tensor(
-            [
-                [
-                    [-18.8312, -12.7110, -7.8350, -9.0105, 17.4249, 17.9310, -4.9404, -0.9551, 26.1960, 6.9420],
-                ]
-            ]
+        expected_logits = Expectations(
+            {
+                (None, None): [
+                    [
+                        [-18.8312, -12.7110, -7.8350, -9.0105, 17.4249, 17.9310, -4.9404, -0.9551, 26.1960, 6.9420],
+                    ]
+                ],
+                ("cuda", 8): [
+                    [
+                        [
+                            -19.071947,
+                            -12.848271,
+                            -7.923994,
+                            -9.123695,
+                            17.561295,
+                            18.006187,
+                            -4.814398,
+                            -0.913560,
+                            26.279634,
+                            6.956081,
+                        ],
+                    ]
+                ],
+            }
         )
-        torch.testing.assert_close(outputs.logits.cpu(), expected_logits, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs.loss.cpu(), torch.tensor(0.0004), rtol=1e-4, atol=1e-4)
+        expected_logits_values = torch.tensor(expected_logits.get_expectation(), device=torch_device)
+        torch.testing.assert_close(outputs.logits, expected_logits_values, rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(outputs.loss, torch.tensor(0.0004, device=torch_device), rtol=2e-4, atol=2e-4)

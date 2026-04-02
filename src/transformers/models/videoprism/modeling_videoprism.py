@@ -305,7 +305,7 @@ def eager_attention_forward(
         attn_weights = torch.tanh(attn_weights)
         attn_weights = attn_weights * softcap
     if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask.expand(*attn_weights.shape)
+        attn_weights = attn_weights + attention_mask
 
     # Normalize the attention scores to probabilities.
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
