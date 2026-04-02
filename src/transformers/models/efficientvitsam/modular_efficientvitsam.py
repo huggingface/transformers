@@ -174,6 +174,7 @@ __all__ = [
     "EfficientvitsamModel",
     "EfficientvitsamPreTrainedModel",
     "EfficientvitsamImageProcessor",
+    "EfficientvitsamImageProcessorKwargs",
     "EfficientvitsamImageProcessorPil",
     "EfficientvitsamProcessor",
 ]
