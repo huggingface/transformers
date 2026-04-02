@@ -432,6 +432,28 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="LayerNorm.bias",
             ),
         ],
+        "nomic_bert": [
+            WeightRenaming(r"encoder.layers", r"layers"),
+            WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
+            WeightRenaming(r"attn.out_proj", r"self_attn.o_proj"),
+            WeightRenaming(r"fc11", r"up_proj"),
+            WeightRenaming(r"fc12", r"gate_proj"),
+            WeightRenaming(r"fc2", r"down_proj"),
+            WeightRenaming(r"norm1", r"post_attention_layernorm"),
+            WeightRenaming(
+                r"norm2",
+                r"post_mlp_layernorm",
+            ),
+            WeightConverter(
+                source_patterns=["attn.Wqkv"],
+                target_patterns=[
+                    "self_attn.q_proj",
+                    "self_attn.k_proj",
+                    "self_attn.v_proj",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         "jina_embeddings_v3": [
             WeightRenaming(source_patterns="emb_ln", target_patterns="embeddings.LayerNorm"),
             WeightRenaming(source_patterns="encoder.layers", target_patterns="layers"),
@@ -554,7 +576,9 @@ def get_checkpoint_conversion_mapping(model_type):
 
 
 def register_checkpoint_conversion_mapping(
-    model_type: str, mapping: list[WeightConverter | WeightRenaming], overwrite: bool = False
+    model_type: str,
+    mapping: list[WeightConverter | WeightRenaming],
+    overwrite: bool = False,
 ) -> None:
     global _checkpoint_conversion_mapping_cache
     if _checkpoint_conversion_mapping_cache is None:
