@@ -245,18 +245,21 @@ def _patch_scaled_dot_product_attention(original):
 
 
 # (object, attribute, factory) triples installed by patch_torch_ops.
-_TORCH_PATCH_TABLE = [
-    (torch, "split", _patch_split),
-    (torch.Tensor, "split", _patch_split),
-    (torch, "chunk", _patch_chunk),
-    (torch.Tensor, "chunk", _patch_chunk),
-    (torch, "topk", _patch_topk),
-    (torch.Tensor, "topk", _patch_topk),
-    (torch, "detach", _patch_detach),
-    (torch.Tensor, "detach", _patch_detach),
-    (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
-    (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
-]
+_TORCH_PATCH_TABLE = []
+
+if is_torch_available():
+    _TORCH_PATCH_TABLE = [
+        (torch, "split", _patch_split),
+        (torch.Tensor, "split", _patch_split),
+        (torch, "chunk", _patch_chunk),
+        (torch.Tensor, "chunk", _patch_chunk),
+        (torch, "topk", _patch_topk),
+        (torch.Tensor, "topk", _patch_topk),
+        (torch, "detach", _patch_detach),
+        (torch.Tensor, "detach", _patch_detach),
+        (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
+        (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
+    ]
 
 
 @contextmanager
