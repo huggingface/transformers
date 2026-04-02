@@ -106,7 +106,7 @@ class NandiTokenizer(TokenizersBackend):
     ):
         if isinstance(text, str):
             # This is a temporary fix to match the behaviour of the training pipeline
-            text = " " + text
+            text = "<|im_start|> " + text
         return super().encode(
             text,
             text_pair=text_pair,
