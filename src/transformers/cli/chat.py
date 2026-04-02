@@ -18,7 +18,7 @@ import platform
 import re
 import string
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse
 
@@ -110,14 +110,14 @@ class RichInterface:
         self.user_id = user_id
         self.base_url = base_url
 
-    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, str | Any | None]:
+    async def stream_output(self, stream: Awaitable[AsyncIterator[ChatCompletionStreamOutput]]) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
             completion_tokens = 0
             start_time = time.time()
             finish_reason: str | None = None
-            async for token in await stream:  # type: ignore[misc]
+            async for token in await stream:
                 outputs = token.choices[0].delta.content
                 finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
 
