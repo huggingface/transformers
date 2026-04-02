@@ -35,9 +35,8 @@ import copy
 import enum
 import functools
 import inspect
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..modeling_utils import PreTrainedModel
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
 
@@ -48,17 +47,21 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
+if TYPE_CHECKING:
+    if is_torch_available():
+        from ..modeling_utils import PreTrainedModel
+
 
 # Output flags that should be set on model.config, not passed as forward() kwargs.
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
+_LEAF_SKIP_TYPES = (type,)
 if is_torch_available():
     # Types that should not be recursed into when extracting leaf tensors.
     # Sym* types carry PyTorch shape_env internals that cause infinite recursion;
     # Enums are scalars with no tensor fields.
-    _LEAF_SKIP_TYPES = (type, enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
-
+    _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
 
 # ── Recursive structure traversal ──────────────────────────────────────────
 # All tensor utilities share this traversal. _map_leaf_tensors applies a function

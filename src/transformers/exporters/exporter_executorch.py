@@ -35,7 +35,8 @@ if is_executorch_available():
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
 
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
+    if is_torch_available():
+        from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
