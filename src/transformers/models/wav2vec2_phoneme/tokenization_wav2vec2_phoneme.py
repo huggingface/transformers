@@ -173,7 +173,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         requires_backends(self, "phonemizer")
         from phonemizer.backend import BACKENDS
 
-        self.backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
+        self._phonemizer_backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
 
     def prepare_for_tokenization(
         self,
@@ -181,6 +181,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         is_split_into_words: bool = False,
         phonemizer_lang: str | None = None,
         do_phonemize: bool | None = None,
+        **kwargs,
     ) -> tuple[str, dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -250,7 +251,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
-        phonemes = self.backend.phonemize(
+        phonemes = self._phonemizer_backend.phonemize(
             [text],
             separator=separator,
         )
