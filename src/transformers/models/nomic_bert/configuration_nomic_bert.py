@@ -53,8 +53,8 @@ class NomicBertConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "silu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
     max_position_embeddings: int = 2048
     type_vocab_size: int = 2
     initializer_range: float = 0.02
