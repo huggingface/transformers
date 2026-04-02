@@ -16,6 +16,7 @@ import sys
 import types
 import unittest
 from copy import deepcopy
+from types import SimpleNamespace
 
 import torch.nn as nn
 
@@ -36,10 +37,15 @@ sys.modules[DUMMY_TRANSFORMERS_MODULE_NAME] = DUMMY_TRANSFORMERS_MODULE
 class DummyFusionConfig(PretrainedConfig):
     model_type = "dummy_fusion"
 
-    def __init__(self, patch_embed_stride=(2, 2, 2), patch_embed_bias=False, **kwargs):
+    def __init__(self, patch_embed_stride=(2, 2, 2), **kwargs):
         super().__init__(**kwargs)
-        self.patch_embed_stride = patch_embed_stride
-        self.patch_embed_bias = patch_embed_bias
+        self.vision_config = SimpleNamespace(
+            in_channels=3,
+            patch_size=2,
+            temporal_patch_size=2,
+            patch_embed_stride=patch_embed_stride,
+            patch_embed_bias=True,
+        )
 
 
 class DummyPatchEmbedding(nn.Module):
@@ -59,7 +65,7 @@ class DummyFusionModel(PreTrainedModel):
         super().__init__(config)
         # Instantiate through the fake module so `apply_patches()` sees the replacement.
         self.patch_embed = DUMMY_TRANSFORMERS_MODULE.DummyPatchEmbedding(
-            stride=tuple(config.patch_embed_stride), bias=config.patch_embed_bias
+            stride=config.vision_config.patch_embed_stride, bias=config.vision_config.patch_embed_bias
         )
 
 
@@ -68,7 +74,7 @@ for class_name, patchable_class in DummyFusionModel.patchable_classes.items():
 
 
 class FusionMappingTest(unittest.TestCase):
-    """Covers discovery, no-match, and conflict handling for fusion mapping."""
+    """Covers registration, no-match, and conflict handling for fusion mapping."""
 
     fusion_config = {"patch_embeddings": True}
 
@@ -85,7 +91,7 @@ class FusionMappingTest(unittest.TestCase):
     def test_register_fusion_patches_is_effective_on_dummy_model(self):
         # Registers and applies a fusion on a dummy model.
         DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
-        config = DummyFusionConfig(patch_embed_stride=(2, 2, 2), patch_embed_bias=True)
+        config = DummyFusionConfig()
 
         self.assertEqual(get_patch_mapping(), {})
         self.assertIsNone(get_checkpoint_conversion_mapping(config.model_type))
@@ -117,7 +123,7 @@ class FusionMappingTest(unittest.TestCase):
     def test_register_fusion_patches_raises_on_transform_conflicts(self):
         # Rejects transforms that would shadow an existing source pattern.
         DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
-        config = DummyFusionConfig(patch_embed_stride=(2, 2, 2))
+        config = DummyFusionConfig()
         model_type = config.model_type
 
         # build a conflicting conversion mapping with the same source pattern but different target pattern
@@ -125,8 +131,8 @@ class FusionMappingTest(unittest.TestCase):
             model_type,
             [
                 WeightConverter(
-                    source_patterns="patch_embed.proj.weight",
-                    target_patterns="patch_embed.other_linear_proj.weight",
+                    source_patterns=r"patch_embed\.proj\.weight$",
+                    target_patterns=r"patch_embed\.other_linear_proj\.weight$",
                     operations=[Conv3dToLinear(in_channels=3, kernel_size=(2, 2, 2))],
                 )
             ],

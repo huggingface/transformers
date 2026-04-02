@@ -18,7 +18,7 @@ See `docs/source/en/fusion_mapping.md` for the design overview and extension gui
 """
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-_FUSION_DISCOVERY_CACHE: dict[str, dict[type, tuple[dict[str, type[nn.Module]], list[WeightTransform]]]] = {}
+_FUSION_DISCOVERY_CACHE: dict[str, dict[type, dict[str, type[nn.Module]]]] = {}
 
 
 class ModuleFusionSpec:
@@ -56,11 +56,11 @@ class ModuleFusionSpec:
         """Return whether `module` is compatible with this fusion family."""
         raise NotImplementedError
 
-    def make_fused_class(self, original_cls: type[nn.Module], reference_module: nn.Module) -> type[nn.Module]:
+    def make_fused_class(self, original_cls: type[nn.Module]) -> type[nn.Module]:
         """Build the runtime replacement class for a compatible module class."""
         raise NotImplementedError
 
-    def make_transforms(self, module_name: str, reference_module: nn.Module) -> list[WeightTransform]:
+    def make_transforms(self, config: "PretrainedConfig") -> list[WeightTransform]:
         """Build the weight transforms needed to load and save the fused runtime layout."""
         raise NotImplementedError
 
@@ -80,18 +80,16 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
             and proj.groups == 1
         )
 
-    def make_fused_class(self, original_cls: type[nn.Module], reference_module: nn.Module) -> type[nn.Module]:
-        # patch_volume = in_channels * temporal_patch_size * patch_height * patch_width
-        patch_volume = reference_module.proj.in_channels * math.prod(reference_module.proj.kernel_size)
-
+    def make_fused_class(self, original_cls: type[nn.Module]) -> type[nn.Module]:
         class FusedPatchEmbedding(original_cls):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
+                self.patch_volume = self.proj.in_channels * math.prod(self.proj.kernel_size)
 
                 self.linear_proj = nn.Linear(
-                    patch_volume,
+                    self.patch_volume,
                     self.proj.out_channels,
-                    bias=self.proj.bias is not None,  # might not be used at all?
+                    bias=self.proj.bias is not None,
                     device=self.proj.weight.device,
                     dtype=self.proj.weight.dtype,
                 )
@@ -100,7 +98,7 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
 
             def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
                 target_dtype = self.linear_proj.weight.dtype
-                hidden_states = hidden_states.view(-1, patch_volume)
+                hidden_states = hidden_states.view(-1, self.patch_volume)
                 hidden_states = self.linear_proj(hidden_states.to(dtype=target_dtype))
                 return hidden_states.view(-1, self.embed_dim)
 
@@ -108,49 +106,46 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
         FusedPatchEmbedding.__qualname__ = f"Fused{original_cls.__qualname__}"
         return FusedPatchEmbedding
 
-    def make_transforms(self, module_name: str, reference_module: nn.Module) -> list[WeightTransform]:
-        source_weight_name = f"{module_name}.proj.weight"
-        target_weight_name = f"{module_name}.linear_proj.weight"
-        converters = [
+    def make_transforms(self, config: "PretrainedConfig") -> list[WeightTransform]:
+        vision_config = config.vision_config
+        patch_size = vision_config.patch_size
+        if isinstance(patch_size, int):
+            patch_size = (patch_size, patch_size)
+        kernel_size = (vision_config.temporal_patch_size, *tuple(patch_size))
+        in_channels = vision_config.in_channels
+
+        return [
             WeightConverter(
-                source_patterns=source_weight_name,
-                target_patterns=target_weight_name,
+                source_patterns=r"patch_embed\.proj\.weight$",
+                target_patterns=r"patch_embed\.linear_proj\.weight$",
                 operations=[
                     Conv3dToLinear(
-                        in_channels=reference_module.proj.in_channels,
-                        kernel_size=tuple(reference_module.proj.kernel_size),
+                        in_channels=in_channels,
+                        kernel_size=kernel_size,
                     )
                 ],
-            )
+            ),
+            WeightRenaming(
+                source_patterns=r"patch_embed\.proj\.bias$",
+                target_patterns=r"patch_embed\.linear_proj\.bias$",
+            ),
         ]
-        if reference_module.proj.bias is not None:
-            converters.append(
-                WeightRenaming(
-                    source_patterns=f"{module_name}.proj.bias",
-                    target_patterns=f"{module_name}.linear_proj.bias",
-                )
-            )
-        return converters
 
 
 def _discover_fusable_modules(
     cls: "type[PreTrainedModel]",
     config: "PretrainedConfig",
     fusion_name: str,
-    is_fusable: Callable[[nn.Module], bool],
-    make_fused_class: Callable[[type[nn.Module], nn.Module], type[nn.Module]],
-    make_transforms: Callable[[str, nn.Module], list[WeightTransform]],
-) -> tuple[dict[str, type[nn.Module]], list[WeightTransform]]:
-    """Discover compatible modules for one fusion family on a meta-initialized model.
+    spec: ModuleFusionSpec,
+) -> dict[str, type[nn.Module]]:
+    """Discover compatible module classes for one fusion family on a meta-initialized model.
 
     This function:
     - instantiates `cls(config)` on the meta device
     - scans `named_modules()` for compatible modules
     - builds the patch mapping used by monkey patching
-    - collects the weight transforms needed for checkpoint conversion
 
-    Results are cached per `(fusion_name, cls)` to avoid repeated
-    meta-initialization.
+    Results are cached per `(fusion_name, cls)` to avoid repeated meta-initialization.
     """
 
     cache = _FUSION_DISCOVERY_CACHE.setdefault(fusion_name, {})
@@ -162,21 +157,18 @@ def _discover_fusable_modules(
 
     seen_classes = set()
     patch_mapping = {}
-    converters = []
-    for module_name, module in model.named_modules():
-        if not is_fusable(module):
-            continue
-
+    for module in model.modules():
         module_cls = type(module)
-        converters.extend(make_transforms(module_name, module))
         if module_cls in seen_classes:
+            continue
+        if not spec.is_fusable(module):
             continue
 
         seen_classes.add(module_cls)
-        patch_mapping[module_cls.__name__] = make_fused_class(module_cls, module)
+        patch_mapping[module_cls.__name__] = spec.make_fused_class(module_cls)
 
-    cache[cls] = (patch_mapping, converters)
-    return patch_mapping, converters
+    cache[cls] = patch_mapping
+    return patch_mapping
 
 
 def _register_module_fusion(
@@ -192,14 +184,7 @@ def _register_module_fusion(
     - conflicting checkpoint transforms fail fast
     """
 
-    fusable_classes, converters = _discover_fusable_modules(
-        cls,
-        config,
-        fusion_name=fusion_name,
-        is_fusable=spec.is_fusable,
-        make_fused_class=spec.make_fused_class,
-        make_transforms=spec.make_transforms,
-    )
+    fusable_classes = _discover_fusable_modules(cls, config, fusion_name=fusion_name, spec=spec)
     if not fusable_classes:
         logger.info(spec.get_empty_log(cls.__name__))
         return
@@ -209,6 +194,7 @@ def _register_module_fusion(
     if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
         raise ValueError(f"Model {cls.__name__} has no config class or model type")
     model_type = cls.config_class.model_type
+    converters = spec.make_transforms(config)
 
     existing_converters = get_checkpoint_conversion_mapping(model_type)
     if existing_converters is not None:
@@ -218,12 +204,7 @@ def _register_module_fusion(
         for converter in converters:
             source_patterns = tuple(converter.source_patterns)
             existing_converter = existing_converter_sources.get(source_patterns)
-            if existing_converter is None:
-                continue
-
-            if type(existing_converter) is not type(converter) or tuple(existing_converter.target_patterns) != tuple(
-                converter.target_patterns
-            ):
+            if existing_converter is not None:
                 raise ValueError(
                     f"Fusion {fusion_name} for model type {model_type} conflicts with an existing conversion mapping "
                     f"for source patterns {source_patterns}."

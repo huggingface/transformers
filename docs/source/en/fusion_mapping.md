@@ -48,9 +48,9 @@ Fusion registration happens before the model is instantiated:
 
 1. [`~PreTrainedModel.from_pretrained`] passes `fusion_config` to `register_fusion_patches(...)`.
 2. The fusion registry validates the requested fusion names.
-3. Each enabled fusion meta-initializes the target model class and discovers compatible modules.
+3. Each enabled fusion meta-initializes the target model class and discovers compatible module classes.
 4. Fused replacement classes are registered through [`~transformers.monkey_patching.register_patch_mapping`].
-5. Matching [`~WeightTransform`] rules are registered so checkpoint loading can map weights into the fused runtime layout.
+5. Matching [`~WeightTransform`] rules are generated from the config so checkpoint loading can map weights into the fused runtime layout.
 6. By default, [`~PreTrainedModel.save_pretrained`] uses the reverse conversion path to restore the original checkpoint layout. Pass `save_original_format=False` to keep the converted runtime layout instead.
 
 This lets a fusion use a different runtime module structure while still loading from the original checkpoint format, and by default saving back to it as well.
@@ -78,7 +78,7 @@ To add a new fusion family:
 2. Add a `make_fused_class` factory.
    This returns the runtime replacement class for a compatible module class.
 3. Add a `make_transforms` factory if the fused layout needs checkpoint conversion.
-   This returns the [`~WeightTransform`] rules that map weights between the original and fused layouts.
+   This returns the [`~WeightTransform`] rules that map weights between the original and fused layouts for a given config.
 4. Register the new `ModuleFusionSpec` in [`fusion_mapping.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/fusion_mapping.py).
 
 Once registered, the new fusion becomes available through `fusion_config`.
