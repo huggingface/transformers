@@ -20,59 +20,234 @@ Usage:
     python utils/checkers.py copies,doc_toc --keep-going
     python utils/checkers.py all
     python utils/checkers.py all --fix
+
+Plugin system
+-------------
+Each checker module declares a ``CHECKER_CONFIG`` dict (extracted via ``ast.literal_eval``,
+no import needed — this keeps discovery fast and avoids executing checker code at scan time).
+See any ``check_*.py`` file for the schema.
+
+Cache semantics of ``file_globs``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``file_globs`` lists the file patterns whose content is hashed to decide whether a checker
+can be skipped. **Not all globs are exact reflections of the checker's runtime behaviour.**
+
+* Some checkers introspect the live ``transformers`` module (``check_repo``,
+  ``check_config_docstrings``, ``check_config_attributes``, ``update_metadata``), so their
+  globs are necessarily *approximations* of the true dependency set.
+* Some checkers over-approximate (``check_dummies``, ``check_doctest_list``): any change
+  inside the broad glob forces a re-run even if the checker wouldn't look at that file.
+  This is safe—just less cache-efficient.
+* Some checkers rely on external state (network, git history, installed packages) that
+  cannot be captured by file globs at all (``add_dates``, ``imports``).
+
+Each ``CHECKER_CONFIG`` that is an approximation has an inline comment explaining the
+gap. When in doubt, use ``--no-cache`` to force a full run.
 """
 
 import argparse
+import ast
 import hashlib
 import itertools
+import json
 import os
 import shutil
 import subprocess
 import sys
 import threading
+import time
+import warnings
 from collections import deque
 from pathlib import Path
 
 
 UTILS_DIR = Path(__file__).parent
 REPO_ROOT = UTILS_DIR.parent
+CACHE_PATH = UTILS_DIR / ".checkers_cache.json"
 
-# Each checker maps to (label, script_path, extra_check_args, extra_fix_args).
-# When fix_args is None, the checker has no fix mode.
-# Custom checkers use None instead of the tuple.
-CHECKERS = {
-    "copies": ("Copied code consistency", "check_copies.py", [], ["--fix_and_overwrite"]),
-    "modular_conversion": ("Modular file conversions", "check_modular_conversion.py", [], ["--fix_and_overwrite"]),
-    "doc_toc": ("Documentation table of contents", "check_doc_toc.py", [], ["--fix_and_overwrite"]),
-    "docstrings": ("Docstring formatting", "check_docstrings.py", [], ["--fix_and_overwrite"]),
-    "dummies": ("Dummy objects", "check_dummies.py", [], ["--fix_and_overwrite"]),
-    "pipeline_typing": ("Pipeline type hints", "check_pipeline_typing.py", [], ["--fix_and_overwrite"]),
-    "doctest_list": ("Doctest list", "check_doctest_list.py", [], ["--fix_and_overwrite"]),
-    "repo": ("Repository structure", "check_repo.py", [], None),
-    "inits": ("Init files", "check_inits.py", [], None),
-    "config_docstrings": ("Config docstrings", "check_config_docstrings.py", [], None),
-    "config_attributes": ("Config attributes", "check_config_attributes.py", [], None),
-    "init_isort": ("Import ordering", "custom_init_isort.py", ["--check_only"], []),
-    "auto_mappings": ("Auto mappings", "sort_auto_mappings.py", ["--check_only"], []),
-    "update_metadata": ("Model metadata", "update_metadata.py", ["--check-only"], []),
-    "add_dates": ("Model dates", "add_dates.py", ["--check-only"], []),
-    "types": (
-        "Type annotations",
-        "check_types.py",
-        [
-            "src/transformers/_typing.py",
-            "src/transformers/utils",
-            "src/transformers/generation",
-            "src/transformers/quantizers",
-        ],
-        None,
-    ),
-    "modeling_structure": ("Modeling file structure", "check_modeling_structure.py", [], None),
+# Required keys in each module's CHECKER_CONFIG dict.
+_CHECKER_CONFIG_KEYS = {"name", "label", "file_globs", "check_args", "fix_args"}
+
+
+def _discover_checkers() -> tuple[dict, dict]:
+    """Scan utils/*.py for CHECKER_CONFIG dicts using AST (no imports).
+
+    Each checker module may define a top-level ``CHECKER_CONFIG`` dict with
+    keys: name, label, file_globs, check_args, fix_args.
+
+    Returns (checkers_dict, file_globs_dict) matching the shapes of
+    the old CHECKERS and CHECKER_FILE_GLOBS registries.
+    """
+    checkers = {}
+    file_globs = {}
+
+    for py_file in sorted(UTILS_DIR.glob("*.py")):
+        if py_file.name == Path(__file__).name:
+            continue
+
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        except SyntaxError:
+            continue
+
+        config = None
+        for node in ast.iter_child_nodes(tree):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "CHECKER_CONFIG"
+            ):
+                try:
+                    config = ast.literal_eval(node.value)
+                except (ValueError, TypeError):
+                    pass
+                break
+
+        if config is None:
+            continue
+
+        missing = _CHECKER_CONFIG_KEYS - set(config)
+        if missing:
+            warnings.warn(
+                f"CHECKER_CONFIG in {py_file.name} is missing keys: {', '.join(sorted(missing))}. Skipping.",
+                stacklevel=1,
+            )
+            continue
+
+        name = config["name"]
+        if name in checkers:
+            warnings.warn(
+                f"Duplicate checker name {name!r} in {py_file.name}, already defined by {checkers[name][1]}",
+                stacklevel=1,
+            )
+
+        checkers[name] = (
+            config["label"],
+            py_file.name,
+            config["check_args"],
+            config["fix_args"],
+        )
+        if config["file_globs"] is not None:
+            file_globs[name] = config["file_globs"]
+
+    return checkers, file_globs
+
+
+# Inline checkers have no separate script file; they use custom runner functions below.
+_INLINE_CHECKERS = {
     "deps_table": ("Dependency versions table", None, None, None),
     "imports": ("Public imports", None, None, None),
+    "import_complexity": ("Import complexity", "check_import_complexity.py", [], None),
     "ruff_check": ("Ruff linting", None, None, None),
     "ruff_format": ("Ruff formatting", None, None, None),
 }
+
+_INLINE_FILE_GLOBS = {
+    # Also generates/checks src/transformers/dependency_versions_table.py.
+    "deps_table": ["setup.py", "pyproject.toml", "src/transformers/dependency_versions_table.py"],
+    # Approximate: runs `from transformers import *` at runtime; depends on the full
+    # Python environment, not just these files. Broad globs used as a safe upper bound.
+    "imports": ["src/transformers/**/__init__.py", "src/transformers/**/*.py"],
+    # Approximate: ruff applies its own ignore rules from pyproject.toml at runtime.
+    "ruff_check": [
+        "examples/**/*.py",
+        "tests/**/*.py",
+        "src/**/*.py",
+        "utils/**/*.py",
+        "scripts/**/*.py",
+        "benchmark/**/*.py",
+        "benchmark_v2/**/*.py",
+        "setup.py",
+        "conftest.py",
+    ],
+    "ruff_format": [
+        "examples/**/*.py",
+        "tests/**/*.py",
+        "src/**/*.py",
+        "utils/**/*.py",
+        "scripts/**/*.py",
+        "benchmark/**/*.py",
+        "benchmark_v2/**/*.py",
+        "setup.py",
+        "conftest.py",
+    ],
+}
+
+# Build the registries: discovered modules + inline custom runners.
+_discovered_checkers, _discovered_globs = _discover_checkers()
+
+CHECKERS = {**_discovered_checkers, **_INLINE_CHECKERS}
+CHECKER_FILE_GLOBS = {**_discovered_globs, **_INLINE_FILE_GLOBS}
+
+
+def get_checker_cache_globs(checker_name: str) -> list[str] | None:
+    """Return the cache inputs for a checker, including its implementation files."""
+    globs = CHECKER_FILE_GLOBS.get(checker_name)
+    if globs is None:
+        return None
+
+    cache_globs = [*globs, str(Path("utils") / Path(__file__).name)]
+    script = CHECKERS[checker_name][1]
+    if script is not None:
+        cache_globs.append(str(Path("utils") / script))
+    return cache_globs
+
+
+class CheckerCache:
+    """Disk-backed cache that tracks file content hashes per checker.
+
+    For each checker that declares file globs in CHECKER_FILE_GLOBS, we compute
+    a single digest over all matching files.  If the digest matches the stored
+    value from the last clean (rc == 0) run, the checker can be skipped.
+    """
+
+    def __init__(self, path: Path | None = None):
+        self._path = CACHE_PATH if path is None else path
+        self._data = self._load()
+
+    def _load(self) -> dict:
+        try:
+            return json.loads(self._path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {}
+
+    def save(self) -> None:
+        try:
+            self._path.write_text(json.dumps(self._data, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def _digest_files(globs: list[str]) -> str:
+        """Compute a single SHA-256 over sorted file paths + contents."""
+        h = hashlib.sha256()
+        paths = set()
+        for pattern in globs:
+            paths.update(REPO_ROOT.glob(pattern))
+        for p in sorted(paths):
+            if p.is_file():
+                h.update(str(p.relative_to(REPO_ROOT)).encode())
+                h.update(p.read_bytes())
+        return h.hexdigest()
+
+    def is_current(self, checker_name: str) -> bool:
+        """Return True if the checker's files haven't changed since last clean run."""
+        globs = get_checker_cache_globs(checker_name)
+        if globs is None:
+            return False
+        return self._data.get(checker_name) == self._digest_files(globs)
+
+    def update(self, checker_name: str) -> None:
+        """Record current digest for a checker (call after a clean run)."""
+        globs = get_checker_cache_globs(checker_name)
+        if globs is None:
+            return
+        self._data[checker_name] = self._digest_files(globs)
+
+    def invalidate(self, checker_name: str) -> None:
+        """Remove a checker from the cache (call after a failed run)."""
+        self._data.pop(checker_name, None)
 
 
 def _file_md5(path):
@@ -85,6 +260,14 @@ GREEN = "\033[32m"
 RED = "\033[31m"
 RESET = "\033[0m"
 SPINNER_CHARS = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+def format_elapsed(seconds: float) -> str:
+    """Format a duration for status output."""
+    if seconds >= 60:
+        minutes, seconds = divmod(seconds, 60)
+        return f"{int(minutes)}m{seconds:05.2f}s"
+    return f"{seconds:.2f}s"
 
 
 class SlidingWindow:
@@ -133,7 +316,7 @@ class SlidingWindow:
             self.lines.append(line.rstrip()[: self.term_width])
             self._redraw()
 
-    def finish(self, success):
+    def finish(self, success, elapsed=None):
         """Stop spinner and print final status title."""
         self._stop.set()
         self._thread.join()
@@ -144,10 +327,11 @@ class SlidingWindow:
             self._title_on_screen = False
             self.displayed = 0
             # Print final title with status
+            suffix = f" ({format_elapsed(elapsed)})" if elapsed is not None else ""
             if success:
-                print(f"{GREEN}✓ {self.label}{RESET}")
+                print(f"{GREEN}✓ {self.label}{suffix}{RESET}")
             else:
-                print(f"{RED}✗ {self.label}{RESET}")
+                print(f"{RED}✗ {self.label}{suffix}{RESET}")
             # Reprint output lines
             for line in self.lines:
                 print(line)
@@ -286,6 +470,7 @@ def main():
         "--keep-going", action="store_true", help="Run all checkers even if some fail (report failures at the end)."
     )
     parser.add_argument("--list", action="store_true", help="List available checkers and exit.")
+    parser.add_argument("--no-cache", action="store_true", help="Ignore the disk cache and re-run every checker.")
 
     args = parser.parse_args()
 
@@ -313,43 +498,89 @@ def main():
     is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CIRCLECI") == "true"
     is_tty = sys.stdout.isatty() and not is_ci
 
+    if not is_tty and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+
+    use_cache = not args.no_cache and not args.fix
+    cache = CheckerCache() if use_cache else None
+
     failures = []
+    skipped = 0
+    total_start = time.perf_counter()
     for name in names:
         label = CHECKERS[name][0]
+
+        # Skip if all relevant files are unchanged since last clean run
+        if cache is not None and cache.is_current(name):
+            skipped += 1
+            if is_tty:
+                print(f"{GREEN}✓ {label} (cached){RESET}\n")
+            else:
+                print(f"{label} (cached)\n", flush=True)
+            continue
+
         cmd_str = get_checker_command(name, fix=args.fix)
+        checker_start = time.perf_counter()
 
         if is_tty:
             window = SlidingWindow(label, max_lines=10)
             if cmd_str:
                 window.add_line(f"$ {cmd_str}")
             rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
-            window.finish(success=(rc == 0))
+            elapsed = time.perf_counter() - checker_start
+            window.finish(success=(rc == 0), elapsed=elapsed)
             print()
-            if rc != 0:
+            if rc == 0 and cache is not None:
+                cache.update(name)
+            elif rc != 0:
+                if cache is not None:
+                    cache.invalidate(name)
                 failures.append(name)
                 if not args.keep_going:
+                    if cache is not None:
+                        cache.save()
                     sys.exit(1)
         else:
-            print(f"{label}")
+            print(f"{label}", flush=True)
             if cmd_str:
-                print(f"$ {cmd_str}")
-            rc, output = run_checker(name, fix=args.fix)
-            tail = output.splitlines()[-10:]
-            if tail:
-                print("\n".join(tail))
+                print(f"$ {cmd_str}", flush=True)
+            if is_ci:
+                rc, output = run_checker(
+                    name, fix=args.fix, line_callback=lambda line: print(line, end="", flush=True)
+                )
+            else:
+                rc, output = run_checker(name, fix=args.fix)
+                tail = output.splitlines()[-10:]
+                if tail:
+                    print("\n".join(tail), flush=True)
+            elapsed = time.perf_counter() - checker_start
             status = "OK" if rc == 0 else "FAILED"
-            print(status)
-            print()
-            if rc != 0:
+            print(f"{status} ({format_elapsed(elapsed)})", flush=True)
+            print(flush=True)
+            if rc == 0 and cache is not None:
+                cache.update(name)
+            elif rc != 0:
+                if cache is not None:
+                    cache.invalidate(name)
                 failures.append(name)
                 if not args.keep_going:
+                    if cache is not None:
+                        cache.save()
                     sys.exit(1)
 
+    if cache is not None:
+        cache.save()
+
     if failures:
-        print(f"\n{len(failures)} failed: {', '.join(failures)}")
+        print(f"\n{len(failures)} failed: {', '.join(failures)}", flush=True)
         sys.exit(1)
 
-    print(f"\nAll {len(names)} checks passed.")
+    total_elapsed = format_elapsed(time.perf_counter() - total_start)
+    passed = len(names) - skipped
+    if skipped:
+        print(f"\nAll {len(names)} checks passed in {total_elapsed} ({passed} ran, {skipped} cached).", flush=True)
+    else:
+        print(f"\nAll {len(names)} checks passed in {total_elapsed}.", flush=True)
 
 
 if __name__ == "__main__":

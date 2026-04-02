@@ -71,10 +71,10 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: list[int] | tuple[int, ...] = (1, 2, 5, 8)
     mlp_ratios: list[int] | tuple[int, ...] = (8, 8, 4, 4)
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     layer_norm_eps: float = 1e-6
     qkv_bias: bool = True
     linear_attention: bool = False

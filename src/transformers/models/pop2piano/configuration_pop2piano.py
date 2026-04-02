@@ -49,7 +49,7 @@ class Pop2PianoConfig(PreTrainedConfig):
     num_heads: int = 8
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     feed_forward_proj: str = "gated-gelu"

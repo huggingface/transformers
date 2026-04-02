@@ -40,6 +40,14 @@ import re
 from pathlib import Path
 
 
+CHECKER_CONFIG = {
+    "name": "inits",
+    "label": "Init files",
+    "file_globs": ["src/transformers/**/__init__.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # Path is set with the intent you should run this script from the root of the repo.
 PATH_TO_TRANSFORMERS = "src/transformers"
 
