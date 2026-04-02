@@ -12,6 +12,7 @@
     "dab-detr": "DabDetrConfig",
     "llama": "LlamaConfig",
     "xlm-roberta-xl": "XLMRobertaXLConfig",
+    "nougat": "NougatConfig",
     "dpr": "DPRConfig",
     "informer": "InformerConfig",
     "glm_moe_dsa": "GlmMoeDsaConfig",
@@ -115,7 +116,9 @@
     "zoedepth": "ZoeDepthConfig",
     "glm4_moe_lite": "Glm4MoeLiteConfig",
     "vitmatte": "VitMatteConfig",
+    "cohere_asr": "CohereAsrConfig",
     "udop": "UdopConfig",
+    "detr": "DetrConfig",
     "maskformer": "MaskFormerConfig",
     "maskformer-swin": "MaskFormerSwinConfig",
     "dinov3_convnext": "DINOv3ConvNextConfig",
@@ -144,6 +147,7 @@
     "clvp_encoder": "ClvpEncoderConfig",
     "clvp_decoder": "ClvpDecoderConfig",
     "clvp": "ClvpConfig",
+    "videomt": "VideomtConfig",
     "vjepa2": "VJEPA2Config",
     "deepseek_vl": "DeepseekVLConfig",
     "flex_olmo": "FlexOlmoConfig",
@@ -182,6 +186,7 @@
     "phi4_multimodal": "Phi4MultimodalConfig",
     "vivit": "VivitConfig",
     "granitemoeshared": "GraniteMoeSharedConfig",
+    "musicflamingo": "MusicFlamingoConfig",
     "metaclip_2_text_model": "MetaClip2TextConfig",
     "metaclip_2_vision_model": "MetaClip2VisionConfig",
     "metaclip_2": "MetaClip2Config",
@@ -201,7 +206,6 @@
     "bert": "BertConfig",
     "llava": "LlavaConfig",
     "gpt2": "GPT2Config",
-    "detr": "DetrConfig",
     "ijepa": "IJepaConfig",
     "pp_chart2table": "PPChart2TableConfig",
     "apertus": "ApertusConfig",
@@ -492,7 +496,7 @@
     "upernet": "UperNetConfig",
     "nanochat": "NanoChatConfig",
     "rwkv": "RwkvConfig",
-    "evolla": "EvollaConfig",
+    "EvollaModel": "EvollaConfig",
     "blenderbot": "BlenderbotConfig",
     "pp_doclayout_v3": "PPDocLayoutV3Config",
     "speech_to_text": "Speech2TextConfig",
@@ -613,6 +617,7 @@
     "qwen3_5_vision": "qwen3_5",
     "gemma3_text": "gemma3",
     "glmasr_encoder": "glmasr",
+    "detr": "maskformer",
     "maskformer-swin": "maskformer",
     "roberta-prelayernorm": "roberta_prelayernorm",
     "glm_image_vqmodel": "glm_image",
@@ -754,6 +759,7 @@
     "align_vision_model": "align",
     "groupvit_text_model": "groupvit",
     "groupvit_vision_model": "groupvit",
+    "EvollaModel": "evolla",
     "mgp-str": "mgp_str",
     "mm-grounding-dino": "mm_grounding_dino",
     "git_vision_model": "git",
@@ -778,6 +784,10 @@
     "paddleocr_vl_text": "paddleocr_vl"
   },
   "IMAGE_PROCESSOR_MAPPING_NAMES": {
+    "nougat": {
+      "pil": "NougatImageProcessorPil",
+      "torchvision": "NougatImageProcessor"
+    },
     "beit": {
       "pil": "BeitImageProcessorPil",
       "torchvision": "BeitImageProcessor"
@@ -851,6 +861,10 @@
       "pil": "VitMatteImageProcessorPil",
       "torchvision": "VitMatteImageProcessor"
     },
+    "detr": {
+      "pil": "DetrImageProcessorPil",
+      "torchvision": "DetrImageProcessor"
+    },
     "maskformer": {
       "pil": "MaskFormerImageProcessorPil",
       "torchvision": "MaskFormerImageProcessor"
@@ -896,10 +910,6 @@
     "llava": {
       "pil": "LlavaImageProcessorPil",
       "torchvision": "LlavaImageProcessor"
-    },
-    "detr": {
-      "pil": "DetrImageProcessorPil",
-      "torchvision": "DetrImageProcessor"
     },
     "pp_chart2table": {
       "pil": "PPChart2TableImageProcessorPil",

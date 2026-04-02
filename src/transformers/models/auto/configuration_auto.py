@@ -36,16 +36,16 @@ with open(f"{root_path}/auto_mappings.json", "r") as f:
     all_mappings = json.load(f)
 
 # Non-standard models that can't be inferred from parsing the code
-missing_config_mapping_names = {
-    "nougat": "VisionEncoderDecoderConfig",
-    "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
-    "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
-    # Zero idea why two model names map to the same config, but here we go. FIXME @raushan!
-    # This has to be defined after `Nougat` so we put `missing_config_mapping_names` before auto-dict
-    "vision-encoder-decoder": "VisionEncoderDecoderConfig",
-}
+MISSING_CONFIG_MAPPING_NAMES = OrderedDict(
+    [
+        ("EvollaModel", "EvollaConfig"),
+        ("nougat", "VisionEncoderDecoderConfig"),
+        ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
+        ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderConfig"),
+    ]
+)
 
-CONFIG_MAPPING_NAMES = OrderedDict({**missing_config_mapping_names, **all_mappings["CONFIG_MAPPING_NAMES"]})
+CONFIG_MAPPING_NAMES = OrderedDict({**MISSING_CONFIG_MAPPING_NAMES, **all_mappings["CONFIG_MAPPING_NAMES"]})
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(**all_mappings["SPECIAL_MODEL_TYPE_TO_MODULE_NAME"])
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
