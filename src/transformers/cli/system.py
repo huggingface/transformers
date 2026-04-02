@@ -47,7 +47,7 @@ def env(
     """Print information about the environment."""
     import safetensors
 
-    safetensors_version = safetensors.__version__
+    safetensors_version = safetensors.__version__ if hasattr(safetensors, "__version__") else "unknown"
 
     accelerate_version = "not installed"
     accelerate_config = accelerate_config_str = "not found"
@@ -114,13 +114,14 @@ def env(
         elif pt_xpu_available:
             info["Using XPU in script?"] = "<fill in>"
             info["XPU type"] = torch.xpu.get_device_name()
-        elif pt_hpu_available:
+        elif pt_hpu_available and hasattr(torch, "hpu"):
             info["Using HPU in script?"] = "<fill in>"
             info["HPU type"] = torch.hpu.get_device_name()
-        elif pt_npu_available:
+        elif pt_npu_available and hasattr(torch, "npu"):
             info["Using NPU in script?"] = "<fill in>"
             info["NPU type"] = torch.npu.get_device_name()
-            info["CANN version"] = torch.version.cann
+            if hasattr(torch.version, "cann"):
+                info["CANN version"] = torch.version.cann
 
     print("\nCopy-and-paste the text below in your GitHub issue and FILL OUT the two last points.\n")
     print(_format_dict(info))

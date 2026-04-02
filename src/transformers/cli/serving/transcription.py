@@ -75,7 +75,7 @@ class TranscriptionHandler:
 
     def _validate_request(self, form_keys: set[str]) -> None:
         """Validate transcription request fields."""
-        unexpected = form_keys - TransformersTranscriptionCreateParams.__mutable_keys__
+        unexpected = form_keys - getattr(TransformersTranscriptionCreateParams, "__mutable_keys__", set())
         if unexpected:
             raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
         unused = form_keys & UNUSED_TRANSCRIPTION_FIELDS
@@ -103,13 +103,21 @@ class TranscriptionHandler:
 
         async with request.form() as form:
             self._validate_request(set(form.keys()))
-            file_bytes = await form["file"].read()
+            file_field = form["file"]
+            if isinstance(file_field, str):
+                raise HTTPException(status_code=422, detail="Expected file upload, got string")
+            file_bytes = await file_field.read()
             model = form["model"]
+            if not isinstance(model, str):
+                raise HTTPException(status_code=422, detail="Expected model name as string")
             stream = str(form.get("stream", "false")).lower() == "true"
 
         model_id_and_revision = self.model_manager.process_model_name(model)
         audio_model, audio_processor = self.model_manager.load_model_and_processor(model_id_and_revision)
-        gen_manager = self.generation_state.get_manager(model_id_and_revision)
+        base_manager = self.generation_state.get_manager(model_id_and_revision)
+        if not isinstance(base_manager, GenerateManager):
+            raise HTTPException(status_code=400, detail="Audio transcription requires sequential generation (not CB)")
+        gen_manager = base_manager
         audio_inputs = self._prepare_audio_inputs(file_bytes, audio_processor, audio_model)
 
         if stream:
@@ -123,7 +131,7 @@ class TranscriptionHandler:
         """Load audio bytes and convert to model inputs."""
         import librosa
 
-        sampling_rate = audio_processor.feature_extractor.sampling_rate
+        sampling_rate = audio_processor.feature_extractor.sampling_rate  # type: ignore[union-attr]
         audio_array, _ = librosa.load(io.BytesIO(file_bytes), sr=sampling_rate, mono=True)
         audio_inputs = audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt").to(
             audio_model.device
@@ -161,7 +169,7 @@ class TranscriptionHandler:
         tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)
+        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)  # type: ignore[union-attr]
         gen_kwargs = {**audio_inputs, "streamer": streamer}
 
         def _run():

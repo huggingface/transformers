@@ -117,7 +117,7 @@ class RichInterface:
             completion_tokens = 0
             start_time = time.time()
             finish_reason: str | None = None
-            async for token in await stream:
+            async for token in await stream:  # type: ignore[misc]
                 outputs = token.choices[0].delta.content
                 finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
 
