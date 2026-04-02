@@ -39,8 +39,9 @@ from transformers.generation.continuous_batching.cache import (
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
-from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor
+from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, OutputRouter
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
+from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
@@ -419,6 +420,30 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             for output in outputs.values():
                 self.assertIsNotNone(output.generated_tokens)
                 self.assertGreater(len(output.generated_tokens), 0)
+
+    def test_output_router_deliver_to_queue(self):
+        """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
+        router = OutputRouter()
+        output = GenerationOutput(request_id="req_0", status=RequestStatus.FINISHED)
+        router.deliver(output)
+        result = router.output_queue.get_nowait()
+        self.assertEqual(result.request_id, "req_0")
+        self.assertTrue(router.output_queue.empty())
+
+    def test_output_router_deliver_to_handler(self):
+        """Test that OutputRouter.deliver forwards to a registered handler instead of the queue."""
+        router = OutputRouter()
+        received = []
+        loop = unittest.mock.Mock()
+
+        with router._lock:
+            router.result_handlers["req_0"] = (lambda out: received.append(out), loop)
+
+        output = GenerationOutput(request_id="req_0", status=RequestStatus.DECODING)
+        router.deliver(output)
+
+        loop.call_soon_threadsafe.assert_called_once()
+        self.assertTrue(router.output_queue.empty())
 
 
 @require_torch_accelerator
@@ -805,6 +830,48 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
+
+    def test_register_result_handler(self) -> None:
+        """Test that register_result_handler receives streaming outputs through the OutputRouter."""
+        import asyncio
+
+        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+        max_new_tokens = 3
+
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        manager = model.init_continuous_batching()
+        manager.logit_processor = LogitsProcessorList()
+        manager.start()
+
+        user_messages = ["What is the Transformers library known for?"]
+        inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)[0]
+
+        async def collect_results():
+            results = []
+            future = asyncio.get_running_loop().create_future()
+
+            def on_result(output):
+                results.append(output)
+                if output.is_finished():
+                    future.set_result(True)
+
+            request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
+            manager.register_result_handler(request_id, on_result)
+
+            await asyncio.wait_for(future, timeout=30)
+            return results
+
+        results = asyncio.run(collect_results())
+
+        # Streaming via handler: incremental token count, same as request_id_iter
+        self.assertEqual(len(results[0].generated_tokens), 1)
+        self.assertEqual(len(results[1].generated_tokens), 2)
+        self.assertEqual(len(results[2].generated_tokens), 3)
+        self.assertTrue(results[-1].is_finished())
+        # Queue should be empty — everything went through the handler
+        self.assertTrue(manager.output_router.output_queue.empty())
+
+        manager.stop(block=True)
 
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #

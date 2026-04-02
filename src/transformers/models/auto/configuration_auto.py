@@ -311,6 +311,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mpt", "MptConfig"),
         ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
+        ("musicflamingo", "MusicFlamingoConfig"),
+        ("musicflamingo_encoder", "AudioFlamingo3EncoderConfig"),
         ("musicgen", "MusicgenConfig"),
         ("musicgen_melody", "MusicgenMelodyConfig"),
         ("mvp", "MvpConfig"),
@@ -835,6 +837,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mpt", "MPT"),
         ("mra", "MRA"),
         ("mt5", "MT5"),
+        ("musicflamingo", "MusicFlamingo"),
+        ("musicflamingo_encoder", "AudioFlamingo3Encoder"),
         ("musicgen", "MusicGen"),
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
@@ -1072,6 +1076,7 @@ DEPRECATED_MODELS = []
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("audioflamingo3_encoder", "audioflamingo3"),
+        ("musicflamingo_encoder", "musicflamingo"),
         ("openai-gpt", "openai"),
         ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
@@ -1470,6 +1475,9 @@ class AutoConfig:
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
+            "transformers."
+        )
         if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             if "--" in class_ref:
@@ -1480,7 +1488,7 @@ class AutoConfig:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
