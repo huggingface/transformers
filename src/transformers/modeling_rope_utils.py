@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import math
 import warnings
 from functools import wraps
@@ -736,10 +737,25 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig"):
+    def validate_rope(self: "PreTrainedConfig", **kwargs):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
+
+        Note: the `ignore_keys` keyword argument is accepted for backward compatibility with external libraries
+        (e.g. vllm) but is deprecated. Set `config.ignore_keys_at_rope_validation` directly instead.
         """
+        if kwargs:
+            import warnings
+
+            warnings.warn(
+                "Passing keyword arguments to `validate_rope()` is deprecated. "
+                "Set `config.ignore_keys_at_rope_validation` directly instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            ignore_keys = kwargs.pop("ignore_keys", None)
+            if ignore_keys is not None:
+                self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | ignore_keys
         # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
         # Note that validation runs every time a new config is created, even if config is non-RoPE
         rope_parameters_dict = getattr(self, "rope_parameters", None)
@@ -764,6 +780,12 @@ class RotaryEmbeddingConfigMixin:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+    # Override __signature__ so that @strict dataclass validation (huggingface_hub) sees only `self`.
+    # The method still accepts **kwargs for backward compatibility with external callers (e.g. vllm).
+    validate_rope.__signature__ = inspect.Signature(
+        [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+    )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}
