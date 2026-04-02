@@ -36,13 +36,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb  # noqa: F401
-
-# trf-ignore: TRF009
-from ..gpt_oss import modeling_gpt_oss as modeling_gpt_oss_module  # NOTE @casinca: temp, waiting for GPT-oss refactor
-
-# trf-ignore: TRF009
-from ..llama import modeling_llama as modeling_llama_module  # NOTE @casinca: temp, waiting for GPT-oss refactor
-from ..llama.modeling_llama import LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaDecoderLayer, eager_attention_forward, repeat_kv
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralModel,
@@ -381,6 +375,44 @@ class MiMoV2FlashMLP(Qwen2MoeMLP):
     pass
 
 
+# There is no prior occurrence of this function in the repo, except for gpt-oss.
+# But for enabling dual eager attention, with a sink path and a non-sink path, we'd need to import both functions from
+# gpt-oss and llama with aliases (they have the same name).
+# However this cause problems with `modular_model_converter.py` and HuggingFace prefers not to refactor other models,
+# see: https://github.com/huggingface/transformers/issues/45141
+# So I'm creating this function as a direct copy of the gpt-oss eager attention forward (with sinks).
+def eager_attention_forward_with_sink(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    **kwargs,
+):
+    """Eager attention with attention sinks (copy from gpt-oss `eager_attention_forward`)."""
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+
+    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
+    # when training with bsz>1 we clamp max values.
+
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
+    scores = probs[..., :-1]  # we drop the sink here
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 # NOTE: @casinca I have to do this in the case users enable backends. The upcoming attention mask (which depends on the
 # backend used) needs to be converted for the sink path which always expects a float mask (gpt-oss eager attn).
 def _prepare_sink_eager_attention_mask(
@@ -446,10 +478,10 @@ class MiMoV2FlashAttention(nn.Module):
         )
         if add_sink:
             self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False)
-            self._eager_attention_forward = modeling_gpt_oss_module.eager_attention_forward
+            self._eager_attention_forward = eager_attention_forward_with_sink
         else:
             self.sinks = None
-            self._eager_attention_forward = modeling_llama_module.eager_attention_forward
+            self._eager_attention_forward = eager_attention_forward
 
     def forward(
         self,
