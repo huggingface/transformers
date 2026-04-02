@@ -1632,9 +1632,9 @@ def set_config_for_less_flaky_test(config):
 
     # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
     # (We don't need the original epsilon values to check eager/sdpa matches)
-    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    attrs = ["text_config", "vision_config", "audio_config", "text_encoder", "audio_encoder", "decoder"]
     for attr in attrs:
-        if hasattr(config, attr):
+        if hasattr(config, attr) and getattr(config, attr) is not None:
             for target_attr in target_attrs:
                 setattr(getattr(config, attr), target_attr, 1.0)
 

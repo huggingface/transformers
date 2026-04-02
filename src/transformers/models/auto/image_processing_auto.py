@@ -125,6 +125,7 @@ else:
             ("fuyu", {"torchvision": "FuyuImageProcessor", "pil": "FuyuImageProcessorPil"}),
             ("gemma3", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
+            ("gemma4", {"torchvision": "Gemma4ImageProcessor", "pil": "Gemma4ImageProcessorPil"}),
             ("git", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("glm46v", {"torchvision": "Glm46VImageProcessor", "pil": "Glm46VImageProcessorPil"}),
             ("glm4v", {"torchvision": "Glm4vImageProcessor", "pil": "Glm4vImageProcessorPil"}),
