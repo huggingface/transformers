@@ -35,7 +35,7 @@ import copy
 import enum
 import functools
 import inspect
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
