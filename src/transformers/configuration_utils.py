@@ -202,6 +202,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
             model is `float16`, ideally we want to load it back using the minimal amount of memory needed to load
             `float16` weights.
+        fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
+            Optional runtime fusion configuration used by [`~PreTrainedModel.from_pretrained`]. When saved in the
+            configuration, it can be reused on subsequent loads without passing `fusion_config` again.
     """
 
     # Class attributes that we don't want to save or have in `self.__dict__`
@@ -227,6 +230,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     output_hidden_states: bool | None = False
     return_dict: bool | None = True
     dtype: Union[str, "torch.dtype"] | None = None
+    fusion_config: dict[str, bool | dict[str, Any]] | None = None
     chunk_size_feed_forward: int = 0
     is_encoder_decoder: bool = False
 

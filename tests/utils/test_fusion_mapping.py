@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import sys
+import tempfile
 import types
 import unittest
 from copy import deepcopy
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch.nn as nn
@@ -35,18 +35,37 @@ DUMMY_TRANSFORMERS_MODULE = types.ModuleType(DUMMY_TRANSFORMERS_MODULE_NAME)
 sys.modules[DUMMY_TRANSFORMERS_MODULE_NAME] = DUMMY_TRANSFORMERS_MODULE
 
 
+class DummyVisionConfig(PretrainedConfig):
+    model_type = "dummy_fusion_vision"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        in_channels=3,
+        patch_size=2,
+        temporal_patch_size=2,
+        patch_embed_stride=(2, 2, 2),
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.in_channels = in_channels
+        self.patch_size = patch_size
+        self.temporal_patch_size = temporal_patch_size
+        self.patch_embed_stride = patch_embed_stride
+
+
 class DummyFusionConfig(PretrainedConfig):
     model_type = "dummy_fusion"
+    sub_configs = {"vision_config": DummyVisionConfig}
 
-    def __init__(self, patch_embed_stride=(2, 2, 2), **kwargs):
+    def __init__(self, vision_config=None, **kwargs):
         super().__init__(**kwargs)
-        self.vision_config = SimpleNamespace(
-            in_channels=3,
-            patch_size=2,
-            temporal_patch_size=2,
-            patch_embed_stride=patch_embed_stride,
-            patch_embed_bias=True,
-        )
+        if vision_config is None:
+            vision_config = DummyVisionConfig()
+        elif isinstance(vision_config, dict):
+            vision_config = DummyVisionConfig(**vision_config)
+
+        self.vision_config = vision_config
 
 
 class DummyPatchEmbedding(nn.Module):
@@ -56,22 +75,19 @@ class DummyPatchEmbedding(nn.Module):
         self.proj = nn.Conv3d(3, self.embed_dim, kernel_size=(2, 2, 2), stride=stride, bias=bias)
 
 
+DUMMY_PATCHABLE_CLASSES = {"DummyPatchEmbedding": DummyPatchEmbedding}
+
+for class_name, patchable_class in DUMMY_PATCHABLE_CLASSES.items():
+    setattr(DUMMY_TRANSFORMERS_MODULE, class_name, patchable_class)
+
 class DummyFusionModel(PreTrainedModel):
     config_class = DummyFusionConfig
-    patchable_classes = {
-        "DummyPatchEmbedding": DummyPatchEmbedding,
-    }
 
     def __init__(self, config):
         super().__init__(config)
         # Instantiate through the fake module so `apply_patches()` sees the replacement.
-        self.patch_embed = DUMMY_TRANSFORMERS_MODULE.DummyPatchEmbedding(
-            stride=config.vision_config.patch_embed_stride, bias=config.vision_config.patch_embed_bias
-        )
-
-
-for class_name, patchable_class in DummyFusionModel.patchable_classes.items():
-    setattr(DUMMY_TRANSFORMERS_MODULE, class_name, patchable_class)
+        self.patch_embed = DUMMY_TRANSFORMERS_MODULE.DummyPatchEmbedding(stride=config.vision_config.patch_embed_stride, bias=True)
+        self.post_init()
 
 
 class FusionMappingTest(unittest.TestCase):
@@ -116,7 +132,7 @@ class FusionMappingTest(unittest.TestCase):
     def test_register_fusion_patches_skips_when_no_modules_match(self):
         # Leaves registries untouched when nothing is fusable.
         DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
-        config = DummyFusionConfig(patch_embed_stride=(1, 1, 1))
+        config = DummyFusionConfig(vision_config={"patch_embed_stride": (1, 1, 1)})
 
         register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
 
@@ -144,3 +160,27 @@ class FusionMappingTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "conflicts with an existing conversion mapping"):
             register_fusion_patches(DummyFusionModel, config, fusion_config=self.fusion_config)
+
+    def test_from_pretrained_uses_serialized_fusion_config(self):
+        # A serialized `fusion_config` is reused on a later load.
+        DummyFusionConfig.model_type = f"dummy_fusion_{self._testMethodName}"
+
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as fused_dir:
+            DummyFusionModel(DummyFusionConfig()).save_pretrained(source_dir)
+
+            fused_model = DummyFusionModel.from_pretrained(source_dir, fusion_config=self.fusion_config)
+            fused_model.save_pretrained(fused_dir)
+
+            # Simulate a fresh process so the second load comes only from the serialized config.
+            monkey_patching._monkey_patch_mapping_cache.clear()
+            fusion_mapping._FUSION_DISCOVERY_CACHE.clear()
+            conversion_mapping._checkpoint_conversion_mapping_cache = deepcopy(
+                self.checkpoint_conversion_mapping_cache
+            )
+
+            reloaded_model = DummyFusionModel.from_pretrained(fused_dir)
+
+        fused_projection = getattr(
+            reloaded_model.patch_embed, "linear_proj", getattr(reloaded_model.patch_embed, "proj", None)
+        )
+        self.assertIsInstance(fused_projection, nn.Linear)

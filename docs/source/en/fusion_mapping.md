@@ -41,12 +41,13 @@ model = AutoModelForImageTextToText.from_pretrained(
 ```
 
 By default, no fusion is applied.
+If `fusion_config` is stored in the model config, `from_pretrained()` will reuse it automatically.
 
 ## How it works
 
 Fusion registration happens before the model is instantiated:
 
-1. [`~PreTrainedModel.from_pretrained`] passes `fusion_config` to `register_fusion_patches(...)`.
+1. [`~PreTrainedModel.from_pretrained`] uses the explicit `fusion_config` argument or falls back to `config.fusion_config`.
 2. The fusion registry validates the requested fusion names.
 3. Each enabled fusion meta-initializes the target model class, optionally filters candidate modules by name, and uses `is_fusable(...)` to discover compatible module classes.
 4. Fused replacement classes are registered through [`~transformers.monkey_patching.register_patch_mapping`].
