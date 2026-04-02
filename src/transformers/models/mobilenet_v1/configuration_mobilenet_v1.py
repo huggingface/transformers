@@ -47,11 +47,11 @@ class MobileNetV1Config(PreTrainedConfig):
 
     num_channels: int = 3
     image_size: int | list[int] | tuple[int, int] = 224
-    depth_multiplier: float = 1.0
+    depth_multiplier: float | int = 1.0
     min_depth: int = 8
     hidden_act: str = "relu6"
     tf_padding: bool = True
-    classifier_dropout_prob: float = 0.999
+    classifier_dropout_prob: float | int = 0.999
     initializer_range: float = 0.02
     layer_norm_eps: float = 0.001
 
