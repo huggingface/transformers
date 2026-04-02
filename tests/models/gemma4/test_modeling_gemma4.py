@@ -121,6 +121,25 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    def test_flash_attention_rejected_for_full_attention_head_dim_above_256(self):
+        config = Gemma4TextConfig(
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_global_key_value_heads=1,
+            head_dim=256,
+            global_head_dim=512,
+            layer_types=["sliding_attention", "full_attention"],
+            vocab_size=128,
+            vocab_size_per_layer_input=128,
+            hidden_size_per_layer_input=16,
+        )
+
+        with self.assertRaisesRegex(ValueError, r"global_head_dim=512"):
+            Gemma4ForCausalLM._from_config(config, attn_implementation="flash_attention_2")
+
 
 class Gemma4Audio2TextModelTester:
     def __init__(
@@ -720,39 +739,14 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    # TODO: raushan FA2 generates gibberish for no reason, check later
-    @require_flash_attn
-    @require_torch_large_accelerator
-    @pytest.mark.flash_attn_test
-    def test_model_4b_flash_attn(self):
+    @slow
+    def test_model_4b_flash_attn_is_rejected(self):
         model_id = "google/gemma-4-e2b-it"
 
-        model = Gemma4ForConditionalGeneration.from_pretrained(
-            model_id, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-        ).to(torch_device)
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        # cache_implementation="hybrid" an in the original transformers implementation
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False, cache_implementation="hybrid")
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("xpu", 3): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
-                ("cuda", 7): [],
-                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
-                ("rocm", (9, 5)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with a turquoise ocean and a distant island in the background. It looks like a sunny'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        with self.assertRaisesRegex(ValueError, r"global_head_dim=512"):
+            Gemma4ForConditionalGeneration.from_pretrained(
+                model_id, dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+            )
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
