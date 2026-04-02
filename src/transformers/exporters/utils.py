@@ -53,10 +53,11 @@ if is_torch_available():
 _OUTPUT_FLAGS = ("use_cache", "output_attentions", "output_hidden_states", "return_dict", "return_loss")
 
 
-# Types that should not be recursed into when extracting leaf tensors.
-# Sym* types carry PyTorch shape_env internals that cause infinite recursion;
-# Enums are scalars with no tensor fields.
-_LEAF_SKIP_TYPES = (type, enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
+if is_torch_available():
+    # Types that should not be recursed into when extracting leaf tensors.
+    # Sym* types carry PyTorch shape_env internals that cause infinite recursion;
+    # Enums are scalars with no tensor fields.
+    _LEAF_SKIP_TYPES = (type, enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
 
 
 # ── Recursive structure traversal ──────────────────────────────────────────
@@ -215,7 +216,8 @@ def prepare_for_export(
 
     # Pre-compute data-dependent vision tensors (position_ids, rot_pos_emb, etc.)
     # that use grid_thw-based loops, repeat_interleave, or itertools.groupby.
-    _precompute_vision_inputs(model, inputs)
+    with torch.no_grad():
+        _precompute_vision_inputs(model, inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -266,7 +268,6 @@ def is_vlm(model: PreTrainedModel) -> bool:
     return bool(_find_vlm_submodules(model))
 
 
-@torch.no_grad()
 def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Pre-compute data-dependent vision tensors and inject them into inputs.
 
