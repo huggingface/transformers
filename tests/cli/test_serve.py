@@ -1657,29 +1657,49 @@ class TestMultimodalLM(unittest.TestCase):
     def tearDownClass(cls):
         cls.serve.kill_server()
 
-    def test_chat_completion_with_audio(self):
-        """Chat completions should accept input_audio (base64) content and transcribe audio."""
+    def _get_audio_messages(self):
         import base64
 
         audio_bytes = httpx.get(_AUDIO_URL, follow_redirects=True).content
         audio_b64 = base64.b64encode(audio_bytes).decode()
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe this audio."},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
 
-        resp = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Transcribe this audio."},
-                        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
-                    ],
-                }
-            ],
-            max_tokens=200,
-        )
-        text = resp.choices[0].message.content
+    def _assert_audio_transcription(self, text):
         self.assertIsNotNone(text)
         self.assertIn("chicago", text.lower(), f"Expected 'chicago' in transcription, got: {text}")
+
+    def _assert_video_description(self, text):
+        self.assertIsNotNone(text)
+        self.assertTrue(
+            any(word in text.lower() for word in ["concert", "music", "stage", "perform"]),
+            f"Expected concert/music/stage/perform in response, got: {text}",
+        )
+
+    def test_chat_completion_with_audio(self):
+        """Chat completions should accept input_audio (base64) content and transcribe audio."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL, messages=self._get_audio_messages(), max_tokens=200,
+        )
+        self._assert_audio_transcription(resp.choices[0].message.content)
+
+    def test_chat_completion_with_audio_streaming(self):
+        """Streaming chat completions should accept input_audio (base64) content and transcribe audio."""
+        stream = self.client.chat.completions.create(
+            model=self.MODEL, messages=self._get_audio_messages(), max_tokens=200, stream=True,
+        )
+        chunks = []
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        self._assert_audio_transcription("".join(chunks))
 
     @require_torchcodec
     def test_chat_completion_with_video(self):
@@ -1697,37 +1717,49 @@ class TestMultimodalLM(unittest.TestCase):
             ],
             max_tokens=200,
         )
-        text = resp.choices[0].message.content
-        self.assertIsNotNone(text)
-        self.assertTrue(
-            any(word in text.lower() for word in ["concert", "music", "stage", "perform"]),
-            f"Expected concert/music/stage/perform in response, got: {text}",
-        )
+        self._assert_video_description(resp.choices[0].message.content)
 
-    def test_responses_with_audio(self):
-        """Responses API should accept input_audio (base64) content and transcribe audio."""
-        import base64
-
-        audio_bytes = httpx.get(_AUDIO_URL, follow_redirects=True).content
-        audio_b64 = base64.b64encode(audio_bytes).decode()
-
-        resp = self.client.responses.create(
+    @require_torchcodec
+    def test_chat_completion_with_video_streaming(self):
+        """Streaming chat completions should accept video_url content and describe video."""
+        stream = self.client.chat.completions.create(
             model=self.MODEL,
-            input=[
+            messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Transcribe this audio."},
-                        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
                     ],
                 }
             ],
-            stream=False,
-            max_output_tokens=200,
+            max_tokens=200,
+            stream=True,
+        )
+        chunks = []
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        self._assert_video_description("".join(chunks))
+
+    def test_responses_with_audio(self):
+        """Responses API should accept input_audio (base64) content and transcribe audio."""
+        resp = self.client.responses.create(
+            model=self.MODEL, input=self._get_audio_messages(), stream=False, max_output_tokens=200,
         )
         self.assertEqual(resp.status, "completed")
-        text = resp.output[0].content[0].text
-        self.assertIn("chicago", text.lower(), f"Expected 'chicago' in transcription, got: {text}")
+        self._assert_audio_transcription(resp.output[0].content[0].text)
+
+    def test_responses_with_audio_streaming(self):
+        """Streaming responses API should accept input_audio (base64) content and transcribe audio."""
+        stream = self.client.responses.create(
+            model=self.MODEL, input=self._get_audio_messages(), stream=True, max_output_tokens=200,
+        )
+        text = ""
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self._assert_audio_transcription(text)
 
     @require_torchcodec
     def test_responses_with_video(self):
@@ -1747,11 +1779,30 @@ class TestMultimodalLM(unittest.TestCase):
             max_output_tokens=200,
         )
         self.assertEqual(resp.status, "completed")
-        text = resp.output[0].content[0].text
-        self.assertTrue(
-            any(word in text.lower() for word in ["concert", "music", "stage", "perform"]),
-            f"Expected concert/music/stage/perform in response, got: {text}",
+        self._assert_video_description(resp.output[0].content[0].text)
+
+    @require_torchcodec
+    def test_responses_with_video_streaming(self):
+        """Streaming responses API should accept video_url content and describe video."""
+        stream = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            stream=True,
+            max_output_tokens=200,
         )
+        text = ""
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self._assert_video_description(text)
 
 
 @slow
