@@ -51,6 +51,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     # global defaults
     sample_rate: int = None
     force_mono: bool = None
+    add_channel_dim: bool = False
 
     # padding defaults
     padding = True
@@ -61,6 +62,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
     pad_to_multiple_of = None
 
     return_padding_mask = True
+    mask_level = None  # None = auto (features for spectrogram, audio for raw), "audio" = always audio-level
     spectrogram_config = None
     do_extract_spectrogram = None
 
@@ -151,26 +153,74 @@ class BaseAudioProcessor(AudioProcessingMixin):
         return_tensors,
         spectrogram_config=None,
         do_extract_spectrogram=None,
-        do_batch_spectrogram=True,
+        do_batch_spectrogram=None,
         **kwargs,
     ) -> BatchFeature:
-        # pad and truncate
-        audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
-        padded_length = audio[0].shape[-1]
-
-        if do_extract_spectrogram:
-            audio = self._to_batch(audio) if do_batch_spectrogram else audio
-            feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges)
-            output = {"audio_features": feature}
+        if do_batch_spectrogram is None:
+            do_batch_spectrogram = getattr(self, "do_batch_spectrogram", True)
+        if do_extract_spectrogram and not do_batch_spectrogram:
+            # Per-waveform extraction path: extract → postprocess → pad features → mask
+            features = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)
+            feature_lengths = [f.shape[0] for f in features]
+            features = self._postprocess_features(features, feature_lengths)
+            features, feature_ranges = self._pad_features(
+                features, padding, max_length, truncation, pad_to_multiple_of
+            )
+            output = {"audio_features": self._stack_features(features)}
+            if self.return_padding_mask:
+                padded_length = features[0].shape[0]
+                output.update(self._get_feature_mask(feature_ranges, padded_length))
+            output = self._postprocess_output(output, feature_ranges=feature_ranges, **kwargs)
         else:
-            output = {"audio_values": self._to_batch(audio)}
+            # Standard path: pad audio → optionally batch → extract/passthrough
+            audio, audio_ranges = self.pad(audio, padding, max_length, truncation, pad_to_multiple_of)
+            padded_length = audio[0].shape[-1]
 
-        if self.return_padding_mask:
-            output.update(self._get_mask(
-                audio_ranges, padded_length, do_extract_spectrogram=do_extract_spectrogram, spectrogram_config=spectrogram_config
-            ))
+            if do_extract_spectrogram:
+                audio = self._to_batch(audio) if do_batch_spectrogram else audio
+                feature = self.extract_spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
+                output = {"audio_features": feature}
+            else:
+                output = {"audio_values": self._to_batch(audio)}
+
+            if self.return_padding_mask:
+                output.update(self._get_mask(
+                    audio_ranges, padded_length, do_extract_spectrogram=do_extract_spectrogram, spectrogram_config=spectrogram_config
+                ))
+            output = self._postprocess_output(output, audio_ranges=audio_ranges, **kwargs)
 
         return BatchFeature(data=output, tensor_type=return_tensors)
+
+    def _postprocess_features(self, features, feature_lengths):
+        """Hook: per-utterance feature processing after extraction, before feature-level padding.
+
+        Override for normalization that must happen on unpadded features
+        (e.g., SeamlessM4t mean/variance normalization).
+        """
+        return features
+
+    def _postprocess_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        """Hook: augment or modify the output dict after main processing.
+
+        Override to add custom fields (e.g., audio_embed_sizes) or
+        post-hoc normalization on the stacked/batched output.
+        """
+        return output
+
+    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
+        """Pad a list of 2D feature arrays along the time axis (axis 0).
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _stack_features(self, features):
+        """Stack a list of feature arrays/tensors into a batch.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
+
+    def _get_feature_mask(self, feature_ranges, padded_length):
+        """Build attention mask dict from feature_ranges.
+        Implemented by backend subclasses."""
+        raise NotImplementedError
 
     def _prepare_audio_like_inputs(self, audio: AudioInput, *args, sample_rate: int | None = None, **kwargs) -> list:
         """
@@ -284,14 +334,20 @@ class BaseAudioProcessor(AudioProcessingMixin):
         raise NotImplementedError
 
     def extract_spectrogram(self, audio, *, spectrogram_config: SpectrogramConfig | None = None, **kwargs):
-        # TODO: it might be a bit unclear to have extract_spectrogram and _extract_spectrogram methods.
         """
-        Both the numpy and torch backends implement this method in a batched/ sequential manner.
-        Is is batched by default, but can be set to be sequential.
+        Extract spectrogram features from audio.
+
+        Both the numpy and torch backends implement this method in a batched/sequential manner.
+        It is batched by default, but can be set to be sequential.
         This can extract just a spectrogram or a Mel spectrogram if a mel config is provided.
 
         Any extra kwargs whose names match ``SpectrogramConfig`` fields will
         override the corresponding value on the config for this call.
+
+        Note: Models that bypass the base STFT pipeline entirely (e.g., GraniteSpeech
+        using torchaudio.transforms.MelSpectrogram, or MusicgenMelody using chroma
+        features) can set ``do_extract_spectrogram=True`` without providing a
+        ``spectrogram_config``. They must override this method completely.
         """
         if spectrogram_config is None:
             spectrogram_config = self.spectrogram_config
@@ -382,6 +438,8 @@ class BaseAudioProcessor(AudioProcessingMixin):
             else:
                 import torch
                 audio = audio.to(getattr(torch, dtype_str))
+        if spectrogram_config.waveform_scale is not None:
+            audio = audio * spectrogram_config.waveform_scale
         window = self._create_stft_window(win_length, stft_cfg, audio)
         window, frame_length = self._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
 

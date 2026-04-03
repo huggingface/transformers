@@ -13,13 +13,14 @@
 # limitations under the License.
 
 from ...audio_processing_backends import TorchAudioBackend
-from ...feature_extraction_utils import BatchFeature
 from ...utils.import_utils import requires
 
 
 class MusicgenMelodyAudioProcessor(TorchAudioBackend):
     sample_rate = 32000
     force_mono = True
+    do_extract_spectrogram = True
+    return_padding_mask = False
     n_fft = 16384
     hop_length = 4096
     n_chroma = 12
@@ -35,11 +36,11 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
             librosa.filters.chroma(sr=self.sample_rate, n_fft=self.n_fft, tuning=0, n_chroma=self.n_chroma)
         ).float()
 
-    def extract_spectrogram(self, audio, *, spectrogram_config):
+    def extract_spectrogram(self, audio, **kwargs):
         import torch
         import torchaudio
 
-        waveform = torch.stack(audio, dim=0)
+        waveform = audio  # Already a batched tensor from _to_batch
         device = waveform.device
         batch_size = waveform.shape[0]
 
@@ -74,30 +75,7 @@ class MusicgenMelodyAudioProcessor(TorchAudioBackend):
         norm_chroma[:] = 0
         norm_chroma.scatter_(dim=-1, index=idx, value=1)
 
-        return [norm_chroma[i] for i in range(batch_size)]
-
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        import torch
-
-        # Pad raw audio
-        if padding:
-            audio, _audio_ranges = self.pad(audio, padding=True, max_length=max_length)
-
-        # Extract chroma features
-        features = self.extract_spectrogram(audio, spectrogram_config=None)
-
-        # Pad features
-        max_feat_len = max(f.shape[0] for f in features)
-        padded = []
-        for f in features:
-            if f.shape[0] < max_feat_len:
-                pad_amount = max_feat_len - f.shape[0]
-                f = torch.nn.functional.pad(f, (0, 0, 0, pad_amount), mode="constant", value=0.0)
-            padded.append(f)
-
-        output_key = "audio_features"
-        stacked = torch.stack(padded, dim=0)
-        return BatchFeature(data={output_key: stacked}, tensor_type=return_tensors)
+        return norm_chroma
 
 
 __all__ = ["MusicgenMelodyAudioProcessor"]

@@ -14,17 +14,14 @@
 
 import numpy as np
 
-from ...audio_processing_backends import NumpyAudioBackend, TorchAudioBackend
+from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-from ...feature_extraction_utils import BatchFeature
-from ...utils import is_torch_available
 
-
-class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend if not is_torch_available() else TorchAudioBackend):
+class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
     return_padding_mask = False
-    padding = False
+    do_batch_spectrogram = False
 
     max_length_frames = 1024
     do_normalize = True
@@ -56,41 +53,20 @@ class AudioSpectrogramTransformerAudioProcessor(NumpyAudioBackend if not is_torc
         mel_floor=1.192092955078125e-07,
     )
 
-    def _preprocess(
-        self,
-        audio,
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        **kwargs,
-    ):
-        # Extract mel spectrogram features from raw audio using the base spectrogram pipeline
-        features = self.extract_spectrogram(audio, spectrogram_config=self.spectrogram_config)
+    def extract_spectrogram(self, audio, **kwargs):
+        return [self._kaldi_fbank(waveform, num_mel_bins=128, window_type="hanning") for waveform in audio]
 
-        # extract_spectrogram returns list of (n_mels, frames); transpose to (frames, n_mels)
-        features = [f.T for f in features]
+    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
+        # Always pad/truncate to max_length_frames regardless of caller's padding args
+        return super()._pad_features(features, "max_length", self.max_length_frames, True, pad_to_multiple_of)
 
-        # Pad or truncate to max_length_frames
-        padded = []
-        for fbank in features:
-            n_frames = fbank.shape[0]
-            if n_frames < self.max_length_frames:
-                pad_amount = self.max_length_frames - n_frames
-                fbank = np.pad(fbank, ((0, pad_amount), (0, 0)), mode="constant", constant_values=0.0)
-            elif n_frames > self.max_length_frames:
-                fbank = fbank[: self.max_length_frames, :]
-            padded.append(fbank)
-
-        # Normalize with AudioSet stats
+    def _postprocess_output(self, output, **kwargs):
+        # Rename to audio_values (AST convention) and apply AudioSet normalization
+        features = output.pop("audio_features")
         if self.do_normalize:
-            padded = [(f - self.ast_mean) / (self.ast_std * 2) for f in padded]
-
-        stacked = np.stack(padded, axis=0)
-        return BatchFeature({"audio_values": stacked}, tensor_type=return_tensors)
+            features = (features - self.ast_mean) / (self.ast_std * 2)
+        output["audio_values"] = features
+        return output
 
 
 __all__ = ["AudioSpectrogramTransformerAudioProcessor"]

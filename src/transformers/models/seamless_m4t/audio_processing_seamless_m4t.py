@@ -16,13 +16,14 @@ import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-from ...feature_extraction_utils import BatchFeature
 
 
 class SeamlessM4tAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
+    do_batch_spectrogram = False
     stride = 2
+    pad_to_multiple_of = 2  # Align feature padding to stride
 
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
@@ -48,14 +49,17 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         waveform_scale=32768.0,
     )
 
-    def _extract_fbank_features(self, waveform):
-        """Extract log-mel filterbank features for a single waveform using the base spectrogram pipeline."""
-        waveform = np.squeeze(waveform) * self.spectrogram_config.waveform_scale
-        features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
-        # extract_spectrogram returns list of (n_mels, time); transpose to (time, n_mels)
-        return features[0].T
+    def extract_spectrogram(self, audio, **kwargs):
+        # Per-waveform fbank extraction returning (time, n_mels)
+        features = []
+        for waveform in audio:
+            waveform = np.squeeze(waveform)
+            f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+            features.append(f[0].T)
+        return features
 
-    def feature_normalize(self, features):
+    def _postprocess_features(self, features, feature_lengths):
+        # Per-utterance mean/variance normalization (before padding)
         normalized = []
         for f in features:
             mean = np.expand_dims(f.mean(axis=0), 0)
@@ -63,55 +67,27 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
             normalized.append((f - mean) / np.sqrt(var + 1e-7))
         return normalized
 
-    def _preprocess(
-        self,
-        audio,
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        **kwargs,
-    ):
-        # Extract features from raw (unpadded) audio, then pad at feature level
-        features = [self._extract_fbank_features(waveform) for waveform in audio]
-        features = self.feature_normalize(features)
-
-        feature_lengths = [f.shape[0] for f in features]
-
-        # Pad features to longest (pad_to_multiple_of stride)
-        max_len = max(feature_lengths)
-        if max_len % self.stride != 0:
-            max_len = ((max_len // self.stride) + 1) * self.stride
-        padded = []
-        for f in features:
-            if f.shape[0] < max_len:
-                f = np.pad(f, ((0, max_len - f.shape[0]), (0, 0)), mode="constant", constant_values=0.0)
-            padded.append(f)
-
-        stacked = np.stack(padded, axis=0)
-        batch_size, num_frames, num_channels = stacked.shape
-
-        # Feature-level attention_mask
-        attention_mask = np.zeros((batch_size, num_frames), dtype=np.int32)
-        for i, length in enumerate(feature_lengths):
-            attention_mask[i, :length] = 1
+    def _postprocess_output(self, output, feature_ranges=None, **kwargs):
+        features = output["audio_features"]  # (batch, num_frames, num_channels)
+        batch_size, num_frames, num_channels = features.shape
 
         # Stride concatenation
         remainder = num_frames % self.stride
         if remainder != 0:
-            stacked = stacked[:, : num_frames - remainder, :]
-            attention_mask = attention_mask[:, : num_frames - remainder]
+            features = features[:, :num_frames - remainder, :]
             num_frames = num_frames - remainder
 
-        stacked = stacked.reshape(batch_size, num_frames // self.stride, num_channels * self.stride)
-        indices = np.arange(0, num_frames)
-        attention_mask = attention_mask[:, indices % self.stride == 1]
+        output["audio_features"] = features.reshape(batch_size, num_frames // self.stride, num_channels * self.stride)
 
-        data = {"audio_features": stacked, "audio_features_mask": attention_mask}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        # Adjust mask for stride
+        if "audio_features_mask" in output:
+            mask = output["audio_features_mask"]
+            if remainder != 0:
+                mask = mask[:, :num_frames]
+            indices = np.arange(0, num_frames)
+            output["audio_features_mask"] = mask[:, indices % self.stride == 1]
+
+        return output
 
 
 __all__ = ["SeamlessM4tAudioProcessor"]

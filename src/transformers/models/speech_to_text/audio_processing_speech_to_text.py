@@ -16,18 +16,11 @@ import numpy as np
 
 from ...audio_processing_backends import NumpyAudioBackend
 from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-from ...feature_extraction_utils import BatchFeature
-from ...utils import is_speech_available
-
-
-if is_speech_available():
-    import torch
-    import torchaudio.compliance.kaldi as ta_kaldi
-
 
 class SpeechToTextAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
+    do_batch_spectrogram = False
 
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
@@ -61,15 +54,11 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
     def _extract_fbank_features(self, waveform):
         """Extract log-mel filterbank features for a single waveform."""
         waveform = waveform * self.spectrogram_config.waveform_scale
-        if is_speech_available():
-            waveform_tensor = torch.from_numpy(waveform).unsqueeze(0)
-            features = ta_kaldi.fbank(waveform_tensor, num_mel_bins=80, sample_frequency=self.sample_rate)
-            return features.numpy()
-        else:
-            waveform = np.squeeze(waveform)
-            features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
-            # extract_spectrogram returns list of (n_mels, time); transpose to (time, n_mels)
-            return features[0].T
+        return self._kaldi_fbank(waveform, num_mel_bins=80)
+
+    def extract_spectrogram(self, audio, **kwargs):
+        # Per-waveform fbank extraction returning (time, n_mels)
+        return [self._extract_fbank_features(waveform) for waveform in audio]
 
     @staticmethod
     def utterance_cmvn(x, input_length, normalize_means=True, normalize_vars=True, padding_value=0.0):
@@ -83,46 +72,17 @@ class SpeechToTextAudioProcessor(NumpyAudioBackend):
             x[input_length:] = padding_value
         return x.astype(np.float32)
 
-    def _preprocess(
-        self,
-        audio,
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        **kwargs,
-    ):
-        # Extract features from raw (unpadded) audio, then pad at feature level
-        features = [self._extract_fbank_features(waveform) for waveform in audio]
-        lengths = [f.shape[0] for f in features]
-
-        # Pad features to longest
-        max_len = max(lengths)
-        padded = []
-        for f in features:
-            if f.shape[0] < max_len:
-                f = np.pad(f, ((0, max_len - f.shape[0]), (0, 0)), mode="constant", constant_values=0.0)
-            padded.append(f)
-
-        # Utterance CMVN normalization
-        normalized = [
-            self.utterance_cmvn(f, length, self.normalize_means, self.normalize_vars, self.padding_value)
-            for f, length in zip(padded, lengths)
-        ]
-
-        stacked = np.stack(normalized, axis=0)
-        data = {"audio_features": stacked}
-
-        if self.return_padding_mask:
-            attention_mask = np.zeros((len(lengths), max_len), dtype=np.int32)
-            for i, length in enumerate(lengths):
-                attention_mask[i, :length] = 1
-            data["audio_features_mask"] = attention_mask
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
+    def _postprocess_output(self, output, feature_ranges=None, **kwargs):
+        # Apply utterance CMVN normalization on the padded, stacked features
+        features = output["audio_features"]  # (batch, time, n_mels)
+        normalized = []
+        for i, (start, end) in enumerate(feature_ranges):
+            length = end - start
+            normalized.append(
+                self.utterance_cmvn(features[i], length, self.normalize_means, self.normalize_vars, self.padding_value)
+            )
+        output["audio_features"] = np.stack(normalized)
+        return output
 
 
 __all__ = ["SpeechToTextAudioProcessor"]

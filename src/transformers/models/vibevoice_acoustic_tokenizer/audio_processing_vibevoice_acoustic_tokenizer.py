@@ -20,6 +20,7 @@ from ...audio_processing_backends import TorchAudioBackend
 class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
     sample_rate = 24000
     force_mono = True
+    add_channel_dim = True
 
     target_dB_FS = -25
     eps = 1e-6
@@ -32,11 +33,6 @@ class VibevoiceAcousticTokenizerAudioProcessor(TorchAudioBackend):
         if max_val > 1.0:
             audio_el = audio_el / (max_val + self.eps)
         return audio_el
-
-    def _preprocess(self, audio, **kwargs):
-        result = super()._preprocess(audio, **kwargs)
-        result["audio_values"] = result["audio_values"].unsqueeze(1)
-        return result
 
 
 __all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]

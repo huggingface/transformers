@@ -34,12 +34,12 @@ class VoxtralRealtimeAudioProcessor(TorchAudioBackend):
             computation_dtype="float64",
         ),
         log_mode="log10",
+        skip_last_frame=True,
     )
     global_log_mel_max = 1.5
 
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
-        features = features[..., :-1]
 
         if self.global_log_mel_max is not None:
             spec_max = torch.tensor(self.global_log_mel_max, device=features.device, dtype=features.dtype)

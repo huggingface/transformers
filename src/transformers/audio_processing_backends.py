@@ -22,7 +22,7 @@ import librosa
 from .audio_processing_utils import BaseAudioProcessor
 from .audio_utils import SpectrogramConfig, amplitude_to_db, power_to_db
 from .feature_extraction_utils import BatchFeature
-from .utils import is_torch_available, logging
+from .utils import PaddingStrategy, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -383,11 +383,76 @@ class NumpyAudioBackend(BaseAudioProcessor):
 
         return mel_filters
 
+    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
+        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
+
+        if truncation and max_length is not None:
+            features = [f[:max_length] for f in features]
+
+        actual_lengths = [f.shape[0] for f in features]
+
+        if padding_strategy == PaddingStrategy.LONGEST:
+            max_length = max(actual_lengths)
+            padding_strategy = PaddingStrategy.MAX_LENGTH
+
+        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+
+        if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
+            padded = []
+            for f in features:
+                if f.shape[0] < max_length:
+                    pad_width = [(0, max_length - f.shape[0])] + [(0, 0)] * (f.ndim - 1)
+                    f = np.pad(f, pad_width, mode="constant", constant_values=self.padding_value)
+                padded.append(f)
+            features = padded
+
+        feature_ranges = [(0, length) for length in actual_lengths]
+        return features, feature_ranges
+
+    def _stack_features(self, features):
+        return np.stack(features)
+
+    def _get_feature_mask(self, feature_ranges, padded_length):
+        mask = np.zeros((len(feature_ranges), padded_length), dtype=np.int32)
+        for i, (start, end) in enumerate(feature_ranges):
+            mask[i, start:end] = 1
+        return {"audio_features_mask": mask}
+
+    def _kaldi_fbank(self, waveform, num_mel_bins, sample_frequency=None, **kwargs):
+        """Extract kaldi-compatible fbank features for a single waveform.
+
+        Uses torchaudio when available, falls back to the base spectrogram pipeline.
+        Returns a numpy array of shape (time, num_mel_bins).
+        """
+        from .utils import is_speech_available
+
+        if sample_frequency is None:
+            sample_frequency = self.sample_rate
+
+        if is_speech_available():
+            import torch
+            import torchaudio.compliance.kaldi as ta_kaldi
+
+            waveform_tensor = torch.from_numpy(np.asarray(waveform)).unsqueeze(0)
+            fbank = ta_kaldi.fbank(
+                waveform_tensor, num_mel_bins=num_mel_bins, sample_frequency=sample_frequency, **kwargs
+            )
+            return fbank.numpy()
+        else:
+            waveform = np.squeeze(waveform)
+            features = self.extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
+            return features[0].T
+
     def _to_batch(self, audio):
-        return np.stack(audio)
+        batch = np.stack(audio)
+        if self.add_channel_dim:
+            batch = batch[:, np.newaxis, :]
+        return batch
 
     def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        if do_extract_spectrogram:
+        use_audio_mask = self.mask_level == "audio"
+        if do_extract_spectrogram and not use_audio_mask:
             spec_cfg = spectrogram_config or self.spectrogram_config
             audio_lengths = np.array([end - start for start, end in audio_ranges])
             features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
@@ -398,7 +463,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
             mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
             for i, (start, end) in enumerate(audio_ranges):
                 mask[i, start:end] = 1
-            return {"audio_values_mask": mask}
+            key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
+            return {key: mask}
 
 
 class TorchAudioBackend(BaseAudioProcessor):
@@ -605,6 +671,9 @@ class TorchAudioBackend(BaseAudioProcessor):
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
+        if spectrogram_config.skip_last_frame:
+            result = result[..., :-1]
+
         return result
 
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
@@ -698,11 +767,53 @@ class TorchAudioBackend(BaseAudioProcessor):
             mel_filters = mel_filters.to(torch.get_default_dtype())
         return mel_filters
 
+    def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
+        padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
+
+        if truncation and max_length is not None:
+            features = [f[:max_length] for f in features]
+
+        actual_lengths = [f.shape[0] for f in features]
+
+        if padding_strategy == PaddingStrategy.LONGEST:
+            max_length = max(actual_lengths)
+            padding_strategy = PaddingStrategy.MAX_LENGTH
+
+        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
+
+        if padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is not None:
+            padded = []
+            for f in features:
+                if f.shape[0] < max_length:
+                    pad_amount = max_length - f.shape[0]
+                    # Pad last dim=0 (time axis): F.pad takes innermost dims first
+                    pad_args = [0, 0] * (f.ndim - 1) + [0, pad_amount]
+                    f = torch.nn.functional.pad(f, pad_args, "constant", self.padding_value)
+                padded.append(f)
+            features = padded
+
+        feature_ranges = [(0, length) for length in actual_lengths]
+        return features, feature_ranges
+
+    def _stack_features(self, features):
+        return torch.stack(features)
+
+    def _get_feature_mask(self, feature_ranges, padded_length):
+        mask = torch.zeros((len(feature_ranges), padded_length), dtype=torch.int32)
+        for i, (start, end) in enumerate(feature_ranges):
+            mask[i, start:end] = 1
+        return {"audio_features_mask": mask}
+
     def _to_batch(self, audio):
-        return torch.stack(audio)
+        batch = torch.stack(audio)
+        if self.add_channel_dim:
+            batch = batch.unsqueeze(1)
+        return batch
 
     def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        if do_extract_spectrogram:
+        use_audio_mask = self.mask_level == "audio"
+        if do_extract_spectrogram and not use_audio_mask:
             spec_cfg = spectrogram_config or self.spectrogram_config
             audio_lengths = torch.tensor([end - start for start, end in audio_ranges])
             features_lengths = self._get_features_lengths(audio_lengths, spec_cfg)
@@ -713,4 +824,5 @@ class TorchAudioBackend(BaseAudioProcessor):
             mask = torch.zeros((len(audio_ranges), padded_length), dtype=torch.int32)
             for i, (start, end) in enumerate(audio_ranges):
                 mask[i, start:end] = 1
-            return {"audio_values_mask": mask}
+            key = "audio_features_mask" if do_extract_spectrogram else "audio_values_mask"
+            return {key: mask}

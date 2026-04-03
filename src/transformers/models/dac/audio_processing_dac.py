@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 
 
 class DacAudioProcessor(NumpyAudioBackend):
     sample_rate = 16000
     force_mono = True
-
-    def _to_batch(self, audio):
-        return np.stack(audio)[:, np.newaxis, :]  # (batch, 1, length)
+    add_channel_dim = True
 
 
 __all__ = ["DacAudioProcessor"]

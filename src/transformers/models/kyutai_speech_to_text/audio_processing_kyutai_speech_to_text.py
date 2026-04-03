@@ -20,32 +20,24 @@ from ...audio_processing_backends import NumpyAudioBackend
 class KyutaiSpeechToTextAudioProcessor(NumpyAudioBackend):
     sample_rate = 24000
     force_mono = True
+    add_channel_dim = True
     audio_delay_seconds = 2.5
     audio_silence_prefix_seconds = 1.0
 
-    def _to_batch(self, audio):
-        return np.stack(audio)[:, np.newaxis, :]
-
-    def _preprocess(self, audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors, **kwargs):
-        kwargs.pop("do_extract_spectrogram", None)
-        result = super()._preprocess(
-            audio, padding, max_length, truncation, pad_to_multiple_of, return_tensors,
-            do_extract_spectrogram=False, **kwargs,
-        )
-
+    def _postprocess_output(self, output, **kwargs):
         # Add silence prefix (left) and delay (right) padding
         pad_left = int(self.audio_silence_prefix_seconds * self.sample_rate)
         pad_right = int((self.audio_delay_seconds + 1.0) * self.sample_rate)
 
         if pad_left > 0 or pad_right > 0:
-            result["audio_values"] = np.pad(
-                result["audio_values"], [(0, 0), (0, 0), (pad_left, pad_right)], mode="constant", constant_values=0.0,
+            output["audio_values"] = np.pad(
+                output["audio_values"], [(0, 0), (0, 0), (pad_left, pad_right)], mode="constant", constant_values=0.0,
             )
-            result["audio_values_mask"] = np.pad(
-                result["audio_values_mask"], [(0, 0), (pad_left, pad_right)], mode="constant", constant_values=0,
+            output["audio_values_mask"] = np.pad(
+                output["audio_values_mask"], [(0, 0), (pad_left, pad_right)], mode="constant", constant_values=0,
             )
 
-        return result
+        return output
 
 
 __all__ = ["KyutaiSpeechToTextAudioProcessor"]

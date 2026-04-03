@@ -130,6 +130,7 @@ class SpectrogramConfig:
     mel_floor: float = 1e-10
     waveform_scale: float | None = None
     computation_dtype: str | None = None
+    skip_last_frame: bool = False
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -170,6 +171,7 @@ class SpectrogramConfig:
             remove_dc_offset=d.get("remove_dc_offset", False),
             mel_floor=d.get("mel_floor", 1e-10),
             waveform_scale=d.get("waveform_scale"),
+            skip_last_frame=d.get("skip_last_frame", False),
         )
 
 
