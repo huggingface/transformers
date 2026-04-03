@@ -229,7 +229,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
     def setUp(self):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
-        self.model_checkpoint = "/mnt/cfs_bj_mt/workspace/zhuangbairong/qfocr-trs-qa/Qianfan-OCR-hf"
+        self.model_checkpoint = "bairongz/QianfanOCR"
         self.image_path = (
             Path(__file__).parents[2] / "fixtures" / "tests_samples" / "COCO" / "000000039769.png"
         )
