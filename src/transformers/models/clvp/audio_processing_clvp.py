@@ -42,6 +42,7 @@ class ClvpAudioProcessor(NumpyAudioBackend):
         ),
         log_mode="log",
         mel_floor=1e-5,
+        computation_dtype="float64",
     )
 
     def __init__(self, mel_norms=None, **kwargs):

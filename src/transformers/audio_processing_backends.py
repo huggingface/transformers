@@ -17,10 +17,9 @@
 import math
 
 import numpy as np
-import librosa
 
 from .audio_processing_utils import BaseAudioProcessor
-from .audio_utils import SpectrogramConfig, amplitude_to_db, power_to_db
+from .audio_utils import SpectrogramConfig, amplitude_to_db, mel_filter_bank, power_to_db
 from .feature_extraction_utils import BatchFeature
 from .utils import PaddingStrategy, is_torch_available, logging
 
@@ -195,6 +194,14 @@ class NumpyAudioBackend(BaseAudioProcessor):
             frame_length = n_fft
         return window, frame_length
 
+    @staticmethod
+    def _np_frame(x, frame_length, hop_length):
+        """Create overlapping frames from a 1D array using stride tricks (replaces librosa.util.frame)."""
+        n_frames = 1 + (x.shape[-1] - frame_length) // hop_length
+        strides = x.strides[:-1] + (x.strides[-1] * hop_length, x.strides[-1])
+        shape = x.shape[:-1] + (n_frames, frame_length)
+        return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
+
     def _frame_waveform(self, waveform, frame_length, hop_length, n_fft, center, pad_mode):
         squeezed = waveform.ndim == 1
         if squeezed:
@@ -217,9 +224,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
                     padding,
                     mode=pad_mode,
                 )
-                y_frames_pre = librosa.util.frame(y_pre, frame_length=frame_length, hop_length=hop_length)
-                y_frames_pre = y_frames_pre[..., :start_k]
-                y_frames_pre = np.moveaxis(y_frames_pre, -2, -1)
+                y_frames_pre = self._np_frame(y_pre, frame_length, hop_length)
+                y_frames_pre = y_frames_pre[..., :start_k, :]
                 extra = y_frames_pre.shape[-2]
 
                 padding[-1] = (0, frame_length // 2)
@@ -228,15 +234,13 @@ class NumpyAudioBackend(BaseAudioProcessor):
                     padding,
                     mode=pad_mode,
                 )
-                y_frames_post = librosa.util.frame(y_post, frame_length=frame_length, hop_length=hop_length)
-                y_frames_post = np.moveaxis(y_frames_post, -2, -1)
+                y_frames_post = self._np_frame(y_post, frame_length, hop_length)
                 extra += y_frames_post.shape[-2]
 
                 start = start_k * hop_length - n_fft // 2
-                y_frames_middle = librosa.util.frame(
-                    waveform[..., start:], frame_length=frame_length, hop_length=hop_length
+                y_frames_middle = self._np_frame(
+                    np.ascontiguousarray(waveform[..., start:]), frame_length, hop_length
                 )
-                y_frames_middle = np.moveaxis(y_frames_middle, -2, -1)
 
                 num_frames = y_frames_pre.shape[-2] + y_frames_middle.shape[-2] + y_frames_post.shape[-2]
                 frames = np.concatenate([y_frames_pre, y_frames_middle, y_frames_post], axis=-2)
@@ -255,8 +259,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
         compute_dtype = np.result_type(audio.dtype, window.dtype)
         return frames.astype(compute_dtype, copy=False)
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
+        # Always store FFT output as complex64, matching the upstream spectrogram() function.
+        # FFT is computed in float64 (numpy default), but the complex64 cast ensures consistent
+        # precision with librosa and the legacy FE code path.
         spec = np.fft.rfft(frames, n=n_fft, axis=-1).astype(np.complex64)
         if stft_cfg.normalized:
             spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
@@ -272,8 +279,13 @@ class NumpyAudioBackend(BaseAudioProcessor):
             spec = spec / np.sqrt(np.sum(window**2)).astype(spec.real.dtype)
         return np.moveaxis(spec, -1, -2)
 
-    def _compute_magnitudes(self, stft_out, power):
-        return np.abs(stft_out, dtype=np.float64) ** power
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
+        # When computation_dtype is set (e.g., "float64"), compute magnitudes in that dtype
+        # to match the upstream FE precision path: np.abs(complex64, dtype=float64) ** power.
+        # Otherwise, use the natural dtype (float32 from complex64) to match librosa.
+        if spectrogram_config and spectrogram_config.computation_dtype:
+            return np.abs(stft_out, dtype=np.float64) ** power
+        return np.abs(stft_out) ** power
 
     def _apply_frame_processing(self, frames, *, spectrogram_config, **kwargs):
         """Apply per-frame signal conditioning using the numpy backend."""
@@ -295,10 +307,11 @@ class NumpyAudioBackend(BaseAudioProcessor):
         **kwargs,
     ) -> list[np.ndarray]:
         """Apply mel filterbank to spectrogram features using the numpy backend."""
+        mel_filters = self.mel_filters.astype(features.dtype, copy=False)
         if spectrogram_config.mel_scale_config.matmul_order == "features_first":
-            mel_spec = np.matmul(features, self.mel_filters)
+            mel_spec = np.matmul(features, mel_filters)
         else:
-            mel_spec = np.matmul(self.mel_filters.T, features)
+            mel_spec = np.matmul(mel_filters.T, features)
         return np.maximum(spectrogram_config.mel_floor, mel_spec)
 
     def _normalize_magnitude(
@@ -315,14 +328,14 @@ class NumpyAudioBackend(BaseAudioProcessor):
         """Apply magnitude normalization (log, log10, or dB scaling) to spectrogram features.
 
         Accepts a single or batched spectrogram (not a list).
-        Mirrors the normalization logic in `audio_utils.spectrogram()`.
+        Mirrors the normalization logic in the spectrogram pipeline.
         """
         log_mel = spectrogram_config.log_mode
         mel_floor = spectrogram_config.mel_floor
         power = spectrogram_config.stft_config.power
 
         if log_mel is None:
-            return features
+            return features.astype(dtype)
 
         # Clamp to mel_floor before taking log
         result = np.maximum(mel_floor, features)
@@ -346,42 +359,21 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        num_frequency_bins = 1 + stft_cfg.n_fft // 2
-        num_mel_filters = mel_cfg.n_mels
-        min_frequency = mel_cfg.f_min
-        max_frequency = mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2
-        sampling_rate = self.sample_rate
-
-        mel_min = _np_hertz_to_mel(min_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_max = _np_hertz_to_mel(max_frequency, mel_scale=mel_cfg.mel_scale)
-        mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
-        filter_freqs = _np_mel_to_hertz(mel_freqs, mel_scale=mel_cfg.mel_scale)
-
-        n_fft = (num_frequency_bins - 1) * 2
-
-        if mel_cfg.triangularize_in_mel_space:
-            fft_bin_width = sampling_rate / n_fft
-            fft_freqs = _np_hertz_to_mel(
-                fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_cfg.mel_scale
-            )
-            filter_freqs = mel_freqs
-        elif mel_cfg.frequency_bin_mode == "rfft":
-            fft_freqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sampling_rate)
-        else:
-            fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
-
-        # Triangular filter bank
-        filter_diff = np.diff(filter_freqs)
-        slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
-        down_slopes = -slopes[:, :-2] / filter_diff[:-1]
-        up_slopes = slopes[:, 2:] / filter_diff[1:]
-        mel_filters = np.maximum(0, np.minimum(down_slopes, up_slopes))
-
-        if mel_cfg.norm == "slaney":
-            enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
-            mel_filters *= np.expand_dims(enorm, 0)
-
-        return mel_filters
+        filters = mel_filter_bank(
+            num_frequency_bins=1 + stft_cfg.n_fft // 2,
+            num_mel_filters=mel_cfg.n_mels,
+            min_frequency=mel_cfg.f_min,
+            max_frequency=mel_cfg.f_max if mel_cfg.f_max is not None else self.sample_rate / 2,
+            sampling_rate=self.sample_rate,
+            norm=mel_cfg.norm,
+            mel_scale=mel_cfg.mel_scale,
+            triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+        )
+        # Store as float32 to match librosa's precision path. Processors needing float64
+        # set computation_dtype, which keeps filters in float64 for exact upstream FE matching.
+        if not spectrogram_config.computation_dtype:
+            filters = filters.astype(np.float32)
+        return filters
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
@@ -557,7 +549,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             )
         return audio.unfold(-1, frame_length, hop_length)
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
         if frame_length < n_fft:
             frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))
@@ -587,7 +579,7 @@ class TorchAudioBackend(BaseAudioProcessor):
             return magnitudes
         return magnitudes.float()
 
-    def _compute_magnitudes(self, stft_out, power):
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         """Convert complex STFT output to a real-valued magnitude spectrogram."""
         return stft_out.abs() ** power
 
@@ -615,7 +607,8 @@ class TorchAudioBackend(BaseAudioProcessor):
         if spectrogram_config.mel_scale_config.matmul_order == "features_first":
             mel_spec = torch.matmul(features.transpose(-2, -1), mel_filters)
         else:
-            mel_spec = torch.matmul(mel_filters.T, features)
+            # Use F.linear to match torchaudio's MelScale implementation exactly
+            mel_spec = torch.nn.functional.linear(features.transpose(-2, -1), mel_filters.T).transpose(-2, -1)
         return torch.clamp(mel_spec, min=spectrogram_config.mel_floor)
 
     def _normalize_magnitude(

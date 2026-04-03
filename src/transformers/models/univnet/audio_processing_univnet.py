@@ -47,6 +47,7 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
         ),
         log_mode="log",
         mel_floor=1e-5,
+        computation_dtype="float64",
     )
 
     def __init__(self, **kwargs):
@@ -63,7 +64,7 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
             audio = np.pad(audio, (pad_amount, pad_amount), mode="reflect")
         return super()._stft(audio, spectrogram_config=spectrogram_config, **kwargs)
 
-    def _compute_magnitudes(self, stft_out, power):
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         # UnivNet adds mel_floor inside the sqrt: sqrt(real² + imag² + mel_floor)
         return np.sqrt(np.real(stft_out) ** 2 + np.imag(stft_out) ** 2 + self.mel_floor)
 

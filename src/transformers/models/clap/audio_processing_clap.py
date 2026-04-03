@@ -37,6 +37,7 @@ class ClapAudioProcessor(NumpyAudioBackend):
             stft_config=StftConfig(n_fft=1024, hop_length=480, power=2.0),
             mel_scale_config=self._mel_configs[truncation_mode],
             log_mode="dB",
+            computation_dtype="float64",
         )
         super().__init__(**kwargs)
         # rand_trunc: base class truncates via pad() → _truncate_single (random offset)
