@@ -12,18 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
-
 from ...audio_processing_backends import NumpyAudioBackend
 
 
 class DiaAudioProcessor(NumpyAudioBackend):
     sample_rate = 44100
     force_mono = True
+    add_channel_dim = True
     pad_to_multiple_of = 512
-
-    def _to_batch(self, audio):
-        return np.stack(audio)[:, np.newaxis, :]  # (batch, 1, length)
 
 
 __all__ = ["DiaAudioProcessor"]

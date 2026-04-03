@@ -14,11 +14,8 @@
 
 import torch
 
-from spectrograms import numpy_mel_spectrogram as _np_spec
-
 from ...audio_processing_backends import TorchAudioBackend
-from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
-from ...feature_extraction_utils import BatchFeature
+from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig, mel_filter_bank
 
 
 class Phi4MultimodalAudioProcessor(TorchAudioBackend):
@@ -54,7 +51,7 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
     def _mel_filter_bank(self, spectrogram_config):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        mel_filters_np = _np_spec.mel_filter_bank(
+        mel_filters_np = mel_filter_bank(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
             min_frequency=mel_cfg.f_min,
@@ -120,34 +117,10 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
 
         return result
 
-    def _preprocess(
-        self,
-        audio,
-        padding,
-        max_length,
-        truncation,
-        pad_to_multiple_of,
-        return_tensors,
-        spectrogram_config=None,
-        do_extract_spectrogram=None,
-        **kwargs,
-    ) -> BatchFeature:
-        output = super()._preprocess(
-            audio,
-            padding,
-            max_length,
-            truncation,
-            pad_to_multiple_of,
-            return_tensors,
-            spectrogram_config=spectrogram_config,
-            do_extract_spectrogram=do_extract_spectrogram,
-            **kwargs,
-        )
-
+    def _postprocess_output(self, output, **kwargs):
         feature_lengths = output["audio_features_mask"].sum(dim=-1)
         feature_lengths = feature_lengths * self.audio_feat_stride
         output["audio_embed_sizes"] = self._compute_audio_embed_size(feature_lengths)
-
         return output
 
 

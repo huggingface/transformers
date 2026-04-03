@@ -21,11 +21,7 @@ from ...audio_utils import MelScaleConfig, SpectrogramConfig, StftConfig
 class UnivNetAudioProcessor(NumpyAudioBackend):
     sample_rate = 24000
     force_mono = True
-    n_fft = 1024
-    hop_length = 256
-    n_mels = 100
-    fmin = 0.0
-    fmax = 12000.0
+    mask_level = "audio"
     mel_floor = 1e-9
     compression_clip_val = 1e-5
     compression_factor = 1.0
@@ -59,7 +55,8 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
 
     def _stft(self, audio, *, spectrogram_config, **kwargs):
         # UnivNet uses reflect padding with (n_fft - hop_length) / 2 instead of center padding
-        pad_amount = int((self.n_fft - self.hop_length) / 2)
+        stft_cfg = spectrogram_config.stft_config
+        pad_amount = int((stft_cfg.n_fft - stft_cfg.hop_length) / 2)
         if audio.ndim > 1:
             audio = np.pad(audio, ((0, 0), (pad_amount, pad_amount)), mode="reflect")
         else:
@@ -79,13 +76,6 @@ class UnivNetAudioProcessor(NumpyAudioBackend):
         if self.do_normalize:
             features = 2 * ((features - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
         return features
-
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        # UnivNet uses waveform-level padding mask even when extracting spectrograms
-        mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
-        for i, (start, end) in enumerate(audio_ranges):
-            mask[i, start:end] = 1
-        return {"audio_features_mask": mask}
 
     def extract_spectrogram(self, audio, *, spectrogram_config, **kwargs):
         features = super().extract_spectrogram(audio, spectrogram_config=spectrogram_config, **kwargs)

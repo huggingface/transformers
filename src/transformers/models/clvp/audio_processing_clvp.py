@@ -23,6 +23,7 @@ class ClvpAudioProcessor(NumpyAudioBackend):
     force_mono = True
     max_length = 132300  # 6 seconds at 22050 Hz
     truncation = True
+    mask_level = "audio"
 
     spectrogram_config = SpectrogramConfig(
         stft_config=StftConfig(
@@ -55,13 +56,5 @@ class ClvpAudioProcessor(NumpyAudioBackend):
         if self.mel_norms is not None:
             features = features / np.array(self.mel_norms)[:, None]
         return features.astype(np.float32)
-
-    def _get_mask(self, audio_ranges, padded_length, do_extract_spectrogram, spectrogram_config):
-        """CLVP uses raw-audio-level mask even for spectrogram output."""
-        mask = np.zeros((len(audio_ranges), padded_length), dtype=np.int32)
-        for i, (start, end) in enumerate(audio_ranges):
-            mask[i, start:end] = 1
-        return {"audio_features_mask": mask}
-
 
 __all__ = ["ClvpAudioProcessor"]
