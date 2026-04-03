@@ -29,7 +29,6 @@ from .image_processing_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
     SizeDict,
-    is_vision_available,
     validate_kwargs,
 )
 from .processing_utils import Unpack, VideosKwargs
@@ -66,9 +65,6 @@ if is_torch_available():
 
 if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as tvF
-
-if is_vision_available():
-    from .image_utils import PILImageResampling
 
 
 logger = logging.get_logger(__name__)
