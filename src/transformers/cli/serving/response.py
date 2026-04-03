@@ -23,7 +23,7 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from ...utils import logging
-from ...utils.import_utils import is_serve_available, is_torchcodec_available
+from ...utils.import_utils import is_serve_available
 
 
 if is_serve_available():
@@ -125,12 +125,11 @@ class ResponseHandler(BaseHandler):
             for msg in processor_inputs
             for c in (msg["content"] if isinstance(msg["content"], list) else [])
         )
-        # TODO: remove this check when the processor handles the torchcodec dependency internally
-        load_audio_from_video = modality == Modality.MULTIMODAL and has_video
-        if load_audio_from_video and not is_torchcodec_available():
-            raise ValueError(
-                "Extracting audio from video requires `torchcodec`. Install it with: `pip install torchcodec`."
-            )
+
+        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
+        chat_template_kwargs = {}
+        if has_video:
+            chat_template_kwargs["num_frames"] = 32
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
@@ -138,7 +137,8 @@ class ResponseHandler(BaseHandler):
             return_tensors=None if use_cb else "pt",
             return_dict=True,
             tokenize=True,
-            load_audio_from_video=load_audio_from_video,
+            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
+            **chat_template_kwargs,
         )
         if not use_cb:
             inputs = inputs.to(model.device)

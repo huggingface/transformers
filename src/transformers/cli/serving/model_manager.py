@@ -237,8 +237,15 @@ class ModelManager:
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
-        architecture = getattr(transformers, config.architectures[0])
 
+        from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
+            from transformers import AutoModelForMultimodalLM
+
+            return AutoModelForMultimodalLM.from_pretrained(model_id, **model_kwargs)
+
+        architecture = getattr(transformers, config.architectures[0])
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(

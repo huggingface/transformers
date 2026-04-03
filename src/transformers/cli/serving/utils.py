@@ -563,8 +563,12 @@ class GenerateManager(BaseGenerateManager):
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        # processor is either a multi-modal Processor (has .tokenizer) or a bare tokenizer (has ._tokenizer directly)
+        rust_tokenizer = processor.tokenizer._tokenizer if hasattr(processor, "tokenizer") else processor._tokenizer
+        streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            gen_kwargs["generation_mode"] = "text"
 
         def _run() -> None:
             try:
@@ -586,9 +590,12 @@ class GenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, "torch.Tensor"]:
         """Run generation to completion via ``model.generate()`` on the inference thread."""
-        sequences = await self.async_submit(
-            model.generate, **inputs, generation_config=gen_config, tokenizer=processor
-        )
+        # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default;
+        # force text-only output since the serve layer only handles text
+        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            generate_kwargs["generation_mode"] = "text"
+        sequences = await self.async_submit(model.generate, **generate_kwargs)
         input_len = inputs["input_ids"].shape[-1]
         generated_ids = sequences[0, input_len:]
         text = processor.decode(generated_ids, skip_special_tokens=True)
@@ -662,7 +669,8 @@ class CBGenerateManager(BaseGenerateManager):
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
-        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+        rust_tokenizer = processor.tokenizer._tokenizer if hasattr(processor, "tokenizer") else processor._tokenizer
+        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue)
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
