@@ -40,6 +40,10 @@ class WhisperAudioProcessor(TorchAudioBackend):
         skip_last_frame=True,
     )
 
+    def _apply_mel_scale(self, features, *, spectrogram_config, **kwargs):
+        mel_filters = self.mel_filters.to(device=features.device)
+        return torch.clamp(torch.matmul(mel_filters.T, features), min=spectrogram_config.mel_floor)
+
     def _normalize_magnitude(self, features, *, spectrogram_config, **kwargs):
         features = super()._normalize_magnitude(features, spectrogram_config=spectrogram_config, **kwargs)
 

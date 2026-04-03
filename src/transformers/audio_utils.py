@@ -580,6 +580,7 @@ def mel_filter_bank(
     norm: str | None = None,
     mel_scale: str = "htk",
     triangularize_in_mel_space: bool = False,
+    dtype: np.dtype | None = None,
 ) -> np.ndarray:
     """
     Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
@@ -648,7 +649,20 @@ def mel_filter_bank(
         # frequencies of FFT bins in Hz
         fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
 
-    mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
+    if dtype is not None:
+        # Per-band computation matching librosa's precision path: compute slopes in float64,
+        # cast each band to dtype immediately. This replicates librosa's per-row assignment
+        # to a dtype-initialized array, which produces different rounding than computing all
+        # bands in float64 and casting at the end.
+        filter_diff = np.diff(filter_freqs)
+        ramps = np.subtract.outer(filter_freqs, fft_freqs)  # (num_mel_filters+2, num_frequency_bins)
+        mel_filters = np.zeros((num_frequency_bins, num_mel_filters), dtype=dtype)
+        for i in range(num_mel_filters):
+            lower = -ramps[i] / filter_diff[i]
+            upper = ramps[i + 2] / filter_diff[i + 1]
+            mel_filters[:, i] = np.maximum(0, np.minimum(lower, upper)).astype(dtype)
+    else:
+        mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
