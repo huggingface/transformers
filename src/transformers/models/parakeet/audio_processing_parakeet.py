@@ -80,7 +80,7 @@ class ParakeetAudioProcessor(TorchAudioBackend):
 
         return torch.from_numpy(weights.T).to(torch.float32)
 
-    def _compute_magnitudes(self, stft_out, power):
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         import torch
 
         magnitudes = torch.view_as_real(stft_out)

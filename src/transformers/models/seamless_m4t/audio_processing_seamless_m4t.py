@@ -46,14 +46,15 @@ class SeamlessM4tAudioProcessor(NumpyAudioBackend):
         preemphasis=0.97,
         remove_dc_offset=True,
         mel_floor=1.192092955078125e-07,
-        waveform_scale=32768.0,
+        computation_dtype="float64",
     )
+    waveform_scale = 32768.0
 
     def extract_spectrogram(self, audio, **kwargs):
         # Per-waveform fbank extraction returning (time, n_mels)
         features = []
         for waveform in audio:
-            waveform = np.squeeze(waveform)
+            waveform = np.squeeze(waveform) * self.waveform_scale
             f = super().extract_spectrogram([waveform], spectrogram_config=self.spectrogram_config)
             features.append(f[0].T)
         return features

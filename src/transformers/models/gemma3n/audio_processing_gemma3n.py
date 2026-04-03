@@ -58,6 +58,7 @@ class Gemma3nAudioProcessor(NumpyAudioBackend):
         mel_floor=1e-5,
         log_mode="log",
         preemphasis=0.97,
+        computation_dtype="float64",
     )
 
     def __init__(self, per_bin_mean=None, per_bin_stddev=None, **kwargs):

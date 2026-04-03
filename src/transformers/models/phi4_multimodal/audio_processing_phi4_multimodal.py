@@ -91,7 +91,7 @@ class Phi4MultimodalAudioProcessor(TorchAudioBackend):
         frames_prev[..., 0] = frames_prev[..., 1]
         return (frames - spectrogram_config.preemphasis * frames_prev) * 32768
 
-    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg):
+    def _window_and_fft(self, frames, window, frame_length, n_fft, stft_cfg, audio_dtype=None):
         frames = frames * window
         if frame_length < n_fft:
             frames = torch.nn.functional.pad(frames, (0, n_fft - frame_length))

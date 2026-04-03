@@ -444,13 +444,14 @@ class BaseAudioProcessor(AudioProcessingMixin):
         window, frame_length = self._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
 
         if needs_manual_framing:
+            audio_dtype = audio.dtype
             frames = self._frame_audio(audio, window, frame_length, hop_length, n_fft, stft_cfg)
             frames = self._apply_frame_processing(frames, spectrogram_config=spectrogram_config, **kwargs)
-            stft_out = self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg)
+            stft_out = self._window_and_fft(frames, window, frame_length, n_fft, stft_cfg, audio_dtype=audio_dtype)
         else:
             stft_out = self._native_stft(audio, window, frame_length, hop_length, n_fft, stft_cfg)
 
-        magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power)
+        magnitudes = self._compute_magnitudes(stft_out, stft_cfg.power, spectrogram_config=spectrogram_config)
         return self._cast_stft_output(magnitudes, spectrogram_config)
 
     def _create_stft_window(self, win_length, stft_cfg, audio):
@@ -478,7 +479,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
         """Native STFT (e.g. torch.stft). Returns complex output. Implemented by backend subclasses."""
         raise NotImplementedError
 
-    def _compute_magnitudes(self, stft_out, power):
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         """Convert complex STFT output to a real-valued magnitude spectrogram.
         Implemented by backend subclasses. Overridable for custom magnitude computation (e.g. Parakeet)."""
         raise NotImplementedError
@@ -502,7 +503,7 @@ class BaseAudioProcessor(AudioProcessingMixin):
             or spectrogram_config.remove_dc_offset
         )
 
-    def _compute_magnitudes(self, stft_out, power):
+    def _compute_magnitudes(self, stft_out, power, spectrogram_config=None):
         """Convert complex STFT output to a real-valued magnitude spectrogram.
 
         Only used in the non-manual-framing STFT path.  Override for
