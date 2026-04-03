@@ -96,11 +96,11 @@ class BaseAudioProcessor(AudioProcessingMixin):
         for key, value in attributes.items():
             setattr(self, key, value)
 
-        # Derive mel_filters from spectrogram_config if mel_scale_config is set
-        # TODO: maybe the mel spectrogram initialization should be lazy?
-        if self.spectrogram_config is not None and self.spectrogram_config.mel_scale_config is not None:
-            if not hasattr(self, "mel_filters"):
+        # Pre-compute mel filters from spectrogram_config
+        if self.spectrogram_config is not None:
+            if self.spectrogram_config.mel_scale_config is not None and not hasattr(self, "mel_filters"):
                 self.mel_filters = self._mel_filter_bank(self.spectrogram_config)
+        self._cached_stft_window = None
 
     def __call__(self, audio: AudioInput, *args, **kwargs: Unpack[AudioKwargs]) -> BatchFeature:
         return self.preprocess(audio, *args, **kwargs)
@@ -440,8 +440,15 @@ class BaseAudioProcessor(AudioProcessingMixin):
                 audio = audio.to(getattr(torch, dtype_str))
         if spectrogram_config.waveform_scale is not None:
             audio = audio * spectrogram_config.waveform_scale
-        window = self._create_stft_window(win_length, stft_cfg, audio)
-        window, frame_length = self._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+
+        # Cache window on first call; reuse on subsequent calls with same config
+        if self._cached_stft_window is not None and spectrogram_config is self.spectrogram_config:
+            window, frame_length = self._cached_stft_window
+        else:
+            window = self._create_stft_window(win_length, stft_cfg, audio)
+            window, frame_length = self._prepare_window_and_framing(window, win_length, n_fft, needs_manual_framing)
+            if spectrogram_config is self.spectrogram_config:
+                self._cached_stft_window = (window, frame_length)
 
         if needs_manual_framing:
             audio_dtype = audio.dtype
