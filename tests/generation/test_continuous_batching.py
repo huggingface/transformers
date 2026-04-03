@@ -40,8 +40,9 @@ from transformers.generation.continuous_batching.cache import (
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
-from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, OutputRouter
+from transformers.generation.continuous_batching.continuous_api import OutputRouter
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
+from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
 from transformers.testing_utils import (
     Expectations,
@@ -771,11 +772,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=True, allow_block_sharing=True, use_async_batching=False, num_blocks=4, block_size=32
         )
 
-        # Patch soft_reset_one_request to verify it's called at least once
-        original_soft_reset = ContinuousBatchProcessor.soft_reset_one_request
+        # Patch offload_one_request to verify it's called at least once
+        original_offload = OffloadingManager.offload_one_request
         with patch.object(
-            ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset
-        ) as mock_soft_reset:
+            OffloadingManager, "offload_one_request", autospec=True, side_effect=original_offload
+        ) as mock_offload:
             self._test_continuous_batching_parity(
                 model_id=model_id,
                 continuous_batching_config=continuous_batching_config,
@@ -783,7 +784,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 max_new_tokens=30,
                 num_repeat_prompts=4,
             )
-            self.assertTrue(mock_soft_reset.called, "Soft reset method was not called.")
+            self.assertTrue(mock_offload.called, "Offload method was not called.")
 
     # ---------------------------------------Streaming tests--------------------------------------- #
     #           Ensures the requests have the right behavior with and without streaming             #
@@ -1094,6 +1095,56 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa2 = tokenizer.decode(out_fa2.generated_tokens, skip_special_tokens=True)
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
+
+    # ---------------------------------- CPU offloading tests ---------------------------------- #
+
+    @require_torch_accelerator
+    def test_cpu_offloading_parity(self) -> None:
+        """Test that CPU offloading produces the same results as the legacy soft-reset path, and that it is actually
+        called at least once. Uses a very small cache (few blocks) to force offloading."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True,
+            allow_block_sharing=True,
+            use_async_batching=False,
+            num_blocks=4,
+            block_size=32,
+            cpu_offload_space=1.0,
+        )
+
+        original_offload = OffloadingManager._offload_to_cpu
+        with patch.object(
+            OffloadingManager, "_offload_to_cpu", autospec=True, side_effect=original_offload
+        ) as mock_offload:
+            self._test_continuous_batching_parity(
+                model_id=model_id,
+                continuous_batching_config=continuous_batching_config,
+                attn_implementation="sdpa",
+                max_new_tokens=30,
+                num_repeat_prompts=4,
+            )
+            self.assertTrue(mock_offload.called, "_offload_to_cpu was not called despite few blocks being available.")
+
+    @require_torch_accelerator
+    def test_cpu_offloading_disabled_when_zero(self) -> None:
+        """Test that cpu_offload_space=0 produces the same output as the legacy path."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=True,
+            allow_block_sharing=True,
+            use_async_batching=False,
+            num_blocks=4,
+            block_size=32,
+            cpu_offload_space=0.0,
+        )
+        # Should work identically to the existing test_continuous_batching_few_blocks
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="sdpa",
+            max_new_tokens=30,
+            num_repeat_prompts=4,
+        )
 
 
 @require_torch_gpu
