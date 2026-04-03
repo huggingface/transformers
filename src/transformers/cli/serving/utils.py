@@ -61,6 +61,7 @@ X_REQUEST_ID = "x-request-id"
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
+    MULTIMODAL = "MULTIMODAL"
     STT = "STT"
     TTS = "TTS"
 
@@ -935,7 +936,7 @@ class BaseHandler:
                     texts = [c["text"] for c in message["content"] if c["type"] == "text"]
                     parsed["content"] = " ".join(texts)
 
-            elif modality == Modality.VLM:
+            elif modality in (Modality.VLM, Modality.MULTIMODAL):
                 if isinstance(message["content"], str):
                     parsed["content"].append({"type": "text", "text": message["content"]})
                 else:

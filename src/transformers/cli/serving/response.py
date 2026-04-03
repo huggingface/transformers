@@ -54,6 +54,7 @@ if is_serve_available():
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
+    Modality,
     ToolCallParser,
     _StreamError,
     detect_tool_format,
@@ -119,6 +120,11 @@ class ResponseHandler(BaseHandler):
         messages = self._input_to_messages(body)
         processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
 
+        has_video = any(
+            c.get("type") == "video"
+            for msg in processor_inputs
+            for c in (msg["content"] if isinstance(msg["content"], list) else [])
+        )
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
@@ -126,6 +132,7 @@ class ResponseHandler(BaseHandler):
             return_tensors=None if use_cb else "pt",
             return_dict=True,
             tokenize=True,
+            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
         )
         if not use_cb:
             inputs = inputs.to(model.device)
