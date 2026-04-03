@@ -140,6 +140,37 @@ class Chunk(ConversionOps):
         return Concatenate(self.dim)
 
 
+class ChunkGQA(ConversionOps):
+    """Split a fused QKV tensor for GQA models where Q, K, V have different sizes.
+
+    Uses ``config.num_attention_heads``, ``config.num_key_value_heads``, and ``config.head_dim``
+    to compute the split sizes along ``dim``.
+    """
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        config = kwargs["config"]
+        head_dim = config.head_dim
+        q_dim = config.num_attention_heads * head_dim
+        kv_dim = config.num_key_value_heads * head_dim
+
+        targets = target_patterns
+        chunks = torch.split(tensor, [q_dim, kv_dim, kv_dim], dim=self.dim)
+        return dict(zip(targets, chunks))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Concatenate(self.dim)
+
+
 class Concatenate(ConversionOps):
     """Concatenate tensors along `dim`."""
 

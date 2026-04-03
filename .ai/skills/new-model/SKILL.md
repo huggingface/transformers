@@ -1,7 +1,7 @@
 ---
 name: new-model
-description: Add a new model to huggingface/transformers using the modular approach. Scaffolds all files, registers in auto mappings, writes tests and docs following reviewer-enforced standards.
-argument-hint: [model_name] [parent_model] [checkpoint]
+description: Add a new model to huggingface/transformers using the modular approach. Can fetch models from the Hub, run the modular model detector, auto-generate modular files, then scaffold tests and docs following reviewer-enforced standards.
+argument-hint: [model_name] [hub_repo_or_modeling_file_or_parent_model] [checkpoint]
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 effort: max
@@ -9,17 +9,110 @@ effort: max
 
 # Add a New Model to HuggingFace Transformers
 
-You are adding a new model called `$0` that inherits from `$1`, with reference checkpoint `$2`.
+You are adding a new model called `$0`, with reference checkpoint `$2`.
+
+The second argument `$1` can be one of three things:
+
+- A **Hub repo ID** (e.g., `sarvamai/sarvam-105b`) — the full automated pipeline downloads the modeling file from the Hub, runs the detector, generates the modular file via LLM, and converts it. This is the recommended flow for models with `trust_remote_code=True` on the Hub.
+- A **path to a local modeling file** (e.g., `my_beit3_modeling.py` or `src/transformers/models/foo/modeling_foo.py`) — the modular model detector analyzes it to find the best parent model automatically.
+- A **parent model name** (e.g., `llama`, `clip`) — used directly as the inheritance target, skipping all detection.
+
+**Detection heuristic:**
+- Contains `/` but no `.py` → Hub repo ID (e.g., `org/model-name`)
+- Contains `.py` extension → local modeling file path
+- Otherwise → parent model name
 
 ## Human ownership requirement
 
 The human user is responsible for understanding and defending every line of code produced here. Do NOT generate code the user hasn't asked for or can't explain. When facing non-trivial design decisions, stop and ask the user rather than guessing. During PR review, the user — not an agent — should address reviewer comments. The agent's role is to assist with implementation, not to autonomously handle the full contribution lifecycle.
 
+## Phased approach
+
+Work in phases. Do not try to do everything at once. Focus on one checkpoint, one task at a time.
+
+**Phase 0 — Discovery & scaffolding:** Depending on the input, either run the full automated pipeline (Hub repo), run the detector on a local file, or skip straight to coding with a known parent.
+
+**Phase 1 — Review & refine:** Review the auto-generated modular file (or write it from scratch if parent was given directly). Fix issues, ensure correctness.
+
+**Phase 2 — Conversion script:** Write the weight conversion script. Verify one checkpoint converts correctly.
+
+**Phase 3 — Validation:** Run `make style`, `make typing`, `make check-repo`. Fix all errors.
+
+**Phase 4 — Tests + docs:** Write tests and documentation. Run the test suite.
+
+**Phase 5 — Human review:** The user reviews all code, opens the PR, and handles reviewer feedback themselves.
+
+## Phase 0 — Discovery & Scaffolding
+
+### Path A: Hub repo provided (recommended for `trust_remote_code` models)
+
+The `utils/auto_modular_pr.py` script automates the entire discovery-to-modular-file pipeline:
+
+```bash
+python utils/auto_modular_pr.py \
+    --hub-repo <org/model-name> \
+    --modeling-file <filename_in_repo.py> \
+    --model-name $0 \
+    --hf-model "Qwen/Qwen2.5-Coder-32B-Instruct" \
+    --dry-run
+```
+
+This runs 4 steps automatically:
+1. **Downloads** the modeling file from the Hub repo
+2. **Runs the modular model detector** to find the best parent model and generate per-class inheritance instructions
+3. **Calls an LLM** (via HF Inference API) to write the modular file based on detector output
+4. **Runs the modular converter** to generate standalone `modeling_*.py` and `configuration_*.py`
+
+The `--dry-run` flag skips the git/PR step — we want to review the output first.
+
+**Before running**, you need to determine the modeling filename in the Hub repo. Check it with:
+```bash
+# List Python files in the repo
+python -c "from huggingface_hub import list_repo_files; print([f for f in list_repo_files('$1') if f.endswith('.py')])"
+```
+
+**After running**, the generated files will be in `src/transformers/models/$0/`. Present the results to the user:
+- Which parent model was detected
+- The per-class inheritance mapping
+- The generated modular file for review
+
+The user must approve before proceeding to Phase 1 (refinement).
+
+**Requirements:**
+- `HF_TOKEN` env var or `huggingface-cli login` for the Inference API
+- The detector needs GPU/significant RAM and downloads an embedding index from the Hub on first run
+- Warn the user about resource requirements before running
+
+### Path B: Local modeling file provided
+
+Run the detector directly:
+
+```bash
+# With prompt generation — produces per-class inheritance recommendations
+python utils/modular_model_detector.py --modeling-file <path_to_modeling_file> --generate-prompt
+
+# Exclude specific models from results
+python utils/modular_model_detector.py --modeling-file <path_to_modeling_file> --generate-prompt --ignore-models "bert,gpt2"
+```
+
+The detector produces:
+1. **Per-class similarity results** — top-N most similar classes in the transformers codebase per source class
+2. **Model class match summary** — ranks which existing model covers the most classes
+3. **Generated prompt** (with `--generate-prompt`) — per-class "inherit from X" or "copy as-is" instructions, saved to `<model>_MODULAR_PROMPT`
+
+**Present the model class match summary to the user.** Show the top 3-5 candidates. Let the user confirm before proceeding. Then either:
+- Run the full pipeline with `auto_modular_pr.py --from-dir` if files are ready, or
+- Use the generated prompt to guide manual modular file creation in Phase 1
+
+### Path C: Parent model name provided directly
+
+The user already knows which model to inherit from. Skip detection entirely. Proceed to Phase 1.
+
 ## Required reading before writing any code
 
 Read these files in the repo — they are the authoritative reference:
 
-1. **Parent model source:** `src/transformers/models/$1/` — read the modular file (if it exists) or modeling file, plus config and tests
+1. **Parent model source:** `src/transformers/models/<parent>/` — read the modular file (if it exists) or modeling file, plus config and tests. The parent is either the detector's recommendation (Phase 0) or `$1` if provided directly.
 2. **Modular guide:** `docs/source/en/modular_transformers.md` — how to write modular files, inheritance patterns, `super()` semantics, dependency tracing, the converter
 3. **Legacy model guide:** `docs/source/en/add_new_model.md` — file structure, auto registration steps, checkpoint conversion, test conventions
 4. **Weight conversion:** `docs/source/en/weightconverter.md` — conversion script patterns
@@ -29,19 +122,7 @@ Read these files in the repo — they are the authoritative reference:
 8. **Auto docstrings:** `docs/source/en/auto_docstring.md` — `@auto_docstring` decorator usage
 9. **Reviewer code quality standards:** [review-standards.md](review-standards.md) — soft standards not in the linter but enforced during review
 
-Also look at a recent similar model as a concrete example — find one by browsing `src/transformers/models/` for a model that inherits from `$1` or a nearby architecture.
-
-## Phased approach
-
-Work in phases. Do not try to do everything at once. Focus on one checkpoint, one task at a time.
-
-**Phase 1 — Modeling + conversion (this skill):** Write the modular file and conversion script. Verify one checkpoint converts correctly by comparing outputs (forward pass with same dummy inputs in both original and HF implementation).
-
-**Phase 2 — Validation:** Run `make style`, `make typing`, `make check-repo`. Fix all errors.
-
-**Phase 3 — Tests + docs:** Write tests and documentation. Run the test suite.
-
-**Phase 4 — Human review:** The user reviews all code, opens the PR, and handles reviewer feedback themselves.
+Also look at a recent similar model as a concrete example — find one by browsing `src/transformers/models/` for a model that inherits from the chosen parent or a nearby architecture.
 
 ## Critical design decisions (decide BEFORE writing code)
 
@@ -154,24 +235,43 @@ Add entries **alphabetically** in ALL of these locations:
 - [ ] `utils/check_repo.py` `IGNORE_NON_TESTED` — for building-block sub-models (e.g., ViTModel)
 - [ ] `utils/mlinter/rules.toml` TRF009 allowlist — only if cross-model imports are needed
 
-## Step-by-step process (Phase 1–3)
+## Step-by-step process
 
-### 1. Understand the parent model
+### 0. Run Phase 0 — Discovery & scaffolding
 
-Read from `src/transformers/models/$1/`:
-- `modular_$1.py` (preferred) or `modeling_$1.py`
-- `configuration_$1.py`
-- `tests/models/$1/test_modeling_$1.py`
+Follow the appropriate path (A/B/C) from the Phase 0 section above. After this step you should have:
+- A confirmed `PARENT_MODEL` (the best parent to inherit from)
+- Optionally, an auto-generated modular file in `src/transformers/models/$0/`
+- Optionally, a `<model>_MODULAR_PROMPT` file with per-class instructions
 
-If the user has the original implementation locally, read it too. Identify which components the new model reuses vs. replaces.
+### 1. Review and understand the parent model
 
-### 2. Create the modular file (SOURCE OF TRUTH)
+Read from `src/transformers/models/<PARENT_MODEL>/`:
+- `modular_<PARENT_MODEL>.py` (preferred) or `modeling_<PARENT_MODEL>.py`
+- `configuration_<PARENT_MODEL>.py`
+- `tests/models/<PARENT_MODEL>/test_modeling_<PARENT_MODEL>.py`
 
-Create `src/transformers/models/$0/modular_$0.py`.
+If the detector/pipeline was run, use its per-class breakdown to understand exactly which components the new model reuses vs. replaces.
 
-This is the ONLY modeling file you write. The converter generates `modeling_$0.py` and `configuration_$0.py`. Follow the patterns in `docs/source/en/modular_transformers.md` and use a sibling model's modular file as a concrete template.
+### 2. Create or refine the modular file (SOURCE OF TRUTH)
 
-The modular file must also pass the reviewer standards in [review-standards.md](review-standards.md). Key rules:
+**If Phase 0 Path A was used (Hub pipeline):** A modular file was auto-generated by the LLM. Read it carefully, compare against the source modeling file, and fix any issues:
+- Incorrect inheritance (wrong parent class for a component)
+- Missing overrides (differences between new and parent not captured)
+- Extra overrides (code identical to parent that should be removed)
+- Import errors or missing dependencies
+- Style violations (see reviewer standards below)
+
+**If Phase 0 Path B was used (detector only):** Read the generated `<model>_MODULAR_PROMPT` file and use its per-class inheritance instructions as the blueprint to write the modular file:
+- Classes marked "inherit from X" → create a subclass that only overrides what differs
+- Classes marked "copy as-is" → reproduce them from the source file without inheriting
+- If classes match different parent models, the modular file can import from multiple parents
+
+**If Phase 0 Path C was used (parent given directly):** Write the modular file from scratch following the patterns in `docs/source/en/modular_transformers.md` and using a sibling model's modular file as a template.
+
+The modular file at `src/transformers/models/$0/modular_$0.py` is the ONLY modeling file you write. The converter generates `modeling_$0.py` and `configuration_$0.py`.
+
+The modular file must pass the reviewer standards in [review-standards.md](review-standards.md). Key rules:
 - `nn.ModuleList` not `nn.Sequential` for layer lists
 - `nn.Linear` for projections, not `nn.Parameter(torch.empty(...))`
 - Inherit from existing components when possible (`SiglipAttention`, `SiglipEncoderLayer`, `CLIPMLP`, etc.)
