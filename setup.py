@@ -85,7 +85,7 @@ _deps = [
     "filelock",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git@main",
+    "hf-doc-builder",
     "huggingface-hub>=1.5.0,<2.0",
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
@@ -292,8 +292,10 @@ class DepsTableUpdateCommand(Command):
         pass
 
     def run(self):
-        if SUPPORTED_PYTHON_VERSIONS[0] != PYTHON_MINOR_VERSION:
-            print(f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x")
+        if SUPPORTED_PYTHON_VERSIONS[0] >= PYTHON_MINOR_VERSION:
+            print(
+                f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x, detected version is {sys.version}."
+            )
             return
 
         entries = "\n".join([f'    "{k}": "{v}",' for k, v in deps.items()])
