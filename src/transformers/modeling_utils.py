@@ -51,7 +51,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.utils import is_fsdp_enabled
+from .distributed.utils import init_device_mesh, is_fsdp_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled
@@ -79,7 +79,6 @@ from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
     apply_tensor_parallel,
     gather_state_dict_for_save,
-    init_device_mesh,
     shard_and_distribute_module,
     verify_tp_plan,
 )
