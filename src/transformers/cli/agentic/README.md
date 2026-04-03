@@ -15,8 +15,11 @@ The module integrates with the main CLI through a single function call in
 ```
 src/transformers/cli/agentic/
 ├── app.py            # register_agentic_commands(app) — the single integration point
-├── _common.py        # Shared helpers (input resolution, output formatting, media loaders)
-├── inference.py      # Pipeline-based inference (~25 commands)
+├── _common.py        # Shared helpers (input resolution, output formatting, media loaders, model loading)
+├── text.py           # Text inference (classify, NER, QA, summarize, translate, fill-mask)
+├── vision.py         # Vision & video (image-classify, detect, segment, depth, keypoints, video-classify)
+├── audio.py          # Audio (transcribe, audio-classify, speak, audio-generate)
+├── multimodal.py     # Multimodal (VQA, document-QA, caption, OCR, multimodal-chat)
 ├── generate.py       # Text generation with streaming, decoding control, tool calling
 ├── train.py          # Fine-tuning / pretraining via Trainer
 ├── quantize.py       # Model quantization (BnB, GPTQ, AWQ)
@@ -87,7 +90,7 @@ via pipe (`echo "hello" | transformers classify`).
 
 9. Fill in masked tokens in a sentence
    ```bash
-   transformers fill-mask --model bert-base-uncased --text "The capital of France is [MASK]."
+   transformers fill-mask --model answerdotai/ModernBERT-base --text "The capital of France is [MASK]."
    ```
 
 ### Text Generation
@@ -156,12 +159,12 @@ via pipe (`echo "hello" | transformers classify`).
 
 22. Classify an image into arbitrary categories without training (zero-shot)
     ```bash
-    transformers image-classify --model openai/clip-vit-base-patch32 --image photo.jpg --labels "cat,dog,bird,fish"
+    transformers image-classify --model google/siglip-base-patch16-224 --image photo.jpg --labels "cat,dog,bird,fish"
     ```
 
 23. Detect objects in an image with bounding boxes
     ```bash
-    transformers detect --model facebook/detr-resnet-50 --image street.jpg
+    transformers detect --model PekingU/rtdetr_r18vd_coco_o365 --image street.jpg
     ```
 
 24. Detect objects from a text description (grounded detection)
@@ -174,298 +177,293 @@ via pipe (`echo "hello" | transformers classify`).
     transformers segment --model nvidia/segformer-b0-finetuned-ade-512-512 --image scene.jpg
     ```
 
-26. Segment individual object instances in an image
-    ```bash
-    transformers segment --model facebook/mask2former-swin-base-coco-instance --image crowd.jpg
-    ```
-
-27. Generate segmentation masks interactively (SAM-style)
+26. Generate segmentation masks interactively (SAM-style)
     ```bash
     transformers segment --model facebook/sam-vit-base --image photo.jpg --points "[[120,45]]" --point-labels "[1]"
     ```
 
-28. Estimate depth from a single image
+27. Estimate depth from a single image
     ```bash
-    transformers depth --model Intel/dpt-large --image room.jpg --output depth_map.png
+    transformers depth --model depth-anything/Depth-Anything-V2-Small-hf --image room.jpg --output depth_map.png
     ```
 
-29. Detect and match keypoints across an image pair
+28. Detect and match keypoints across an image pair
     ```bash
     transformers keypoints --model magic-leap-community/superglue --images img1.jpg --images img2.jpg
     ```
 
-30. Extract feature vectors from an image
+29. Extract feature vectors from an image
     ```bash
-    transformers embed --model google/vit-base-patch16-224 --image photo.jpg --output features.npy
+    transformers embed --model facebook/dinov2-small --image photo.jpg --output features.npy
     ```
 
 ### Audio
 
-31. Transcribe speech to text
+30. Transcribe speech to text
     ```bash
     transformers transcribe --model openai/whisper-small --audio recording.wav
     ```
 
-32. Transcribe speech with word-level timestamps
+31. Transcribe speech with word-level timestamps
     ```bash
-    transformers transcribe --model openai/whisper-small --audio recording.wav --timestamps word --json
+    transformers transcribe --model openai/whisper-small --audio recording.wav --timestamps true --json
     ```
 
-33. Classify an audio clip into categories
+32. Classify an audio clip into categories
     ```bash
     transformers audio-classify --model MIT/ast-finetuned-audioset-10-10-0.4593 --audio clip.wav
     ```
 
-34. Classify audio into arbitrary categories without training (zero-shot)
+33. Classify audio into arbitrary categories without training (zero-shot)
     ```bash
     transformers audio-classify --model laion/clap-htsat-unfused --audio clip.wav --labels "speech,music,noise,silence"
     ```
 
-35. Generate speech from text (text-to-speech)
+34. Generate speech from text (text-to-speech)
     ```bash
     transformers speak --model suno/bark-small --text "Hello, how are you today?" --output speech.wav
     ```
 
-36. Generate audio from a text description (music, sound effects)
+35. Generate audio from a text description (music, sound effects)
     ```bash
     transformers audio-generate --model facebook/musicgen-small --text "A calm piano melody" --output music.wav
     ```
 
 ### Video
 
-37. Classify a video clip into categories
+36. Classify a video clip into categories
     ```bash
     transformers video-classify --model MCG-NJU/videomae-base-finetuned-kinetics --video clip.mp4
     ```
 
 ### Multimodal
 
-38. Answer a question about an image (visual QA)
+37. Answer a question about an image (visual QA)
     ```bash
-    transformers vqa --model Salesforce/blip2-opt-2.7b --image chart.png --question "What is the trend shown?"
+    transformers vqa --model vikhyatk/moondream2 --image chart.png --question "What is the trend shown?"
     ```
 
-39. Answer a question about a document image (document QA)
+38. Answer a question about a document image (document QA)
     ```bash
     transformers document-qa --model impira/layoutlm-document-qa --image invoice.png --question "What is the total amount?"
     ```
 
-40. Generate a caption for an image
+39. Generate a caption for an image
     ```bash
-    transformers caption --model Salesforce/blip2-opt-2.7b --image sunset.jpg
+    transformers caption --model vikhyatk/moondream2 --image sunset.jpg
     ```
 
-41. Extract text from a document image (OCR)
+40. Extract text from a document image (OCR)
     ```bash
-    transformers ocr --model naver-clova-ix/donut-base-finetuned-cord-v2 --image receipt.png
+    transformers ocr --model vikhyatk/moondream2 --image receipt.png
     ```
 
-42. Single-turn conversation with mixed inputs (image, audio, text)
+41. Single-turn conversation with mixed inputs (image, audio, text)
     ```bash
     transformers multimodal-chat --model meta-llama/Llama-4-Scout-17B-16E-Instruct --prompt "Describe what you see and hear." --image photo.jpg --audio clip.wav
     ```
 
 ### Training
 
-43. Fine-tune a text classification model
+42. Fine-tune a text classification model
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./sst2-finetuned --epochs 3 --lr 2e-5
     ```
 
-44. Fine-tune a token classification model (NER)
+43. Fine-tune a token classification model (NER)
     ```bash
     transformers train token-classification --model bert-base-uncased --dataset conll2003 --output ./ner-finetuned --epochs 5
     ```
 
-45. Fine-tune a question answering model
+44. Fine-tune a question answering model
     ```bash
     transformers train question-answering --model bert-base-uncased --dataset squad --output ./qa-finetuned --epochs 2
     ```
 
-46. Fine-tune a summarization model
+45. Fine-tune a summarization model
     ```bash
     transformers train summarization --model t5-small --dataset cnn_dailymail --output ./summarizer --epochs 3
     ```
 
-47. Fine-tune a translation model
+46. Fine-tune a translation model
     ```bash
     transformers train translation --model t5-small --dataset wmt16/de-en --output ./translator
     ```
 
-48. Continued pretraining on a domain-specific corpus
+47. Continued pretraining on a domain-specific corpus
     ```bash
     transformers train language-modeling --model bert-base-uncased --dataset ./corpus.txt --output ./domain-bert --mlm
     ```
 
-49. Fine-tune an LLM with LoRA
+48. Fine-tune an LLM with LoRA
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.2-1B --dataset ./instructions.jsonl --output ./llama-lora --lora --lora-r 16
     ```
 
-50. Fine-tune a 4-bit quantized LLM with QLoRA
+49. Fine-tune a 4-bit quantized LLM with QLoRA
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.1-8B --dataset ./instructions.jsonl --output ./llama-qlora --lora --quantization bnb-4bit
     ```
 
-51. Pretrain a language model from scratch
+50. Pretrain a language model from scratch
     ```bash
     transformers train language-modeling --model-config gpt2 --dataset ./corpus.txt --output ./my-lm --from-scratch
     ```
 
-52. Fine-tune an image classification model
+51. Fine-tune an image classification model
     ```bash
     transformers train image-classification --model google/vit-base-patch16-224 --dataset food101 --output ./food-classifier --epochs 5
     ```
 
-53. Fine-tune an object detection model
+52. Fine-tune an object detection model
     ```bash
     transformers train object-detection --model facebook/detr-resnet-50 --dataset cppe-5 --output ./detector --epochs 10
     ```
 
-54. Fine-tune a segmentation model
+53. Fine-tune a segmentation model
     ```bash
     transformers train semantic-segmentation --model nvidia/segformer-b0-finetuned-ade-512-512 --dataset scene_parse_150 --output ./segmenter
     ```
 
-55. Fine-tune an ASR model on domain-specific audio
+54. Fine-tune an ASR model on domain-specific audio
     ```bash
     transformers train speech-recognition --model openai/whisper-small --dataset ./medical-audio/ --output ./medical-whisper --epochs 5
     ```
 
-56. Fine-tune an audio classification model
+55. Fine-tune an audio classification model
     ```bash
     transformers train audio-classification --model MIT/ast-finetuned-audioset-10-10-0.4593 --dataset superb/ks --output ./audio-classifier
     ```
 
-57. Run hyperparameter search with Optuna
+56. Run hyperparameter search with Optuna
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./hpo-run --hpo optuna --hpo-trials 20
     ```
 
-58. Resume training from a checkpoint
+57. Resume training from a checkpoint
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./sst2-finetuned --resume-from-checkpoint ./sst2-finetuned/checkpoint-500
     ```
 
-59. Train with early stopping
+58. Train with early stopping
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./sst2-finetuned --early-stopping --early-stopping-patience 3
     ```
 
-60. Evaluate periodically during training
+59. Evaluate periodically during training
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./sst2-finetuned --eval-strategy steps --eval-steps 100
     ```
 
 ### Distributed & Large-Scale Training
 
-61. Train across multiple GPUs on a single machine
+60. Train across multiple GPUs on a single machine
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.2-1B --dataset ./data.jsonl --output ./multi-gpu --multi-gpu
     ```
 
-62. Train across multiple nodes
+61. Train across multiple nodes
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.2-1B --dataset ./data.jsonl --output ./multi-node --nnodes 4
     ```
 
-63. Train with DeepSpeed ZeRO
+62. Train with DeepSpeed ZeRO
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.1-8B --dataset ./data.jsonl --output ./deepspeed-run --deepspeed zero3
     ```
 
-64. Train with FSDP
+63. Train with FSDP
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.1-8B --dataset ./data.jsonl --output ./fsdp-run --fsdp full-shard
     ```
 
-65. Train on TPUs
+64. Train on TPUs
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./tpu-run --device tpu
     ```
 
-66. Train on Apple Silicon (MPS)
+65. Train on Apple Silicon (MPS)
     ```bash
     transformers train text-classification --model bert-base-uncased --dataset glue/sst2 --output ./mps-run --device mps
     ```
 
-67. Train with mixed precision
+66. Train with mixed precision
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.2-1B --dataset ./data.jsonl --output ./bf16-run --dtype bf16
     ```
 
-68. Train with gradient checkpointing
+67. Train with gradient checkpointing
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.1-8B --dataset ./data.jsonl --output ./gc-run --gradient-checkpointing
     ```
 
-69. Train with gradient accumulation
+68. Train with gradient accumulation
     ```bash
     transformers train text-generation --model meta-llama/Llama-3.2-1B --dataset ./data.jsonl --output ./ga-run --gradient-accumulation-steps 8
     ```
 
 ### Quantization
 
-70. Quantize a model to 4-bit
+69. Quantize a model to 4-bit
     ```bash
     transformers quantize --model meta-llama/Llama-3.1-8B --method bnb-4bit --output ./llama-4bit
     ```
 
-71. Quantize a model to 8-bit
+70. Quantize a model to 8-bit
     ```bash
     transformers quantize --model meta-llama/Llama-3.1-8B --method bnb-8bit --output ./llama-8bit
     ```
 
-72. Run GPTQ quantization with calibration data
+71. Run GPTQ quantization with calibration data
     ```bash
     transformers quantize --model meta-llama/Llama-3.1-8B --method gptq --calibration-dataset wikitext --output ./llama-gptq
     ```
 
-73. Run AWQ quantization
+72. Run AWQ quantization
     ```bash
     transformers quantize --model meta-llama/Llama-3.1-8B --method awq --output ./llama-awq
     ```
 
-74. Compare quality across quantization methods
+73. Compare quality across quantization methods
     ```bash
     transformers benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit --json
     ```
 
 ### Export
 
-75. Export a model to ONNX
+74. Export a model to ONNX
     ```bash
     transformers export onnx --model bert-base-uncased --output ./bert-onnx/
     ```
 
-76. Convert a model to GGUF for llama.cpp
+75. Convert a model to GGUF for llama.cpp
     ```bash
     transformers export gguf --model meta-llama/Llama-3.2-1B --output llama-1b.gguf
     ```
 
-77. Export a model to ExecuTorch for mobile/edge
+76. Export a model to ExecuTorch for mobile/edge
     ```bash
     transformers export executorch --model distilbert-base-uncased --output ./model.pte
     ```
 
 ### Utilities
 
-78. Compute text embeddings
+77. Compute text embeddings
     ```bash
-    transformers embed --model sentence-transformers/all-MiniLM-L6-v2 --text "The quick brown fox." --output embeddings.npy
+    transformers embed --model BAAI/bge-small-en-v1.5 --text "The quick brown fox." --output embeddings.npy
     ```
 
-79. Tokenize text and display tokens
+78. Tokenize text and display tokens
     ```bash
     transformers tokenize --model meta-llama/Llama-3.2-1B-Instruct --text "Hello, world!" --ids
     ```
 
-80. Inspect a model's configuration (no weight download)
+79. Inspect a model's configuration (no weight download)
     ```bash
     transformers inspect meta-llama/Llama-3.2-1B-Instruct --json
     ```
 
-81. Examine attention weights and hidden states
+80. Examine attention weights and hidden states
     ```bash
     transformers inspect-forward --model bert-base-uncased --text "The cat sat on the mat." --output ./activations/
     ```
@@ -474,7 +472,7 @@ via pipe (`echo "hello" | transformers classify`).
 
 These commands ship alongside the agentic commands and are available via the same `transformers` entry point.
 
-82. Start an OpenAI-compatible inference server (chat completions, audio, images)
+81. Start an OpenAI-compatible inference server (chat completions, audio, images)
     ```bash
     transformers serve --host 0.0.0.0 --port 8000
     ```
@@ -482,7 +480,7 @@ These commands ship alongside the agentic commands and are available via the sam
     throughput-oriented deployments, and `--quantization bnb-4bit` for memory-constrained
     hardware.
 
-83. Open an interactive chat session with a model (local or remote)
+82. Open an interactive chat session with a model (local or remote)
     ```bash
     transformers chat meta-llama/Llama-3.2-1B-Instruct
     ```
@@ -491,22 +489,22 @@ These commands ship alongside the agentic commands and are available via the sam
     transformers chat meta-llama/Llama-3.2-1B-Instruct http://localhost:8000/v1
     ```
 
-84. Download a model and its tokenizer from the Hub to the local cache
+83. Download a model and its tokenizer from the Hub to the local cache
     ```bash
     transformers download meta-llama/Llama-3.2-1B-Instruct
     ```
 
-85. Print environment and dependency information (useful for bug reports)
+84. Print environment and dependency information (useful for bug reports)
     ```bash
     transformers env
     ```
 
-86. Print the installed Transformers version
+85. Print the installed Transformers version
     ```bash
     transformers version
     ```
 
-87. Scaffold a new model by copying an existing one
+86. Scaffold a new model by copying an existing one
     ```bash
     transformers add-new-model-like
     ```
