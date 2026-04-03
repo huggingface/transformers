@@ -47,6 +47,7 @@ from ..sam.configuration_sam import SamVisionConfig
 from ..sam.modeling_sam import (
     SamPatchEmbeddings,
     SamVisionAttention,
+    SamVisionEncoder,
     SamVisionLayer,
     SamVisionNeck,
 )
@@ -281,38 +282,10 @@ class DeepseekOcr2SamVisionProj(nn.Module):
         return hidden_states
 
 
-class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
+class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
-        self.config = config
-        self.image_size = config.image_size
-        self.patch_embed = DeepseekOcr2SamPatchEmbeddings(config)
-
-        self.pos_embed = None
-        if config.use_abs_pos:
-            # Initialize absolute positional embedding with pretrain image size.
-            self.pos_embed = nn.Parameter(
-                torch.zeros(
-                    1,
-                    config.image_size // config.patch_size,
-                    config.image_size // config.patch_size,
-                    config.hidden_size,
-                )
-            )
-
-        self.layers = nn.ModuleList()
-        for i in range(config.num_hidden_layers):
-            layer = DeepseekOcr2SamVisionLayer(
-                config,
-                window_size=config.window_size if i not in config.global_attn_indexes else 0,
-            )
-            self.layers.append(layer)
-
-        self.neck = DeepseekOcr2SamVisionNeck(config)
-
-        self.gradient_checkpointing = False
         self.proj = DeepseekOcr2SamVisionProj(config)
-        self.post_init()
 
     def _interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int) -> torch.Tensor:
         src_size = pos_embed.shape[1]

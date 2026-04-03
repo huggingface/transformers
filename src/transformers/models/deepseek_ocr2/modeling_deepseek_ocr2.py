@@ -535,6 +535,8 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
+    _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
+
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
         self.config = config
@@ -567,20 +569,11 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         self.proj = DeepseekOcr2SamVisionProj(config)
         self.post_init()
 
-    def _interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int) -> torch.Tensor:
-        src_size = pos_embed.shape[1]
-        if src_size == target_size:
-            return pos_embed
-        pos_embed = pos_embed.permute(0, 3, 1, 2).float()
-        pos_embed = torch.nn.functional.interpolate(
-            pos_embed,
-            size=(target_size, target_size),
-            mode="bicubic",
-            align_corners=False,
-        )
-        pos_embed = pos_embed.permute(0, 2, 3, 1)
-        return pos_embed
+    def get_input_embeddings(self):
+        return self.patch_embed
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
@@ -594,6 +587,20 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         hidden_states = self.neck(hidden_states)
         hidden_states = self.proj(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
+
+    def _interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int) -> torch.Tensor:
+        src_size = pos_embed.shape[1]
+        if src_size == target_size:
+            return pos_embed
+        pos_embed = pos_embed.permute(0, 3, 1, 2).float()
+        pos_embed = torch.nn.functional.interpolate(
+            pos_embed,
+            size=(target_size, target_size),
+            mode="bicubic",
+            align_corners=False,
+        )
+        pos_embed = pos_embed.permute(0, 2, 3, 1)
+        return pos_embed
 
 
 def rotate_half(x):
