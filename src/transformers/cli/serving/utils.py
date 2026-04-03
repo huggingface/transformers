@@ -911,15 +911,13 @@ class BaseHandler:
     def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
-        For LLMs, collapses list content blocks into plain text. For VLMs, converts
-        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``,
-        ``input_audio`` content parts into ``{"type": "audio", "url": ...}``, and
-        ``video_url`` / ``video`` content parts into ``{"type": "video", "url": ...}``
-        entries that HF processors understand.
+        All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
+        MULTIMODAL handles all of the above plus ``input_audio`` and ``audio_url``.
+        For LLMs, the content parts are collapsed into a plain text string.
 
         Args:
             messages (`list[dict]`): OpenAI-format chat messages.
-            modality (`Modality`): Whether the model is an LLM or VLM.
+            modality (`Modality`): The model modality (LLM, VLM, or MULTIMODAL).
 
         Returns:
             `list[dict]`: Processor-compatible messages.
@@ -929,43 +927,41 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            # Normalize content to a list of typed parts
+            raw_content = message["content"]
+            if isinstance(raw_content, str):
+                raw_content = [{"type": "text", "text": raw_content}]
+
+            for content in raw_content:
+                if content["type"] == "text":
+                    parsed["content"].append(content)
+                elif content["type"] == "image_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    from PIL import Image
+
+                    url = content["image_url"]["url"]
+                    if "base64" in url:
+                        image_data = re.sub("^data:image/.+;base64,", "", url)
+                        image = Image.open(BytesIO(base64.b64decode(image_data)))
+                        file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                        image.save(file.name)
+                        url = file.name
+                    parsed["content"].append({"type": "image", "url": url})
+                elif content["type"] == "input_audio" and modality == Modality.MULTIMODAL:
+                    audio_data = base64.b64decode(content["input_audio"]["data"])
+                    suffix = f".{content['input_audio'].get('format', 'wav')}"
+                    file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+                    file.write(audio_data)
+                    file.flush()
+                    parsed["content"].append({"type": "audio", "url": file.name})
+                # Extensions (not part of the OpenAI API standard)
+                elif content["type"] == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                elif content["type"] == "audio_url" and modality == Modality.MULTIMODAL:
+                    parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+
+            # LLMs expect plain text, not a list of content parts
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
-                    parsed["content"] = " ".join(texts)
-
-            elif modality in (Modality.VLM, Modality.MULTIMODAL):
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
-                        if content["type"] == "text":
-                            parsed["content"].append(content)
-                        elif content["type"] == "image_url":
-                            from PIL import Image
-
-                            url = content["image_url"]["url"]
-                            if "base64" in url:
-                                image_data = re.sub("^data:image/.+;base64,", "", url)
-                                image = Image.open(BytesIO(base64.b64decode(image_data)))
-                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                                image.save(file.name)
-                                url = file.name
-                            parsed["content"].append({"type": "image", "url": url})
-                        elif content["type"] == "input_audio":
-                            audio_data = base64.b64decode(content["input_audio"]["data"])
-                            suffix = f".{content['input_audio'].get('format', 'wav')}"
-                            file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-                            file.write(audio_data)
-                            file.flush()
-                            parsed["content"].append({"type": "audio", "url": file.name})
-                        # Extensions (not part of the OpenAI API standard)
-                        elif content["type"] == "audio_url":
-                            parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
-                        elif content["type"] == "video_url":
-                            parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                parsed["content"] = " ".join(c["text"] for c in parsed["content"])
 
             processor_inputs.append(parsed)
         return processor_inputs

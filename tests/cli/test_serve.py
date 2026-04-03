@@ -209,7 +209,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             self.assertIsInstance(msg["content"], list)
             self.assertEqual(msg["content"][0]["type"], "text")
 
-    def test_vlm_base64_input_audio_decoded_to_temp_file(self):
+    def test_multimodal_base64_input_audio_decoded_to_temp_file(self):
         """input_audio with base64 data should be decoded, written to a temp file, and converted to HF audio format."""
         import base64
 
@@ -228,19 +228,38 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
                 ],
             }
         ]
-        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        result = get_processor_inputs_from_messages(messages, Modality.MULTIMODAL)
         self.assertEqual(len(result[0]["content"]), 2)
         self.assertEqual(result[0]["content"][0]["type"], "text")
         audio_item = result[0]["content"][1]
         self.assertEqual(audio_item["type"], "audio")
         self.assertTrue(os.path.exists(audio_item["url"]))
         self.assertTrue(audio_item["url"].endswith(".mp3"))
-        # Verify the file content matches the original audio
         with open(audio_item["url"], "rb") as f:
             self.assertEqual(f.read(), audio_bytes)
 
-    def test_vlm_video_url_converted_to_hf_video_format(self):
-        """video_url content (non-standard extension) should be converted to HF video format."""
+    def test_vlm_ignores_audio_content(self):
+        """VLM models should ignore audio content parts."""
+        import base64
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        audio_b64 = base64.b64encode(b"fake audio").decode()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What do you hear?"},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertEqual(len(result[0]["content"]), 1)
+        self.assertEqual(result[0]["content"][0]["type"], "text")
+
+    def test_video_url_converted_to_hf_video_format(self):
+        """video_url content should be converted to HF video format for both VLM and MULTIMODAL."""
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
         video_src = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
@@ -253,10 +272,12 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
                 ],
             }
         ]
-        result = get_processor_inputs_from_messages(messages, Modality.VLM)
-        self.assertEqual(len(result[0]["content"]), 2)
-        video_item = result[0]["content"][0]
-        self.assertEqual(video_item, {"type": "video", "url": video_src})
+        for modality in (Modality.VLM, Modality.MULTIMODAL):
+            with self.subTest(modality=modality):
+                result = get_processor_inputs_from_messages(messages, modality)
+                self.assertEqual(len(result[0]["content"]), 2)
+                video_item = result[0]["content"][0]
+                self.assertEqual(video_item, {"type": "video", "url": video_src})
 
 
 
