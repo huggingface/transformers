@@ -152,10 +152,14 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
         return input_features
 
     @torch.compile(dynamic=True)
-    def _normalize_mel_features(self, mel_features: torch.Tensor, audio_lengths: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _normalize_mel_features(
+        self, mel_features: torch.Tensor, audio_lengths: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # normalize mel features, ignoring padding
         features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
-        attention_mask = torch.arange(mel_features.shape[1], device=mel_features.device)[None, :] < features_lengths[:, None]
+        attention_mask = (
+            torch.arange(mel_features.shape[1], device=mel_features.device)[None, :] < features_lengths[:, None]
+        )
 
         mask = attention_mask.unsqueeze(-1)
         lengths = attention_mask.sum(dim=1)
@@ -167,7 +171,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
 
     def _pad_raw_speech(self, raw_speech: list[torch.Tensor], max_len: int, device: str) -> torch.Tensor:
         output = torch.full((len(raw_speech), max_len), self.padding_value, device=device, dtype=torch.float32)
-        dsts = [output[i, :raw_speech[i].shape[0]] for i in range(len(raw_speech))]
+        dsts = [output[i, : raw_speech[i].shape[0]] for i in range(len(raw_speech))]
         srcs = [s.squeeze(-1) for s in raw_speech]
         # single kernel horizontal fusion
         torch._foreach_copy_(dsts, srcs)
