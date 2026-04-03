@@ -2002,7 +2002,9 @@ def create_causal_mask_mapping(
     Uses `pixel_values` as an optional input to disambiguate edge cases.
     """
     if is_training and mm_token_type_ids is None:
-        raise ValueError("`mm_token_type_ids` is required as a model input when training")
+        mm_token_type_ids = torch.zeros(
+            inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device
+        )
 
     mask_kwargs = {
         "config": config.get_text_config(),
