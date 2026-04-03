@@ -673,65 +673,96 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if is_flash_attention_requested(self.config):
-            return None
+    def chunk_and_pad_features(self, input_features, feature_lens):
+        """Chunk audio features into fixed-size windows and pad to equal length.
 
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
+        Splits ``input_features`` into chunks of ``2 * n_window`` frames (last chunk may be
+        shorter), then pads all chunks to the same length. Uses ``.tolist()`` for the
+        variable-length split — not traceable by ``torch.export``.
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        input_features,
-        feature_lens=None,
-        aftercnn_lens=None,
-        **kwargs,
-    ):
-        r"""
-        feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
-            mel length
-        aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`):
-            mel length after cnn
+        Returns:
+            ``padded_feature``: padded chunks ``(num_chunks, 1, mel_bins, max_chunk_len)``
+            ``chunk_lengths``: actual length of each chunk ``(num_chunks,)``
         """
-        aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
-
         chunk_lengths = torch.full((chunk_num.sum(),), self.n_window * 2, dtype=torch.long, device=feature_lens.device)
         tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
         chunk_lengths[tail_chunk_index] = feature_lens % (self.n_window * 2)
         chunk_lengths[chunk_lengths == 0] = self.n_window * 2
 
         chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
-        padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
+        padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2).unsqueeze(1)
+        return padded_feature, chunk_lengths
+
+    def get_valid_indices(self, chunk_lengths):
+        """Compute flat indices of valid (non-padding) positions after CNN downsampling.
+
+        ``torch.export`` cannot trace ``nonzero()`` (data-dependent output shape).
+
+        Returns:
+            ``valid_indices``: flat indices into the ``(num_chunks * max_after_cnn,)`` tensor
+        """
         feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
-        padded_mask_after_cnn = nn.utils.rnn.pad_sequence(
-            [torch.ones(length, dtype=torch.bool, device=padded_feature.device) for length in feature_lens_after_cnn],
-            batch_first=True,
+        max_len_after_cnn = feature_lens_after_cnn.max().item()
+        mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
+        return mask.flatten().nonzero().squeeze(-1)
+
+    def get_pool_indices(self, feature_lens):
+        """Compute indices for post-encoder average pooling on ragged hidden states.
+
+        The ``AvgPool1d(2, stride=2)`` averages consecutive pairs of tokens per audio.
+        This precomputes the flat index of each pair's first element so the forward can
+        do ``(hidden[idx] + hidden[idx+1]) / 2`` without ragged splits or padding.
+
+        Returns:
+            ``pool_indices``: flat index of the first element of each pair ``(total_pooled_tokens,)``
+        """
+        aftercnn_lens, _ = self._get_feat_extract_output_lengths(feature_lens)
+        offsets = F.pad(aftercnn_lens[:-1].cumsum(0), (1, 0), value=0)
+        # For each audio, generate pair start indices: offset, offset+2, offset+4, ...
+        pool_indices = torch.cat(
+            [
+                torch.arange(0, length - 1, 2, device=feature_lens.device) + offset
+                for offset, length in zip(offsets, aftercnn_lens)
+            ]
         )
-        padded_feature = padded_feature.unsqueeze(1)
-        # Split to chunk to avoid OOM during convolution
-        padded_embeds = []
-        for chunk in padded_feature.split(self.conv_chunksize, dim=0):
-            padded_embed = F.gelu(self.conv2d1(chunk))
-            padded_embed = F.gelu(self.conv2d2(padded_embed))
-            padded_embed = F.gelu(self.conv2d3(padded_embed))
-            padded_embeds.append(padded_embed)
-        padded_embed = torch.cat(padded_embeds, dim=0)
+        return pool_indices
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        input_features=None,
+        feature_lens=None,
+        padded_feature=None,
+        chunk_lengths=None,
+        valid_indices=None,
+        cu_seqlens=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        r"""
+        feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
+            mel length
+        padded_feature (`torch.FloatTensor`, *optional*):
+            Precomputed padded audio chunks (from `chunk_and_pad_features`).
+        chunk_lengths (`torch.LongTensor`, *optional*):
+            Precomputed per-chunk lengths (from `chunk_and_pad_features`).
+        valid_indices (`torch.LongTensor`, *optional*):
+            Precomputed flat indices of valid post-CNN positions (from `get_valid_indices`).
+        cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+        """
+        if padded_feature is None:
+            padded_feature, chunk_lengths = self.chunk_and_pad_features(input_features, feature_lens)
+        if valid_indices is None:
+            valid_indices = self.get_valid_indices(chunk_lengths)
+        if cu_seqlens is None:
+            cu_seqlens = self.get_cu_seqlens(chunk_lengths, feature_lens)
+
+        padded_embed = F.gelu(self.conv2d1(padded_feature))
+        padded_embed = F.gelu(self.conv2d2(padded_embed))
+        padded_embed = F.gelu(self.conv2d3(padded_embed))
         b, c, f, t = padded_embed.size()
         padded_embed = self.conv_out(padded_embed.permute(0, 3, 1, 2).contiguous().view(b, t, c * f))
 
@@ -741,22 +772,36 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
             .to(padded_embed.dtype)
         )
         padded_embed = padded_embed + positional_embedding
-        hidden_states = padded_embed[padded_mask_after_cnn]
-        cu_chunk_lens = [0]
-        window_aftercnn = padded_mask_after_cnn.shape[-1] * (self.n_window_infer // (self.n_window * 2))
-        for cnn_len in aftercnn_lens:
-            cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
-            remainder = cnn_len % window_aftercnn
-            if remainder != 0:
-                cu_chunk_lens += [remainder]
-        cu_seqlens = torch.tensor(cu_chunk_lens, device=aftercnn_lens.device).cumsum(-1, dtype=torch.int32)
+        hidden_states = torch.index_select(padded_embed.reshape(-1, padded_embed.shape[-1]), 0, valid_indices)
+
+        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
+        # NOTE: the created attention mask only approximates the ragged FA2 attention by
+        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
+        # blocks. Though it will not be a 100% match for FA2's `varlen` path
+        if is_flash_attention_requested(self.config):
+            attention_mask = None
+        else:
+            seq_idx = torch.arange(hidden_states.shape[0], device=hidden_states.device)
+            block_ids = torch.searchsorted(cu_seqlens[1:], seq_idx, right=True)
+            same_block = block_ids.unsqueeze(0) == block_ids.unsqueeze(1)
+            attention_mask = (
+                torch.full(
+                    (hidden_states.shape[0], hidden_states.shape[0]),
+                    torch.finfo(hidden_states.dtype).min,
+                    dtype=hidden_states.dtype,
+                    device=hidden_states.device,
+                )
+                .masked_fill(same_block, 0.0)
+                .unsqueeze(0)
+                .unsqueeze(0)
+            )
 
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(
                 hidden_states,
                 cu_seqlens,
+                attention_mask=attention_mask,
             )
-
             hidden_states = layer_outputs[0]
 
         hidden_states = self.ln_post(hidden_states)
@@ -764,44 +809,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
-
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        """
-        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
-        Then prepares a mask so that pad tokens are not attended to.
-        """
-        max_len = tensor_len.max()
-        dim = tensor_list[0].shape[0]
-        padded_tensor = torch.full(
-            size=(len(tensor_list), dim, max_len),
-            fill_value=padding_value,
-            dtype=self.dtype,
-            device=tensor_list[0].device,
-        )
-
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(tensor_len):
-            batch_mask[i, :length] = 1
-            padded_tensor[i, :, :length] = tensor_list[i]
-
-        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
-        max_len_after_cnn = feature_lens_after_cnn.max()
-        batch_mask_after_cnn = torch.zeros(
-            (len(tensor_len), max_len_after_cnn),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(feature_lens_after_cnn):
-            batch_mask_after_cnn[i, :length] = 1
-        return (
-            padded_tensor,
-            batch_mask.unsqueeze(1),
-            batch_mask_after_cnn.bool(),
-        )
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -811,6 +818,28 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         input_lengths = (input_lengths - 1) // 2 + 1
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
+
+    def get_cu_seqlens(self, chunk_lengths, feature_lens):
+        """Compute cumulative sequence lengths for windowed attention.
+
+        Uses a Python loop over per-audio lengths — not traceable by ``torch.export``.
+
+        Returns:
+            ``cu_seqlens``: cumulative sequence boundaries ``(num_windows + 1,)``
+        """
+        aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
+        feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
+        max_len_after_cnn = feature_lens_after_cnn.max().item()
+
+        cu_chunk_lens = [0]
+        n_window_ratio = self.n_window_infer // (self.n_window * 2)
+        window_aftercnn = max_len_after_cnn * n_window_ratio
+        for cnn_len in aftercnn_lens:
+            cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
+            remainder = cnn_len % window_aftercnn
+            if remainder != 0:
+                cu_chunk_lens += [remainder]
+        return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
 
 
 def rotate_half(x):

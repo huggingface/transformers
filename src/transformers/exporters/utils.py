@@ -215,10 +215,11 @@ def prepare_for_export(
         if hasattr(module, "_cached_keys"):
             module._cached_keys = None
 
-    # Pre-compute data-dependent vision tensors (position_ids, rot_pos_emb, etc.)
-    # that use grid_thw-based loops, repeat_interleave, or itertools.groupby.
+    # Pre-compute data-dependent vision/audio tensors that use loops, .tolist(),
+    # repeat_interleave, or itertools.groupby — untraceable by torch.export.
     with torch.no_grad():
         _precompute_vision_inputs(model, inputs)
+        _precompute_audio_inputs(model, inputs)
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -343,6 +344,31 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     # fast_pos_embed_interpolate (loops over grid_thw)
     if hasattr(model, "fast_pos_embed_interpolate"):
         inputs["pos_embeds"] = model.fast_pos_embed_interpolate(grid_thw)
+
+
+def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
+    """Precompute audio encoder inputs that use untraceable ops (.tolist(), nonzero(), loops)."""
+    if not hasattr(model, "chunk_and_pad_features"):
+        return
+
+    if "input_features" not in inputs or "feature_lens" not in inputs:
+        return
+
+    feature_lens = inputs.pop("feature_lens")
+    input_features = inputs.pop("input_features")
+
+    padded_feature, chunk_lengths = model.chunk_and_pad_features(input_features, feature_lens)
+    inputs["padded_feature"] = padded_feature
+    inputs["chunk_lengths"] = chunk_lengths
+
+    if hasattr(model, "get_cu_seqlens"):
+        inputs["cu_seqlens"] = model.get_cu_seqlens(chunk_lengths, feature_lens)
+
+    if hasattr(model, "get_valid_indices"):
+        inputs["valid_indices"] = model.get_valid_indices(chunk_lengths)
+
+    if hasattr(model, "get_pool_indices"):
+        inputs["pool_indices"] = model.get_pool_indices(feature_lens)
 
 
 @contextlib.contextmanager
