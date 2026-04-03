@@ -15,10 +15,8 @@
 
 """ONNX exporter.
 
-This module provides the `OnnxExporter` class and helper functions used to
-export `PreTrainedModel` instances to ONNX via `torch.onnx.export`.
-
-The export pipeline has four stages, each with its own set of patches/fixes:
+Extends `DynamoExporter` with four extra stages that convert an `ExportedProgram`
+into an ONNX model via `torch.onnx.export`:
 
 1. **Torch patches** (`patch_torch_ops`): monkey-patch PyTorch ops at tracing
    time to avoid problematic decompositions or unsupported patterns.

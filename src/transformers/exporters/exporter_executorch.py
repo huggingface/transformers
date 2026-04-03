@@ -12,6 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""ExecuTorch exporter.
+
+Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for
+mobile and edge deployment, with two extra steps:
+
+1. **Backend preparation** (`prepare_for_xnnpack`, `prepare_for_cuda`): move the
+   model to the target device/dtype and build the partitioner list.
+2. **Torch patches** (`patch_torch_ops`): replace ops unsupported by ExecuTorch
+   backends (split_copy, topk, avg_pool2d, ...) with decomposed equivalents.
+"""
+
 from __future__ import annotations
 
 import math

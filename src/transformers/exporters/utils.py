@@ -15,8 +15,7 @@
 
 """Shared export utilities used by multiple exporter backends.
 
-This module contains helpers that are backend-agnostic and used by more than
-one exporter (Dynamo, ONNX, ExecuTorch):
+Backend-agnostic helpers used by Dynamo, ONNX, and ExecuTorch exporters:
 
 - `get_leaf_tensors`: recursively extract all leaf tensors from nested outputs.
 - `prepare_for_export`: configure model config, attention/experts implementations,
@@ -24,8 +23,8 @@ one exporter (Dynamo, ONNX, ExecuTorch):
 - `decompose_prefill_decode`: run `model.generate()` and capture the forward kwargs
   for the prefill and decode steps.
 - `decompose_vlm`: capture inputs to every known VLM submodule (vision tower,
-  projector, language model, lm_head, …) via a single forward pass,
-  returning one `(name, module, inputs)` triplet per component for independent export.
+  projector, language model, ...) via a single forward pass, returning one
+  `(name, module, inputs)` triplet per component for independent export.
 """
 
 from __future__ import annotations
@@ -60,6 +59,7 @@ if is_torch_available():
     # Sym* types carry PyTorch shape_env internals that cause infinite recursion;
     # Enums are scalars with no tensor fields.
     _LEAF_SKIP_TYPES += (enum.Enum, torch.SymInt, torch.SymFloat, torch.SymBool)
+
 
 # ── Recursive structure traversal ──────────────────────────────────────────
 # All tensor utilities share this traversal. _map_leaf_tensors applies a function
@@ -105,6 +105,7 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
 
 
 # ── Public tensor utilities ────────────────────────────────────────────────
+# Extract or cast tensors from nested model outputs.
 
 
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
@@ -234,6 +235,8 @@ def prepare_for_export(
 
 
 # ── VLM decomposition ────────────────────────────────────────────────────────
+# Split VLMs into independently exportable submodules (vision encoder, projector,
+# language model) by capturing each submodule's forward inputs during a single pass.
 
 # Well-known submodule attribute names for VLM architectures.
 _VLM_LM_NAMES = ("language_model", "text_model", "lm_head")

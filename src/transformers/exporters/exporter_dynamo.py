@@ -15,11 +15,12 @@
 
 """Dynamo exporter.
 
-Helper sections in this file:
+Wraps `torch.export.export(strict=False)` with helpers that make Transformers
+models exportable. The export pipeline uses four helper sections:
 
-1. **Model patches** (`patch_untraceable_patterns`): reversible patches applied during
-   `torch.export` tracing to replace non-exportable model patterns (data-dependent
-   loops, in-place ops, mask checks) with export-safe equivalents.
+1. **Model patches** (`patch_untraceable_patterns`): reversible patches applied
+   during tracing to replace non-exportable model patterns (data-dependent loops,
+   in-place ops, mask checks) with export-safe equivalents.
 2. **Pytree registration** (`register_cache_pytrees_for_model`): flatten/unflatten
    for Cache objects and other custom types so `torch.export` can trace through them.
 3. **Model signature patch** (`patch_forward_signature`): replaces `model.forward`
@@ -57,7 +58,7 @@ logger = logging.get_logger(__file__)
 
 
 class DynamoExporter(HfExporter):
-    """Exporter that converts a [`PreTrainedModel`] to a `torch.export.ExportedProgram`.
+    """Exporter that converts a [`PreTrainedModel`] to an `ExportedProgram`.
 
     Example:
 
@@ -441,9 +442,9 @@ def register_cache_pytrees_for_model(model: PreTrainedModel):
         _register_pytree_node(ImageList)
 
 
-# ── Dynamic shapes ──────────────────────────────────────────────────────────
-# Automatic Dim.AUTO inference for all tensor and cache inputs when
-# DynamoConfig.dynamic is True and no explicit dynamic_shapes are provided.
+# ── Model signature patch ──────────────────────────────────────────────────
+# Replaces `model.forward` with a flat explicit signature derived from the
+# inputs dict so `torch.export` does not expand `**kwargs` into a large bundle.
 
 
 @contextmanager
@@ -470,6 +471,11 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
         yield
     finally:
         model.forward = original_forward
+
+
+# ── Dynamic shapes ──────────────────────────────────────────────────────────
+# Automatic `Dim.AUTO` inference for all tensor and cache inputs when
+# `DynamoConfig.dynamic` is True and no explicit `dynamic_shapes` are provided.
 
 
 def _auto_dynamic_shape(tensor: torch.Tensor) -> dict[int, torch.export.Dim]:

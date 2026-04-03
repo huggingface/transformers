@@ -1376,11 +1376,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                 dtype=hidden_states.dtype,
                 device=hidden_states.device,
             )
-            attention_mask = (
-                attention_mask.masked_fill(same_block, 0.0)
-                .unsqueeze(0)
-                .unsqueeze(0)
-            )
+            attention_mask = attention_mask.masked_fill(same_block, 0.0).unsqueeze(0).unsqueeze(0)
 
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(

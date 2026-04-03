@@ -30,9 +30,9 @@ no waiting for a downstream library to catch up.
 
 | Exporter               | Output                         | Runtime                              |
 | ---------------------- | ------------------------------ | ------------------------------------ |
-| [`DynamoExporter`]     | `torch.export.ExportedProgram` | Any PyTorch runtime, AOT compilation |
-| [`OnnxExporter`]       | `torch.onnx.ONNXProgram`       | Any ONNX runtime (ORT, TensorRT, OpenVINO, …) |
-| [`ExecutorchExporter`] | `ExecutorchProgramManager`     | Mobile and edge devices (ExecuTorch) |
+| [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation           |
+| [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO, …)  |
+| [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)            |
 
 ## Installation
 
