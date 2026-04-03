@@ -455,9 +455,8 @@ class ContinuousBatchingIOs:
                 self.true_write_sizes[i] = len(group_write_indices)
 
     def get_model_kwargs(self, use_padding: bool = False) -> dict[str, Any]:
-        """Get model keyword arguments for the current batch, eventually padding the query dimension to (padded_q_size)
-        and the keys/values dimension to (padded_kv_cache_size). The padding is only useful if we want static shapes,
-        like when using cuda graphs AND only activated if both Q and KV are padded."""
+        """Get model keyword arguments for the current batch, eventually padding the query dimension and KV dimensions
+        if use_padding is True. The padding is only useful if we want static shapes, like when using cuda graphs."""
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
         batch_size = self.num_q_tokens if use_padding else self.true_batch_size
