@@ -24,7 +24,7 @@ from typing import Annotated
 
 import typer
 
-from ._common import load_image, resolve_input
+from ._common import _load_pretrained, load_image, resolve_input
 
 
 def embed(
@@ -45,56 +45,54 @@ def embed(
     """
     Compute embeddings for text or images.
 
-    Uses ``feature-extraction`` (text) or ``image-feature-extraction``
-    (images) pipeline. Outputs shape and a preview by default. Pass
-    ``--output`` to save as ``.npy`` (NumPy) or ``.json``.
+    Uses ``AutoModel`` with ``AutoTokenizer`` (text) or
+    ``AutoImageProcessor`` (images). Outputs shape and a preview by
+    default. Pass ``--output`` to save as ``.npy`` (NumPy) or ``.json``.
 
     Examples::
 
         # Text embeddings
-        transformers embed --model sentence-transformers/all-MiniLM-L6-v2 --text "The quick brown fox." --output embeddings.npy
+        transformers embed --model BAAI/bge-small-en-v1.5 --text "The quick brown fox." --output embeddings.npy
 
         # Image embeddings
-        transformers embed --model google/vit-base-patch16-224 --image photo.jpg --output features.npy
+        transformers embed --model facebook/dinov2-small --image photo.jpg --output features.npy
 
         # Quick preview (no file saved)
         transformers embed --text "Hello world"
     """
     import numpy as np
+    import torch
 
-    from transformers import pipeline
-
-    pipe_kwargs = {}
-    if model is not None:
-        pipe_kwargs["model"] = model
-    if device is not None:
-        pipe_kwargs["device"] = device
-    if dtype != "auto":
-        import torch
-
-        pipe_kwargs["dtype"] = getattr(torch, dtype)
-    if trust_remote_code:
-        pipe_kwargs["trust_remote_code"] = True
-    if token is not None:
-        pipe_kwargs["token"] = token
-    if revision is not None:
-        pipe_kwargs["revision"] = revision
+    from transformers import AutoModel
 
     if image is not None:
-        task = "image-feature-extraction"
-        inp = load_image(image)
+        from transformers import AutoImageProcessor
+
+        model_id = model or "facebook/dinov2-small"
+        loaded_model, processor = _load_pretrained(
+            AutoModel, AutoImageProcessor, model_id, device, dtype, trust_remote_code, token, revision
+        )
+        img = load_image(image)
+        inputs = processor(images=img, return_tensors="pt")
     elif text is not None or file is not None:
-        task = "feature-extraction"
-        inp = resolve_input(text, file)
+        from transformers import AutoTokenizer
+
+        model_id = model or "BAAI/bge-small-en-v1.5"
+        loaded_model, tokenizer = _load_pretrained(
+            AutoModel, AutoTokenizer, model_id, device, dtype, trust_remote_code, token, revision
+        )
+        input_text = resolve_input(text, file)
+        inputs = tokenizer(input_text, return_tensors="pt", truncation=True)
     else:
         raise SystemExit("Error: provide --text, --file, or --image.")
 
-    pipe = pipeline(task, **pipe_kwargs)
-    result = pipe(inp)
+    if hasattr(loaded_model, "device"):
+        inputs = inputs.to(loaded_model.device)
 
-    embedding = np.array(result)
-    if embedding.ndim == 3 and embedding.shape[0] == 1:
-        embedding = embedding[0]
+    with torch.no_grad():
+        outputs = loaded_model(**inputs)
+
+    embedding = outputs.last_hidden_state.mean(dim=1)[0].cpu().numpy()
 
     if output is not None:
         if output.endswith(".npy"):
@@ -139,7 +137,7 @@ def tokenize(
     from transformers import AutoTokenizer
 
     input_text = resolve_input(text, file)
-    model_id = model or "openai-community/gpt2"
+    model_id = model or "HuggingFaceTB/SmolLM2-360M-Instruct"
 
     tok_kwargs = {}
     if token is not None:
@@ -256,7 +254,7 @@ def inspect_forward(
 
     from transformers import AutoModel, AutoTokenizer
 
-    model_id = model or "bert-base-uncased"
+    model_id = model or "answerdotai/ModernBERT-base"
 
     common_kwargs = {}
     if token is not None:
@@ -376,6 +374,7 @@ def benchmark_quantization(
 
         try:
             loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
+            loaded_model.eval()
             inputs = tokenizer(prompt, return_tensors="pt").to(loaded_model.device)
 
             # Warmup
