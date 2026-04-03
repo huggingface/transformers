@@ -280,7 +280,6 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
                 self.assertEqual(video_item, {"type": "video", "url": video_src})
 
 
-
 class TestGenerativeModelList(unittest.TestCase):
     def test_lists_only_generative_models(self):
         """Should list LLMs and VLMs but not non-generative models like BERT."""
@@ -1634,7 +1633,9 @@ class TestVLM(unittest.TestCase):
         )
 
 
-_AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+_AUDIO_URL = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+)
 _VIDEO_URL = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
 
 
