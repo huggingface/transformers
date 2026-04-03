@@ -911,7 +911,9 @@ class BaseHandler:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
         For LLMs, collapses list content blocks into plain text. For VLMs, converts
-        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``
+        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``,
+        ``input_audio`` content parts into ``{"type": "audio", "url": ...}``, and
+        ``video_url`` / ``video`` content parts into ``{"type": "video", "url": ...}``
         entries that HF processors understand.
 
         Args:
@@ -951,6 +953,18 @@ class BaseHandler:
                                 image.save(file.name)
                                 url = file.name
                             parsed["content"].append({"type": "image", "url": url})
+                        elif content["type"] == "input_audio":
+                            audio_data = base64.b64decode(content["input_audio"]["data"])
+                            suffix = f".{content['input_audio'].get('format', 'wav')}"
+                            file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+                            file.write(audio_data)
+                            file.flush()
+                            parsed["content"].append({"type": "audio", "url": file.name})
+                        # Extensions (not part of the OpenAI API standard)
+                        elif content["type"] == "audio_url":
+                            parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+                        elif content["type"] == "video_url":
+                            parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
 
             processor_inputs.append(parsed)
         return processor_inputs
