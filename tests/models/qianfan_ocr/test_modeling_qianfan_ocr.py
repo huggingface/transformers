@@ -41,12 +41,10 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
     from transformers import QianfanOCRForConditionalGeneration, QianfanOCRModel
 
 if is_vision_available():
     from PIL import Image
-
 
 class QianfanOCRVisionText2TextModelTester:
     def __init__(

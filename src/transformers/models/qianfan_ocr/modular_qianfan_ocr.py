@@ -202,7 +202,6 @@ class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
     """
-
     pass
 
 
