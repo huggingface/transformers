@@ -29,7 +29,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -345,6 +347,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
         txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
 
+    @require_deterministic_for_xpu
     @slow
     def test_fixture_batched_matches(self):
         """
@@ -353,8 +356,16 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
         path = Path(__file__).parent.parent.parent / "fixtures/musicflamingo/expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
-        exp_ids = torch.tensor(raw["token_ids"])
-        exp_txt = raw["transcriptions"]
+
+        exp_ids = Expectations(
+            {
+                ("cuda", None): torch.tensor(raw["cuda"]["token_ids"]),
+                ("xpu", None): torch.tensor(raw["xpu"]["token_ids"]),
+            }
+        ).get_expectation()
+        exp_txt = Expectations(
+            {("cuda", None): raw["cuda"]["transcriptions"], ("xpu", None): raw["xpu"]["transcriptions"]}
+        ).get_expectation()
 
         conversations = [
             [
