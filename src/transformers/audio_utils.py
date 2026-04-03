@@ -79,6 +79,12 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np
         # needed. Do not raise any errors if not installed or versions do not match
         if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION:
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
+        elif audio.rsplit("?", 1)[0].lower().endswith((".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv")):
+            raise RuntimeError(
+                f"The audio source appears to be a video file ('{audio.split('/')[-1]}'). "
+                "librosa cannot decode video containers. "
+                "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from video files."
+            )
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
     elif not isinstance(audio, np.ndarray):
