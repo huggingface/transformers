@@ -36,6 +36,7 @@ from ..eomt.modeling_eomt import (
 )
 
 
+@auto_docstring(checkpoint="tue-mps/videomt-dinov2-small-ytvis2019")
 class VideomtConfig(EomtConfig):
     model_type = "videomt"
 
