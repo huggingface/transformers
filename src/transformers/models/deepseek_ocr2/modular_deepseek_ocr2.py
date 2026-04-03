@@ -20,10 +20,11 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -64,8 +65,6 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
         Window size for windowed attention layers.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         Indices of encoder layers that use global (non-windowed) attention.
-    num_pos_feats (`int`, *optional*, defaults to 128):
-        Number of positional embedding features.
     mlp_dim (`int`, *optional*):
         Dimensionality of the MLP layer in each vision encoder block. Defaults to `hidden_size * mlp_ratio`.
     downsample_channels (`list[int]`, *optional*):
@@ -73,6 +72,9 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
     """
 
     base_config_key = "sam_config"
+
+    # Remove unused attribute inherited from SamVisionConfig
+    num_pos_feats = AttributeError()
 
     downsample_channels: list[int] | None = None
 
@@ -139,11 +141,13 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    kv_lora_rank: int = 0
-    q_lora_rank: int | None = None
-    qk_nope_head_dim: int = 0
-    qk_rope_head_dim: int = 0
-    v_head_dim: int = 0
+    # Remove unused MLA attributes inherited from DeepseekV2Config
+    kv_lora_rank = AttributeError()
+    norm_topk_prob = AttributeError()
+    q_lora_rank = AttributeError()
+    qk_nope_head_dim = AttributeError()
+    qk_rope_head_dim = AttributeError()
+    v_head_dim = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.hidden_size // self.num_attention_heads
@@ -214,7 +218,7 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flash_attn = False
     _supports_sdpa = False
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -349,14 +353,68 @@ class DeepseekOcr2VisionDecoderLayer(Qwen2DecoderLayer):
 
 @auto_docstring(custom_intro="Qwen2 backbone used as vision encoder inside DeepEncoderV2.")
 class DeepseekOcr2VisionEncoder(Qwen2Model):
-    r"""
-    Uses Qwen2Model's forward with a pre-computed hybrid attention mask.
-    The hybrid mask is created externally (in VisionModel) and passed as attention_mask.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         del self.embed_tokens
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        if input_ids is not None:
+            raise ValueError("`input_ids` is expected to be `None`")
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+            }
+            # The sliding window alternating layers are not always activated depending on the config
+            if self.has_sliding_layers:
+                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values if use_cache else None,
+        )
 
 
 class DeepseekOcr2Projector(nn.Module):
@@ -525,18 +583,19 @@ class DeepseekOcr2Model(LlavaNextModel):
         global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
         global_features = self.multi_modal_projector(global_vision_outputs.last_hidden_state)
 
-        if pixel_values_local is not None and pixel_values_local.shape[0] > 0:
+        if pixel_values_local is not None:
             local_vision_outputs = self.vision_tower(pixel_values_local, **kwargs)
             all_local_features = self.multi_modal_projector(local_vision_outputs.last_hidden_state)
             per_image_local = torch.split(all_local_features, num_local_patches, dim=0)
         else:
+            local_vision_outputs = None
             per_image_local = [None] * batch_size
 
         all_features = []
         for idx in range(batch_size):
             global_flat = global_features[idx].reshape(-1, global_features.shape[-1])
 
-            if per_image_local[idx] is not None and per_image_local[idx].shape[0] > 0:
+            if per_image_local[idx] is not None:
                 local_flat = per_image_local[idx].reshape(-1, per_image_local[idx].shape[-1])
                 all_features.append(torch.cat([local_flat, global_flat, self.view_separator.unsqueeze(0)], dim=0))
             else:
@@ -548,8 +607,11 @@ class DeepseekOcr2Model(LlavaNextModel):
             pooler_output=image_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
-            local_last_hidden_state=local_vision_outputs.last_hidden_state if pixel_values_local is not None else None,
-            local_hidden_states=local_vision_outputs.hidden_states if pixel_values_local is not None else None,
+            local_last_hidden_state=local_vision_outputs.last_hidden_state
+            if local_vision_outputs is not None
+            else None,
+            local_hidden_states=local_vision_outputs.hidden_states if local_vision_outputs is not None else None,
+            local_attentions=local_vision_outputs.attentions if local_vision_outputs is not None else None,
         )
 
     @can_return_tuple
@@ -620,6 +682,14 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration, Ge
         num_local_patches: list[int] | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+            The tensors corresponding to the global view input images.
+        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+            All local patches flattened across the batch, or `None` if no local views.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image, e.g. `[6, 0, 4]`.
+        """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             pixel_values_local=pixel_values_local,

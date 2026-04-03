@@ -134,7 +134,6 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
     image_std = (0.5, 0.5, 0.5)
     size = {"height": 1024, "width": 1024}
     tile_size = 768
-    do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
@@ -251,7 +250,6 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        do_resize: bool,
         size: SizeDict,
         crop_to_patches: bool,
         min_patches: int,

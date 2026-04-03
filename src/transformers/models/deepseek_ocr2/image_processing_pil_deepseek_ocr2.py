@@ -40,7 +40,6 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
     image_std = [0.5, 0.5, 0.5]
     size = {"height": 1024, "width": 1024}
     tile_size = 768
-    do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
@@ -145,7 +144,6 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
     def _preprocess(
         self,
         images: list[np.ndarray],
-        do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | int | None",
         do_rescale: bool,

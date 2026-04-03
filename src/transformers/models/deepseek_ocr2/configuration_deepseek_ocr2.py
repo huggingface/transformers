@@ -35,8 +35,6 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
         Window size for windowed attention layers.
     global_attn_indexes (`list[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
         Indices of encoder layers that use global (non-windowed) attention.
-    num_pos_feats (`int`, *optional*, defaults to 128):
-        Number of positional embedding features.
     mlp_dim (`int`, *optional*):
         Dimensionality of the MLP layer in each vision encoder block. Defaults to `hidden_size * mlp_ratio`.
     downsample_channels (`list[int]`, *optional*):
@@ -63,7 +61,6 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
     use_rel_pos: bool = True
     window_size: int = 14
     global_attn_indexes: list[int] | tuple[int, ...] = (2, 5, 8, 11)
-    num_pos_feats: int = 128
     mlp_dim: int | None = None
 
     downsample_channels: list[int] | None = None
@@ -197,19 +194,12 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     mlp_bias: bool = False
     head_dim: int | None = None
     first_k_dense_replace: int = 0
-
-    kv_lora_rank: int = 0
-    q_lora_rank: int | None = None
     n_group: int | None = None
     n_routed_experts: int = 64
     n_shared_experts: int = 2
-    qk_nope_head_dim: int = 0
-    qk_rope_head_dim: int = 0
     routed_scaling_factor: float = 1.0
     topk_group: int | None = None
     topk_method: str | None = "greedy"
-    norm_topk_prob: bool | None = False
-    v_head_dim: int = 0
     num_experts_per_tok: int | None = None
     moe_intermediate_size: int = 1407
 

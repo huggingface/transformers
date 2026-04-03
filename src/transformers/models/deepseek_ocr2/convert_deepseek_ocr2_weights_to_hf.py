@@ -26,6 +26,8 @@ import torch
 from safetensors import safe_open
 
 from transformers import DeepseekOcr2Config, DeepseekOcr2ForConditionalGeneration, PreTrainedTokenizerFast
+from transformers.models.deepseek_ocr2.image_processing_deepseek_ocr2 import DeepseekOcr2ImageProcessor
+from transformers.models.deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor
 
 
 # fmt: off
@@ -104,7 +106,6 @@ def convert_config(config_dict: dict) -> dict:
         vision_config["num_attention_heads"] = 14
         vision_config["num_key_value_heads"] = 2
         vision_config["intermediate_size"] = 4864
-        vision_config["max_query"] = 400
         vision_config["rms_norm_eps"] = 1e-6
         vision_config["rope_theta"] = 1000000.0
         vision_config["vocab_size"] = 1
@@ -228,11 +229,18 @@ def convert_weights(input_dir: str, output_dir: str, hub_repo_id: str | None = N
     tokenizer.save_pretrained(output_dir)
     print("Tokenizer saved.")
 
+    print("Saving processor ...")
+    image_processor = DeepseekOcr2ImageProcessor()
+    processor = DeepseekOcr2Processor(image_processor=image_processor, tokenizer=tokenizer)
+    processor.save_pretrained(output_dir)
+    print("Processor saved.")
+
     if hub_repo_id:
         print(f"Pushing to hub ({hub_repo_id}) ...")
         model = DeepseekOcr2ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16)
         model.push_to_hub(hub_repo_id)
         tokenizer.push_to_hub(hub_repo_id)
+        processor.push_to_hub(hub_repo_id)
 
     print("Done.")
 
