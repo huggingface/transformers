@@ -75,8 +75,8 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     image_size: int | list[int] | tuple[int, int] = 224
@@ -87,7 +87,7 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     use_relative_position_bias: bool = False
     use_shared_relative_position_bias: bool = False
     layer_scale_init_value: float = 0.1
-    drop_path_rate: float = 0.1
+    drop_path_rate: float | int = 0.1
     use_mean_pooling: bool = True
     pool_scales: list[int] | tuple[int, ...] = (1, 2, 3, 6)
     use_auxiliary_head: bool = True

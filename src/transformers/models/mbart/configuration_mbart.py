@@ -65,7 +65,7 @@ class MBartConfig(PreTrainedConfig):
     activation_dropout: float | int = 0.0
     init_std: float = 0.02
     classifier_dropout: float | int = 0.0
-    scale_embedding: int = False
+    scale_embedding: bool = False
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2
