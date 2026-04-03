@@ -44,6 +44,7 @@ from transformers.testing_utils import (
     require_multipart,
     require_serve,
     require_torch_accelerator,
+    require_torchcodec,
     require_vision,
     slow,
 )
@@ -1680,6 +1681,7 @@ class TestMultimodalLM(unittest.TestCase):
         self.assertIsNotNone(text)
         self.assertIn("chicago", text.lower(), f"Expected 'chicago' in transcription, got: {text}")
 
+    @require_torchcodec
     def test_chat_completion_with_video(self):
         """Chat completions should accept video_url content and describe video."""
         resp = self.client.chat.completions.create(
@@ -1727,6 +1729,7 @@ class TestMultimodalLM(unittest.TestCase):
         text = resp.output[0].content[0].text
         self.assertIn("chicago", text.lower(), f"Expected 'chicago' in transcription, got: {text}")
 
+    @require_torchcodec
     def test_responses_with_video(self):
         """Responses API should accept video_url content and describe video."""
         resp = self.client.responses.create(
