@@ -359,7 +359,10 @@ class NumpyAudioBackend(BaseAudioProcessor):
     def _mel_filter_bank(self, spectrogram_config: SpectrogramConfig):
         stft_cfg = spectrogram_config.stft_config
         mel_cfg = spectrogram_config.mel_scale_config
-        filters = mel_filter_bank(
+        # Use float32 dtype for per-band rounding matching librosa. Processors requiring
+        # float64 precision set computation_dtype, which skips the dtype to keep float64.
+        filter_dtype = None if spectrogram_config.computation_dtype else np.float32
+        return mel_filter_bank(
             num_frequency_bins=1 + stft_cfg.n_fft // 2,
             num_mel_filters=mel_cfg.n_mels,
             min_frequency=mel_cfg.f_min,
@@ -368,12 +371,8 @@ class NumpyAudioBackend(BaseAudioProcessor):
             norm=mel_cfg.norm,
             mel_scale=mel_cfg.mel_scale,
             triangularize_in_mel_space=mel_cfg.triangularize_in_mel_space,
+            dtype=filter_dtype,
         )
-        # Store as float32 to match librosa's precision path. Processors needing float64
-        # set computation_dtype, which keeps filters in float64 for exact upstream FE matching.
-        if not spectrogram_config.computation_dtype:
-            filters = filters.astype(np.float32)
-        return filters
 
     def _pad_features(self, features, padding, max_length, truncation, pad_to_multiple_of):
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
