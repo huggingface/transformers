@@ -1686,14 +1686,19 @@ class TestMultimodalLM(unittest.TestCase):
     def test_chat_completion_with_audio(self):
         """Chat completions should accept input_audio (base64) content and transcribe audio."""
         resp = self.client.chat.completions.create(
-            model=self.MODEL, messages=self._get_audio_messages(), max_tokens=200,
+            model=self.MODEL,
+            messages=self._get_audio_messages(),
+            max_tokens=200,
         )
         self._assert_audio_transcription(resp.choices[0].message.content)
 
     def test_chat_completion_with_audio_streaming(self):
         """Streaming chat completions should accept input_audio (base64) content and transcribe audio."""
         stream = self.client.chat.completions.create(
-            model=self.MODEL, messages=self._get_audio_messages(), max_tokens=200, stream=True,
+            model=self.MODEL,
+            messages=self._get_audio_messages(),
+            max_tokens=200,
+            stream=True,
         )
         chunks = []
         for chunk in stream:
@@ -1745,7 +1750,10 @@ class TestMultimodalLM(unittest.TestCase):
     def test_responses_with_audio(self):
         """Responses API should accept input_audio (base64) content and transcribe audio."""
         resp = self.client.responses.create(
-            model=self.MODEL, input=self._get_audio_messages(), stream=False, max_output_tokens=200,
+            model=self.MODEL,
+            input=self._get_audio_messages(),
+            stream=False,
+            max_output_tokens=200,
         )
         self.assertEqual(resp.status, "completed")
         self._assert_audio_transcription(resp.output[0].content[0].text)
@@ -1753,7 +1761,10 @@ class TestMultimodalLM(unittest.TestCase):
     def test_responses_with_audio_streaming(self):
         """Streaming responses API should accept input_audio (base64) content and transcribe audio."""
         stream = self.client.responses.create(
-            model=self.MODEL, input=self._get_audio_messages(), stream=True, max_output_tokens=200,
+            model=self.MODEL,
+            input=self._get_audio_messages(),
+            stream=True,
+            max_output_tokens=200,
         )
         text = ""
         for event in stream:
