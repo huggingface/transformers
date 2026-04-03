@@ -46,8 +46,8 @@ class XLMRobertaXLConfig(PreTrainedConfig):
     num_attention_heads: int = 32
     intermediate_size: int = 10240
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 514
     type_vocab_size: int = 1
     initializer_range: float = 0.02

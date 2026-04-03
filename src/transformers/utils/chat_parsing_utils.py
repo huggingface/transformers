@@ -26,6 +26,26 @@ else:
     jmespath = None
 
 
+def _gemma4_json_to_json(text: str) -> str:
+    """Convert Gemma4 tool call format (unquoted keys, ``<|"|>`` string delimiters) to valid JSON."""
+    strings = []
+
+    def _capture(m):
+        strings.append(m.group(1))
+        return f"\x00{len(strings) - 1}\x00"
+
+    # Grab the inside of gemma-quotes and store them for later
+    text = re.sub(r'<\|"\|>(.*?)<\|"\|>', _capture, text, flags=re.DOTALL)
+    # Add quotes to the bare keys elsewhere
+    text = re.sub(r"(?<=[{,])(\w+):", r'"\1":', text)
+
+    # Put the inside of the quotes back afterwards
+    for i, s in enumerate(strings):
+        text = text.replace(f"\x00{i}\x00", json.dumps(s))
+
+    return text
+
+
 def _parse_re_match(node_match: re.Match) -> dict | str:
     # If the regex has named groups, return a dict of those groups
     if node_match.groupdict():
@@ -70,14 +90,22 @@ def recursive_parse(
 
     # If not, we have to do a little parsing. First, set some vars and do basic validation
     node_type = node_schema.get("type")
-    has_regex = "x-regex" in node_schema or "x-regex-iterator" in node_schema or "x-regex-key-value" in node_schema
+    has_regex = (
+        "x-regex" in node_schema
+        or "x-regex-iterator" in node_schema
+        or "x-regex-key-value" in node_schema
+        or "x-regex-substitutions" in node_schema
+    )
     if has_regex and not isinstance(node_content, str):
         raise TypeError(
-            "Schema node got a non-string input, but has a regex for parsing.\n"
+            "Schema node got a non-string input, but has a regex for parsing or substitution.\n"
             f"Input: {node_content}\n"
             f"Schema: {node_schema}"
         )
 
+    node_subs = node_schema.get("x-regex-substitutions", [])
+    for node_sub in node_subs:
+        node_content = re.sub(node_sub[0], node_sub[1], node_content, flags=re.DOTALL)
     node_regex = node_schema.get("x-regex")
     node_regex_iterator = node_schema.get("x-regex-iterator")
     node_regex_to_dict = node_schema.get("x-regex-key-value")
@@ -118,6 +146,13 @@ def recursive_parse(
     # a substring to parse, if needed.
     if "x-parser" in node_schema:
         parser = node_schema["x-parser"]
+        if parser == "gemma4-tool-call":
+            if not isinstance(node_content, str):
+                raise TypeError(
+                    f"Node has Gemma4 tool call parser but got non-string input: {node_content}\nSchema: {node_schema}"
+                )
+            node_content = _gemma4_json_to_json(node_content)
+            parser = "json"  # fall through to the JSON parser below - don't add an elif!
         if parser == "json":
             if not isinstance(node_content, str):
                 raise TypeError(

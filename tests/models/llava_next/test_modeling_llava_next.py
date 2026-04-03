@@ -130,7 +130,7 @@ class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase
 class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-        url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
+        url = "https://raw.githubusercontent.com/haotian-liu/LLaVA/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
         self.prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"

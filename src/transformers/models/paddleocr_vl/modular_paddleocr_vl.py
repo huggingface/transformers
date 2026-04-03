@@ -38,8 +38,9 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
+from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...processing_utils import (
+    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -50,7 +51,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
     torch_compilable_check,
     torch_int,
@@ -88,10 +88,6 @@ from ..video_llama_3.modeling_video_llama_3 import (
 )
 
 
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
-
-
 logger = logging.get_logger(__name__)
 
 
@@ -127,7 +123,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
+class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -136,6 +132,12 @@ class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
@@ -147,7 +149,7 @@ class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -258,7 +260,7 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -531,7 +533,7 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
     video_token_id: int = 100296
     vision_start_token_id: int = 101305
     vision_end_token_id: int = 101306
-    tie_word_embeddings: int = True
+    tie_word_embeddings: bool = True
 
 
 class PaddleOCRProjector(nn.Module):

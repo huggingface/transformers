@@ -21,6 +21,7 @@
 from typing import Union
 
 import torch
+import torch.nn.functional as F
 import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
@@ -36,10 +37,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
-
-
-if is_torch_available():
-    import torch.nn.functional as F
 
 
 class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
@@ -151,7 +148,7 @@ class SegformerImageProcessor(TorchvisionBackend):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
