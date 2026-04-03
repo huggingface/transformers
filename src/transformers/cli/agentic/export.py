@@ -70,15 +70,15 @@ def export(
         _export_executorch(model, output, trust_remote_code, token)
 
 
-def _export_onnx(model: str, output: str, opset: int | None, task: str | None,
-                 trust_remote_code: bool, token: str | None):
+def _export_onnx(
+    model: str, output: str, opset: int | None, task: str | None, trust_remote_code: bool, token: str | None
+):
     """Export to ONNX via the optimum library."""
     try:
         from optimum.exporters.onnx import main_export
     except ImportError:
         raise SystemExit(
-            "ONNX export requires the 'optimum' library.\n"
-            "Install it with: pip install optimum[exporters]"
+            "ONNX export requires the 'optimum' library.\nInstall it with: pip install optimum[exporters]"
         )
 
     export_kwargs = {
@@ -131,8 +131,7 @@ def _export_executorch(model: str, output: str, trust_remote_code: bool, token: 
         from torch.export import export as torch_export
     except ImportError:
         raise SystemExit(
-            "ExecuTorch export requires the 'executorch' library.\n"
-            "Install it with: pip install executorch"
+            "ExecuTorch export requires the 'executorch' library.\nInstall it with: pip install executorch"
         )
 
     from pathlib import Path

@@ -46,8 +46,16 @@ RevisionOpt = Annotated[str | None, typer.Option(help="Model revision (branch, t
 JsonOpt = Annotated[bool, typer.Option("--json", help="Output results as JSON.")]
 
 
-def _make_pipeline(task: str, model: str | None, device: str | None, dtype: str, trust_remote_code: bool,
-                   token: str | None, revision: str | None, **kwargs):
+def _make_pipeline(
+    task: str,
+    model: str | None,
+    device: str | None,
+    dtype: str,
+    trust_remote_code: bool,
+    token: str | None,
+    revision: str | None,
+    **kwargs,
+):
     """Instantiate a ``transformers.pipeline()`` with the common CLI options."""
     from transformers import pipeline
 
@@ -58,6 +66,7 @@ def _make_pipeline(task: str, model: str | None, device: str | None, dtype: str,
         pipe_kwargs["device"] = device
     if dtype != "auto":
         import torch
+
         pipe_kwargs["dtype"] = getattr(torch, dtype)
     if trust_remote_code:
         pipe_kwargs["trust_remote_code"] = True
@@ -78,7 +87,9 @@ def _make_pipeline(task: str, model: str | None, device: str | None, dtype: str,
 def classify(
     text: Annotated[str | None, typer.Option(help="Text to classify.")] = None,
     file: Annotated[str | None, typer.Option(help="Read text from this file.")] = None,
-    labels: Annotated[str | None, typer.Option(help="Comma-separated candidate labels for zero-shot classification.")] = None,
+    labels: Annotated[
+        str | None, typer.Option(help="Comma-separated candidate labels for zero-shot classification.")
+    ] = None,
     model: ModelOpt = None,
     device: DeviceOpt = None,
     dtype: DtypeOpt = "auto",
@@ -128,7 +139,9 @@ def ner(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    aggregation_strategy: Annotated[str, typer.Option(help="Entity aggregation: 'none', 'simple', 'first', 'average', 'max'.")] = "simple",
+    aggregation_strategy: Annotated[
+        str, typer.Option(help="Entity aggregation: 'none', 'simple', 'first', 'average', 'max'.")
+    ] = "simple",
     output_json: JsonOpt = False,
 ):
     """
@@ -142,8 +155,16 @@ def ner(
         transformers ner --model dslim/bert-base-NER --text "Apple CEO Tim Cook met with President Biden in Washington."
     """
     input_text = resolve_input(text, file)
-    pipe = _make_pipeline("token-classification", model, device, dtype, trust_remote_code, token, revision,
-                          aggregation_strategy=aggregation_strategy)
+    pipe = _make_pipeline(
+        "token-classification",
+        model,
+        device,
+        dtype,
+        trust_remote_code,
+        token,
+        revision,
+        aggregation_strategy=aggregation_strategy,
+    )
     result = pipe(input_text)
     print(format_output(result, output_json))
 
@@ -415,8 +436,12 @@ def detect(
 def segment(
     image: Annotated[str, typer.Option(help="Path or URL to the image.")],
     model: ModelOpt = None,
-    points: Annotated[str | None, typer.Option(help="JSON list of [x,y] points for SAM-style mask generation.")] = None,
-    point_labels: Annotated[str | None, typer.Option(help="JSON list of point labels (1=foreground, 0=background).")] = None,
+    points: Annotated[
+        str | None, typer.Option(help="JSON list of [x,y] points for SAM-style mask generation.")
+    ] = None,
+    point_labels: Annotated[
+        str | None, typer.Option(help="JSON list of point labels (1=foreground, 0=background).")
+    ] = None,
     device: DeviceOpt = None,
     dtype: DtypeOpt = "auto",
     trust_remote_code: TrustOpt = False,
@@ -617,8 +642,8 @@ def speak(
 
         transformers speak --model suno/bark-small --text "Hello, how are you today?" --output speech.wav
     """
-    import scipy.io.wavfile
     import numpy as np
+    import scipy.io.wavfile
 
     pipe = _make_pipeline("text-to-audio", model, device, dtype, trust_remote_code, token, revision)
     result = pipe(text)
@@ -630,6 +655,7 @@ def speak(
         scipy.io.wavfile.write(output, sampling_rate, audio_data)
     else:
         import torch
+
         if isinstance(audio_data, torch.Tensor):
             scipy.io.wavfile.write(output, sampling_rate, audio_data.cpu().numpy())
 
@@ -656,8 +682,8 @@ def audio_generate(
 
         transformers audio-generate --model facebook/musicgen-small --text "A calm piano melody" --output music.wav
     """
-    import scipy.io.wavfile
     import numpy as np
+    import scipy.io.wavfile
 
     pipe = _make_pipeline("text-to-audio", model, device, dtype, trust_remote_code, token, revision)
     result = pipe(text)
@@ -669,6 +695,7 @@ def audio_generate(
         scipy.io.wavfile.write(output, sampling_rate, audio_data)
     else:
         import torch
+
         if isinstance(audio_data, torch.Tensor):
             scipy.io.wavfile.write(output, sampling_rate, audio_data.cpu().numpy())
 
@@ -860,6 +887,7 @@ def multimodal_chat(
         model_kwargs["device_map"] = "auto"
     if dtype != "auto":
         import torch
+
         model_kwargs["torch_dtype"] = getattr(torch, dtype)
 
     loaded_model = AutoModelForImageTextToText.from_pretrained(model, **model_kwargs)
@@ -881,5 +909,5 @@ def multimodal_chat(
         inputs = inputs.to(loaded_model.device)
 
     output_ids = loaded_model.generate(**inputs, max_new_tokens=max_new_tokens)
-    new_tokens = output_ids[0, inputs["input_ids"].shape[1]:]
+    new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     print(processor.decode(new_tokens, skip_special_tokens=True))

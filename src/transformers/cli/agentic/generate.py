@@ -20,7 +20,6 @@ options: streaming, decoding strategies, speculative decoding, watermarking,
 tool calling, constrained decoding, and quantization.
 """
 
-import sys
 from typing import Annotated
 
 import typer
@@ -121,13 +120,16 @@ def generate(
         model_kwargs["device_map"] = "auto"
     if dtype != "auto":
         import torch
+
         model_kwargs["torch_dtype"] = getattr(torch, dtype)
 
     if quantization == "bnb-4bit":
         from transformers import BitsAndBytesConfig
+
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
     elif quantization == "bnb-8bit":
         from transformers import BitsAndBytesConfig
+
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, **tok_kwargs)
@@ -163,10 +165,12 @@ def generate(
 
     if watermark:
         from transformers import WatermarkingConfig
+
         gen_kwargs["watermarking_config"] = WatermarkingConfig()
 
     if cache_quantization is not None:
         from transformers import QuantizedCacheConfig
+
         nbits = 4 if "4" in cache_quantization else 8
         gen_kwargs["cache_implementation"] = "quantized"
         gen_kwargs["cache_config"] = QuantizedCacheConfig(nbits=nbits)
@@ -177,6 +181,7 @@ def generate(
     # --- Constrained decoding ---
     if grammar == "json":
         from transformers import GrammarConstrainedLogitsProcessor, LogitsProcessorList
+
         gen_kwargs.setdefault("logits_processor", LogitsProcessorList())
         gen_kwargs["logits_processor"].append(
             GrammarConstrainedLogitsProcessor(tokenizer=tokenizer, grammar_str='root ::= "{" [^}]* "}"')
@@ -188,7 +193,11 @@ def generate(
             tools_def = json_mod.load(f)
         messages = [{"role": "user", "content": input_text}]
         inputs = tokenizer.apply_chat_template(
-            messages, tools=tools_def, return_tensors="pt", return_dict=True, add_generation_prompt=True,
+            messages,
+            tools=tools_def,
+            return_tensors="pt",
+            return_dict=True,
+            add_generation_prompt=True,
         )
     else:
         inputs = tokenizer(input_text, return_tensors="pt")
@@ -199,20 +208,23 @@ def generate(
     # --- Generate ---
     if stream:
         from transformers import TextStreamer
+
         streamer = TextStreamer(tokenizer, skip_prompt=True)
         gen_kwargs["streamer"] = streamer
         loaded_model.generate(**inputs, **gen_kwargs)
         print()
     else:
         output_ids = loaded_model.generate(**inputs, **gen_kwargs)
-        new_tokens = output_ids[0, inputs["input_ids"].shape[1]:]
+        new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
         print(tokenizer.decode(new_tokens, skip_special_tokens=True))
 
 
 def detect_watermark(
     text: Annotated[str | None, typer.Option(help="Text to check for watermark.")] = None,
     file: Annotated[str | None, typer.Option(help="Read text from this file.")] = None,
-    model: Annotated[str | None, typer.Option("--model", "-m", help="Model ID (must match the model that generated the text).")] = None,
+    model: Annotated[
+        str | None, typer.Option("--model", "-m", help="Model ID (must match the model that generated the text).")
+    ] = None,
 ):
     """
     Detect whether text contains a watermark.

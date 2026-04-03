@@ -212,7 +212,9 @@ def train(
     gradient_checkpointing: Annotated[bool, typer.Option(help="Enable gradient checkpointing.")] = False,
     # Distributed
     multi_gpu: Annotated[bool, typer.Option(help="Use all available GPUs on this machine.")] = False,
-    nnodes: Annotated[int | None, typer.Option(help="Number of nodes for multi-node training (uses torchrun).")] = None,
+    nnodes: Annotated[
+        int | None, typer.Option(help="Number of nodes for multi-node training (uses torchrun).")
+    ] = None,
     deepspeed: Annotated[str | None, typer.Option(help="DeepSpeed config: 'zero2', 'zero3', or path to JSON.")] = None,
     fsdp: Annotated[str | None, typer.Option(help="FSDP strategy: 'full-shard', 'shard-grad-op', 'offload'.")] = None,
     # Logging
@@ -257,8 +259,8 @@ def train(
     from transformers import (
         AutoConfig,
         AutoTokenizer,
-        TrainingArguments,
         Trainer,
+        TrainingArguments,
     )
 
     if task not in _TASK_CONFIGS:
@@ -309,14 +311,17 @@ def train(
 
     if quantization == "bnb-4bit":
         from transformers import BitsAndBytesConfig
+
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
     elif quantization == "bnb-8bit":
         from transformers import BitsAndBytesConfig
+
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
 
     if from_scratch:
-        config = AutoConfig.from_pretrained(model, **{k: v for k, v in model_kwargs.items()
-                                                       if k not in ("quantization_config",)})
+        config = AutoConfig.from_pretrained(
+            model, **{k: v for k, v in model_kwargs.items() if k not in ("quantization_config",)}
+        )
         loaded_model = auto_cls.from_config(config)
     else:
         loaded_model = auto_cls.from_pretrained(model, **model_kwargs)
@@ -334,6 +339,7 @@ def train(
         processing_class = AutoTokenizer.from_pretrained(model, **tok_kwargs)
     elif preprocess_type == "image_transform":
         from transformers import AutoImageProcessor
+
         proc_kwargs = {}
         if trust_remote_code:
             proc_kwargs["trust_remote_code"] = True
@@ -360,7 +366,9 @@ def train(
         columns = ds["train"].column_names
         # Find source and target columns
         source_col = columns[0]
-        target_col = label_col if label_col and label_col in columns else columns[1] if len(columns) > 1 else columns[0]
+        target_col = (
+            label_col if label_col and label_col in columns else columns[1] if len(columns) > 1 else columns[0]
+        )
 
         def preprocess_fn(examples):
             model_inputs = processing_class(examples[source_col], truncation=True, max_length=max_seq_length)
@@ -444,9 +452,6 @@ def train(
 
     # Multi-GPU / multi-node: delegate to accelerate or torchrun
     if multi_gpu or nnodes is not None:
-        import os
-        import subprocess
-
         # Build the command to re-launch via accelerate
         cmd = ["accelerate", "launch"]
         if nnodes is not None:
@@ -480,27 +485,32 @@ def train(
     data_collator = None
     if preprocess_type == "tokenize":
         from transformers import DataCollatorWithPadding
+
         data_collator = DataCollatorWithPadding(tokenizer=processing_class)
     elif preprocess_type in ("tokenize_causal", "tokenize_mlm"):
         from transformers import DataCollatorForLanguageModeling
+
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=processing_class,
             mlm=(preprocess_type == "tokenize_mlm" or mlm),
         )
     elif preprocess_type == "tokenize_seq2seq":
         from transformers import DataCollatorForSeq2Seq
+
         data_collator = DataCollatorForSeq2Seq(tokenizer=processing_class, model=loaded_model)
 
     # --- Callbacks ---
     callbacks = []
     if early_stopping:
         from transformers import EarlyStoppingCallback
+
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
 
     # --- Build Trainer ---
     trainer_cls = Trainer
     if "Seq2Seq" in task_config["auto_class"]:
         from transformers import Seq2SeqTrainer
+
         trainer_cls = Seq2SeqTrainer
 
     trainer = trainer_cls(

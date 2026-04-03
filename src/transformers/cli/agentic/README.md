@@ -469,3 +469,44 @@ via pipe (`echo "hello" | transformers classify`).
     ```bash
     transformers inspect-forward --model bert-base-uncased --text "The cat sat on the mat." --output ./activations/
     ```
+
+## Traditional CLI Commands
+
+These commands ship alongside the agentic commands and are available via the same `transformers` entry point.
+
+82. Start an OpenAI-compatible inference server (chat completions, audio, images)
+    ```bash
+    transformers serve --host 0.0.0.0 --port 8000
+    ```
+    Pass `--force-model` to pin a model for all requests, `--continuous-batching` for
+    throughput-oriented deployments, and `--quantization bnb-4bit` for memory-constrained
+    hardware.
+
+83. Open an interactive chat session with a model (local or remote)
+    ```bash
+    transformers chat meta-llama/Llama-3.2-1B-Instruct
+    ```
+    Connect to a running `transformers serve` instance:
+    ```bash
+    transformers chat meta-llama/Llama-3.2-1B-Instruct http://localhost:8000/v1
+    ```
+
+84. Download a model and its tokenizer from the Hub to the local cache
+    ```bash
+    transformers download meta-llama/Llama-3.2-1B-Instruct
+    ```
+
+85. Print environment and dependency information (useful for bug reports)
+    ```bash
+    transformers env
+    ```
+
+86. Print the installed Transformers version
+    ```bash
+    transformers version
+    ```
+
+87. Scaffold a new model by copying an existing one
+    ```bash
+    transformers add-new-model-like
+    ```
