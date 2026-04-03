@@ -14,8 +14,7 @@
 """
 Text generation CLI commands.
 
-Unlike the pipeline-based inference commands, ``generate`` loads the model
-directly via ``AutoModelForCausalLM`` to expose the full set of generation
+Uses ``AutoModelForCausalLM`` directly to expose the full set of generation
 options: streaming, decoding strategies, speculative decoding, watermarking,
 tool calling, constrained decoding, and quantization.
 """
@@ -101,7 +100,7 @@ def generate(
     input_text = resolve_input(prompt, file)
 
     # --- Load model & tokenizer ---
-    model_id = model or "openai-community/gpt2"
+    model_id = model or "HuggingFaceTB/SmolLM2-360M-Instruct"
 
     tok_kwargs = {}
     model_kwargs = {}
@@ -134,6 +133,7 @@ def generate(
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, **tok_kwargs)
     loaded_model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
+    loaded_model.eval()
 
     # --- Load assistant model for speculative decoding ---
     loaded_assistant = None
@@ -239,7 +239,7 @@ def detect_watermark(
     from transformers import AutoModelForCausalLM, AutoTokenizer, WatermarkDetector
 
     input_text = resolve_input(text, file)
-    model_id = model or "openai-community/gpt2"
+    model_id = model or "HuggingFaceTB/SmolLM2-360M-Instruct"
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     detector = WatermarkDetector(
